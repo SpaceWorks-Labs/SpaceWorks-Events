@@ -7,7 +7,7 @@ import { checkInByRsvpId, previewCheckInByToken, type CheckInPreviewData, type C
 import { gateCheckInForStatus, parseCheckInPayload } from "@/lib/checkIn";
 import { getOfflineRoster, queueOfflineCheckIn, saveOfflineRoster, type OfflineAttendee, type OfflineRoster } from "@/lib/offline-checkin.client";
 import type { useToast } from "@/components/feedback/ToastProvider";
-import { playSuccessFeedback } from "./parts";
+import { playSuccessFeedback } from "@/components/checkin/checkInFeedback";
 import type { LastResult, StationRequest } from "./types";
 
 /** Scanning or pasting a ticket: preview it, then confirm the check-in online or into the offline queue. */

@@ -45,25 +45,3 @@ export function CheckInTimestamp({ value }: { value: string }) {
   return <>{isClient ? new Date(value).toLocaleString() : `${value.slice(0, 16).replace("T", " ")} UTC`}</>;
 }
 
-export function playSuccessFeedback() {
-  if (typeof window === "undefined") return;
-  try {
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.frequency.value = 880;
-    g.gain.value = 0.08;
-    o.start();
-    setTimeout(() => {
-      o.stop();
-      ctx.close();
-    }, 120);
-  } catch {
-    /* ignore */
-  }
-  if (typeof navigator !== "undefined" && navigator.vibrate) {
-    navigator.vibrate(40);
-  }
-}
