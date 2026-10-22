@@ -117,6 +117,15 @@ describe("beat", () => {
     expect(SCHEDULED_JOBS.map((job) => job.name)).toEqual(["payments", "waitlists", "event-reminders", "webhooks", "backup-alerts", "retention"]);
   });
 
+  it("delivers organisation webhooks as a beat job that never stops the others", async () => {
+    mocks.webhooks.mockRejectedValue(new Error("webhook table unavailable"));
+    const { results, failures } = await runScheduledJobs({ force: true });
+    expect(failures).toBe(1);
+    expect(results.webhooks).toBeNull();
+    expect(mocks.purge).toHaveBeenCalled();
+    await expect(runOutboxScheduler()).resolves.toHaveProperty("sent");
+  });
+
   it("keeps going when one job fails", async () => {
     mocks.payments.mockRejectedValue(new Error("down"));
     const { failures } = await runScheduledJobs({ force: true });

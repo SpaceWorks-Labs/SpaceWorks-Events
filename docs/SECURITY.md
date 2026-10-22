@@ -85,7 +85,7 @@ This page documents implemented controls and security boundaries. It is not a su
 ## Abuse protection
 
 - Password login applies account and IP limits inside the credential verifier, in addition to proxy limits. Missing and OAuth-only identities perform dummy bcrypt work; signup returns the same response for existing and newly created accounts. Auth.js errors are logged without exception payloads.
-- Redis-backed limits cover APIs, authentication mutations, RSVP, feedback, search/discovery, uploads, Server Actions, object creation, invitations, broadcasts, check-in, personal data exports (per user), public ticket status and event streams (per IP), and short-link lookups (per IP). Bucket sizes live in `lib/rateLimit.ts`.
+- Redis-backed limits cover organisation webhook changes (`webhookManage`, 30 per minute) and test sends/redeliveries (`webhookTest`, 20 per hour), APIs, authentication mutations, RSVP, feedback, search/discovery, uploads, Server Actions, object creation, invitations, broadcasts, check-in, personal data exports (per user), public ticket status and event streams (per IP), and short-link lookups (per IP). Bucket sizes live in `lib/rateLimit.ts`.
 - Machine API traffic has an additional per-client limit so credential rotation cannot multiply request capacity.
 - Security-sensitive production traffic fails closed when Redis is unavailable.
 - Process-local fallback exists for development and an explicit CI-only production-build test mode.
@@ -107,6 +107,8 @@ This page documents implemented controls and security boundaries. It is not a su
   is category-only. Attendee answers and ticket capabilities require the exact
   registration-management permission; the check-in surface requires the
   separate exact check-in permission.
+- Organisation webhooks (`docs/WEBHOOKS.md`) are managed by owners and admins only (`canManageWebhooks`). Payloads are strict DTOs with ids, statuses, timestamps, event title/slug and attendee display names only: no email addresses, user ids, registration or feedback answers, or ticket, check-in, certificate or invitation tokens. Signing secrets are generated server-side, shown once, stored with AES-256-GCM under their own HKDF label from `MFA_ENCRYPTION_KEY`, and never logged or audited; audit metadata records the target host only.
+- Webhook targets are SSRF-restricted: `https` on 443/8443 without URL credentials, no local or internal host names, and every resolved address must be public unicast (private, loopback, link-local and metadata, CGNAT, multicast, reserved, documentation, IPv6 ULA/link-local, and IPv4-mapped/NAT64/6to4 forms of blocked IPv4 are refused). The check runs at save time and before every delivery, and the socket is pinned to the vetted address so DNS rebinding cannot redirect it. Redirects are never followed, requests time out after 10 s, bodies are capped at 256 KB, and only a short redacted response excerpt is stored. `WEBHOOKS_ALLOW_PRIVATE_TARGETS=1` relaxes this for development and tests only; production ignores it outside CI test mode and `production:check` refuses it.
 - An organisation's own SMTP server is connected only by an address its host name resolves to that is public (never loopback, private, link-local, CGNAT or metadata ranges, checked for every resolved address), on ports 25, 465, 587 or 2525, with TLS checked against the host name. Its password is AES-GCM encrypted, bound to the organisation, and write-only. Connection errors are never echoed back. Account email never goes through an organisation's server.
 - Chat connections (webhook addresses, bot tokens, WhatsApp access tokens) are validated per service (Slack and Discord only on their own webhook hosts), AES-GCM encrypted bound to the organisation and the channel, and never shown again: the settings page shows only the host, chat id or last digits of numbers. A self-hosted Mattermost server is reached only by a checked public address pinned for the request, with TLS checked against its name. Discord messages disable mentions, so a guest's name can't ping a server. Chat messages carry names and titles only, never ticket links or contact details, and service replies are never echoed back.
 - Machine order responses (`orders:read`) carry totals only: no buyer names or emails, order links, receipts, card details or payment provider IDs. The organiser's orders CSV and the event PDF are audited (`ORDERS_EXPORTED`, report downloads).
@@ -120,7 +122,8 @@ This page documents implemented controls and security boundaries. It is not a su
   and retries use a stable non-sensitive Message-ID under lease-owned state
   transitions. Protected scheduler/readiness routes require one exact bearer.
 - Retention cleanup covers expired sessions, invitations, verification tokens,
-  undo snapshots, and old sent/failed non-capability outbox records. Deployment
+  undo snapshots, old sent/failed non-capability outbox records, and webhook
+  delivery history older than 30 days. Deployment
   operators must define broader legal retention and deletion procedures.
 
 ## Audit trail

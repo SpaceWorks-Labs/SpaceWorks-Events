@@ -276,6 +276,12 @@ come from `components/brand/SpaceWorksLogo.tsx` (masters in
 - Instance settings override legacy environment fallbacks for SMTP, Google SSO,
   and backup posture. Backup settings are display-only; do not imply that the
   app creates, retains, or restores provider backups.
+- Organisation webhooks (`lib/webhooks/*`, `docs/WEBHOOKS.md`) are owner/admin
+  only. Emit only after a transaction commits, through `emitWebhookEvent`
+  (background enqueue, never throws); keep payloads to the strict DTOs (no
+  emails, answers, or tokens), signing secrets write-only and encrypted, and
+  every target SSRF-checked at save and delivery time with the pinned lookup.
+  `WEBHOOKS_ALLOW_PRIVATE_TARGETS` is for development and tests only.
 - Machine API clients are tenant-bound bearer identities, not Auth.js users.
   Require explicit scopes, resolve the tenant solely from the credential, use
   explicit DTOs/selects, and never log or persist a raw credential.

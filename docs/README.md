@@ -21,6 +21,7 @@ New here? Start with [Features](FEATURES.md) for what it does, then [Local devel
 | [Security](SECURITY.md) | Authentication, authorization, privacy, abuse protection, and known boundaries |
 | [Permissions](PERMISSIONS.md) | Event and series dashboard matrix: every control, its server check, and what owners, admins, members and each co-organiser grant see |
 | [Machine API v1](API.md) | Server-to-server authentication, scopes, contracts, and credential lifecycle |
+| [Organisation webhooks](WEBHOOKS.md) | Outgoing signed webhooks: event types, payloads, signature verification, retries, auto-disable, and SSRF rules |
 | [Testing](TESTING.md) | Test suites, CI checks, coverage, and release verification |
 
 ## Deployment and operations
