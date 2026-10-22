@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Custom check-in lists.** Organisers add lists beyond venue entry ("Swag collection", "Lunch – Day 1", "Workshop B") from **Manage lists** on the Check-in tab or page (owners/admins and `EDIT_DETAILS` co-organisers), and anyone who can check people in (`CHECK_IN`) switches the desk from **Entry** to a list, then scans, types a code or searches to mark guests, with undo, "already checked in to <list> at <time>" feedback, collected / eligible counts and a collected / not collected guest view. Same eligibility and Override as entry, an optional "only after entry check-in" rule, read-only archived lists, a `Check-in: <list>` column per list in the attendee CSV, and list chips in the Guests list. Entry check-in, the live ticket and the entry history are unchanged. New Server Actions in `app/actions/checkin-lists.ts` over `lib/core/checkinLists.ts`; migration `20261103000000_check_in_lists` is additive. Standalone events only for now.
 - Role-based access control utilities (`requireAuth`, `requireOrgRole`, `canManageEvents`, `canManageMembers`, `canDeleteOrg`)
 - Organisation dashboard (`/dashboard/[orgSlug]`) with stats, event list, and FAB create actions
 - Event management panel (`/dashboard/[orgSlug]/event/[eventId]`) with tabs:

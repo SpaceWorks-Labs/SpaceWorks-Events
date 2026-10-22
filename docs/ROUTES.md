@@ -53,7 +53,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/dashboard/:orgSlug/ids/:programmeId` | Programme members (approve, reject, revoke, renew, email, download), import (CSV or public Google Sheet with column mapping), front/back card designer and settings; owners/admins only except the read-only member list |
 | `/dashboard/:orgSlug/event/:eventId` | Event overview, attendees, forms, invites, and feedback |
 | `/dashboard/:orgSlug/event/:eventId/schedule` | Standalone-event programme planning and live delay management |
-| `/dashboard/:orgSlug/event/:eventId/check-in` | Online/offline check-in station; organisation admin or exact event `CHECK_IN` grant |
+| `/dashboard/:orgSlug/event/:eventId/check-in` | Online/offline check-in station; organisation admin or exact event `CHECK_IN` grant. `?list=<id>` opens the desk for one open custom check-in list instead of entry |
 | `/dashboard/:orgSlug/series/:seriesId` | Recurring-series management |
 
 Dashboard pages require authentication and enforce membership/role permissions on the server. Organisation staff must also have an authenticator app: without one they are sent to `/account/security?mfa=required`, and without an authenticator check in this session to `/verify-mfa` (unless `STAFF_MFA_REQUIRED=false`).
