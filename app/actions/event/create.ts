@@ -18,6 +18,7 @@ import { recordAuditEvent } from "@/lib/audit";
 import { isOrganisationUploadUrl } from "@/lib/uploadUrl";
 import { richTextToPlainText, sanitizeRichText } from "@/lib/richText";
 import { revalidateEventPaths, validationError } from "./shared";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 
 export async function createEvent(
   input: unknown,
@@ -135,6 +136,9 @@ export async function createEvent(
       metadata: { status: created.status },
     });
 
+    if (created.status === EventStatus.PUBLISHED || created.status === EventStatus.CANCELLED) {
+      emitWebhookEvent({ type: created.status === EventStatus.PUBLISHED ? "event.published" : "event.cancelled", eventId: created.id, previousStatus: null });
+    }
     revalidateEventPaths(org.slug, slug, created.id);
     return { ok: true, data: { id: created.id, slug: created.slug } };
   } catch {

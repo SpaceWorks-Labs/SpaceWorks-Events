@@ -12,6 +12,7 @@ import { recordAuditEvent } from "@/lib/audit";
 import { z } from "zod";
 import { hasPaidOrders, notifyEventCancelled, refundCancelledEvent } from "@/lib/payments/eventCancellation";
 import { revalidateEventPaths, revalidatePath } from "./shared";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 
 export async function deleteEvent(input: unknown): Promise<ActionResult> {
   const session = await auth();
@@ -97,15 +98,18 @@ export async function cancelEvent(input: unknown): Promise<ActionResult<{ refund
   const event = await prisma.event.findFirst({ where: { id: parsed.data.eventId, organisationId: org.id }, select: { id: true, slug: true, title: true, status: true } });
   if (!event) return { ok: false, error: "Event not found." };
 
+  let cancelledNow = false;
   const notified = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
     if (event.status === EventStatus.CANCELLED) return 0;
+    cancelledNow = true;
     await tx.event.update({ where: { id: event.id }, data: { status: EventStatus.CANCELLED } });
     // Everyone is told here; buyers also hear about their refund.
     const told = await notifyEventCancelled(tx, { organisationId: org.id, eventId: event.id, title: event.title, reason: parsed.data.reason });
     await recordAuditEvent({ action: "EVENT_CANCELLED", actorUserId: session.user!.id, organisationId: org.id, targetType: "Event", targetId: event.id, client: tx });
     return told;
   });
+  if (cancelledNow) emitWebhookEvent({ type: "event.cancelled", eventId: event.id, previousStatus: event.status });
   const result = await refundCancelledEvent({ eventId: event.id, organisationId: org.id, actorUserId: session.user.id });
   revalidateEventPaths(org.slug, event.slug, event.id);
   return { ok: true, data: { ...result, notified } };

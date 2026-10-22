@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   alerts: vi.fn(),
   waitlists: vi.fn(),
   reminders: vi.fn(),
+  webhooks: vi.fn(),
 }));
 vi.mock("@/lib/outbox", () => ({ deliverOutboxBatch: mocks.deliver }));
 vi.mock("@/lib/retention", () => ({ purgeExpiredOperationalData: mocks.purge }));
@@ -17,6 +18,7 @@ vi.mock("@/lib/payments/maintenance", () => ({ runPaymentMaintenance: mocks.paym
 vi.mock("@/lib/backupAlerts", () => ({ alertOnBackupProblems: mocks.alerts }));
 vi.mock("@/lib/payments/operations", () => ({ fillWaitlists: mocks.waitlists }));
 vi.mock("@/lib/eventReminders", () => ({ sendEventReminders: mocks.reminders }));
+vi.mock("@/lib/webhooks/delivery", () => ({ deliverWebhookBatch: mocks.webhooks }));
 vi.mock("@/lib/operationalHeartbeat", () => ({
   OUTBOX_SCHEDULER_HEARTBEAT_KEY: "outbox-scheduler",
   BEAT_HEARTBEAT_KEY: "beat",
@@ -32,6 +34,7 @@ describe("outbox scheduler", () => {
     vi.clearAllMocks();
     mocks.waitlists.mockResolvedValue({ offered: 0 });
     mocks.reminders.mockResolvedValue({ queued: 0 });
+    mocks.webhooks.mockResolvedValue({ delivered: 0, failed: 0 });
     mocks.started.mockResolvedValue(undefined);
     mocks.success.mockResolvedValue(undefined);
     mocks.failure.mockResolvedValue(undefined);
@@ -94,6 +97,7 @@ describe("beat", () => {
     mocks.alerts.mockResolvedValue(undefined);
     mocks.waitlists.mockResolvedValue({ offered: 0 });
     mocks.reminders.mockResolvedValue({ queued: 0 });
+    mocks.webhooks.mockResolvedValue({ delivered: 0, failed: 0 });
   });
 
   it("runs each job only when its interval has passed", async () => {
@@ -110,7 +114,7 @@ describe("beat", () => {
     await runScheduledJobs({ now: new Date(start.getTime() + 61 * 60_000), lastRun });
     expect(mocks.purge).toHaveBeenCalledTimes(2);
     expect(mocks.reminders).toHaveBeenCalledTimes(2);
-    expect(SCHEDULED_JOBS.map((job) => job.name)).toEqual(["payments", "waitlists", "event-reminders", "backup-alerts", "retention"]);
+    expect(SCHEDULED_JOBS.map((job) => job.name)).toEqual(["payments", "waitlists", "event-reminders", "webhooks", "backup-alerts", "retention"]);
   });
 
   it("keeps going when one job fails", async () => {

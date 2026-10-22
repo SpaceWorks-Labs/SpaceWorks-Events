@@ -14,6 +14,7 @@ import { notifyEventCancelled, peopleWithPlaces, refundCancelledEvent } from "@/
 import { noticeEach, noticeSubject, whenLabel } from "@/lib/notices";
 import { getBroadcastBaseUrl } from "@/lib/eventBroadcast";
 import { revalidateEventPaths, validationError } from "./shared";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 
 export async function updateEvent(input: unknown): Promise<ActionResult> {
   const session = await auth();
@@ -98,6 +99,7 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
         });
         if (confirmed > data.capacity) return false;
       }
+      const locked = await tx.event.findUnique({ where: { id: event.id }, select: { status: true } });
       await tx.event.update({
         where: { id: event.id },
         data: {
@@ -161,7 +163,7 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
             : {}),
         },
       });
-      return true;
+      return { previousStatus: locked?.status ?? event.status };
     });
     if (!saved)
       return {
@@ -184,6 +186,9 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
       await refundCancelledEvent({ eventId: event.id, organisationId: org.id, actorUserId: session.user.id });
     }
 
+    if (data.status !== saved.previousStatus && (data.status === EventStatus.PUBLISHED || data.status === EventStatus.CANCELLED)) {
+      emitWebhookEvent({ type: data.status === EventStatus.PUBLISHED ? "event.published" : "event.cancelled", eventId: event.id, previousStatus: saved.previousStatus });
+    }
     revalidateEventPaths(org.slug, event.slug, event.id);
     return { ok: true };
   } catch {

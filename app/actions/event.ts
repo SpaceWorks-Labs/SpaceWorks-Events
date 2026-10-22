@@ -18,6 +18,7 @@ import { createSafeWebpDerivative } from "@/lib/imageValidation";
 import { recordAuditEvent } from "@/lib/audit";
 import { z } from "zod";
 import { revalidateEventPaths } from "./event/shared";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { cloneEvent as cloneEventAction, createEvent as createEventAction } from "./event/create";
 import { updateEvent as updateEventAction } from "./event/update";
 import { cancelEvent as cancelEventAction, deleteEvent as deleteEventAction } from "./event/remove";
@@ -222,6 +223,9 @@ export async function publishEvent(input: unknown): Promise<ActionResult> {
     }),
   ]);
 
+  if (event.status !== EventStatus.PUBLISHED) {
+    emitWebhookEvent({ type: "event.published", eventId: event.id, previousStatus: event.status });
+  }
   await recordAuditEvent({
     action: "EVENT_PUBLISHED",
     actorUserId: session.user.id,

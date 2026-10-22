@@ -14,6 +14,7 @@ import { runPaymentMaintenance } from "@/lib/payments/maintenance";
 import { fillWaitlists } from "@/lib/payments/operations";
 import { sendEventReminders } from "@/lib/eventReminders";
 import { logOpsError } from "@/lib/opsAlerts";
+import { deliverWebhookBatch } from "@/lib/webhooks/delivery";
 
 /**
  * What this Node.js process does besides serving requests, from
@@ -21,7 +22,8 @@ import { logOpsError } from "@/lib/opsAlerts";
  * - `web`: serves requests only; mail and timed jobs run elsewhere.
  * - `worker`: sends queued email within seconds of it being queued.
  * - `beat`: runs the timed jobs (payment holds and reminders, waitlists,
- *   event reminders, retention, backup alerts). Its jobs queue email; the worker sends it.
+ *   event reminders, organisation webhooks, retention, backup alerts). Its jobs
+ *   queue email; the worker sends it. Webhook requests go out from the beat.
  * - `all` (the default): all three in one process, for one-container installs.
  */
 export type ProcessRole = "all" | "web" | "worker" | "beat";
@@ -47,6 +49,8 @@ export const SCHEDULED_JOBS: Job[] = [
   { name: "waitlists", everyMs: 60_000, run: (now) => fillWaitlists(now) },
   // A reminder about a day before each event or series date.
   { name: "event-reminders", everyMs: 5 * 60_000, run: (now) => sendEventReminders(now) },
+  // Organisation webhooks: due deliveries and retries (row claims make it safe on every replica).
+  { name: "webhooks", everyMs: 15_000, run: () => deliverWebhookBatch() },
   { name: "backup-alerts", everyMs: 5 * 60_000, run: () => alertOnBackupProblems() },
   { name: "retention", everyMs: 60 * 60_000, run: () => purgeExpiredOperationalData() },
 ];

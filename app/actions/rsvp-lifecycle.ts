@@ -12,6 +12,7 @@ import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { declineRequestedOrder, offerRequestedOrder } from "@/lib/payments/operations";
 import { attendeeEmail, attendeeName, loadRsvpContext, paidRequest, paymentOperation, revalidateRsvpPaths } from "./rsvp-lifecycle/helpers";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { reacceptRsvpFor, type ReacceptStatus } from "./rsvp-lifecycle/reaccept";
 
 export async function approveRsvp(input: unknown): Promise<ActionResult> {
@@ -174,6 +175,7 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
     return result;
   });
   if (rejected.count !== 1) return { ok: false, error: "This RSVP was changed by another organiser." };
+  emitWebhookEvent({ type: "registration.status_changed", rsvpId: rsvp.id, status: RsvpStatus.REJECTED, previousStatus: rsvp.status });
 
   await recordAuditEvent({ action: "RSVP_REJECTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
 

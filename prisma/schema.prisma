@@ -95,6 +95,13 @@ enum OutboxStatus {
   FAILED
 }
 
+enum WebhookDeliveryStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
 enum ApiClientStatus {
   ACTIVE
   DISABLED
@@ -255,6 +262,7 @@ model User {
   promoCodesCreated PromoCode[]        @relation("PromoCodeCreatedBy")
   checkInListRecords CheckInListRecord[]
   checkInListEvents  CheckInListEvent[]
+  webhookEndpointsCreated WebhookEndpoint[] @relation("WebhookEndpointCreatedBy")
 }
 
 model Account {
@@ -335,6 +343,7 @@ model Organisation {
   orders            Order[]
   payments          Payment[]
   paymentDisputes   PaymentDispute[]
+  webhookEndpoints  WebhookEndpoint[]
 }
 
 /// The organisation's own payment provider account. Money goes straight to
@@ -1859,4 +1868,65 @@ model PaymentDispute {
   @@unique([provider, externalDisputeId])
   @@index([paymentId])
   @@index([organisationId, status])
+}
+
+/// An organisation's outgoing webhook receiver (docs/WEBHOOKS.md). The signing
+/// secret is stored only as AES-GCM ciphertext under a domain-separated key and
+/// is shown to the organiser once, on create or rotate.
+model WebhookEndpoint {
+  id                  String    @id @default(cuid())
+  organisationId      String
+  url                 String
+  description         String    @default("")
+  /// Subscribed event types (lib/webhooks/eventTypes.ts). `ping` is always deliverable as a test.
+  eventTypes          String[]
+  enabled             Boolean   @default(true)
+  secretEncrypted     String
+  /// Why the endpoint is off when it was not switched off by a person ("auto_disabled").
+  disabledReason      String?
+  disabledAt          DateTime?
+  consecutiveFailures Int       @default(0)
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  createdByUserId     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organisation Organisation      @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  createdBy    User?             @relation("WebhookEndpointCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  deliveries   WebhookDelivery[]
+
+  @@index([organisationId, enabled])
+}
+
+/// Durable delivery queue: one row per endpoint and event. A worker claims rows
+/// with FOR UPDATE SKIP LOCKED; request paths only insert them after commit.
+model WebhookDelivery {
+  id             String                @id @default(cuid())
+  endpointId     String
+  organisationId String
+  /// Stable envelope id (`evt_…`), identical on every retry for receiver idempotency.
+  eventId        String
+  eventType      String
+  /// The complete minimal envelope as sent. Never holds tokens, answers, or secrets.
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  nextAttemptAt  DateTime              @default(now())
+  lockedAt       DateTime?
+  lastAttemptAt  DateTime?
+  deliveredAt    DateTime?
+  lastStatusCode Int?
+  /// Short, redacted failure summary (never the full response body).
+  lastError      String?
+  responseTimeMs Int?
+  createdAt      DateTime              @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId, eventId])
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([createdAt])
 }

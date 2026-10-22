@@ -9,11 +9,12 @@ import { recordAuditEvent } from "@/lib/audit";
 import type { ActionResult } from "./org";
 import { z } from "zod";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { EventPrivacyType } from "@prisma/client";
+import { EventPrivacyType, RsvpStatus } from "@prisma/client";
 import { NOT_FROM_PAID_ORDER } from "@/lib/rsvpCapacity";
 import { fillFromWaitlist } from "@/lib/payments/operations";
 import { lockSeriesDates, seatTargetOf } from "@/lib/payments/targets";
 import { noticeEach, noticeSubject, personEmail } from "@/lib/notices";
+import { emitWebhookEvent, type RsvpWebhookSnapshot } from "@/lib/webhooks/emit";
 import { notifyChat } from "@/lib/chat/notify";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
@@ -75,6 +76,8 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
     return { ok: false, error: "You can only cancel your own registration." };
   }
 
+  let promotedId: string | null = null;
+  let removed: { snapshot: RsvpWebhookSnapshot; previousStatus: RsvpStatus; } | null = null;
   const cancellation = await prisma.$transaction(async (tx) => {
     if (rsvp.eventId) {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${rsvp.eventId} FOR UPDATE`;
@@ -104,6 +107,7 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
       return { error: null };
     }
     await tx.rSVP.delete({ where: { id: current.id } });
+    removed = { previousStatus: current.status, snapshot: { id: current.id, eventId: current.eventId, eventInstanceId: current.eventInstanceId, userId: current.userId, guestName: current.guestName, createdAt: current.createdAt, checkedInAt: current.checkedInAt } };
     const to = personEmail(current);
     if (to) {
       const what = current.status === "WAITLISTED" ? "left the waitlist for" : current.status === "PENDING_APPROVAL" ? "withdrawn your request to join" : "cancelled your place at";
@@ -129,6 +133,7 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
           where: { id: nextWaitlisted.id, status: "WAITLISTED" },
           data: { status: "CONFIRMED" },
         });
+        if (promoted.count === 1) promotedId = nextWaitlisted.id;
         const to = nextWaitlisted.user?.email?.trim() || nextWaitlisted.guestEmail;
         if (promoted.count === 1 && to) {
           await enqueueRsvpStatusNotification(tx, {
@@ -143,6 +148,9 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
     return { error: null };
   });
   if (cancellation.error) return { ok: false, error: cancellation.error };
+  const cancelled = removed as { snapshot: RsvpWebhookSnapshot; previousStatus: RsvpStatus; } | null;
+  if (cancelled) emitWebhookEvent({ type: "registration.status_changed", rsvpId: cancelled.snapshot.id, status: "CANCELLED", previousStatus: cancelled.previousStatus, snapshot: cancelled.snapshot });
+  if (promotedId) emitWebhookEvent({ type: "registration.status_changed", rsvpId: promotedId, status: RsvpStatus.CONFIRMED, previousStatus: RsvpStatus.WAITLISTED });
   if ("freed" in cancellation && cancellation.freed) await fillFromWaitlist(cancellation.freed);
 
   await recordAuditEvent({

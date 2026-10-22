@@ -6,6 +6,7 @@ import { notifyChatAbout } from "@/lib/chat/notify";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { lockSeriesDates } from "@/lib/payments/targets";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { RsvpTargetClosedError } from "./shared";
 
 export function decideRsvpStatus(params: {
@@ -41,7 +42,7 @@ export async function reserveRsvp(params: {
   afterCreate?: (tx: Prisma.TransactionClient, rsvpId: string) => Promise<void>;
   enforceOpen?: boolean;
 }) {
-  return prisma.$transaction(async (tx) => {
+  const reservation = await prisma.$transaction(async (tx) => {
     let capacity = params.capacity;
     let privacyType = params.privacyType;
     if ("eventId" in params.target) {
@@ -97,4 +98,6 @@ export async function reserveRsvp(params: {
     const count = await tx.rSVP.count({ where: params.target });
     return { ...rsvp, status, count };
   });
+  emitWebhookEvent({ type: "registration.created", rsvpId: reservation.id });
+  return reservation;
 }

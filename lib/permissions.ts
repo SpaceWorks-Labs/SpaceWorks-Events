@@ -127,6 +127,6 @@ export async function requireOrgDashboardAccess(orgSlug: string): Promise<Omit<O
   return { organisation: { id: org.id, slug: org.slug, name: org.name }, membership: null, userId: session.user.id, isCollaborator: true };
 }
 
-export { hasRoleAtLeast, isOrgAdmin, canManageEvents, canCreateEvent, canPublishEvents, canManageMembers, canDeleteOrg } from "@/lib/permissionRoles";
+export { hasRoleAtLeast, isOrgAdmin, canManageEvents, canCreateEvent, canPublishEvents, canManageWebhooks, canManageMembers, canDeleteOrg } from "@/lib/permissionRoles";
 
 import { hasRoleAtLeast } from "./permissionRoles";

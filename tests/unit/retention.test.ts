@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   undo: vi.fn(),
   outbox: vi.fn(),
   webhooks: vi.fn(),
+  webhookDeliveries: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ prisma: {
@@ -21,6 +22,7 @@ vi.mock("@/lib/db", () => ({ prisma: {
   rsvpDeletionUndo: { deleteMany: mocks.undo },
   outboxMessage: { deleteMany: mocks.outbox },
   processedWebhookEvent: { deleteMany: mocks.webhooks },
+  webhookDelivery: { deleteMany: mocks.webhookDeliveries },
 } }));
 
 import { purgeExpiredOperationalData } from "@/lib/retention";
@@ -31,7 +33,7 @@ describe("operational retention", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OUTBOX_RETENTION_DAYS = "30";
-    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks]) {
+    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries]) {
       mock.mockResolvedValue({ count: 1 });
     }
     mocks.transaction.mockImplementation((operations: Array<Promise<unknown>>) => Promise.all(operations));
@@ -53,11 +55,13 @@ describe("operational retention", () => {
       sentOutboxMessages: 1,
       failedOutboxMessages: 1,
       processedWebhookEvents: 1,
+      webhookDeliveries: 1,
     });
     expect(mocks.orgInvite).toHaveBeenCalledWith({ where: { usedAt: null, expiresAt: { lt: now } } });
     expect(mocks.collaboratorInvite).toHaveBeenCalledWith({ where: { usedAt: null, expiresAt: { lt: now } } });
     expect(mocks.outbox).toHaveBeenNthCalledWith(1, { where: { status: OutboxStatus.SENT, sentAt: { lt: new Date("2030-01-30T00:00:00.000Z") } } });
     expect(mocks.outbox).toHaveBeenNthCalledWith(2, { where: { status: OutboxStatus.FAILED, createdAt: { lt: new Date("2030-01-30T00:00:00.000Z") } } });
     expect(mocks.webhooks).toHaveBeenCalledWith({ where: { processedAt: { lt: new Date("2029-12-01T00:00:00.000Z") } } });
+    expect(mocks.webhookDeliveries).toHaveBeenCalledWith({ where: { createdAt: { lt: new Date("2030-01-30T00:00:00.000Z") }, status: { not: "PROCESSING" } } });
   });
 });

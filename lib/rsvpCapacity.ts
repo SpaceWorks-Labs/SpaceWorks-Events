@@ -1,5 +1,6 @@
 import { EventStatus, Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { enqueueRsvpConfirmation, enqueueRsvpStatusNotification } from "@/lib/outbox";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { lockDate } from "@/lib/payments/targets";
@@ -69,7 +70,7 @@ export async function confirmRsvpWithinCapacity(params: {
   whenFull?: "reject" | "waitlist";
 }): Promise<"confirmed" | "waitlisted" | "full" | "changed" | "closed"> {
   const target = params.eventId ? { eventId: params.eventId } : { eventInstanceId: params.eventInstanceId! };
-  return prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx): Promise<"confirmed" | "waitlisted" | "full" | "changed" | "closed"> => {
     let capacity: number | null;
     let isOpen: boolean;
     if (params.eventId) {
@@ -112,4 +113,13 @@ export async function confirmRsvpWithinCapacity(params: {
     }
     return updated.count === 1 ? "confirmed" : "changed";
   });
+  if (outcome === "confirmed" || outcome === "waitlisted") {
+    emitWebhookEvent({
+      type: "registration.status_changed",
+      rsvpId: params.rsvpId,
+      status: outcome === "confirmed" ? RsvpStatus.CONFIRMED : RsvpStatus.WAITLISTED,
+      previousStatus: params.expectedStatuses.length === 1 ? params.expectedStatuses[0]! : null,
+    });
+  }
+  return outcome;
 }
