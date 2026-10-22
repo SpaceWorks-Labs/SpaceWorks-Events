@@ -1,4 +1,4 @@
-import { loadCheckInPanel } from "@/lib/views/components__event-dashboard__panels__CheckInPanel";
+import { loadCheckInListsSetup, loadCheckInPanel } from "@/lib/views/components__event-dashboard__panels__CheckInPanel";
 import Link from "next/link";
 import { Download, IdCard, ScanLine } from "lucide-react";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
@@ -8,7 +8,6 @@ import { cn } from "@/lib/cn";
 import { type DoorsTone } from "@/components/event-dashboard/check-in/doors";
 import { DoorStationControls } from "@/components/event-dashboard/check-in/DoorStationControls";
 import { CheckInListsCard } from "@/components/event-dashboard/check-in/CheckInListsCard";
-import { loadCheckInLists } from "@/lib/eventDashboard/checkInLists";
 import { NoPermission } from "./shared";
 
 const DOORS_CHIP: Record<DoorsTone, string> = {
@@ -31,7 +30,7 @@ export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
   if (!permissions.canCheckIn) {
     if (!permissions.canManageCheckInLists) return <NoPermission>You do not have permission to operate check-in.</NoPermission>;
     // EDIT_DETAILS co-organisers set up the lists; scanning stays with CHECK_IN.
-    const lists = await loadCheckInLists(ctx.event.id);
+    const { lists } = await loadCheckInListsSetup({ ctx });
     return (
       <div className="flex flex-col gap-5">
         <CheckInListsCard organisationSlug={ctx.organisation.slug} eventId={ctx.event.id} lists={lists} checkInHref={null} canManage />

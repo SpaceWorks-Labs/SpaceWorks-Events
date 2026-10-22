@@ -22,3 +22,10 @@ export async function loadCheckInPanel({ ctx }: { ctx: EventDashboardContext; })
 
 import { notFound } from "next/navigation";
 import { loadEventDashboard } from "@/lib/eventDashboard/context";
+
+/** EDIT_DETAILS co-organisers set up the lists without the check-in permission; scanning stays with CHECK_IN. */
+export async function loadCheckInListsSetup({ ctx }: { ctx: EventDashboardContext; }) {
+  ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
+  if (!ctx.permissions.canManageCheckInLists) notFound();
+  return { lists: await loadCheckInLists(ctx.event.id) };
+}

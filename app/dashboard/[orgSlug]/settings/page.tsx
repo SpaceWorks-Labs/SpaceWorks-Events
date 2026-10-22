@@ -1,6 +1,6 @@
 import { loadOrgSettingsView } from "@/lib/views/app__dashboard__orgSlug__settings__page";
 import Link from "next/link";
-import { CreditCard, ExternalLink, KeyRound, Mail, MessageSquare } from "lucide-react";
+import { CreditCard, ExternalLink, KeyRound, Mail, MessageSquare, Webhook } from "lucide-react";
 import { EditOrgForm } from "@/components/org/EditOrgForm";
 import { CopyOrganisationUrl } from "@/components/org/CopyOrganisationUrl";
 import { DeleteOrganisationButton } from "@/components/dashboard/DeleteOrganisationButton";
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 const sectionCard = "rounded-xl border border-line bg-panel p-5 sm:p-6";
 
 export default async function OrgSettingsPage({ params }: Props) {
-  const { org, isOwner, canDelete, totalApiClients, activeApiClients, payments, email, chatChannels } = await loadOrgSettingsView({ params });
+  const { org, isOwner, canDelete, totalApiClients, activeApiClients, payments, email, chatChannels, webhooks } = await loadOrgSettingsView({ params });
   return (
     <div className="flex flex-col gap-7">
       <OrgPageHeader
@@ -133,6 +133,28 @@ export default async function OrgSettingsPage({ params }: Props) {
               <Link href={`/dashboard/${org.slug}/settings/chat`}>
                 <MessageSquare aria-hidden className="size-4" />
                 Manage chats
+              </Link>
+            </Button>
+          </div>
+        </section>
+
+        <section id="webhooks" aria-labelledby="webhooks-title" className={cn(sectionCard, "flex flex-col gap-4 md:flex-row md:items-center")}>
+          <div className="min-w-0 flex-1">
+            <h2 id="webhooks-title" className="text-h4 text-ink">Webhooks</h2>
+            <p className="mt-0.5 text-body-ui text-ink-muted">Send registrations, check-ins and other events to your own systems as they happen.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Chip tone={webhooks.enabled > 0 ? "success" : "neutral"}>
+              {webhooks.total === 0
+                ? "No endpoints yet"
+                : webhooks.enabled === 0
+                  ? "No active endpoints"
+                  : `${webhooks.enabled} active ${webhooks.enabled === 1 ? "endpoint" : "endpoints"}`}
+            </Chip>
+            <Button asChild variant="secondary">
+              <Link href={`/dashboard/${org.slug}/settings/webhooks`}>
+                <Webhook aria-hidden className="size-4" />
+                Manage webhooks
               </Link>
             </Button>
           </div>

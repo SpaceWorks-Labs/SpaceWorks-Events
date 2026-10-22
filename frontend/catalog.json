@@ -126,6 +126,16 @@
       "id": "app__dashboard__orgSlug__settings__payments__page:loadPaymentSettingsView"
     },
     {
+      "module": "lib/views/app__dashboard__orgSlug__settings__webhooks__endpointId__page",
+      "name": "loadWebhookEndpointView",
+      "id": "app__dashboard__orgSlug__settings__webhooks__endpointId__page:loadWebhookEndpointView"
+    },
+    {
+      "module": "lib/views/app__dashboard__orgSlug__settings__webhooks__page",
+      "name": "loadWebhooksSettingsView",
+      "id": "app__dashboard__orgSlug__settings__webhooks__page:loadWebhooksSettingsView"
+    },
+    {
       "module": "lib/views/app__dashboard__page",
       "name": "loadDashboardView",
       "id": "app__dashboard__page:loadDashboardView"
@@ -376,6 +386,11 @@
       "id": "components__event-dashboard__panels__CheckInPanel:loadCheckInPanel"
     },
     {
+      "module": "lib/views/components__event-dashboard__panels__CheckInPanel",
+      "name": "loadCheckInListsSetup",
+      "id": "components__event-dashboard__panels__CheckInPanel:loadCheckInListsSetup"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__EmailsPanel",
       "name": "loadEmailsPanel",
       "id": "components__event-dashboard__panels__EmailsPanel:loadEmailsPanel"
@@ -551,6 +566,36 @@
       "module": "app/actions/chat-channels",
       "name": "testChatChannel",
       "id": "chat-channels:testChatChannel"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "createCheckInList",
+      "id": "checkin-lists:createCheckInList"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "updateCheckInList",
+      "id": "checkin-lists:updateCheckInList"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "reorderCheckInLists",
+      "id": "checkin-lists:reorderCheckInLists"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "checkInToList",
+      "id": "checkin-lists:checkInToList"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "undoListCheckIn",
+      "id": "checkin-lists:undoListCheckIn"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "lookupListAttendees",
+      "id": "checkin-lists:lookupListAttendees"
     },
     {
       "module": "app/actions/checkin-station",
@@ -1256,6 +1301,41 @@
       "module": "app/actions/ticket-types",
       "name": "saveTransferPolicy",
       "id": "ticket-types:saveTransferPolicy"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "createWebhookEndpoint",
+      "id": "webhooks:createWebhookEndpoint"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "updateWebhookEndpoint",
+      "id": "webhooks:updateWebhookEndpoint"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "deleteWebhookEndpoint",
+      "id": "webhooks:deleteWebhookEndpoint"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "rotateWebhookSecret",
+      "id": "webhooks:rotateWebhookSecret"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "setWebhookEndpointEnabled",
+      "id": "webhooks:setWebhookEndpointEnabled"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "sendWebhookTest",
+      "id": "webhooks:sendWebhookTest"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "redeliverWebhook",
+      "id": "webhooks:redeliverWebhook"
     }
   ]
 }
