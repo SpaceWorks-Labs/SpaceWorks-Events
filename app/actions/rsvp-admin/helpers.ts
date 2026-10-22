@@ -1,7 +1,8 @@
-import { RsvpStatus } from "@prisma/client";
+import { type Prisma, RsvpStatus } from "@prisma/client";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { z } from "zod";
+import { CHECK_IN_LIST_SOURCES, MAX_CHECK_IN_LISTS } from "@/lib/checkInLists";
 
 export const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -25,6 +26,12 @@ export const snapshotSchema = z.object({
     valueNumber: z.number().finite().nullable(),
     valueDate: z.string().datetime().nullable(),
   })).max(200),
+  /** Custom check-in list records, restored for lists that still belong to the event. */
+  listCheckIns: z.array(z.object({
+    listId: z.string().min(1).max(128),
+    checkedInAt: z.string().datetime(),
+    source: z.enum(CHECK_IN_LIST_SOURCES),
+  })).max(MAX_CHECK_IN_LISTS).optional(),
 }).refine(
   (value) => Boolean(value.eventId) !== Boolean(value.eventInstanceId),
   { message: "Invalid RSVP target." },
@@ -38,4 +45,20 @@ export function revalidateRsvpPaths(orgSlug: string, target: { eventId: string |
     if (target.eventSlug) revalidatePath(`/${orgSlug}/${target.eventSlug}`);
   }
   if (target.eventInstanceId) revalidatePath(`/${orgSlug}/i/${target.eventInstanceId}`);
+}
+
+/** Puts back a restored RSVP's custom check-in list records, for lists still on the same event. History is not rewritten. */
+export async function restoreListCheckIns(tx: Prisma.TransactionClient, eventId: string | null, rsvpId: string, listCheckIns: z.infer<typeof snapshotSchema>["listCheckIns"]) {
+  if (!eventId || !listCheckIns?.length) return;
+  const lists = await tx.checkInList.findMany({ where: { eventId, id: { in: listCheckIns.map((entry) => entry.listId) } }, select: { id: true } });
+  const live = new Set(lists.map((list) => list.id));
+  await tx.checkInListRecord.createMany({
+    data: listCheckIns.filter((entry) => live.has(entry.listId)).map((entry) => ({
+      listId: entry.listId,
+      rsvpId,
+      source: entry.source,
+      checkedInAt: new Date(entry.checkedInAt),
+    })),
+    skipDuplicates: true,
+  });
 }

@@ -91,6 +91,7 @@ export const loadAttendees = cache(async (eventId: string, origin: string) => {
       answers: { include: { field: true } },
       ticketType: { select: { name: true } },
       order: { select: attendeeOrderSelect },
+      checkInListRecords: { select: { checkedInAt: true, list: { select: { name: true, archived: true } } }, orderBy: { list: { sortOrder: "asc" } } },
     },
     orderBy: { createdAt: "desc" },
     take: MAX_BROWSER_ATTENDEES + 1,
@@ -103,6 +104,11 @@ export const loadAttendees = cache(async (eventId: string, origin: string) => {
     guestName: rsvp.guestName,
     user: rsvp.user ? { id: rsvp.user.id, name: rsvp.user.name, email: rsvp.user.email } : null,
     checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
+    /** Custom check-in lists this guest is in (never changes entry check-in). */
+    listCheckIns: rsvp.checkInListRecords.map((record) => ({
+      listName: record.list.archived ? `${record.list.name} (archived)` : record.list.name,
+      checkedInAt: record.checkedInAt.toISOString(),
+    })),
     ticketUrl: `${origin}/ticket/${rsvp.checkInToken}`,
     ticketName: rsvp.ticketType?.name ?? null,
     order: rsvp.order && rsvp.order.totalMinor > BigInt(0) ? attendeeOrder(rsvp.order) : null,

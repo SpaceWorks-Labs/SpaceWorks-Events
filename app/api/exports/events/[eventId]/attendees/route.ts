@@ -55,6 +55,12 @@ export async function GET(_request: Request, context: RouteContext) {
       registrationForm: {
         select: { fields: { select: { id: true, label: true }, orderBy: { sortOrder: "asc" } } },
       },
+      // One column per custom check-in list, after the registration answers,
+      // so existing columns keep their positions.
+      checkInLists: {
+        select: { id: true, name: true, archived: true },
+        orderBy: [{ archived: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+      },
     },
   });
   if (!event) return missing();
@@ -64,6 +70,7 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!(await canAccessEvent({ userId: session.user.id, organisationId: event.organisationId, eventId: event.id, permission: EventPermission.MANAGE_REGISTRATIONS }))) return missing();
 
   const fields = event.registrationForm?.fields ?? [];
+  const lists = event.checkInLists;
   const origin = await getRequestOrigin();
   await recordAuditEvent({
     action: "ATTENDEE_LIST_EXPORTED",
@@ -77,7 +84,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        controller.enqueue(encoder.encode(`\uFEFF${buildCsv([["Name", "Email", "Status", "Registration Date", "Checked In At", "Ticket URL", "Ticket", "Order", "Order status", "Order total", ...fields.map((field) => field.label)]])}\n`));
+        controller.enqueue(encoder.encode(`\uFEFF${buildCsv([["Name", "Email", "Status", "Registration Date", "Checked In At", "Ticket URL", "Ticket", "Order", "Order status", "Order total", ...fields.map((field) => field.label), ...lists.map((list) => `Check-in: ${list.name}${list.archived ? " (archived)" : ""}`)]])}\n`));
         let cursor: string | undefined;
 
         while (true) {
@@ -91,12 +98,14 @@ export async function GET(_request: Request, context: RouteContext) {
               ticketType: { select: { name: true } },
               order: { select: { reference: true, status: true, totalMinor: true, currency: true } },
               answers: { select: { fieldId: true, valueText: true, valueBool: true, valueNumber: true, valueDate: true } },
+              checkInListRecords: { select: { listId: true, checkedInAt: true } },
             },
           });
           if (!rsvps.length) break;
 
           const rows = rsvps.map((rsvp) => {
             const answers = new Map(rsvp.answers.map((answer) => [answer.fieldId, answerValue(answer)]));
+            const listCheckIns = new Map(rsvp.checkInListRecords.map((record) => [record.listId, record.checkedInAt.toISOString()]));
             return [
               rsvp.user?.name ?? rsvp.guestName ?? "",
               rsvp.user?.email ?? rsvp.guestEmail ?? "",
@@ -109,6 +118,7 @@ export async function GET(_request: Request, context: RouteContext) {
               rsvp.order?.status ?? "",
               rsvp.order ? `${rsvp.order.currency} ${minorToDecimalString(rsvp.order.totalMinor, rsvp.order.currency)}` : "",
               ...fields.map((field) => answers.get(field.id) ?? ""),
+              ...lists.map((list) => listCheckIns.get(list.id) ?? ""),
             ];
           });
           controller.enqueue(encoder.encode(`${buildCsv(rows)}\n`));

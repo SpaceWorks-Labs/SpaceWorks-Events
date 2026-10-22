@@ -10,6 +10,8 @@ export type AttendeeRow = {
   guestName?: string | null;
   user: { id: string; name: string | null; email: string | null } | null;
   checkedInAt: string | null;
+  /** Custom check-in lists ("Swag", "Lunch") this guest has been checked into. */
+  listCheckIns?: { listName: string; checkedInAt: string }[];
   ticketUrl: string;
   /** Paid events: the ticket bought and the order it belongs to. */
   ticketName?: string | null;

@@ -14,7 +14,7 @@ import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { hasCapacityToRestoreConfirmedRsvp } from "@/lib/rsvpCapacity";
 import { noticeSubject, personEmail } from "@/lib/notices";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
-import { revalidatePath, revalidateRsvpPaths, snapshotSchema, UNDO_TTL_MS } from "./rsvp-admin/helpers";
+import { restoreListCheckIns, revalidatePath, revalidateRsvpPaths, snapshotSchema, UNDO_TTL_MS } from "./rsvp-admin/helpers";
 
 export async function addManualRsvp(
   input: unknown,
@@ -160,6 +160,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
       event: { select: { slug: true, title: true, endDateTime: true } },
       eventInstance: { select: { endDateTime: true, series: { select: { title: true } } } },
       order: { select: { totalMinor: true } },
+      checkInListRecords: { select: { listId: true, checkedInAt: true, source: true } },
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
@@ -183,6 +184,11 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
       valueBool: answer.valueBool,
       valueNumber: answer.valueNumber,
       valueDate: answer.valueDate?.toISOString() ?? null,
+    })),
+    listCheckIns: rsvp.checkInListRecords.map((record) => ({
+      listId: record.listId,
+      checkedInAt: record.checkedInAt.toISOString(),
+      source: record.source,
     })),
   };
 
@@ -284,6 +290,7 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
           },
         },
       });
+      await restoreListCheckIns(tx, snapshot.data.eventId, created.id, snapshot.data.listCheckIns);
       await tx.rsvpDeletionUndo.delete({ where: { id: undo.id } });
       // The removal notice waiting out the undo window is no longer true.
       await tx.outboxMessage.deleteMany({ where: { kind: "operator-notice", status: "PENDING", payload: { path: ["undoId"], equals: undo.id } } });
