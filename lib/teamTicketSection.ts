@@ -86,6 +86,11 @@ export async function loadTicketTeamSection(rsvp: TicketRsvp, isCheckedIn: boole
  */
 export function ticketSubmissionMode(rsvp: TicketRsvp, viewerId: string | null): TicketSubmissionMode | null {
   const event = rsvp.event;
+  // Submissions are on but the event isn't live: say why there is no form yet
+  // instead of nothing (the submission pages themselves stay 404).
+  if (event?.submissionsEnabled && (event.status === "DRAFT" || event.status === "HIDDEN") && rsvp.status !== "REJECTED") {
+    return { kind: "not-live", offline: event.status === "HIDDEN" };
+  }
   if (!event?.submissionsEnabled || event.status !== "PUBLISHED" || !event.page?.isPublished || !rsvp.eventId || rsvp.status === "REJECTED") return null;
   if (rsvp.userId && rsvp.userId === viewerId) return { kind: "account", href: `/account/submissions/${encodeURIComponent(rsvp.eventId)}`, isTeam: Boolean(rsvp.teamId) };
   if (rsvp.teamId) return { kind: "team-info" };
