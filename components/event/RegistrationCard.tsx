@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { RsvpStatus } from "@prisma/client";
 import { ArrowRight, Share2 } from "lucide-react";
 import { RsvpForm } from "@/components/rsvp/RsvpForm";
@@ -89,6 +90,7 @@ export function RegistrationCard(props: {
   ticketing?: TicketingInfo | null;
 }) {
   const { orgSlug, eventSlug, eventInstanceId, eventTitle, organisation, registrationFields, confirmedCount, capacity, state, accentColor, team, viewerRsvp = null, tickets = [], heldCount = 0, paidSalesOpen = false, ticketing = null } = props;
+  const router = useRouter();
   const prices = tickets.filter((ticket) => ticket.priceMinor > 0);
   const cheapest = prices.length > 0 ? prices.reduce((low, ticket) => (ticket.priceMinor < low.priceMinor ? ticket : low)) : null;
   // Hidden tickets, pay what you want, fees and paid extras count as tickets too.
@@ -219,6 +221,9 @@ export function RegistrationCard(props: {
                 // link is on its way by email), so that dialog stays open.
                 // Otherwise close it and let the card switch to the ticket link.
                 if (teamMode !== "create") setDialogOpen(false);
+                // `/api/rsvp` revalidates this page; refresh so the going/places
+                // count updates now. Client state (an open dialog) is kept.
+                router.refresh();
               }}
             />
           </DialogBody>
