@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useSession } from "next-auth/react";
+import { useAuthSession } from "@/components/auth/useAuthSession";
 import { useRouter } from "next/navigation";
 import type { RsvpStatus } from "@prisma/client";
 import type { RegistrationFieldDefinition } from "@/components/rsvp/registrationTypes";
@@ -68,7 +68,7 @@ export function RsvpForm(props: {
   const atDesk = deskOffered && payAtDesk;
   const currency = tickets[0]?.currency ?? addOns[0]?.currency ?? "INR";
   const sellsPaid = tickets.some((ticket) => ticket.priceMinor > 0 || ticket.flexible || ticket.feeMinor > 0) || addOns.some((addOn) => addOn.priceMinor > 0);
-  const { data: session, status } = useSession();
+  const { data: session, status } = useAuthSession();
   const router = useRouter();
   const lsKey = storageKey({ orgSlug, eventSlug, eventInstanceId });
   const [guestEmail, setGuestEmail] = useState("");

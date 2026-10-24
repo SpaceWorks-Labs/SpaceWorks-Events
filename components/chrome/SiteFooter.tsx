@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useAuthSession } from "@/components/auth/useAuthSession";
 import { SpaceWorksEventsLogo, SpaceWorksLogo } from "@/components/brand/SpaceWorksLogo";
 import { GITHUB_URL, LICENSE_URL } from "@/lib/openSource";
 
@@ -37,7 +37,7 @@ function SourceCredit() {
 /** Space Works Events site footer (Figma 121:1333). */
 export function SiteFooter() {
   const pathname = usePathname();
-  const { status } = useSession();
+  const { status } = useAuthSession();
   const links = status === "authenticated" ? [{ label: "Dashboard", href: "/dashboard" }, { label: "Account", href: "/account" }, ...publicLinks] : publicLinks;
 
   return (

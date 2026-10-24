@@ -7,7 +7,7 @@ import { GuestsTeams } from "./GuestsTeams";
 import { NoPermission } from "./shared";
 
 export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
-  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teamsPage } = await loadGuestsPanel({ ctx });
+  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teamsPage, savedViews } = await loadGuestsPanel({ ctx });
   const teamsTab: SubTab[] = teamMode
     ? [
         {
@@ -15,7 +15,13 @@ export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
           label: "Teams",
           count: teamsPage ? teamsPage.counts.all : undefined,
           content: teamsPage ? (
-            <GuestsTeams organisationSlug={organisation.slug} eventId={event.id} initialPage={teamsPage} approvalRequired={event.privacyType === "APPROVAL_REQUIRED"} />
+            <GuestsTeams
+              organisationSlug={organisation.slug}
+              eventId={event.id}
+              initialPage={teamsPage}
+              approvalRequired={event.privacyType === "APPROVAL_REQUIRED"}
+              savedViews={savedViews.GUESTS_TEAMS ?? []}
+            />
           ) : (
             <NoPermission>You do not have permission to view or manage attendee registrations.</NoPermission>
           ),
@@ -30,7 +36,7 @@ export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
           value: "people",
           label: "People",
           content: attendees ? (
-            <GuestsPeople organisationSlug={organisation.slug} target={{ kind: "event", eventId: event.id, eventTitle: event.title }} timeZone={event.timezone} now={ctx.now.toISOString()} initialPage={attendees} registrationFields={fields} ticketTypes={ticketTypes} canUndoCheckIn={permissions.canCheckIn} teamMode={teamMode} />
+            <GuestsPeople organisationSlug={organisation.slug} target={{ kind: "event", eventId: event.id, eventTitle: event.title }} timeZone={event.timezone} now={ctx.now.toISOString()} initialPage={attendees} registrationFields={fields} ticketTypes={ticketTypes} canUndoCheckIn={permissions.canCheckIn} teamMode={teamMode} savedViews={savedViews.GUESTS_PEOPLE ?? []} />
           ) : (
             <NoPermission>You do not have permission to view or manage attendee registrations.</NoPermission>
           ),

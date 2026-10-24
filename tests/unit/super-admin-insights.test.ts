@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   compareWindows,
@@ -103,6 +105,17 @@ describe("super-admin insight helpers", () => {
     // Bulk badge sheets and member ID card exports carry personal data too.
     expect(SECURITY_AUDIT_ACTIONS).toContain("BADGES_EXPORTED");
     expect(SECURITY_AUDIT_ACTIONS).toContain("ID_CARDS_EXPORTED");
+  });
+
+  it("lists every audit action a data-export route records", () => {
+    const root = join(process.cwd(), "app/api/exports");
+    const routes = readdirSync(root, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith("route.ts"));
+    const actions = new Set(routes.flatMap((file) => [...readFileSync(join(root, file), "utf8").matchAll(/action: "([A-Z_]+)"/g)].map((match) => match[1])));
+    expect(actions).toContain("TEAM_LIST_EXPORTED");
+    expect(actions).toContain("JUDGING_SUBMISSIONS_EXPORTED");
+    // Single-badge and single-ID-card prints happen at the desk all day; only their bulk exports are listed.
+    const singleRecordDownloads = new Set(["BADGE_DOWNLOADED", "ID_CARD_DOWNLOADED"]);
+    for (const action of actions) if (!singleRecordDownloads.has(action)) expect(SECURITY_AUDIT_ACTIONS as readonly string[]).toContain(action);
   });
 
   it("reads list search params defensively", () => {

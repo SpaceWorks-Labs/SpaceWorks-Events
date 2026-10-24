@@ -4,6 +4,7 @@ import { judgingOrganiserContext, loadJudgingDashboard } from "@/lib/eventDashbo
 import { listEligibleJudges } from "@/lib/core/judging";
 import { loadJudgingProgress } from "@/lib/core/judgingOps";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
+import { loadSavedViewsForDashboard } from "@/lib/eventDashboard/savedViews";
 
 /** Judging → Progress: the summary and first pages, plus who can be picked for automatic assignment. */
 async function loadProgressTab(organiser: JudgingOrganiserContext, now: Date) {
@@ -16,6 +17,10 @@ export async function loadJudgingPanel({ ctx }: { ctx: EventDashboardContext; })
   ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
   if (!ctx.permissions.canManageJudging) return null;
   const organiser = judgingOrganiserContext(ctx);
-  const [data, progress] = await Promise.all([loadJudgingDashboard(ctx), organiser ? loadProgressTab(organiser, ctx.now) : null]);
-  return data ? { ...data, progress } : null;
+  const [data, progress, savedViews] = await Promise.all([
+    loadJudgingDashboard(ctx),
+    organiser ? loadProgressTab(organiser, ctx.now) : null,
+    loadSavedViewsForDashboard(ctx),
+  ]);
+  return data ? { ...data, progress, savedViews } : null;
 }

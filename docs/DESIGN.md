@@ -448,9 +448,16 @@ card and dialog rules above: panel surfaces, hairlines, 16px radius, no shadows 
   (between Check-in and Feedback) appears only on events that use hackathon judging
   ([Hackathon](HACKATHON.md)); until then its on switch sits in Settings.
 - **Guests lists are paged on the server**, never capped in the browser: People 50 at a time with
-  **Load more**, whole-event chip counts and **Export emails** for every match; Invites in numbered
+  **Load more**, whole-event chip counts and **Export CSV** / **Export emails** for every match
+  (disabled, with a reason, when nothing matches); Teams, Judging → Submissions and Results have the
+  same **Export CSV**; Feedback → individual responses in numbered pages of 25; Invites in numbered
   pages of 50 (`PageNumberPager`, shared with Judging → Results) with an email search; Move to team
   a searchable list of teams with room, 20 at a time.
+- **Views menu** (Guests → People and Teams, Judging → Submissions, Results, Progress;
+  `components/event-dashboard/views/SavedViewsMenu.tsx`): a secondary small "Views" button reading
+  "Views · <name>" when a preset or saved view matches ("Custom filters" otherwise), listing Presets,
+  Your views, Shared views, then Save current view…, Manage views…, Copy link and Clear filters.
+  Filters always sit in the address bar, so bookmarks and Back work too.
 - **Account area:** header card + tabs Profile · Registrations · Organisations · Security, each a column
   of `AccountCard`s. Registrations sections show 50 at a time with page-number links
   (`?past=2#past`) that keep the other sections' pages.

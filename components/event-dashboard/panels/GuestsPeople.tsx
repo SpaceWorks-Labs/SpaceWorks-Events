@@ -32,6 +32,9 @@ import { loadAttendeesPage } from "@/app/actions/guest-list";
 import { attendeeViewSearchParams } from "@/lib/attendeeListQuery";
 import { showingLabel } from "@/lib/keysetCursor";
 import type { AttendeesPage } from "@/lib/eventDashboard/attendees";
+import { viewParam, type SavedViewDto, type ViewParams } from "@/lib/savedViews";
+import { SavedViewsMenu } from "@/components/event-dashboard/views/SavedViewsMenu";
+import { useInitialViewParams, useSyncViewToUrl } from "@/components/event-dashboard/views/useViewUrl";
 import { FILTER_DOTS, NO_COUNTS, SEARCH_DELAY_MS, type ActionResult, type GuestListTarget, type Meta, type View } from "./GuestsPeople/constants";
 
 export type { GuestListTarget } from "./GuestsPeople/constants";
@@ -47,6 +50,7 @@ export function GuestsPeople({
   teamMode = false,
   ticketTypes = [],
   canUndoCheckIn = true,
+  savedViews,
 }: {
   organisationSlug: string;
   target: GuestListTarget;
@@ -63,15 +67,19 @@ export function GuestsPeople({
   ticketTypes?: Array<{ id: string; name: string; priceMinor: number; currency: string; }>;
   /** Undo check-in is a CHECK_IN operation, separate from managing registrations. */
   canUndoCheckIn?: boolean;
+  /** Saved views for this list (event dashboard only); omitted on a series date. */
+  savedViews?: SavedViewDto[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [manualRsvpOpen, setManualRsvpOpen] = useState(false);
-  const [status, setStatus] = useState<GuestStatusFilter>("all");
-  const [kind, setKind] = useState<GuestKindFilter>("all");
-  const [team, setTeam] = useState<GuestTeamFilter>("all");
+  // Filters live in the address bar (saved views): a link reopens the same view.
+  const fromUrl = useInitialViewParams("GUESTS_PEOPLE");
+  const [status, setStatus] = useState<GuestStatusFilter>(viewParam(fromUrl, "status") as GuestStatusFilter);
+  const [kind, setKind] = useState<GuestKindFilter>(viewParam(fromUrl, "kind") as GuestKindFilter);
+  const [team, setTeam] = useState<GuestTeamFilter>(viewParam(fromUrl, "team") as GuestTeamFilter);
   const { openTab } = useEventTabs();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(viewParam(fromUrl, "q"));
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editGuest, setEditGuest] = useState<AttendeeRow | null>(null);
@@ -84,6 +92,21 @@ export function GuestsPeople({
   const scope = target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId };
 
   const searchedQuery = useDebouncedValue(query.trim(), SEARCH_DELAY_MS);
+  const viewParams = useMemo(() => {
+    const params: ViewParams = {};
+    if (status !== "all") params.status = status;
+    if (kind !== "all") params.kind = kind;
+    if (teamMode && team !== "all") params.team = team;
+    if (searchedQuery) params.q = searchedQuery;
+    return params;
+  }, [status, kind, team, teamMode, searchedQuery]);
+  useSyncViewToUrl("GUESTS_PEOPLE", viewParams);
+  const applyView = useCallback((params: ViewParams) => {
+    setStatus(viewParam(params, "status") as GuestStatusFilter);
+    setKind(viewParam(params, "kind") as GuestKindFilter);
+    setTeam(viewParam(params, "team") as GuestTeamFilter);
+    setQuery(viewParam(params, "q"));
+  }, []);
   const view: View = useMemo(() => ({ status, kind, team: teamMode ? team : "all", query: searchedQuery }), [status, kind, team, teamMode, searchedQuery]);
   const viewKey = JSON.stringify(view);
   const isDefaultView = view.status === "all" && view.kind === "all" && view.team === "all" && !view.query;
@@ -104,7 +127,11 @@ export function GuestsPeople({
   const list = useServerPages<AttendeeRow, View, Meta>({ initial, view, viewKey, isDefaultView, delayMs: 0, fetchPage, keyOf: (row) => row.id });
   const { counts, total } = list.meta;
   const shownTotal = counts[view.status];
-  const emailExportHref = eventId ? `/api/exports/events/${eventId}/attendee-emails${attendeeViewSearchParams(view) ? `?${attendeeViewSearchParams(view)}` : ""}` : null;
+  // Both exports carry the list's current filters and search, so they hold
+  // every matching registration, not only the rows loaded here.
+  const viewQuery = attendeeViewSearchParams(view);
+  const emailExportHref = eventId ? `/api/exports/events/${eventId}/attendee-emails${viewQuery ? `?${viewQuery}` : ""}` : null;
+  const csvExportHref = eventId ? `/api/exports/events/${eventId}/attendees${viewQuery ? `?${viewQuery}` : ""}` : null;
 
   function run<R extends ActionResult>(guest: AttendeeRow, action: () => Promise<R>, success: string | ((res: R) => string)) {
     setBusyId(guest.id);
@@ -153,6 +180,16 @@ export function GuestsPeople({
         <h2 className="text-h4 text-ink">{title}</h2>
         {target.kind === "event" ? (
           <div className="flex flex-wrap gap-2">
+            {savedViews ? (
+              <SavedViewsMenu
+                surface="GUESTS_PEOPLE"
+                scope={{ organisationSlug, eventId: target.eventId }}
+                params={viewParams}
+                onApply={applyView}
+                initialViews={savedViews}
+                teamMode={teamMode}
+              />
+            ) : null}
             {emailExportHref && shownTotal > 0 ? (
               <Button asChild variant="secondary" startIcon={<AtSign />}>
                 <a href={emailExportHref} title="Export emails for every guest matching these filters">Export emails</a>
@@ -162,9 +199,15 @@ export function GuestsPeople({
                 Export emails
               </Button>
             )}
-            <Button asChild variant="secondary" startIcon={<Download />}>
-              <a href={`/api/exports/events/${target.eventId}/attendees`}>Download CSV</a>
-            </Button>
+            {csvExportHref && shownTotal > 0 ? (
+              <Button asChild variant="secondary" startIcon={<Download />}>
+                <a href={csvExportHref} title="Export every guest matching these filters, with their answers">Export CSV</a>
+              </Button>
+            ) : (
+              <Button variant="secondary" startIcon={<Download />} disabled title="No guests match these filters">
+                Export CSV
+              </Button>
+            )}
             <Button variant="primary" startIcon={<Plus />} onClick={() => setManualRsvpOpen(true)}>
               Add guest
             </Button>

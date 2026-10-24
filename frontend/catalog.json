@@ -873,6 +873,11 @@
       "id": "feedback-form:deleteFeedbackField"
     },
     {
+      "module": "app/actions/feedback-form",
+      "name": "loadFeedbackResponsesPage",
+      "id": "feedback-form:loadFeedbackResponsesPage"
+    },
+    {
       "module": "app/actions/guest-list",
       "name": "loadAttendeesPage",
       "id": "guest-list:loadAttendeesPage"
@@ -1061,6 +1066,11 @@
       "module": "app/actions/judging-admin",
       "name": "loadSubmissionsPage",
       "id": "judging-admin:loadSubmissionsPage"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "loadUnsubmittedEntrantsPage",
+      "id": "judging-admin:loadUnsubmittedEntrantsPage"
     },
     {
       "module": "app/actions/judging-admin",
@@ -1431,6 +1441,26 @@
       "module": "app/actions/rsvp",
       "name": "submitRsvp",
       "id": "rsvp:submitRsvp"
+    },
+    {
+      "module": "app/actions/saved-views",
+      "name": "saveView",
+      "id": "saved-views:saveView"
+    },
+    {
+      "module": "app/actions/saved-views",
+      "name": "renameView",
+      "id": "saved-views:renameView"
+    },
+    {
+      "module": "app/actions/saved-views",
+      "name": "shareView",
+      "id": "saved-views:shareView"
+    },
+    {
+      "module": "app/actions/saved-views",
+      "name": "deleteView",
+      "id": "saved-views:deleteView"
     },
     {
       "module": "app/actions/schedule",
