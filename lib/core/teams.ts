@@ -17,7 +17,7 @@ import { flattenZodErrors } from "@/app/actions/utils";
 import { canManageEvents, getMembership } from "@/lib/permissions";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { submitRsvpCore } from "@/lib/rsvpCore";
-import { enqueueRsvpStatusNotification, enqueueTeamMemberAdded } from "@/lib/outbox";
+import { enqueueRsvpStatusNotification, enqueueTeamCreated, enqueueTeamMemberAdded } from "@/lib/outbox";
 import {
   captureSubmissionSnapshotTx,
   restoreSubmissionSnapshotTx,
@@ -444,8 +444,9 @@ export async function regenerateJoinToken(auth: TeamLeaderAuth): Promise<TeamRes
 
 /**
  * New management link; the old one stops working immediately. The raw token
- * is returned once so the page can move to the new address; only its hash is
- * stored.
+ * is returned once so the page can move to the new address, and is emailed to
+ * the leader (outbox `team-created`, reason `reset`) so the team stays
+ * manageable if that tab is lost; only its hash is stored.
  */
 export async function regenerateManageToken(auth: TeamLeaderAuth): Promise<TeamResult<{ manageToken: string; managePath: string }>> {
   return prisma.$transaction(async (tx): Promise<TeamResult<{ manageToken: string; managePath: string }>> => {
@@ -455,6 +456,11 @@ export async function regenerateManageToken(auth: TeamLeaderAuth): Promise<TeamR
     if (!team) return fail(TEAM_NOT_FOUND);
     const manage = generateTeamManageToken();
     await tx.team.update({ where: { id: team.id }, data: { manageTokenHash: manage.hash } });
+    const leader = team.leaderRsvpId
+      ? await tx.rSVP.findUnique({ where: { id: team.leaderRsvpId }, select: { guestEmail: true, user: { select: { email: true } } } })
+      : null;
+    const to = leader?.user?.email?.trim() || leader?.guestEmail;
+    if (to) await enqueueTeamCreated(tx, { to, teamId: team.id, manageToken: manage.raw, reason: "reset" });
     return { ok: true, data: { manageToken: manage.raw, managePath: teamManagePath(manage.raw) } };
   });
 }

@@ -20,7 +20,7 @@ export async function sendTeamCreatedEmail(params: {
   teamName: string;
   managePath: string;
   joinPath: string;
-  reason: "created" | "leader";
+  reason: "created" | "leader" | "reset";
   recipientName?: string;
   messageId?: string;
 }): Promise<void> {
@@ -31,15 +31,22 @@ export async function sendTeamCreatedEmail(params: {
   const safeTeam = escapeHtml(params.teamName);
   const safeTitle = escapeHtml(params.eventTitle);
   const leader = params.reason === "leader";
+  const reset = params.reason === "reset";
   const subject = leader
     ? `You now lead ${headerText(params.teamName)} · ${headerText(params.eventTitle)}`
-    : `Your team ${headerText(params.teamName)} · ${headerText(params.eventTitle)}`;
+    : reset
+      ? `New team page link for ${headerText(params.teamName)} · ${headerText(params.eventTitle)}`
+      : `Your team ${headerText(params.teamName)} · ${headerText(params.eventTitle)}`;
   const intro = leader
     ? `You are now the leader of team <strong>${safeTeam}</strong> for <strong>${safeTitle}</strong>.`
-    : `Your team <strong>${safeTeam}</strong> is registered for <strong>${safeTitle}</strong>.`;
+    : reset
+      ? `The link to the team page of <strong>${safeTeam}</strong> for <strong>${safeTitle}</strong> was reset. Earlier team page links no longer work.`
+      : `Your team <strong>${safeTeam}</strong> is registered for <strong>${safeTitle}</strong>.`;
   const introText = leader
     ? `You are now the leader of team "${params.teamName}" for "${params.eventTitle}".`
-    : `Your team "${params.teamName}" is registered for "${params.eventTitle}".`;
+    : reset
+      ? `The link to the team page of "${params.teamName}" for "${params.eventTitle}" was reset. Earlier team page links no longer work.`
+      : `Your team "${params.teamName}" is registered for "${params.eventTitle}".`;
   const html = emailLayout(escapeHtml(subject), `
           <h2 style="${HEADING_STYLE}">Your team page</h2>
           <p style="${BODY_STYLE}">${salutation.html}<br><br>${intro}</p>

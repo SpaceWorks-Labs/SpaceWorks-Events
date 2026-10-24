@@ -203,6 +203,7 @@ export function EventCheckInClient(props: {
           ) : null}
 
           <AttendeeSearch
+            teamEvent={teamEvent}
             lookupQuery={lookupQuery}
             setLookupQuery={setLookupQuery}
             runLookup={runLookup}

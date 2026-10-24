@@ -37,6 +37,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TeamJoinPage({ params }: Props) {
   const { org, event, accentColor, preview, team, teamConfig, fields, registrationOpen, registration } = await loadTeamJoinView({ params });
   const teamFull = team.maxSize != null && team.size >= team.maxSize;
+  // Only promise "register below" when the form is actually shown.
+  const showsForm = event.status !== EventStatus.CANCELLED && !registration && registrationOpen && !teamFull;
+  const existingRegistrationHint = (
+    <p className="text-caption text-ink-muted">
+      Already registered on your own? Open your ticket page (the link is in your confirmation email) and paste this team link under <span className="font-semibold">Join a team</span>.
+    </p>
+  );
   const timeZone = safeTimeZone(event.timezone);
   const dateBlock = formatDateBlock(event.startDateTime, timeZone);
   const eventHref = `/${org.slug}/${event.slug}`;
@@ -68,7 +75,7 @@ export default async function TeamJoinPage({ params }: Props) {
           <p className="text-[15px] font-semibold text-ink">{event.isOnline ? "Online event" : event.location || "Venue details coming soon"}</p>
         </div>
         <p className="max-w-[640px] text-body-l text-ink-secondary">
-          You’ve been invited to join <span className="font-semibold text-ink">{team.name}</span> for this event. Register below and you’ll be on the team straight away.
+          You’ve been invited to join <span className="font-semibold text-ink">{team.name}</span> for this event.{showsForm ? " Register below and you’ll be on the team straight away." : null}
         </p>
         <div>
           <Button asChild variant="secondary">
@@ -87,7 +94,11 @@ export default async function TeamJoinPage({ params }: Props) {
             // doesn't depend on new registrations being open.
             <JoinWithAccountRegistration registration={registration} joinToken={team.joinToken} teamName={team.name} />
           ) : !registrationOpen ? (
-            <p className="text-body-ui text-ink-muted">Registration is closed.</p>
+            <>
+              <p className="text-body-ui text-ink-muted">Registration is closed.</p>
+              {/* Moving an existing registration into the team still works after registration closes (docs/TEAMS.md). */}
+              {event.endDateTime > new Date() && !teamFull ? existingRegistrationHint : null}
+            </>
           ) : teamFull ? (
             <Callout tone="warning" title="This team is full">
               Ask the team leader to make room, then open this link again.
@@ -101,9 +112,7 @@ export default async function TeamJoinPage({ params }: Props) {
                 registrationFields={fields}
                 team={{ ...teamConfig, joinTeam: team }}
               />
-              <p className="text-caption text-ink-muted">
-                Already registered on your own? Open your ticket page (the link is in your confirmation email) and paste this team link under <span className="font-semibold">Join a team</span>.
-              </p>
+              {existingRegistrationHint}
             </>
           )}
         </section>
