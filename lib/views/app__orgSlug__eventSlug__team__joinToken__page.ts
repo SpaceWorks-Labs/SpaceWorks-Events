@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
-import { EventStatus, RegistrationMode } from "@prisma/client";
+import { EventStatus, RegistrationMode, RsvpStatus } from "@prisma/client";
+import { auth } from "@/lib/auth";
+import type { JoinPageRegistration } from "@/components/team/JoinTeamWithRegistration";
 import { prisma } from "@/lib/db";
 import { resolvePublicEventAccess } from "@/lib/publicEventAccess";
 import { loadJoinPageTeam } from "@/lib/core/teams";
@@ -34,6 +36,7 @@ export async function loadTeamJoinView({ params }: { params: Promise<{ orgSlug: 
   if (event.registrationMode !== RegistrationMode.TEAM) notFound();
   const team = await loadJoinPageTeam(event.id, joinToken);
   if (!team) notFound();
+  const registration = await signedInRegistration(event.id, joinToken);
   const teamConfig = publicTeamRegistrationConfig(event);
   if (!teamConfig) notFound();
   const form = await prisma.eventRegistrationForm.findUnique({ where: { eventId: event.id }, include: { fields: { orderBy: { sortOrder: "asc" } } } });
@@ -47,5 +50,27 @@ export async function loadTeamJoinView({ params }: { params: Promise<{ orgSlug: 
     teamConfig,
     fields: (form?.fields ?? []).map(toFieldDefinition),
     registrationOpen,
+    registration,
   };
+}
+
+/**
+ * The signed-in person's own registration for this event, if any, and how it
+ * relates to the team behind this join link. Only their own ticket token is
+ * returned, never anyone else's.
+ */
+async function signedInRegistration(eventId: string, joinToken: string): Promise<JoinPageRegistration | null> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return null;
+  const rsvp = await prisma.rSVP.findFirst({
+    where: { eventId, userId },
+    select: { checkInToken: true, status: true, teamId: true, team: { select: { joinToken: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!rsvp) return null;
+  const ticketToken = rsvp.checkInToken;
+  if (rsvp.teamId) return { state: rsvp.team?.joinToken === joinToken ? "this-team" : "other-team", ticketToken };
+  if (rsvp.status === RsvpStatus.REJECTED) return { state: "declined", ticketToken };
+  return { state: "solo", ticketToken };
 }

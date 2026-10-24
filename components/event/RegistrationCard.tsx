@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Callout, Chip, OrgLogo, ProgressBar } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { accentStyle } from "@/lib/theme/accent";
+import { registrationActionLabel } from "@/lib/registrationLabel";
 import { formatMoney } from "@/lib/payments/money";
 import type { PublicTicketType } from "@/lib/payments/tickets";
 import type { TicketingInfo } from "@/components/rsvp/PromoCodeField";
@@ -118,8 +119,12 @@ export function RegistrationCard(props: {
   };
 
   const savedLabel = saved ? statusLabels[saved.status ?? "CONFIRMED"] ?? { chip: "Registered", tone: "neutral" as const, action: "View registration" } : null;
-  const registerLabel = state.full ? "Join the waitlist" : state.approvalRequired ? "Request to join" : allFree ? "Register — it's free" : "Get tickets";
-  const registerNote = !allFree
+  const registerLabel = team ? registrationActionLabel(state, team) : state.full ? "Join the waitlist" : state.approvalRequired ? "Request to join" : allFree ? "Register — it's free" : "Get tickets";
+  const registerNote = team
+    ? team.soloPolicy === "TEAMS_ONLY"
+      ? "Create a team or join one with its link. Each team takes one place. We'll email your ticket."
+      : "Create a team, join one with its link, or take part on your own. We'll email your ticket."
+    : !allFree
     ? state.approvalRequired
       ? "Choose a ticket and send your request. Nothing is charged now; if the organiser approves it, we'll email you a link to pay."
       : state.full

@@ -134,7 +134,7 @@ export async function createEvent(
       organisationId: org.id,
       targetType: "Event",
       targetId: created.id,
-      metadata: { status: created.status },
+      metadata: { status: created.status, registrationMode: created.registrationMode },
     });
 
     if (created.status === EventStatus.PUBLISHED || created.status === EventStatus.CANCELLED) {

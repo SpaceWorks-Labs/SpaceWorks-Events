@@ -22,8 +22,8 @@ export function fromDatetimeLocalValue(value: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export const STEP_TITLES = ["New event: the basics", "New event: when it happens", "New event: where it happens"];
-export const STEP_LABELS = ["Basics", "Schedule", "Location & platform"];
+export const STEP_TITLES = ["New event: the basics", "New event: when it happens", "New event: where and how people sign up"];
+export const STEP_LABELS = ["Basics", "Schedule", "Location & sign-ups"];
 
 export function isRichTextEmpty(html: string) {
   return !new DOMParser().parseFromString(html, "text/html").body.textContent?.trim();

@@ -1308,6 +1308,11 @@
       "id": "team-admin:deleteTeam"
     },
     {
+      "module": "app/actions/team-admin",
+      "name": "loadTeamsPage",
+      "id": "team-admin:loadTeamsPage"
+    },
+    {
       "module": "app/actions/teams",
       "name": "renameTeamAction",
       "id": "teams:renameTeamAction"
@@ -1386,6 +1391,11 @@
       "module": "app/actions/teams",
       "name": "cancelTeamRequestAction",
       "id": "teams:cancelTeamRequestAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "joinTeamWithTicketAction",
+      "id": "teams:joinTeamWithTicketAction"
     },
     {
       "module": "app/actions/ticket-types",

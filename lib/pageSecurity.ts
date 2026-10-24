@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+/** Pages whose URL is itself the credential: `/ticket/{token}`, `/team/{token}`, `/{org}/{event}/team/{joinToken}`. */
+function isCapabilityPage(pathname: string): boolean {
+  return /^\/(?:ticket|team)\/[^/]+\/?$/.test(pathname) || /^\/[^/]+\/[^/]+\/team\/[^/]+\/?$/.test(pathname);
+}
+
 export function pageSecurity(request: NextRequest) {
   const isEmbed = /^\/embed\/[^/]+\/[^/]+$/.test(request.nextUrl.pathname);
   const ancestors = isEmbed ? [...new Set((process.env.ALLOWED_EMBED_ORIGINS ?? "").split(",").map((v) => v.trim()).filter((value) => {
@@ -22,7 +27,10 @@ export function pageSecurity(request: NextRequest) {
   incoming.set("x-nonce", nonce);
   const response = NextResponse.next({ request: { headers: incoming } });
   response.headers.set("Content-Security-Policy", csp);
-  response.headers.set("Cache-Control", "no-transform");
+  // Bearer-capability pages (ticket, team management and team join links;
+  // docs/TEAMS.md) must never be stored by a browser or shared cache. This
+  // header replaces Next's own `private, no-store` in production, so say it here.
+  response.headers.set("Cache-Control", isCapabilityPage(request.nextUrl.pathname) ? "private, no-cache, no-store, max-age=0, must-revalidate, no-transform" : "no-transform");
   if (!isEmbed) response.headers.set("X-Frame-Options", "DENY");
   return response;
 }

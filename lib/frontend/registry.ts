@@ -261,37 +261,39 @@ import { promoteTeam as endpoint257 } from "@/app/actions/team-admin";
 import { renameTeamAsOrganiser as endpoint258 } from "@/app/actions/team-admin";
 import { moveTeamMember as endpoint259 } from "@/app/actions/team-admin";
 import { deleteTeam as endpoint260 } from "@/app/actions/team-admin";
-import { renameTeamAction as endpoint261 } from "@/app/actions/teams";
-import { regenerateTeamJoinLinkAction as endpoint262 } from "@/app/actions/teams";
-import { regenerateTeamManageLinkAction as endpoint263 } from "@/app/actions/teams";
-import { addTeamMemberAction as endpoint264 } from "@/app/actions/teams";
-import { removeTeamMemberAction as endpoint265 } from "@/app/actions/teams";
-import { transferTeamLeadershipAction as endpoint266 } from "@/app/actions/teams";
-import { setTeamLookingForMembersAction as endpoint267 } from "@/app/actions/teams";
-import { disbandTeamAction as endpoint268 } from "@/app/actions/teams";
-import { inviteSeekerAction as endpoint269 } from "@/app/actions/teams";
-import { respondToTeamRequestAction as endpoint270 } from "@/app/actions/teams";
-import { cancelTeamInviteAction as endpoint271 } from "@/app/actions/teams";
-import { leaveTeamAction as endpoint272 } from "@/app/actions/teams";
-import { saveSeekerProfileAction as endpoint273 } from "@/app/actions/teams";
-import { requestToJoinTeamAction as endpoint274 } from "@/app/actions/teams";
-import { respondToTeamInviteAction as endpoint275 } from "@/app/actions/teams";
-import { cancelTeamRequestAction as endpoint276 } from "@/app/actions/teams";
-import { saveTicketType as endpoint277 } from "@/app/actions/ticket-types";
-import { archiveTicketType as endpoint278 } from "@/app/actions/ticket-types";
-import { createPromoCode as endpoint279 } from "@/app/actions/ticket-types";
-import { archivePromoCode as endpoint280 } from "@/app/actions/ticket-types";
-import { saveRefundPolicy as endpoint281 } from "@/app/actions/ticket-types";
-import { saveAddOn as endpoint282 } from "@/app/actions/ticket-types";
-import { archiveAddOn as endpoint283 } from "@/app/actions/ticket-types";
-import { saveTransferPolicy as endpoint284 } from "@/app/actions/ticket-types";
-import { createWebhookEndpoint as endpoint285 } from "@/app/actions/webhooks";
-import { updateWebhookEndpoint as endpoint286 } from "@/app/actions/webhooks";
-import { deleteWebhookEndpoint as endpoint287 } from "@/app/actions/webhooks";
-import { rotateWebhookSecret as endpoint288 } from "@/app/actions/webhooks";
-import { setWebhookEndpointEnabled as endpoint289 } from "@/app/actions/webhooks";
-import { sendWebhookTest as endpoint290 } from "@/app/actions/webhooks";
-import { redeliverWebhook as endpoint291 } from "@/app/actions/webhooks";
+import { loadTeamsPage as endpoint261 } from "@/app/actions/team-admin";
+import { renameTeamAction as endpoint262 } from "@/app/actions/teams";
+import { regenerateTeamJoinLinkAction as endpoint263 } from "@/app/actions/teams";
+import { regenerateTeamManageLinkAction as endpoint264 } from "@/app/actions/teams";
+import { addTeamMemberAction as endpoint265 } from "@/app/actions/teams";
+import { removeTeamMemberAction as endpoint266 } from "@/app/actions/teams";
+import { transferTeamLeadershipAction as endpoint267 } from "@/app/actions/teams";
+import { setTeamLookingForMembersAction as endpoint268 } from "@/app/actions/teams";
+import { disbandTeamAction as endpoint269 } from "@/app/actions/teams";
+import { inviteSeekerAction as endpoint270 } from "@/app/actions/teams";
+import { respondToTeamRequestAction as endpoint271 } from "@/app/actions/teams";
+import { cancelTeamInviteAction as endpoint272 } from "@/app/actions/teams";
+import { leaveTeamAction as endpoint273 } from "@/app/actions/teams";
+import { saveSeekerProfileAction as endpoint274 } from "@/app/actions/teams";
+import { requestToJoinTeamAction as endpoint275 } from "@/app/actions/teams";
+import { respondToTeamInviteAction as endpoint276 } from "@/app/actions/teams";
+import { cancelTeamRequestAction as endpoint277 } from "@/app/actions/teams";
+import { joinTeamWithTicketAction as endpoint278 } from "@/app/actions/teams";
+import { saveTicketType as endpoint279 } from "@/app/actions/ticket-types";
+import { archiveTicketType as endpoint280 } from "@/app/actions/ticket-types";
+import { createPromoCode as endpoint281 } from "@/app/actions/ticket-types";
+import { archivePromoCode as endpoint282 } from "@/app/actions/ticket-types";
+import { saveRefundPolicy as endpoint283 } from "@/app/actions/ticket-types";
+import { saveAddOn as endpoint284 } from "@/app/actions/ticket-types";
+import { archiveAddOn as endpoint285 } from "@/app/actions/ticket-types";
+import { saveTransferPolicy as endpoint286 } from "@/app/actions/ticket-types";
+import { createWebhookEndpoint as endpoint287 } from "@/app/actions/webhooks";
+import { updateWebhookEndpoint as endpoint288 } from "@/app/actions/webhooks";
+import { deleteWebhookEndpoint as endpoint289 } from "@/app/actions/webhooks";
+import { rotateWebhookSecret as endpoint290 } from "@/app/actions/webhooks";
+import { setWebhookEndpointEnabled as endpoint291 } from "@/app/actions/webhooks";
+import { sendWebhookTest as endpoint292 } from "@/app/actions/webhooks";
+import { redeliverWebhook as endpoint293 } from "@/app/actions/webhooks";
 
 export const viewReaders = Object.freeze({
   "app__about__page:loadView": endpoint0,
@@ -557,35 +559,37 @@ export const backendActions = Object.freeze({
   "team-admin:renameTeamAsOrganiser": endpoint258,
   "team-admin:moveTeamMember": endpoint259,
   "team-admin:deleteTeam": endpoint260,
-  "teams:renameTeamAction": endpoint261,
-  "teams:regenerateTeamJoinLinkAction": endpoint262,
-  "teams:regenerateTeamManageLinkAction": endpoint263,
-  "teams:addTeamMemberAction": endpoint264,
-  "teams:removeTeamMemberAction": endpoint265,
-  "teams:transferTeamLeadershipAction": endpoint266,
-  "teams:setTeamLookingForMembersAction": endpoint267,
-  "teams:disbandTeamAction": endpoint268,
-  "teams:inviteSeekerAction": endpoint269,
-  "teams:respondToTeamRequestAction": endpoint270,
-  "teams:cancelTeamInviteAction": endpoint271,
-  "teams:leaveTeamAction": endpoint272,
-  "teams:saveSeekerProfileAction": endpoint273,
-  "teams:requestToJoinTeamAction": endpoint274,
-  "teams:respondToTeamInviteAction": endpoint275,
-  "teams:cancelTeamRequestAction": endpoint276,
-  "ticket-types:saveTicketType": endpoint277,
-  "ticket-types:archiveTicketType": endpoint278,
-  "ticket-types:createPromoCode": endpoint279,
-  "ticket-types:archivePromoCode": endpoint280,
-  "ticket-types:saveRefundPolicy": endpoint281,
-  "ticket-types:saveAddOn": endpoint282,
-  "ticket-types:archiveAddOn": endpoint283,
-  "ticket-types:saveTransferPolicy": endpoint284,
-  "webhooks:createWebhookEndpoint": endpoint285,
-  "webhooks:updateWebhookEndpoint": endpoint286,
-  "webhooks:deleteWebhookEndpoint": endpoint287,
-  "webhooks:rotateWebhookSecret": endpoint288,
-  "webhooks:setWebhookEndpointEnabled": endpoint289,
-  "webhooks:sendWebhookTest": endpoint290,
-  "webhooks:redeliverWebhook": endpoint291,
+  "team-admin:loadTeamsPage": endpoint261,
+  "teams:renameTeamAction": endpoint262,
+  "teams:regenerateTeamJoinLinkAction": endpoint263,
+  "teams:regenerateTeamManageLinkAction": endpoint264,
+  "teams:addTeamMemberAction": endpoint265,
+  "teams:removeTeamMemberAction": endpoint266,
+  "teams:transferTeamLeadershipAction": endpoint267,
+  "teams:setTeamLookingForMembersAction": endpoint268,
+  "teams:disbandTeamAction": endpoint269,
+  "teams:inviteSeekerAction": endpoint270,
+  "teams:respondToTeamRequestAction": endpoint271,
+  "teams:cancelTeamInviteAction": endpoint272,
+  "teams:leaveTeamAction": endpoint273,
+  "teams:saveSeekerProfileAction": endpoint274,
+  "teams:requestToJoinTeamAction": endpoint275,
+  "teams:respondToTeamInviteAction": endpoint276,
+  "teams:cancelTeamRequestAction": endpoint277,
+  "teams:joinTeamWithTicketAction": endpoint278,
+  "ticket-types:saveTicketType": endpoint279,
+  "ticket-types:archiveTicketType": endpoint280,
+  "ticket-types:createPromoCode": endpoint281,
+  "ticket-types:archivePromoCode": endpoint282,
+  "ticket-types:saveRefundPolicy": endpoint283,
+  "ticket-types:saveAddOn": endpoint284,
+  "ticket-types:archiveAddOn": endpoint285,
+  "ticket-types:saveTransferPolicy": endpoint286,
+  "webhooks:createWebhookEndpoint": endpoint287,
+  "webhooks:updateWebhookEndpoint": endpoint288,
+  "webhooks:deleteWebhookEndpoint": endpoint289,
+  "webhooks:rotateWebhookSecret": endpoint290,
+  "webhooks:setWebhookEndpointEnabled": endpoint291,
+  "webhooks:sendWebhookTest": endpoint292,
+  "webhooks:redeliverWebhook": endpoint293,
 });

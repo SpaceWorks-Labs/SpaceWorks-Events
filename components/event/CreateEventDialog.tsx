@@ -12,6 +12,13 @@ import { Callout } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
+import {
+  DEFAULT_TEAM_SETTINGS,
+  TeamSettingsFields,
+  teamSettingsPayload,
+  teamSettingsProblem,
+  type TeamSettingsDraft,
+} from "./TeamSettingsFields";
 import { STEP_LABELS, STEP_TITLES, isRichTextEmpty, toDatetimeLocalValue } from "./CreateEventDialog/helpers";
 import { BasicsStep, ScheduleStep } from "./CreateEventDialog/steps";
 
@@ -34,6 +41,7 @@ export function CreateEventDialog(props: {
   // Wizard States
   const [activeStep, setActiveStep] = useState(0);
   const [isOnline, setIsOnline] = useState(false);
+  const [teamSettings, setTeamSettings] = useState<TeamSettingsDraft>(DEFAULT_TEAM_SETTINGS);
 
   const resetDraft = () => {
     setActiveStep(0);
@@ -43,6 +51,7 @@ export function CreateEventDialog(props: {
     setTagsPreview([]);
     setTagInput("");
     setIsOnline(false);
+    setTeamSettings(DEFAULT_TEAM_SETTINGS);
     setFormKey((current) => current + 1);
   };
 
@@ -56,6 +65,11 @@ export function CreateEventDialog(props: {
     e.preventDefault();
     if (activeStep !== 2) return;
     setError(null);
+    const teamProblem = teamSettingsProblem(teamSettings);
+    if (teamProblem) {
+      setError(teamProblem);
+      return;
+    }
     const form = e.currentTarget;
     const fd = new FormData(form);
     // The picked wall-clock times belong to the chosen event timezone, not the browser's or the server's.
@@ -88,6 +102,7 @@ export function CreateEventDialog(props: {
         capacity: "",
         status: EventStatus.DRAFT,
         privacyType: EventPrivacyType.PUBLIC,
+        ...teamSettingsPayload(teamSettings),
       });
       if (!res.ok) {
         setError(res.error);
@@ -198,6 +213,9 @@ export function CreateEventDialog(props: {
                     <Input name="mapLinkUrl" type="url" />
                   </Field>
                 )}
+                <div className="border-t border-line pt-4">
+                  <TeamSettingsFields value={teamSettings} onChange={setTeamSettings} />
+                </div>
               </div>
             </DialogBody>
             <DialogFooter className="sm:justify-between">

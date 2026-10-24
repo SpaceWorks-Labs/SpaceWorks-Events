@@ -7,16 +7,15 @@ import { GuestsTeams } from "./GuestsTeams";
 import { NoPermission } from "./shared";
 
 export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
-  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teams } = await loadGuestsPanel({ ctx });
-  const moveTargets = teams.map((team) => ({ id: team.id, name: team.name, status: team.status, size: team.size, maxSize: team.maxSize }));
+  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teamsPage, moveTargets } = await loadGuestsPanel({ ctx });
   const teamsTab: SubTab[] = teamMode
     ? [
         {
           value: "teams",
           label: "Teams",
-          count: permissions.canManageRegistrations ? teams.length : undefined,
-          content: permissions.canManageRegistrations ? (
-            <GuestsTeams organisationSlug={organisation.slug} eventId={event.id} teams={teams} approvalRequired={event.privacyType === "APPROVAL_REQUIRED"} />
+          count: teamsPage ? teamsPage.counts.all : undefined,
+          content: teamsPage ? (
+            <GuestsTeams organisationSlug={organisation.slug} eventId={event.id} initialPage={teamsPage} moveTargets={moveTargets} approvalRequired={event.privacyType === "APPROVAL_REQUIRED"} />
           ) : (
             <NoPermission>You do not have permission to view or manage attendee registrations.</NoPermission>
           ),

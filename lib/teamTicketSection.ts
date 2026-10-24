@@ -16,18 +16,24 @@ type TicketRsvp = {
   userId: string | null;
   teamId: string | null;
   status: string;
-  event: { organisationId: string; registrationMode: RegistrationMode; soloPolicy: SoloPolicy; } | null;
+  event: { organisationId: string; registrationMode: RegistrationMode; soloPolicy: SoloPolicy; endDateTime: Date; } | null;
 };
+
+type SeekerView = NonNullable<Awaited<ReturnType<typeof loadSeekerView>>>;
 
 export type TicketTeamSection =
   | { kind: "member"; team: NonNullable<Awaited<ReturnType<typeof loadMemberTeamView>>>; manageHref: string | null; canLeave: boolean; }
   | {
-    kind: "seeker";
-    profile: NonNullable<Awaited<ReturnType<typeof loadSeekerView>>>["profile"];
-    invites: NonNullable<Awaited<ReturnType<typeof loadSeekerView>>>["invites"];
-    requests: NonNullable<Awaited<ReturnType<typeof loadSeekerView>>>["requests"];
-    seekers: Awaited<ReturnType<typeof listSeekersForSeeker>>;
-    teams: Awaited<ReturnType<typeof listTeamsLookingForMembers>>;
+    /** A solo registrant: join a team with its link, and on matching events list themselves as looking for one. */
+    kind: "solo";
+    canJoin: boolean;
+    seeker: {
+      profile: SeekerView["profile"];
+      invites: SeekerView["invites"];
+      requests: SeekerView["requests"];
+      seekers: Awaited<ReturnType<typeof listSeekersForSeeker>>;
+      teams: Awaited<ReturnType<typeof listTeamsLookingForMembers>>;
+    } | null;
   }
   | { kind: "sign-in" };
 
@@ -55,9 +61,11 @@ export async function loadTicketTeamSection(rsvp: TicketRsvp, isCheckedIn: boole
       canLeave: canAct && !isCheckedIn && rsvp.status !== "REJECTED",
     };
   }
-  if (event.soloPolicy !== SoloPolicy.SOLO_WITH_MATCHING || rsvp.status === "REJECTED") return null;
+  if (rsvp.status === "REJECTED") return null;
   if (!canAct) return { kind: "sign-in" };
+  const canJoin = event.endDateTime > new Date();
+  if (event.soloPolicy !== SoloPolicy.SOLO_WITH_MATCHING) return canJoin ? { kind: "solo", canJoin, seeker: null } : null;
   const [seekerView, seekers, teams] = await Promise.all([loadSeekerView(holder), listSeekersForSeeker(holder), listTeamsLookingForMembers(holder)]);
-  if (!seekerView) return null;
-  return { kind: "seeker", profile: seekerView.profile, invites: seekerView.invites, requests: seekerView.requests, seekers, teams };
+  const seeker = seekerView ? { profile: seekerView.profile, invites: seekerView.invites, requests: seekerView.requests, seekers, teams } : null;
+  return seeker || canJoin ? { kind: "solo", canJoin, seeker } : null;
 }

@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowUpRight, CalendarPlus, Check } from "lucide-react";
 import { TicketQrPanel } from "@/components/ticket/TicketQrPanel";
 import { CancelRsvpButton } from "@/components/ticket/CancelRsvpButton";
 import { TicketSeekerPanel, TicketTeamCard } from "@/components/team/TicketTeamSection";
+import { TicketJoinTeamForm } from "@/components/team/JoinTeamWithRegistration";
 import { TicketDownloadButton } from "@/components/ticket/TicketDownloadButton";
 import { TicketStatusStorageSync } from "@/components/ticket/TicketStatusStorageSync";
 import { HideAfterLiveCheckIn, LiveCheckedInChip, LiveTicketCard, LiveTicketProvider } from "@/components/ticket/LiveTicket";
@@ -30,10 +31,13 @@ export default async function TicketPage({ params, searchParams }: Props) {
   const { teamSection, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
   const teamBlock = teamSection?.kind === "member" ? (
     <TicketTeamCard ticketToken={rsvp.checkInToken} team={teamSection.team} manageHref={teamSection.manageHref} canLeave={teamSection.canLeave} eventPageHref={eventPageHref} />
-  ) : teamSection?.kind === "seeker" ? (
-    <TicketSeekerPanel ticketToken={rsvp.checkInToken} profile={teamSection.profile} invites={teamSection.invites} requests={teamSection.requests} seekers={teamSection.seekers} teams={teamSection.teams} />
+  ) : teamSection?.kind === "solo" ? (
+    <>
+      {teamSection.seeker ? <TicketSeekerPanel ticketToken={rsvp.checkInToken} profile={teamSection.seeker.profile} invites={teamSection.seeker.invites} requests={teamSection.seeker.requests} seekers={teamSection.seeker.seekers} teams={teamSection.seeker.teams} /> : null}
+      {teamSection.canJoin ? <TicketJoinTeamForm ticketToken={rsvp.checkInToken} /> : null}
+    </>
   ) : teamSection?.kind === "sign-in" ? (
-    <Callout tone="info">Sign in to the account you registered with to find a team.</Callout>
+    <Callout tone="info">Sign in to the account you registered with to join or find a team.</Callout>
   ) : null;
 
   const ticketMain = (

@@ -7,6 +7,7 @@ import { safeTimeZone } from "@/lib/timeZone";
 import { accentStyle } from "@/lib/theme/accent";
 import { formatDateBlock, formatDayLong, formatTimeRange } from "@/lib/format/datetime";
 import { RsvpForm } from "@/components/rsvp/RsvpForm";
+import { JoinWithAccountRegistration, JoinWithSavedTicket } from "@/components/team/JoinTeamWithRegistration";
 import { Button } from "@/components/ui/button";
 import { Callout, Chip, DateBlock } from "@/components/ui/display";
 
@@ -34,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
  * name, size and maximum size, never its members.
  */
 export default async function TeamJoinPage({ params }: Props) {
-  const { org, event, accentColor, preview, team, teamConfig, fields, registrationOpen } = await loadTeamJoinView({ params });
+  const { org, event, accentColor, preview, team, teamConfig, fields, registrationOpen, registration } = await loadTeamJoinView({ params });
   const teamFull = team.maxSize != null && team.size >= team.maxSize;
   const timeZone = safeTimeZone(event.timezone);
   const dateBlock = formatDateBlock(event.startDateTime, timeZone);
@@ -81,6 +82,10 @@ export default async function TeamJoinPage({ params }: Props) {
           <h2 id="team-join-title" className="text-h3 text-ink">Join {team.name}</h2>
           {event.status === EventStatus.CANCELLED ? (
             <Callout tone="danger" title="Event cancelled" />
+          ) : registration ? (
+            // Moving an existing registration into a team adds no place, so it
+            // doesn't depend on new registrations being open.
+            <JoinWithAccountRegistration registration={registration} joinToken={team.joinToken} teamName={team.name} />
           ) : !registrationOpen ? (
             <p className="text-body-ui text-ink-muted">Registration is closed.</p>
           ) : teamFull ? (
@@ -88,12 +93,18 @@ export default async function TeamJoinPage({ params }: Props) {
               Ask the team leader to make room, then open this link again.
             </Callout>
           ) : (
-            <RsvpForm
-              orgSlug={org.slug}
-              eventSlug={event.slug}
-              registrationFields={fields}
-              team={{ ...teamConfig, joinTeam: team }}
-            />
+            <>
+              <JoinWithSavedTicket orgSlug={org.slug} eventSlug={event.slug} joinToken={team.joinToken} teamName={team.name} />
+              <RsvpForm
+                orgSlug={org.slug}
+                eventSlug={event.slug}
+                registrationFields={fields}
+                team={{ ...teamConfig, joinTeam: team }}
+              />
+              <p className="text-caption text-ink-muted">
+                Already registered on your own? Open your ticket page (the link is in your confirmation email) and paste this team link under <span className="font-semibold">Join a team</span>.
+              </p>
+            </>
           )}
         </section>
       </aside>
