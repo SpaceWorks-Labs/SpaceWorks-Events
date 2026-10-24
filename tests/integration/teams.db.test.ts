@@ -61,6 +61,8 @@ import {
   type TeamLeaderAuth,
 } from "@/lib/core/teams";
 import type { TeamRegistrationIntent } from "@/lib/validators";
+import { countConfirmedForEvent } from "@/lib/rsvpCapacity";
+import { loadRsvpCounts } from "@/lib/dashboardHome";
 
 const suffix = randomUUID().replaceAll("-", "");
 const orgSlug = `teams-${suffix}`;
@@ -1001,5 +1003,29 @@ describe.sequential("team registration integration", () => {
     await expect(prisma.checkInListRecord.findMany({ where: { rsvpId: solo.leader.rsvpId }, select: { listId: true, source: true } })).resolves.toEqual([
       { listId: swag.id, source: "mobile-manual" },
     ]);
+  });
+
+  it("dashboard counts compare units, not people, with capacity on TEAM events", async () => {
+    const event = await createEvent({ capacity: 3 });
+    const alpha = await createTeam(event, "Count Alpha");
+    await joinTeam(event, alpha.team.id);
+    await joinTeam(event, alpha.team.id);
+    const beta = await createTeam(event, "Count Beta");
+    await joinTeam(event, beta.team.id);
+    await registerOk(event, "count-solo");
+    // 6 people in 3 units: the event is full in units.
+    await expect(prisma.rSVP.count({ where: { eventId: event.id, status: RsvpStatus.CONFIRMED } })).resolves.toBe(6);
+    await expect(countConfirmedForEvent(event.id, event.registrationMode)).resolves.toBe(3);
+    const counts = await loadRsvpCounts([event.id], []);
+    expect(counts.event.get(event.id)?.confirmed).toBe(6);
+    expect(counts.units.get(event.id)).toBe(3);
+
+    // INDIVIDUAL events: units equal confirmed people.
+    const individual = await createEvent({ capacity: 5, registrationMode: RegistrationMode.INDIVIDUAL });
+    await registerOk(individual, "count-one");
+    await registerOk(individual, "count-two");
+    await expect(countConfirmedForEvent(individual.id, individual.registrationMode)).resolves.toBe(2);
+    const individualCounts = await loadRsvpCounts([individual.id], []);
+    expect(individualCounts.units.get(individual.id)).toBe(2);
   });
 });

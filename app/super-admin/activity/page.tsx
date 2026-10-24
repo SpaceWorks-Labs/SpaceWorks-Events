@@ -5,6 +5,7 @@ import { RsvpStatus } from "@prisma/client";
 import { ACTIVITY_SERIES } from "@/lib/superAdminSeries";
 import { compareWindows, formatChange, formatShare, sumPoints } from "@/lib/superAdminInsights";
 import { SparklineCard } from "@/components/super-admin/Sparkline";
+import { peopleCount, teamCapacityLabel } from "@/lib/teamCapacityDisplay";
 import { AdminPanel, MetricRows, NameCell } from "@/components/super-admin/AdminPanel";
 import { EmptyState, PageHeader } from "@/components/ui/display";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -31,7 +32,7 @@ const rsvpStatusLabels: Record<RsvpStatus, string> = {
 
 export default async function SuperAdminActivityPage() {
   await requireSuperAdminMfa();
-  const { series, rsvpStatuses, rsvpTotal, topOrgs, upcoming, emptyOrgCount, emptyOrgs } = await loadSuperAdminActivityView();
+  const { series, rsvpStatuses, rsvpTotal, topOrgs, upcoming, emptyOrgCount, emptyOrgs, unitsByEvent } = await loadSuperAdminActivityView();
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Activity" description={`Growth and usage across the instance over the last ${WINDOW_DAYS} days (UTC days).`} />
@@ -124,7 +125,18 @@ export default async function SuperAdminActivityPage() {
                   <TR key={event.id}>
                     <TD><NameCell name={event.title} sub={<Link href={`/super-admin/orgs/${event.organisation.id}`} className="underline-offset-4 hover:underline">{event.organisation.name}</Link>} /></TD>
                     <TD className="whitespace-nowrap text-ink-secondary">{event.startDateTime.toLocaleString()}</TD>
-                    <TD className="text-right tabular-nums">{event.capacity ? `${event._count.rsvps} / ${event.capacity}` : event._count.rsvps}</TD>
+                    <TD className="text-right tabular-nums">
+                      {unitsByEvent[event.id] != null ? (
+                        <>
+                          {teamCapacityLabel(unitsByEvent[event.id]!, event.capacity, event.soloPolicy)}
+                          <span className="block text-caption text-ink-muted">{peopleCount(event._count.rsvps)}</span>
+                        </>
+                      ) : event.capacity ? (
+                        `${event._count.rsvps} / ${event.capacity}`
+                      ) : (
+                        event._count.rsvps
+                      )}
+                    </TD>
                   </TR>
                 ))}
               </TBody>

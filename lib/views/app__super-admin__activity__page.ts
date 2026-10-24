@@ -2,6 +2,7 @@ import { requireSuperAdminMfa } from "@/lib/permissions";
 import { EventStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ACTIVITY_SERIES, loadDailyActivity, loadTopOrganisationsByRsvps } from "@/lib/superAdminData";
+import { countConfirmedForEvent } from "@/lib/rsvpCapacity";
 import { fillDailySeries, windowStart, DAY_MS } from "@/lib/superAdminInsights";
 const WINDOW_DAYS = 30;
 
@@ -21,7 +22,7 @@ export async function loadSuperAdminActivityView() {
       where: { status: EventStatus.PUBLISHED, startDateTime: { gte: now, lt: nextWeek } },
       orderBy: { startDateTime: "asc" },
       take: 15,
-      select: { id: true, title: true, startDateTime: true, capacity: true, organisation: { select: { id: true, name: true } }, _count: { select: { rsvps: { where: { status: RsvpStatus.CONFIRMED } } } } },
+      select: { id: true, title: true, startDateTime: true, capacity: true, registrationMode: true, soloPolicy: true, organisation: { select: { id: true, name: true } }, _count: { select: { rsvps: { where: { status: RsvpStatus.CONFIRMED } } } } },
     }),
     prisma.organisation.count({ where: { events: { none: {} }, eventSeries: { none: {} } } }),
     prisma.organisation.findMany({
@@ -33,5 +34,9 @@ export async function loadSuperAdminActivityView() {
   ]);
   const series = fillDailySeries(dailyRows, ACTIVITY_SERIES, WINDOW_DAYS * 2, now);
   const rsvpTotal = rsvpStatuses.reduce((total, row) => total + row._count._all, 0);
-  return { series, rsvpStatuses, rsvpTotal, topOrgs, upcoming, emptyOrgCount, emptyOrgs };
+  // TEAM events fill capacity in units (teams plus solo registrants), not people.
+  const unitsByEvent: Record<string, number> = Object.fromEntries(
+    await Promise.all(upcoming.filter((event) => event.registrationMode === "TEAM").map(async (event) => [event.id, await countConfirmedForEvent(event.id, event.registrationMode)] as const)),
+  );
+  return { series, rsvpStatuses, rsvpTotal, topOrgs, upcoming, emptyOrgCount, emptyOrgs, unitsByEvent };
 }
