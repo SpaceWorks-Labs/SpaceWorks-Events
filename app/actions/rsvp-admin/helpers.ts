@@ -1,5 +1,5 @@
 import { Prisma, RsvpStatus } from "@prisma/client";
-import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft } from "@/lib/teamUnits";
+import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { soleMemberTeamSnapshotTx } from "@/lib/core/teams";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
@@ -81,12 +81,17 @@ export async function teamDeletionPayload(tx: Prisma.TransactionClient, params: 
   return { teamId, payload: (teamSnapshot ?? params.snapshot) as Prisma.InputJsonValue };
 }
 
-/** After a team member is removed: leadership passes on, an emptied team goes, and a freed unit is offered. */
-export async function settleTeamAfterRemoval(tx: Prisma.TransactionClient, params: { eventId: string; teamId: string; rsvpId: string }) {
+/**
+ * After a team member is removed: leadership passes on, an emptied team goes,
+ * and a freed unit is offered. Returns the promotion's webhooks, one per
+ * member, for the caller to emit after commit.
+ */
+export async function settleTeamAfterRemoval(tx: Prisma.TransactionClient, params: { eventId: string; teamId: string; rsvpId: string }): Promise<RegistrationStatusWebhook[]> {
   const settled = await settleTeamAfterMemberLeft(tx, { teamId: params.teamId, eventId: params.eventId, leftRsvpId: params.rsvpId });
-  if (!settled.freedConfirmedUnit) return;
+  if (!settled.freedConfirmedUnit) return [];
   const event = await tx.event.findUnique({ where: { id: params.eventId }, select: { id: true, title: true, capacity: true, privacyType: true } });
-  if (event) await promoteOldestWaitlistedUnit(tx, event);
+  const promoted = event ? await promoteOldestWaitlistedUnit(tx, event) : null;
+  return promoted?.webhooks ?? [];
 }
 
 /**

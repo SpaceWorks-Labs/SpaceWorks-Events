@@ -10,7 +10,7 @@ import type { ActionResult } from "./org";
 import { z } from "zod";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { EventPrivacyType, RegistrationMode, RsvpStatus } from "@prisma/client";
-import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft } from "@/lib/teamUnits";
+import { emitTeamWebhooks, promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { NOT_FROM_PAID_ORDER } from "@/lib/rsvpCapacity";
 import { fillFromWaitlist } from "@/lib/payments/operations";
 import { lockSeriesDates, seatTargetOf } from "@/lib/payments/targets";
@@ -78,6 +78,7 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
   }
 
   let promotedId: string | null = null;
+  const promotedWebhooks: RegistrationStatusWebhook[] = [];
   let removed: { snapshot: RsvpWebhookSnapshot; previousStatus: RsvpStatus; } | null = null;
   const cancellation = await prisma.$transaction(async (tx) => {
     if (rsvp.eventId) {
@@ -123,7 +124,9 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
       if (event?.registrationMode === RegistrationMode.TEAM) {
         let freedUnit = !current.teamId && current.status === RsvpStatus.CONFIRMED;
         if (current.teamId) freedUnit = (await settleTeamAfterMemberLeft(tx, { teamId: current.teamId, eventId: event.id, leftRsvpId: current.id })).freedConfirmedUnit;
-        if (freedUnit) await promoteOldestWaitlistedUnit(tx, event);
+        // A promoted team raises one webhook per member; a promoted solo RSVP, one.
+        const promotedUnit = freedUnit ? await promoteOldestWaitlistedUnit(tx, event) : null;
+        if (promotedUnit) promotedWebhooks.push(...promotedUnit.webhooks);
         return { error: null };
       }
     }
@@ -164,6 +167,7 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
   const cancelled = removed as { snapshot: RsvpWebhookSnapshot; previousStatus: RsvpStatus; } | null;
   if (cancelled) emitWebhookEvent({ type: "registration.status_changed", rsvpId: cancelled.snapshot.id, status: "CANCELLED", previousStatus: cancelled.previousStatus, snapshot: cancelled.snapshot });
   if (promotedId) emitWebhookEvent({ type: "registration.status_changed", rsvpId: promotedId, status: RsvpStatus.CONFIRMED, previousStatus: RsvpStatus.WAITLISTED });
+  emitTeamWebhooks(promotedWebhooks);
   if ("freed" in cancellation && cancellation.freed) await fillFromWaitlist(cancellation.freed);
 
   await recordAuditEvent({

@@ -205,6 +205,27 @@ helper, validator, delivery branch, capability flag because they carry tokens):
 
 Status changes reuse the existing RSVP status email per member, naming the team.
 
+## Organisation webhooks
+
+Team changes raise the same per-registration webhooks as individual RSVPs
+(`docs/WEBHOOKS.md`), one per member, emitted only after the transaction has
+committed and with the same minimal payload (no team name, emails or tokens):
+
+- Creating a team, joining by link, and a leader adding a member:
+  `registration.created`.
+- Whole-team approve, reject and promote, automatic team promotion after a
+  unit is freed, and a registration moved into a team with a different status
+  (seeker accepted, solo join by link, organiser move):
+  `registration.status_changed` for each member whose status changed.
+- A member leaving, a leader removing a member, and disbanding:
+  `registration.status_changed` with `CANCELLED`. An organiser deleting a team
+  (or its last member): `REMOVED`. Undoing that deletion: the restored status
+  with `previousStatus: "REMOVED"`.
+
+Undoing a team deletion (or the deletion of a team's last member) also
+restores each member's custom check-in list records, for lists that still
+belong to the event, exactly like the single-RSVP undo.
+
 ## Machine API
 
 Out of scope for this version beyond safety: a registration without a team on
@@ -227,8 +248,11 @@ tickets, and adding a ticket to a team event is refused.
   cannot act on another; a solo registrant joining by link frees and promotes
   their unit, cancels pending requests and hides their profile, while other
   events' links, full teams and checked-in moves into an unconfirmed team are
-  refused; the Teams view pages, searches and filters within one event; and the
-  check-in lookup matches team names within the event.
+  refused; the Teams view pages, searches and filters within one event; the
+  check-in lookup matches team names within the event; whole-team approval,
+  deletion, promotion, disbanding and undo send one minimal
+  `registration.status_changed` webhook per member; and undoing a team
+  deletion restores the members' custom check-in list records.
 - Unit tests: validators, the unit-count helper, status decisions, DTOs for the
   join page and seeker list (forbidden fields), the token hashing, pasted
   join-link parsing, and the Teams view cursor and search escaping.

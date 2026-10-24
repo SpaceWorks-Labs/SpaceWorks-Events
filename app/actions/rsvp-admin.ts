@@ -17,6 +17,7 @@ import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { restoreListCheckIns, revalidatePath, revalidateRsvpPaths, settleTeamAfterRemoval, snapshotSchema, teamDeletionPayload, teamForRestore, UNDO_TTL_MS } from "./rsvp-admin/helpers";
 import { isTeamDeletionSnapshot, restoreTeamDeletionSnapshot } from "@/lib/core/teams";
+import { emitTeamWebhooks, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 
 export async function addManualRsvp(
   input: unknown,
@@ -196,6 +197,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
     })),
   };
 
+  const promotedWebhooks: RegistrationStatusWebhook[] = [];
   const undo = await prisma.$transaction(async (tx) => {
     const team = teamEvent ? await teamDeletionPayload(tx, { eventId: teamEvent, rsvpId: rsvp.id, snapshot }) : null;
     // Keep the short-lived undo table bounded even when no scheduled cleanup is
@@ -211,7 +213,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
       select: { id: true },
     });
     await tx.rSVP.delete({ where: { id: rsvp.id } });
-    if (teamEvent && team?.teamId) await settleTeamAfterRemoval(tx, { eventId: teamEvent, teamId: team.teamId, rsvpId: rsvp.id });
+    if (teamEvent && team?.teamId) promotedWebhooks.push(...await settleTeamAfterRemoval(tx, { eventId: teamEvent, teamId: team.teamId, rsvpId: rsvp.id }));
     return created;
   });
   // The guest is told once the undo window has passed, unless the removal was undone.
@@ -234,6 +236,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
     previousStatus: rsvp.status,
     snapshot: { id: rsvp.id, eventId: rsvp.eventId, eventInstanceId: rsvp.eventInstanceId, userId: rsvp.userId, guestName: rsvp.guestName, createdAt: rsvp.createdAt, checkedInAt: rsvp.checkedInAt },
   });
+  emitTeamWebhooks(promotedWebhooks);
   await recordAuditEvent({ action: "RSVP_DELETED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
 
   revalidateRsvpPaths(org.slug, { eventId: rsvp.eventId, eventInstanceId: rsvp.eventInstanceId, eventSlug: rsvp.event?.slug });

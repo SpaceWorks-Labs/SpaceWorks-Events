@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - On team events, approving, rejecting, or promoting a single registration that belongs to a team is refused; organisers act on the whole team instead. Self-cancellation, organiser delete and restore, and the capacity-lowering check in `updateEvent` count units on team events. `INDIVIDUAL` events behave as before.
 - A registration without a team on an event that registers teams only is refused with the code `TEAM_REQUIRED`.
+- Team changes send organisation webhooks like individual RSVPs: one `registration.status_changed` per member for whole-team approve, reject and promote, automatic team promotion, moves into a team, leader removals and disbanding (`CANCELLED`), organiser team deletion (`REMOVED`) and its undo, and `registration.created` when a leader adds a member. Undoing a team deletion (or a last-member deletion) restores the members' custom check-in list records, like the single-RSVP undo.
 
 
 ### Added
