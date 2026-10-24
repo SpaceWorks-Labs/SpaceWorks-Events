@@ -653,6 +653,11 @@
       "id": "checkin-lists:lookupListAttendees"
     },
     {
+      "module": "app/actions/checkin-lists",
+      "name": "loadListRosterPage",
+      "id": "checkin-lists:loadListRosterPage"
+    },
+    {
       "module": "app/actions/checkin-station",
       "name": "createOrRotateCheckInStation",
       "id": "checkin-station:createOrRotateCheckInStation"
@@ -706,6 +711,11 @@
       "module": "app/actions/checkin",
       "name": "checkInByRsvpId",
       "id": "checkin:checkInByRsvpId"
+    },
+    {
+      "module": "app/actions/checkin",
+      "name": "loadRecentCheckIns",
+      "id": "checkin:loadRecentCheckIns"
     },
     {
       "module": "app/actions/event-collaborators",
@@ -863,6 +873,11 @@
       "id": "feedback-form:deleteFeedbackField"
     },
     {
+      "module": "app/actions/guest-list",
+      "name": "loadAttendeesPage",
+      "id": "guest-list:loadAttendeesPage"
+    },
+    {
       "module": "app/actions/instance-settings",
       "name": "setNewUserRegistrationEnabled",
       "id": "instance-settings:setNewUserRegistrationEnabled"
@@ -946,6 +961,11 @@
       "module": "app/actions/invites",
       "name": "removeSeriesInvite",
       "id": "invites:removeSeriesInvite"
+    },
+    {
+      "module": "app/actions/invites",
+      "name": "loadInvitesPage",
+      "id": "invites:loadInvitesPage"
     },
     {
       "module": "app/actions/judging-admin",
@@ -1034,6 +1054,21 @@
     },
     {
       "module": "app/actions/judging-admin",
+      "name": "loadSubmissionsPage",
+      "id": "judging-admin:loadSubmissionsPage"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "loadResultsPage",
+      "id": "judging-admin:loadResultsPage"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "searchAwardCandidates",
+      "id": "judging-admin:searchAwardCandidates"
+    },
+    {
+      "module": "app/actions/judging-admin",
       "name": "publishJudgingResults",
       "id": "judging-admin:publishJudgingResults"
     },
@@ -1041,6 +1076,11 @@
       "module": "app/actions/judging-admin",
       "name": "unpublishJudgingResults",
       "id": "judging-admin:unpublishJudgingResults"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadJudgeSubmissionsPage",
+      "id": "judging:loadJudgeSubmissionsPage"
     },
     {
       "module": "app/actions/judging",
@@ -1483,6 +1523,11 @@
       "id": "team-admin:loadTeamsPage"
     },
     {
+      "module": "app/actions/team-admin",
+      "name": "searchMoveTargets",
+      "id": "team-admin:searchMoveTargets"
+    },
+    {
       "module": "app/actions/teams",
       "name": "renameTeamAction",
       "id": "teams:renameTeamAction"
@@ -1566,6 +1611,36 @@
       "module": "app/actions/teams",
       "name": "joinTeamWithTicketAction",
       "id": "teams:joinTeamWithTicketAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTeamSeekersPageAction",
+      "id": "teams:loadTeamSeekersPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTeamJoinRequestsPageAction",
+      "id": "teams:loadTeamJoinRequestsPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketSeekersPageAction",
+      "id": "teams:loadTicketSeekersPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketTeamsPageAction",
+      "id": "teams:loadTicketTeamsPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketInvitesPageAction",
+      "id": "teams:loadTicketInvitesPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketRequestsPageAction",
+      "id": "teams:loadTicketRequestsPageAction"
     },
     {
       "module": "app/actions/ticket-types",

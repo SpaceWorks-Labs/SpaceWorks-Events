@@ -7,7 +7,7 @@ import { GuestsTeams } from "./GuestsTeams";
 import { NoPermission } from "./shared";
 
 export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
-  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teamsPage, moveTargets } = await loadGuestsPanel({ ctx });
+  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teamsPage } = await loadGuestsPanel({ ctx });
   const teamsTab: SubTab[] = teamMode
     ? [
         {
@@ -15,7 +15,7 @@ export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
           label: "Teams",
           count: teamsPage ? teamsPage.counts.all : undefined,
           content: teamsPage ? (
-            <GuestsTeams organisationSlug={organisation.slug} eventId={event.id} initialPage={teamsPage} moveTargets={moveTargets} approvalRequired={event.privacyType === "APPROVAL_REQUIRED"} />
+            <GuestsTeams organisationSlug={organisation.slug} eventId={event.id} initialPage={teamsPage} approvalRequired={event.privacyType === "APPROVAL_REQUIRED"} />
           ) : (
             <NoPermission>You do not have permission to view or manage attendee registrations.</NoPermission>
           ),
@@ -29,8 +29,8 @@ export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
         {
           value: "people",
           label: "People",
-          content: permissions.canManageRegistrations ? (
-            <GuestsPeople organisationSlug={organisation.slug} target={{ kind: "event", eventId: event.id, eventTitle: event.title }} timeZone={event.timezone} now={ctx.now.toISOString()} attendees={attendees.attendees} truncated={attendees.truncated} registrationFields={fields} ticketTypes={ticketTypes} canUndoCheckIn={permissions.canCheckIn} teamMode={teamMode} teams={moveTargets} />
+          content: attendees ? (
+            <GuestsPeople organisationSlug={organisation.slug} target={{ kind: "event", eventId: event.id, eventTitle: event.title }} timeZone={event.timezone} now={ctx.now.toISOString()} initialPage={attendees} registrationFields={fields} ticketTypes={ticketTypes} canUndoCheckIn={permissions.canCheckIn} teamMode={teamMode} />
           ) : (
             <NoPermission>You do not have permission to view or manage attendee registrations.</NoPermission>
           ),
@@ -39,9 +39,9 @@ export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
         {
           value: "invites",
           label: "Invites",
-          count: permissions.canManageInvitations ? invites.length : undefined,
-          content: permissions.canManageInvitations ? (
-            <EventInvitePanel organisationSlug={organisation.slug} eventId={event.id} eventHasEnded={event.endDateTime <= ctx.now} invites={invites} timeZone={event.timezone} now={ctx.now.toISOString()} />
+          count: invites ? invites.total : undefined,
+          content: invites ? (
+            <EventInvitePanel organisationSlug={organisation.slug} eventId={event.id} eventHasEnded={event.endDateTime <= ctx.now} initialPage={invites} timeZone={event.timezone} now={ctx.now.toISOString()} />
           ) : (
             <NoPermission>You do not have permission to manage invitations for this event.</NoPermission>
           ),

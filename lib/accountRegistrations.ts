@@ -7,14 +7,18 @@ import { safeTimeZone } from "@/lib/timeZone";
 import { formatDateBlock, formatDayShort, formatTimeRange } from "@/lib/format/datetime";
 import type { ChipTone } from "@/components/ui/display";
 
-/** Per-section cap. Upcoming and Past are each bounded; nothing here is unbounded. */
-import { ACCOUNT_REGISTRATIONS_LIMIT } from "./accountLimits";
-export { ACCOUNT_REGISTRATIONS_LIMIT } from "./accountLimits";
-export const ACCOUNT_CERTIFICATES_LIMIT = 50;
+import {
+  ACCOUNT_CERTIFICATES_LIMIT,
+  ACCOUNT_REGISTRATIONS_LIMIT,
+  accountSectionPagination,
+  type AccountPages,
+} from "./accountLimits";
+
+export * from "./accountLimits";
 
 /* ---------- Pure helpers (unit-tested) ---------- */
 
-export type RegistrationStatusView = { label: string; tone: ChipTone; };
+export type RegistrationStatusView = { label: string; tone: ChipTone };
 
 /** The single attendee-facing status for one RSVP. A check-in outranks the RSVP status. */
 export function registrationStatus(status: RsvpStatus, checkedInAt: Date | null): RegistrationStatusView {
@@ -40,18 +44,8 @@ export function isUpcoming(endDateTime: Date, now: Date): boolean {
   return endDateTime.getTime() >= now.getTime();
 }
 
-/**
- * Split occurrences into Upcoming (soonest first) and Past (most recent first),
- * each capped. Pure so the ordering rule is tested without a database.
- */
-export function splitRegistrations<T extends { start: Date; end: Date; }>(rows: readonly T[], now: Date, limit = ACCOUNT_REGISTRATIONS_LIMIT) {
-  const upcoming = rows.filter((row) => isUpcoming(row.end, now)).sort((a, b) => a.start.getTime() - b.start.getTime());
-  const past = rows.filter((row) => !isUpcoming(row.end, now)).sort((a, b) => b.start.getTime() - a.start.getTime());
-  return { upcoming: upcoming.slice(0, limit), past: past.slice(0, limit) };
-}
-
 /** Attendees may withdraw until check-in, while the occurrence has not ended and was not declined. */
-export function canCancelRegistration(row: { status: RsvpStatus; checkedInAt: Date | null; end: Date; }, now: Date): boolean {
+export function canCancelRegistration(row: { status: RsvpStatus; checkedInAt: Date | null; end: Date }, now: Date): boolean {
   return !row.checkedInAt && row.status !== RsvpStatus.REJECTED && isUpcoming(row.end, now);
 }
 
@@ -116,14 +110,14 @@ const rsvpSelect = {
   eventInstance: { select: instanceSelect },
 } satisfies Prisma.RSVPSelect;
 
-type RsvpRow = Prisma.RSVPGetPayload<{ select: typeof rsvpSelect; }>;
+export type AccountRsvpRow = Prisma.RSVPGetPayload<{ select: typeof rsvpSelect }>;
 
 /** Serializable, client-safe row. The ticket token travels only inside `ticketHref`/`cancelToken`, never as display text. */
 export type AccountRegistrationRow = {
   id: string;
   title: string;
   organisationName: string;
-  dateBlock: { month: string; day: string; };
+  dateBlock: { month: string; day: string };
   dateLabel: string;
   timeLabel: string;
   location: string | null;
@@ -149,8 +143,8 @@ export type AccountCertificateRow = {
   certificateHref: string;
 };
 
-type Normalised = {
-  rsvp: RsvpRow;
+export type NormalisedAccountRegistration = {
+  rsvp: AccountRsvpRow;
   title: string;
   organisationName: string;
   start: Date;
@@ -163,7 +157,7 @@ type Normalised = {
   eventHref: string | null;
 };
 
-function normalise(rsvp: RsvpRow, invitedEventIds: Set<string>, invitedSeriesIds: Set<string>): Normalised | null {
+function normalise(rsvp: AccountRsvpRow, invitedEventIds: Set<string>, invitedSeriesIds: Set<string>): NormalisedAccountRegistration | null {
   if (rsvp.event) {
     const event = rsvp.event;
     const reachable = isEventPageReachable({
@@ -212,7 +206,7 @@ function normalise(rsvp: RsvpRow, invitedEventIds: Set<string>, invitedSeriesIds
   return null;
 }
 
-function toRow(item: Normalised, now: Date): AccountRegistrationRow {
+function toRow(item: NormalisedAccountRegistration, now: Date): AccountRegistrationRow {
   const { rsvp } = item;
   const cancellable = canCancelRegistration({ status: rsvp.status, checkedInAt: rsvp.checkedInAt, end: item.end }, now);
   const showTicket = rsvp.status !== RsvpStatus.REJECTED;
@@ -253,7 +247,7 @@ export function submissionHref(rsvp: {
 }
 
 /** The leader link resolves only for the signed-in leader (`resolveLeaderForUser`); the id alone grants nothing. */
-function teamView(rsvp: RsvpRow): AccountRegistrationRow["team"] {
+function teamView(rsvp: AccountRsvpRow): AccountRegistrationRow["team"] {
   const team = rsvp.team;
   if (!team) return null;
   const isLeader = team.leaderRsvpId === rsvp.id;
@@ -261,52 +255,106 @@ function teamView(rsvp: RsvpRow): AccountRegistrationRow["team"] {
 }
 
 /**
- * The signed-in user's own registrations. Every query is keyed on
- * `RSVP.userId` (never an email match) and bounded with `take`.
+ * The signed-in user's own registrations, one page per section. Every query
+ * is keyed on `RSVP.userId` (never an email match) and bounded by the page size.
  */
-export async function loadAccountRegistrations(userId: string, now: Date = new Date()) {
-  const take = ACCOUNT_REGISTRATIONS_LIMIT;
-  const [upcomingEvents, upcomingInstances, pastEvents, pastInstances, certificates, user] = await Promise.all([
-    prisma.rSVP.findMany({
-      where: { userId, event: { is: { endDateTime: { gte: now } } } },
-      orderBy: { event: { startDateTime: "asc" } },
-      take,
-      select: rsvpSelect,
-    }),
-    prisma.rSVP.findMany({
-      where: { userId, eventInstance: { is: { endDateTime: { gte: now } } } },
-      orderBy: { eventInstance: { startDateTime: "asc" } },
-      take,
-      select: rsvpSelect,
-    }),
-    prisma.rSVP.findMany({
-      where: { userId, event: { is: { endDateTime: { lt: now } } } },
-      orderBy: { event: { startDateTime: "desc" } },
-      take,
-      select: rsvpSelect,
-    }),
-    prisma.rSVP.findMany({
-      where: { userId, eventInstance: { is: { endDateTime: { lt: now } } } },
-      orderBy: { eventInstance: { startDateTime: "desc" } },
-      take,
-      select: rsvpSelect,
-    }),
-    // Mirrors the certificate route: issued token on the user's own confirmed RSVP.
-    prisma.eventFeedbackResponse.findMany({
-      where: { certificateToken: { not: null }, rsvp: { is: { userId, status: RsvpStatus.CONFIRMED } } },
-      orderBy: { submittedAt: "desc" },
-      take: ACCOUNT_CERTIFICATES_LIMIT,
-      select: {
-        id: true,
-        certificateToken: true,
-        submittedAt: true,
-        form: { select: { event: { select: { title: true, timezone: true, organisation: { select: { name: true } } } } } },
-      },
-    }),
+export async function loadAccountRegistrations(userId: string, now: Date = new Date(), pages: Partial<AccountPages> = {}) {
+  const { upcoming, past, certificates, pagination } = await loadAccountRegistrationRecords(userId, now, pages);
+  return {
+    pagination,
+    upcoming: upcoming.map((item) => toRow(item, now)),
+    past: past.map((item) => toRow(item, now)),
+    certificates: certificates.map((certificate): AccountCertificateRow => ({
+      id: certificate.id,
+      title: certificate.title,
+      organisationName: certificate.organisationName,
+      issuedLabel: formatDayShort(certificate.issuedAt, certificate.timeZone, now),
+      certificateHref: certificate.certificateHref,
+    })),
+  };
+}
+
+export type AccountCertificateRecord = {
+  id: string;
+  title: string;
+  organisationName: string;
+  issuedAt: Date;
+  timeZone: string;
+  certificateHref: string;
+};
+
+const REGISTRATION_FROM = Prisma.sql`"RSVP" r
+  LEFT JOIN "Event" e ON e."id" = r."eventId"
+  LEFT JOIN "EventInstance" i ON i."id" = r."eventInstanceId"`;
+
+/**
+ * One page of the user's registrations in a section, ordered across one-off
+ * events and series occurrences together (the event's dates win, as in
+ * `normalise`): Upcoming soonest first, Past most recent first, then by id.
+ * Keyed on `RSVP.userId` only, with a separate count for the page numbers.
+ */
+async function registrationSectionPage(userId: string, now: Date, section: "upcoming" | "past", requestedPage: number) {
+  const at = now.toISOString().replace("Z", "");
+  const where =
+    section === "upcoming"
+      ? Prisma.sql`r."userId" = ${userId} AND COALESCE(e."endDateTime", i."endDateTime") >= ${at}::timestamp(3)`
+      : Prisma.sql`r."userId" = ${userId} AND COALESCE(e."endDateTime", i."endDateTime") < ${at}::timestamp(3)`;
+  const order =
+    section === "upcoming"
+      ? Prisma.sql`COALESCE(e."startDateTime", i."startDateTime") ASC, r."id" ASC`
+      : Prisma.sql`COALESCE(e."startDateTime", i."startDateTime") DESC, r."id" ASC`;
+  const counted = await prisma.$queryRaw<Array<{ count: bigint }>>`SELECT count(*) AS "count" FROM ${REGISTRATION_FROM} WHERE ${where}`;
+  const pagination = accountSectionPagination(requestedPage, Number(counted[0]?.count ?? 0), ACCOUNT_REGISTRATIONS_LIMIT);
+  if (pagination.total === 0) return { rows: [] as AccountRsvpRow[], pagination };
+  const ids = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT r."id" FROM ${REGISTRATION_FROM}
+    WHERE ${where}
+    ORDER BY ${order}
+    LIMIT ${ACCOUNT_REGISTRATIONS_LIMIT} OFFSET ${(pagination.page - 1) * ACCOUNT_REGISTRATIONS_LIMIT}`;
+  const found = ids.length
+    ? await prisma.rSVP.findMany({ where: { id: { in: ids.map((row) => row.id) }, userId }, select: rsvpSelect })
+    : [];
+  const byId = new Map(found.map((rsvp) => [rsvp.id, rsvp]));
+  return { rows: ids.flatMap((row) => byId.get(row.id) ?? []), pagination };
+}
+
+/** One page of the user's certificates, newest first (issued token on their own confirmed RSVP, as the certificate route checks). */
+async function certificatePage(userId: string, requestedPage: number) {
+  const where = { certificateToken: { not: null }, rsvp: { is: { userId, status: RsvpStatus.CONFIRMED } } } satisfies Prisma.EventFeedbackResponseWhereInput;
+  const total = await prisma.eventFeedbackResponse.count({ where });
+  const pagination = accountSectionPagination(requestedPage, total, ACCOUNT_CERTIFICATES_LIMIT);
+  const rows = total
+    ? await prisma.eventFeedbackResponse.findMany({
+        where,
+        orderBy: [{ submittedAt: "desc" }, { id: "asc" }],
+        skip: (pagination.page - 1) * ACCOUNT_CERTIFICATES_LIMIT,
+        take: ACCOUNT_CERTIFICATES_LIMIT,
+        select: {
+          id: true,
+          certificateToken: true,
+          submittedAt: true,
+          form: { select: { event: { select: { title: true, timezone: true, organisation: { select: { name: true } } } } } },
+        },
+      })
+    : [];
+  return { rows, pagination };
+}
+
+/**
+ * The records behind `loadAccountRegistrations`: ownership, ordering, page
+ * size and page-reachability rules. Each section is paged on its own
+ * (`pages`, default page 1).
+ */
+export async function loadAccountRegistrationRecords(userId: string, now: Date = new Date(), pages: Partial<AccountPages> = {}) {
+  const [upcomingPage, pastPage, certificatesPage, user] = await Promise.all([
+    registrationSectionPage(userId, now, "upcoming", pages.upcoming ?? 1),
+    registrationSectionPage(userId, now, "past", pages.past ?? 1),
+    certificatePage(userId, pages.certificates ?? 1),
     prisma.user.findUnique({ where: { id: userId }, select: { email: true, emailVerified: true } }),
   ]);
+  const certificates = certificatesPage.rows;
 
-  const rsvps = [...upcomingEvents, ...upcomingInstances, ...pastEvents, ...pastInstances];
+  const rsvps = [...upcomingPage.rows, ...pastPage.rows];
 
   // Invite-only pages require an invitation for the user's verified email,
   // exactly as `resolvePublicEventAccess` does. Batched, bounded by the RSVP ids above.
@@ -315,35 +363,37 @@ export async function loadAccountRegistrations(userId: string, now: Date = new D
   const inviteOnlySeriesIds = [...new Set(rsvps.flatMap((r) => (r.eventInstance?.series.privacyType === EventPrivacyType.INVITE_ONLY ? [r.eventInstance.series.id] : [])))];
   const [eventInvites, seriesInvites] = email
     ? await Promise.all([
-      inviteOnlyEventIds.length
-        ? prisma.eventInvite.findMany({ where: { email, eventId: { in: inviteOnlyEventIds } }, select: { eventId: true } })
-        : Promise.resolve([]),
-      inviteOnlySeriesIds.length
-        ? prisma.seriesInvite.findMany({ where: { email, eventSeriesId: { in: inviteOnlySeriesIds } }, select: { eventSeriesId: true } })
-        : Promise.resolve([]),
-    ])
+        inviteOnlyEventIds.length
+          ? prisma.eventInvite.findMany({ where: { email, eventId: { in: inviteOnlyEventIds } }, select: { eventId: true } })
+          : Promise.resolve([]),
+        inviteOnlySeriesIds.length
+          ? prisma.seriesInvite.findMany({ where: { email, eventSeriesId: { in: inviteOnlySeriesIds } }, select: { eventSeriesId: true } })
+          : Promise.resolve([]),
+      ])
     : [[], []];
   const invitedEventIds = new Set(eventInvites.map((invite) => invite.eventId));
   const invitedSeriesIds = new Set(seriesInvites.map((invite) => invite.eventSeriesId));
 
-  const normalised = rsvps.flatMap((rsvp) => {
-    const item = normalise(rsvp, invitedEventIds, invitedSeriesIds);
-    return item ? [item] : [];
-  });
-  const { upcoming, past } = splitRegistrations(normalised, now);
+  const normaliseAll = (rows: AccountRsvpRow[]) =>
+    rows.flatMap((rsvp) => {
+      const item = normalise(rsvp, invitedEventIds, invitedSeriesIds);
+      return item ? [item] : [];
+    });
 
   return {
-    upcoming: upcoming.map((item) => toRow(item, now)),
-    past: past.map((item) => toRow(item, now)),
-    certificates: certificates.flatMap((response): AccountCertificateRow[] =>
+    upcoming: normaliseAll(upcomingPage.rows),
+    past: normaliseAll(pastPage.rows),
+    pagination: { upcoming: upcomingPage.pagination, past: pastPage.pagination, certificates: certificatesPage.pagination },
+    certificates: certificates.flatMap((response): AccountCertificateRecord[] =>
       response.certificateToken
         ? [{
-          id: response.id,
-          title: response.form.event.title,
-          organisationName: response.form.event.organisation.name,
-          issuedLabel: formatDayShort(response.submittedAt, safeTimeZone(response.form.event.timezone), now),
-          certificateHref: `/api/feedback/certificate/${response.certificateToken}`,
-        }]
+            id: response.id,
+            title: response.form.event.title,
+            organisationName: response.form.event.organisation.name,
+            issuedAt: response.submittedAt,
+            timeZone: safeTimeZone(response.form.event.timezone),
+            certificateHref: `/api/feedback/certificate/${response.certificateToken}`,
+          }]
         : [],
     ),
   };

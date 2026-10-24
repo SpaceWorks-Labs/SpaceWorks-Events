@@ -46,14 +46,13 @@ export default async function EventCheckInPage({ params, searchParams }: Props) 
           eventId={event.id}
           timeZone={event.timezone}
           list={view.selectedList}
-          roster={view.roster.rows}
-          rosterTruncated={view.roster.truncated}
+          initialRoster={view.roster}
         />
       </div>
     );
   }
 
-  const { confirmed, stationEnabled, registrationForm, checkedInCount, recent, badgeEvent, canManageStation, stationUrl } = view;
+  const { confirmed, stationEnabled, registrationForm, checkedInCount, recentPage, attendeeExportHref, badgeEvent, canManageStation, stationUrl } = view;
   return (
     <div className="flex flex-col gap-6">
       {header}
@@ -66,7 +65,9 @@ export default async function EventCheckInPage({ params, searchParams }: Props) 
         registrationFields={registrationForm?.fields ?? []}
         teamEvent={event.registrationMode === "TEAM"}
         stats={{ confirmed, checkedIn: checkedInCount }}
-        recent={recent}
+        recent={recentPage.rows}
+        recentNextCursor={recentPage.nextCursor}
+        attendeeExportHref={attendeeExportHref}
         badge={{ design: badgeDesignFor(badgeEvent), branding: badgeBrandingFor(badgeEvent), canSave: true }}
       />
       {canManageStation ? <CheckInStationSettings organisationSlug={organisation.slug} eventId={event.id} stationUrl={stationUrl} enabled={stationEnabled} /> : null}

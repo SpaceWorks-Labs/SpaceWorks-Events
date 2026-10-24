@@ -25,6 +25,8 @@ import {
   downloadOfflineCheckInRoster as downloadOfflineCheckInRosterAction,
   syncOfflineCheckIns as syncOfflineCheckInsAction,
 } from "./checkin/offline";
+import { loadRecentCheckIns as loadRecentCheckInsAction } from "./checkin/recent";
+import type { RecentCheckInsPage } from "@/lib/checkInRecent";
 
 export type CheckInResultData = {
   rsvpId: string;
@@ -326,4 +328,8 @@ export async function checkInByRsvpId(
   input: unknown,
 ): Promise<ActionResult<CheckInResultData>> {
   return checkInByRsvpIdAction(input);
+}
+
+export async function loadRecentCheckIns(input: unknown): Promise<ActionResult<RecentCheckInsPage>> {
+  return loadRecentCheckInsAction(input);
 }

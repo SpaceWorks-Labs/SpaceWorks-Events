@@ -47,8 +47,6 @@ export const loadRegistrationFields = cache(async (eventId: string): Promise<Reg
   return (form?.fields ?? []).map((field) => ({ id: field.id, sortOrder: field.sortOrder, ...toFieldDefinition(field) }));
 });
 
-export const MAX_BROWSER_ATTENDEES = 250;
-
 export const attendeeOrderSelect = {
   id: true, reference: true, status: true, totalMinor: true, currency: true, testMode: true,
   _count: { select: { rsvps: true } },
@@ -88,68 +86,3 @@ export function attendeeOrder(order: Prisma.OrderGetPayload<{ select: typeof att
     dispute: dispute ? { status: dispute.status, respondBy: dispute.respondBy?.toISOString() ?? null } : null,
   };
 }
-
-/** The most recent registrations for the browser (organisation admins only). */
-export const loadAttendees = cache(async (eventId: string, origin: string) => {
-  const rsvps = await prisma.rSVP.findMany({
-    where: { eventId },
-    include: {
-      user: { select: { id: true, name: true, email: true } },
-      answers: { include: { field: true } },
-      team: { select: { id: true, name: true, leaderRsvpId: true } },
-      ticketType: { select: { name: true } },
-      order: { select: attendeeOrderSelect },
-      checkInListRecords: { select: { checkedInAt: true, list: { select: { name: true, archived: true } } }, orderBy: { list: { sortOrder: "asc" } } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: MAX_BROWSER_ATTENDEES + 1,
-  });
-  const attendees = rsvps.slice(0, MAX_BROWSER_ATTENDEES).map((rsvp) => ({
-    id: rsvp.id,
-    status: rsvp.status,
-    createdAt: rsvp.createdAt.toISOString(),
-    guestEmail: rsvp.guestEmail,
-    guestName: rsvp.guestName,
-    user: rsvp.user ? { id: rsvp.user.id, name: rsvp.user.name, email: rsvp.user.email } : null,
-    checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
-    /** Custom check-in lists this guest is in (never changes entry check-in). */
-    listCheckIns: rsvp.checkInListRecords.map((record) => ({
-      listName: record.list.archived ? `${record.list.name} (archived)` : record.list.name,
-      checkedInAt: record.checkedInAt.toISOString(),
-    })),
-    ticketUrl: `${origin}/ticket/${rsvp.checkInToken}`,
-    // TEAM events: the team this registration belongs to (null when solo).
-    team: rsvp.team ? { id: rsvp.team.id, name: rsvp.team.name, isLeader: rsvp.team.leaderRsvpId === rsvp.id } : null,
-    ticketName: rsvp.ticketType?.name ?? null,
-    order: rsvp.order && rsvp.order.totalMinor > BigInt(0) ? attendeeOrder(rsvp.order) : null,
-    rawAnswers: rsvp.answers.map((answer) => ({
-      fieldId: answer.fieldId,
-      valueText: answer.valueText,
-      valueBool: answer.valueBool,
-      valueNumber: answer.valueNumber,
-      valueDate: answer.valueDate?.toISOString() ?? null,
-    })),
-    answers: (() => {
-      const byField: Record<string, { label: string; values: string[] }> = {};
-      for (const answer of rsvp.answers) {
-        const value =
-          answer.valueText ??
-          (answer.valueBool != null ? (answer.valueBool ? "Yes" : "No") : null) ??
-          (answer.valueNumber != null ? String(answer.valueNumber) : null) ??
-          (answer.valueDate != null ? new Date(answer.valueDate).toLocaleDateString() : null);
-        if (!value) continue;
-        if (!byField[answer.field.id]) byField[answer.field.id] = { label: answer.field.label, values: [] };
-        byField[answer.field.id]!.values.push(value);
-      }
-      return Object.values(byField).map((entry) => ({ label: entry.label, value: entry.values.join(", ") }));
-    })(),
-  }));
-  return { attendees, truncated: rsvps.length > MAX_BROWSER_ATTENDEES };
-});
-
-export type AttendeeRows = Awaited<ReturnType<typeof loadAttendees>>["attendees"];
-
-export const loadEventInvites = cache(async (eventId: string) => {
-  const invites = await prisma.eventInvite.findMany({ where: { eventId }, orderBy: { createdAt: "desc" }, select: { id: true, email: true, createdAt: true } });
-  return invites.map((invite) => ({ ...invite, createdAt: invite.createdAt.toISOString() }));
-});

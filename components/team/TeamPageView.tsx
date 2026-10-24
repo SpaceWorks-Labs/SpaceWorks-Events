@@ -40,7 +40,8 @@ export function TeamPageView({ data, teamRef, tokenPage, submission = null }: {
           inviteOnly: page.event.inviteOnly,
         }}
         members={page.members}
-        pendingRequests={page.pendingRequests}
+        incomingRequests={page.incomingRequests}
+        sentInvites={page.sentInvites}
         seekers={seekers}
         submissionSlot={submission}
       />

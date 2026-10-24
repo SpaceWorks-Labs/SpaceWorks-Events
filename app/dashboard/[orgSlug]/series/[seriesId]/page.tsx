@@ -26,7 +26,7 @@ function eventDateInput(date: Date, timeZone: string) {
 }
 
 export default async function SeriesManagePage({ params }: Props) {
-  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendees, attendeesTruncated, rollup, dates, tickets, revenue } = await loadSeriesManageView({ params });
+  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, tickets, revenue } = await loadSeriesManageView({ params });
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title={series.title} description="Manage this recurring event and its upcoming occurrences." />
@@ -131,7 +131,7 @@ export default async function SeriesManagePage({ params }: Props) {
         </section>
       ) : null}
 
-      {firstInstanceId && canManageRegistrations ? (
+      {firstInstanceId && attendeesPage ? (
         <section aria-label="Attendees (next date)" className="min-w-0">
           <GuestsPeople
             organisationSlug={organisation.slug}
@@ -139,8 +139,7 @@ export default async function SeriesManagePage({ params }: Props) {
             title="Attendees (next date)"
             timeZone={series.timezone}
             now={now.toISOString()}
-            attendees={attendees}
-            truncated={attendeesTruncated}
+            initialPage={attendeesPage}
             registrationFields={[]}
           />
         </section>

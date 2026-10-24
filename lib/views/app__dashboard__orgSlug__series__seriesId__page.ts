@@ -8,9 +8,8 @@ import { percentOf } from "@/components/event-dashboard/analytics/metrics";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { loadTicketSettings } from "@/lib/payments/ticketSettings";
 import { loadRevenue } from "@/lib/payments/revenue";
-import { attendeeOrder, attendeeOrderSelect } from "@/lib/eventDashboard/data";
+import { listAttendeesPage } from "@/lib/eventDashboard/attendees";
 type Props = { params: Promise<{ orgSlug: string; seriesId: string; }>; };
-const MAX_BROWSER_ATTENDEES = 250;
 export async function loadSeriesManageView({ params }: Props) {
   const { orgSlug, seriesId } = await params;
   const access = await requireOrgDashboardAccess(orgSlug);
@@ -62,33 +61,14 @@ export async function loadSeriesManageView({ params }: Props) {
     : null;
   // The guest list shows the next date that is still on.
   const firstInstanceId = upcoming.find((date) => !date.cancelledAt)?.id;
-  const rsvps = firstInstanceId && canManageRegistrations
-    ? await prisma.rSVP.findMany({
-      where: { eventInstanceId: firstInstanceId },
-      include: { user: { select: { id: true, name: true, email: true } }, ticketType: { select: { name: true } }, order: { select: attendeeOrderSelect } },
-      orderBy: { createdAt: "desc" },
-      take: MAX_BROWSER_ATTENDEES + 1,
-    })
-    : [];
   const origin = await getRequestOrigin();
+  // The first page of the date's guests; further pages, filters and search
+  // go through `loadAttendeesPage` with the same series grant check.
+  const attendeesPage = firstInstanceId && canManageRegistrations
+    ? await listAttendeesPage({ kind: "instance", eventInstanceId: firstInstanceId, organisationId: organisation.id }, {}, { origin, teamMode: false })
+    : null;
   const canDownloadReports = Boolean(access.membership && isOrgAdmin(access.membership.role));
   const finishedInstances = series.instances.filter((instance) => instance.endDateTime < now);
-  const attendeesTruncated = rsvps.length > MAX_BROWSER_ATTENDEES;
-  const attendees = rsvps.slice(0, MAX_BROWSER_ATTENDEES).map((r) => ({
-    id: r.id,
-    status: r.status,
-    createdAt: r.createdAt.toISOString(),
-    guestEmail: r.guestEmail,
-    guestName: r.guestName,
-    user: r.user
-      ? { id: r.user.id, name: r.user.name, email: r.user.email }
-      : null,
-    checkedInAt: r.checkedInAt?.toISOString() ?? null,
-    ticketUrl: `${origin}/ticket/${r.checkInToken}`,
-    ticketName: r.ticketType?.name ?? null,
-    order: r.order && r.order.totalMinor > BigInt(0) ? attendeeOrder(r.order) : null,
-    rawAnswers: [],
-  }));
   // Attendance across finished occurrences (organisers only): counts, never people.
   let rollup: { rows: Array<{ id: string; start: Date; going: number; came: number; turnout: number | null }>; averageTurnout: number | null; totalCame: number } | null = null;
   if (canDownloadReports && finishedInstances.length) {
@@ -110,5 +90,5 @@ export async function loadSeriesManageView({ params }: Props) {
   }
   // Takings across every date and pass, for those who manage registrations.
   const revenue = canManageRegistrations ? await loadRevenue({ eventSeriesId: series.id }, series.timezone, now) : null;
-  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendees, attendeesTruncated, rollup, dates, tickets, revenue };
+  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendeesPage, rollup, dates, tickets, revenue };
 }

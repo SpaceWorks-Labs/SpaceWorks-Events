@@ -397,7 +397,9 @@ panel on `bg-success-bg` takes its place. Reduced motion: no rip, a 120ms fade.
 
 Station kiosk with a full-height result panel: success (success fill, "Checked in", name in display
 type), waitlisted (warning), invalid (danger fill with `text-on-danger`, plain-language reason). Badge
-printing and the badge designer live in `components/checkin/`.
+printing and the badge designer live in `components/checkin/`. The desk's Recent check-ins show the
+25 newest with **Load more** ("Showing x of N checked in"); its CSV button is the full attendee export
+and shows only with export access.
 
 ### 4.13 App shell (dashboard)
 
@@ -445,8 +447,13 @@ card and dialog rules above: panel surfaces, hairlines, 16px radius, no shadows 
   editor, registration form), Emails, Check-in, Feedback, Analytics, Settings. A Judging tab
   (between Check-in and Feedback) appears only on events that use hackathon judging
   ([Hackathon](HACKATHON.md)); until then its on switch sits in Settings.
+- **Guests lists are paged on the server**, never capped in the browser: People 50 at a time with
+  **Load more**, whole-event chip counts and **Export emails** for every match; Invites in numbered
+  pages of 50 (`PageNumberPager`, shared with Judging → Results) with an email search; Move to team
+  a searchable list of teams with room, 20 at a time.
 - **Account area:** header card + tabs Profile · Registrations · Organisations · Security, each a column
-  of `AccountCard`s.
+  of `AccountCard`s. Registrations sections show 50 at a time with page-number links
+  (`?past=2#past`) that keep the other sections' pages.
 
 ---
 

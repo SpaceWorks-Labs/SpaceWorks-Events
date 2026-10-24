@@ -19,6 +19,7 @@ export function useLookupFlow({
   showToast,
   startTransition,
   stationRequest,
+  removeRecent,
   setLookupRows,
   setLastResult,
   setScanPreview,
@@ -34,6 +35,8 @@ export function useLookupFlow({
   showToast: ReturnType<typeof useToast>["showToast"];
   startTransition: TransitionStartFunction;
   stationRequest: StationRequest;
+  /** Drops an undone check-in from Recent check-ins, including older loaded pages. */
+  removeRecent: (rsvpId: string) => void;
   setLookupRows: Dispatch<SetStateAction<LookupRow[]>>;
   setLastResult: Dispatch<SetStateAction<LastResult>>;
   setScanPreview: Dispatch<SetStateAction<CheckInPreviewData | null>>;
@@ -150,6 +153,7 @@ export function useLookupFlow({
         showToast(res.error, "error");
         return;
       }
+      removeRecent(rsvpId);
       showToast("Check-in removed", "success");
       // Search results and the result card would otherwise still say "Checked in" and offer Undo again.
       setLookupRows((rows) => rows.map((row) => (row.rsvpId === rsvpId ? { ...row, checkedInAt: null } : row)));

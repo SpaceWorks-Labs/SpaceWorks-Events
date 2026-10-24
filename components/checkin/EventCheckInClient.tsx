@@ -11,7 +11,6 @@ import { IdCardPrintDialog } from "@/components/checkin/IdCardPrintDialog";
 import type { BadgeDesignSource, BadgeDesignSeed } from "@/components/checkin/id-card/shared";
 import type { BadgeBranding } from "@/lib/badge/types";
 import { shouldRefreshCheckIn } from "@/lib/checkInRefresh";
-import { buildCsv } from "@/lib/csv";
 import { CheckInHeader, DeskOptions, OfflinePanel } from "./EventCheckInClient/DeskPanels";
 import { AttendeeDetailsDialog, ConfirmScanDialog } from "./EventCheckInClient/dialogs";
 import { RecentCheckIns } from "./EventCheckInClient/RecentCheckIns";
@@ -19,6 +18,7 @@ import { AttendeeSearch, LastResultCard } from "./EventCheckInClient/ResultAndSe
 import type { CheckInRecentRow, LastResult, StationResponse } from "./EventCheckInClient/types";
 import { useLookupFlow } from "./EventCheckInClient/useLookupFlow";
 import { useOfflineCheckIn } from "./EventCheckInClient/useOfflineCheckIn";
+import { useRecentCheckIns } from "./EventCheckInClient/useRecentCheckIns";
 import { useScanFlow } from "./EventCheckInClient/useScanFlow";
 
 export type { CheckInRecentRow } from "./EventCheckInClient/types";
@@ -35,11 +35,16 @@ export function EventCheckInClient(props: {
   /** TEAM event: team names on badges ({{team}} and the Team line). */
   teamEvent?: boolean;
   stats: { confirmed: number; checkedIn: number };
+  /** The newest page of check-ins (server-rendered on every refresh). */
   recent: CheckInRecentRow[];
+  /** Cursor for the next, older page ("Load more"), or null when that was all. */
+  recentNextCursor: string | null;
+  /** The full attendee CSV, for operators allowed to export it; null hides the download. */
+  attendeeExportHref: string | null;
   /** The event's saved badge design and artwork. Dashboard desks may edit it; stations only print it. */
   badge: { design: BadgeDesignSeed | null; branding: BadgeBranding; canSave: boolean };
 }) {
-  const { organisationSlug, organisationName, eventId, eventTitle, registrationFields, stats, recent, stationMode = false, eventSlug, badge, teamEvent = false } = props;
+  const { organisationSlug, organisationName, eventId, eventTitle, registrationFields, stats, recent, recentNextCursor, attendeeExportHref, stationMode = false, eventSlug, badge, teamEvent = false } = props;
   const badgeSource = useMemo<BadgeDesignSource>(() => ({
     eventId,
     organisationSlug,
@@ -114,27 +119,12 @@ export function EventCheckInClient(props: {
     openPreviewForScan(manual);
   };
 
+  const recentCheckIns = useRecentCheckIns({ organisationSlug, eventId, eventSlug, stationMode, recent, recentNextCursor, showToast });
+
   const { runLookup, checkInRow, viewAttendee, onUndo } = useLookupFlow({
     organisationSlug, eventId, stationMode, lookupQuery, router, showToast, startTransition,
-    stationRequest, setLookupRows, setLastResult, setScanPreview, setScanIsOffline, setScanOpen, setDetailsAttendee,
+    stationRequest, removeRecent: recentCheckIns.removeRecent, setLookupRows, setLastResult, setScanPreview, setScanIsOffline, setScanOpen, setDetailsAttendee,
   });
-
-  const csvBlob = useMemo(() => {
-    const body = buildCsv([
-      ["Name", "Email", "Checked in at"],
-      ...recent.map((r) => [r.displayName, r.email ?? "", new Date(r.checkedInAt).toISOString()]),
-    ]);
-    return new Blob([body], { type: "text/csv;charset=utf-8" });
-  }, [recent]);
-
-  const downloadCsv = () => {
-    const url = URL.createObjectURL(csvBlob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `checkins-${eventId.slice(0, 8)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const rate =
     stats.confirmed > 0
@@ -243,7 +233,7 @@ export function EventCheckInClient(props: {
 
       <AttendeeDetailsDialog detailsAttendee={detailsAttendee} setDetailsAttendee={setDetailsAttendee} />
 
-      <RecentCheckIns stationMode={stationMode} downloadCsv={downloadCsv} recent={recent} onUndo={onUndo} pending={pending} isOnline={isOnline} />
+      <RecentCheckIns stationMode={stationMode} attendeeExportHref={attendeeExportHref} checkedIn={stats.checkedIn} recent={recentCheckIns} onUndo={onUndo} pending={pending} isOnline={isOnline} />
 
       {!stationMode ? (
         <p className="text-sm text-ink-muted">
