@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Check, ChevronDown, Copy, CreditCard, MoreHorizontal, Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
+import { ArrowRightLeft, Check, ChevronDown, Copy, CreditCard, MoreHorizontal, Pencil, RotateCcw, Trash2, Users, UserX } from "lucide-react";
 import { Button, IconButton } from "@/components/ui/button";
 import { Avatar, Chip, type ChipTone } from "@/components/ui/display";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
@@ -9,7 +9,7 @@ import type { AttendeeRow } from "@/components/attendees/types";
 import { orderPaymentChip } from "@/components/attendees/PaymentDialog";
 import { cn } from "@/lib/cn";
 import { formatTime } from "@/lib/format/datetime";
-import { GUEST_STATUS_LABELS, describeCheckIn, describeGuestWhen, guestDisplayName, guestEmail } from "./guestList";
+import { GUEST_STATUS_LABELS, describeCheckIn, describeGuestWhen, guestDisplayName, guestEmail, isManagedByTeam } from "./guestList";
 
 const CHIP_TONES: Record<AttendeeRow["status"], ChipTone> = {
   CONFIRMED: "success",
@@ -38,6 +38,10 @@ export type GuestRowActions = {
   /** Omitted where no undo-check-in action exists for the target (series dates). */
   undoCheckIn?: (guest: AttendeeRow) => void;
   remove: (guest: AttendeeRow) => void;
+  /** TEAM events: opens Guests → Teams, where a member's team is approved or declined as a whole. */
+  openTeams?: () => void;
+  /** TEAM events: move this registration into a team (solo) or another team. */
+  moveToTeam?: (guest: AttendeeRow) => void;
   /** Paid tickets: refunds, payments taken in person, complimentary tickets and payment links. */
   payment?: (guest: AttendeeRow) => void;
 };
@@ -50,6 +54,8 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
   const when = describeGuestWhen(guest, timeZone, now);
   const checkIn = describeCheckIn(guest, timeZone, now);
   const answers = guest.answers ?? [];
+  // Team members are approved, declined and promoted only with their whole team.
+  const teamManaged = isManagedByTeam(guest);
   const payment = orderPaymentChip(guest.order);
 
   return (
@@ -64,6 +70,13 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
         <Chip size="sm" tone={CHIP_TONES[guest.status]}>{GUEST_STATUS_LABELS[guest.status]}</Chip>
+        {guest.team ? (
+          <Chip size="sm" tone="neutral" icon={<Users />} className="max-w-[200px]">
+            <span className="sr-only">Team: </span>
+            {guest.team.name}
+            {guest.team.isLeader ? " · leader" : ""}
+          </Chip>
+        ) : null}
         {payment ? <Chip size="sm" tone={payment.tone}>{payment.label}</Chip> : null}
         <span className={cn("text-caption sm:w-[150px]", guest.checkedInAt ? "font-semibold text-success-fg" : "text-ink-muted")}>
           {checkIn ?? <span aria-label="Not applicable">—</span>}
@@ -82,7 +95,16 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             Answers <span className="text-ink-muted">{answers.length}</span>
           </Button>
         ) : null}
-        {guest.status === "PENDING_APPROVAL" ? (
+        {teamManaged && (guest.status === "PENDING_APPROVAL" || guest.status === "WAITLISTED") ? (
+          actions.openTeams ? (
+            <Button size="sm" variant="quiet" disabled={disabled} onClick={actions.openTeams} aria-label={`Manage ${name}'s team in Teams`}>
+              Manage in Teams
+            </Button>
+          ) : (
+            <span className="text-caption text-ink-muted">Managed with their team</span>
+          )
+        ) : null}
+        {!teamManaged && guest.status === "PENDING_APPROVAL" ? (
           <>
             <Button size="sm" variant="secondary" disabled={disabled} loading={busy} onClick={() => actions.approve(guest)} aria-label={`Approve ${name}`}>
               Approve
@@ -92,7 +114,7 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             </Button>
           </>
         ) : null}
-        {guest.status === "WAITLISTED" ? (
+        {!teamManaged && guest.status === "WAITLISTED" ? (
           <Button size="sm" variant="secondary" disabled={disabled} loading={busy} onClick={() => actions.promote(guest)} aria-label={`Give ${name} a spot`}>
             Give a spot
           </Button>
@@ -120,12 +142,17 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             <MenuItem icon={<Pencil />} onSelect={() => actions.edit(guest)}>
               {guest.user ? "View registration" : "Edit registration or transfer ticket"}
             </MenuItem>
+            {actions.moveToTeam ? (
+              <MenuItem icon={<ArrowRightLeft />} onSelect={() => actions.moveToTeam?.(guest)}>
+                {guest.team ? "Move to another team" : "Add to a team"}
+              </MenuItem>
+            ) : null}
             {guest.checkedInAt && actions.undoCheckIn ? (
               <MenuItem icon={<RotateCcw />} onSelect={() => actions.undoCheckIn?.(guest)}>
                 Undo check-in
               </MenuItem>
             ) : null}
-            {guest.status === "WAITLISTED" ? (
+            {!teamManaged && guest.status === "WAITLISTED" ? (
               <MenuItem danger icon={<UserX />} onSelect={() => actions.decline(guest)}>
                 Decline
               </MenuItem>

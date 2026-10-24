@@ -1,4 +1,5 @@
 import { EventPrivacyType, EventStatus, RsvpStatus } from "@prisma/client";
+import type { TeamRegistrationIntent } from "@/lib/validators";
 import { prisma } from "@/lib/db";
 import { isValidAttendeeName, rsvpGuestSchema, rsvpLoggedInSchema } from "@/lib/validators";
 import type { ActionResult } from "@/app/actions/org";
@@ -8,13 +9,17 @@ import { validateAndNormalizeAnswers } from "./answers";
 import { submitInstanceRsvp } from "./instance";
 import { sellsTickets, submitTicketOrder } from "./orders";
 import { reserveRsvp } from "./reserve";
+import { isUniqueViolationOn, TeamRegistrationError, teamRegistrationFailure } from "./team";
 import { isRsvpTargetClosedError, normalizeGuestEmail, resolveAttendeeEmail } from "./shared";
 
 export async function submitRsvpCore(
   input: unknown,
-  opts: { userId: string | null },
-): Promise<ActionResult<{ count: number; status: RsvpStatus; ticketToken: string; orderToken?: string; checkoutUrl?: string | null }>> {
+  opts: { userId: string | null; team?: TeamRegistrationIntent },
+): Promise<ActionResult<{ count: number; status: RsvpStatus; ticketToken: string; orderToken?: string; checkoutUrl?: string | null; teamId?: string | null }>> {
   const userId = opts.userId;
+  // How to register on a TEAM event (docs/TEAMS.md), parsed by the caller; omitted means solo.
+  const teamIntent = opts.team;
+  const notTeamEvent = { ok: false as const, error: "This event does not use team registration." };
 
   if (userId) {
     const parsed = rsvpLoggedInSchema.safeParse(input);
@@ -33,6 +38,7 @@ export async function submitRsvpCore(
     if (!org) return { ok: false, error: "Event not found." };
 
     if (eventInstanceId) {
+      if (teamIntent && teamIntent.mode !== "solo") return notTeamEvent;
       return submitInstanceRsvp({
         org,
         eventInstanceId,
@@ -119,6 +125,7 @@ export async function submitRsvpCore(
       if ("error" in validated) return { ok: false, error: validated.error };
 
       if (await sellsTickets({ eventId: event.id })) {
+        if (teamIntent && teamIntent.mode !== "solo") return notTeamEvent;
         return submitTicketOrder({
           target: { eventId: event.id },
           organisationId: event.organisationId,
@@ -134,6 +141,7 @@ export async function submitRsvpCore(
         capacity: event.capacity,
         privacyType: event.privacyType,
         notification: { to: emailRes.email, eventTitle: event.title },
+        team: teamIntent,
         data: {
             eventId: event.id,
             userId,
@@ -164,10 +172,12 @@ export async function submitRsvpCore(
 
       return {
         ok: true,
-        data: { count: reservation.count, status: reservation.status, ticketToken: reservation.checkInToken },
+        data: { count: reservation.count, status: reservation.status, ticketToken: reservation.checkInToken, teamId: reservation.teamId },
       };
     } catch (e: unknown) {
       if (isRsvpTargetClosedError(e)) return { ok: false, error: "This event is not open for RSVP." };
+      if (e instanceof TeamRegistrationError) return teamRegistrationFailure(e);
+      if (isUniqueViolationOn(e, "nameKey")) return { ok: false, error: "That team name is already taken for this event." };
       if (
         typeof e === "object" &&
         e !== null &&
@@ -199,6 +209,7 @@ export async function submitRsvpCore(
   if (!org) return { ok: false, error: "Event not found." };
 
   if (eventInstanceId) {
+    if (teamIntent && teamIntent.mode !== "solo") return notTeamEvent;
     return submitInstanceRsvp({
       org,
       eventInstanceId,
@@ -260,6 +271,7 @@ export async function submitRsvpCore(
     if ("error" in validated) return { ok: false, error: validated.error };
 
     if (await sellsTickets({ eventId: event.id })) {
+      if (teamIntent && teamIntent.mode !== "solo") return notTeamEvent;
       return submitTicketOrder({
         target: { eventId: event.id },
         organisationId: event.organisationId,
@@ -274,6 +286,7 @@ export async function submitRsvpCore(
       capacity: event.capacity,
       privacyType: event.privacyType,
       notification: { to: emailNorm, eventTitle: event.title },
+      team: teamIntent,
       data: {
           eventId: event.id,
           userId: null,
@@ -299,10 +312,12 @@ export async function submitRsvpCore(
 
     return {
       ok: true,
-      data: { count: reservation.count, status: reservation.status, ticketToken: reservation.checkInToken },
+      data: { count: reservation.count, status: reservation.status, ticketToken: reservation.checkInToken, teamId: reservation.teamId },
     };
   } catch (e: unknown) {
     if (isRsvpTargetClosedError(e)) return { ok: false, error: "This event is not open for RSVP." };
+    if (e instanceof TeamRegistrationError) return teamRegistrationFailure(e);
+    if (isUniqueViolationOn(e, "nameKey")) return { ok: false, error: "That team name is already taken for this event." };
     if (
       typeof e === "object" &&
       e !== null &&

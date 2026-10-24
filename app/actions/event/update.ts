@@ -1,10 +1,11 @@
 import "server-only";
 
-import { EventPrivacyType, EventStatus } from "@prisma/client";
+import { EventPrivacyType, EventStatus, RegistrationMode } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { canCreateEvent, canPublishEvents, getMembership } from "@/lib/permissions";
-import { updateEventSchema } from "@/lib/validators";
+import { normalizedTeamSettings, updateEventSchema } from "@/lib/validators";
+import { countConfirmedForCapacity } from "@/lib/teamUnits";
 import type { ActionResult } from "../org";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { recordAuditEvent } from "@/lib/audit";
@@ -15,6 +16,15 @@ import { noticeEach, noticeSubject, whenLabel } from "@/lib/notices";
 import { getBroadcastBaseUrl } from "@/lib/eventBroadcast";
 import { revalidateEventPaths, validationError } from "./shared";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
+
+const EVENT_UPDATE_REFUSALS = {
+  missing: "Event not found.",
+  capacity: "Capacity cannot be lower than the current confirmed attendance.",
+  capacityUnits: "Capacity cannot be lower than the number of teams and solo registrants who already have a place.",
+  mode: "Team registration can't be turned on or off once people have registered.",
+  tickets: "Team registration can't be used with tickets yet. Remove this event's tickets first.",
+  teamSize: "Maximum team size cannot be lower than the largest current team.",
+} as const;
 
 export async function updateEvent(input: unknown): Promise<ActionResult> {
   const session = await auth();
@@ -90,16 +100,37 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "Choose an uploaded event page logo." };
   }
 
+  const teamSettings = normalizedTeamSettings(data);
   try {
     const saved = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
+      const locked = await tx.event.findUnique({ where: { id: event.id }, select: { status: true, registrationMode: true } });
+      if (!locked) return "missing" as const;
       if (data.capacity != null) {
-        const confirmed = await tx.rSVP.count({
-          where: { eventId: event.id, status: "CONFIRMED" },
-        });
-        if (confirmed > data.capacity) return false;
+        // TEAM events count units (docs/TEAMS.md); INDIVIDUAL events keep the
+        // confirmed-RSVP count.
+        const confirmed = await countConfirmedForCapacity(tx, event.id, locked.registrationMode);
+        if (confirmed > data.capacity) return locked.registrationMode === RegistrationMode.TEAM ? ("capacityUnits" as const) : ("capacity" as const);
       }
-      const locked = await tx.event.findUnique({ where: { id: event.id }, select: { status: true } });
+      if (teamSettings) {
+        if (teamSettings.registrationMode !== locked.registrationMode && (await tx.rSVP.count({ where: { eventId: event.id } })) > 0) {
+          return "mode" as const;
+        }
+        // Team registration doesn't take tickets yet: an event sells tickets or registers teams.
+        if (teamSettings.registrationMode === RegistrationMode.TEAM && (await tx.ticketType.count({ where: { eventId: event.id, archivedAt: null } })) > 0) {
+          return "tickets" as const;
+        }
+        if (teamSettings.registrationMode === RegistrationMode.TEAM && teamSettings.teamMaxSize != null) {
+          const largest = await tx.rSVP.groupBy({
+            by: ["teamId"],
+            where: { eventId: event.id, teamId: { not: null } },
+            _count: { _all: true },
+            orderBy: { _count: { teamId: "desc" } },
+            take: 1,
+          });
+          if ((largest[0]?._count._all ?? 0) > teamSettings.teamMaxSize) return "teamSize" as const;
+        }
+      }
       await tx.event.update({
         where: { id: event.id },
         data: {
@@ -120,6 +151,8 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
           listedPublicly: data.privacyType === EventPrivacyType.APPROVAL_REQUIRED && data.listedPublicly,
           registrationClosesAt: data.registrationClosesAt ?? null,
           registrationLeadMinutes: data.registrationLeadMinutes ?? null,
+          // Omitted team settings (older forms) leave the stored ones untouched.
+          ...(teamSettings ?? {}),
         },
       });
       if (data.status === EventStatus.CANCELLED && event.status !== EventStatus.CANCELLED) {
@@ -163,14 +196,9 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
             : {}),
         },
       });
-      return { previousStatus: locked?.status ?? event.status };
+      return { previousStatus: locked.status };
     });
-    if (!saved)
-      return {
-        ok: false,
-        error:
-          "Capacity cannot be lower than the current confirmed attendance.",
-      };
+    if (typeof saved === "string") return { ok: false, error: EVENT_UPDATE_REFUSALS[saved] };
 
     await recordAuditEvent({
       action: "EVENT_UPDATED",

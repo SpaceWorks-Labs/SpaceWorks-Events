@@ -131,7 +131,7 @@ export async function loadEventView({ params }: Props) {
       where: { eventId: event.id },
       include: { fields: { orderBy: { sortOrder: "asc" } } },
     }),
-    countConfirmedForEvent(event.id),
+    countConfirmedForEvent(event.id, event.registrationMode),
     auth().then((session) =>
       session?.user?.id
         ? prisma.rSVP.findFirst({

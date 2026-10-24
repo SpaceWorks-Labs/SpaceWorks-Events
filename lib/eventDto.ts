@@ -35,6 +35,10 @@ export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "c
     allowTransfers: event.allowTransfers,
     transferCutoffHours: event.transferCutoffHours,
     shortCode: event.shortCode,
+    registrationMode: event.registrationMode,
+    teamMinSize: event.teamMinSize,
+    teamMaxSize: event.teamMaxSize,
+    soloPolicy: event.soloPolicy,
     createdAt: event.createdAt,
   };
 }

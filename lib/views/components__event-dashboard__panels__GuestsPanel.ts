@@ -1,22 +1,25 @@
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { prisma } from "@/lib/db";
 import { loadAttendees, loadEventInvites, loadRegistrationFields } from "@/lib/eventDashboard/data";
+import { loadEventTeams } from "@/lib/eventDashboard/teams";
 import { DEFAULT_CURRENCY } from "@/lib/payments/money";
 
 export async function loadGuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
   ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
   const { event, permissions, organisation } = ctx;
-  const [attendees, fields, invites, ticketTypes] = await Promise.all([
+  const teamMode = event.registrationMode === "TEAM";
+  const [attendees, fields, invites, ticketTypes, teams] = await Promise.all([
     permissions.canManageRegistrations ? loadAttendees(event.id, ctx.origin) : Promise.resolve({ attendees: [], truncated: false }),
     loadRegistrationFields(event.id),
     permissions.canManageInvitations ? loadEventInvites(event.id) : Promise.resolve([]),
     permissions.canManageRegistrations
       ? prisma.ticketType.findMany({ where: { eventId: event.id, archivedAt: null }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, priceMinor: true } })
       : Promise.resolve([]),
+    teamMode && permissions.canManageRegistrations ? loadEventTeams(ctx) : Promise.resolve([]),
   ]);
   const currency = event.currency ?? DEFAULT_CURRENCY;
   return {
-    permissions, organisation, event, attendees, fields, invites,
+    permissions, organisation, event, attendees, fields, invites, teamMode, teams,
     ticketTypes: ticketTypes.map((type) => ({ id: type.id, name: type.name, priceMinor: Number(type.priceMinor), currency })),
   };
 }

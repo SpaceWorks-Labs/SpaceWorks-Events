@@ -24,5 +24,5 @@ export async function loadVenueCheckInStationView({ params }: Props) {
   // The station prints the event's saved badge design; it cannot change it.
   const badge = { design: badgeDesignFor(badgeEvent), branding: badgeBrandingFor(badgeEvent), canSave: false };
 
-  return { unlocked: true as const, event: { id: event.id, slug: event.slug, title: event.title, organisation: event.organisation }, confirmed, checkedIn, fields: form?.fields ?? [], recent: recentRsvps.map((r) => ({ rsvpId: r.id, displayName: label(r), email: r.user?.email ?? r.guestEmail, checkedInAt: r.checkedInAt!.toISOString() })), badge };
+  return { unlocked: true as const, event: { id: event.id, slug: event.slug, title: event.title, organisation: event.organisation, teamEvent: event.registrationMode === "TEAM" }, confirmed, checkedIn, fields: form?.fields ?? [], recent: recentRsvps.map((r) => ({ rsvpId: r.id, displayName: label(r), email: r.user?.email ?? r.guestEmail, checkedInAt: r.checkedInAt!.toISOString() })), badge };
 }

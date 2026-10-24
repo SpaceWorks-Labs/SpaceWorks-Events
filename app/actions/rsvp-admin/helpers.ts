@@ -1,4 +1,6 @@
-import { type Prisma, RsvpStatus } from "@prisma/client";
+import { Prisma, RsvpStatus } from "@prisma/client";
+import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft } from "@/lib/teamUnits";
+import { soleMemberTeamSnapshotTx } from "@/lib/core/teams";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { z } from "zod";
@@ -19,6 +21,8 @@ export const snapshotSchema = z.object({
   checkInToken: z.string().min(8).max(256),
   checkedInAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
+  /** Team the RSVP belonged to (TEAM events); restored into it only if it still exists with room. */
+  teamId: z.string().min(1).max(128).nullable().optional(),
   answers: z.array(z.object({
     fieldId: z.string().min(1),
     valueText: z.string().nullable(),
@@ -61,4 +65,40 @@ export async function restoreListCheckIns(tx: Prisma.TransactionClient, eventId:
     })),
     skipDuplicates: true,
   });
+}
+
+/**
+ * TEAM events (docs/TEAMS.md): under the shared Event lock, re-read the team.
+ * The last member's removal also deletes the emptied team, so a member
+ * snapshot could never be restored into it: the whole team is kept instead.
+ */
+export async function teamDeletionPayload(tx: Prisma.TransactionClient, params: { eventId: string; rsvpId: string; snapshot: { teamId?: string | null } & Record<string, unknown> }) {
+  await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${params.eventId} FOR UPDATE`;
+  const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { teamId: true } });
+  const teamId = current?.teamId ?? null;
+  params.snapshot.teamId = teamId;
+  const teamSnapshot = teamId ? await soleMemberTeamSnapshotTx(tx, { teamId, eventId: params.eventId, rsvpId: params.rsvpId }) : null;
+  return { teamId, payload: (teamSnapshot ?? params.snapshot) as Prisma.InputJsonValue };
+}
+
+/** After a team member is removed: leadership passes on, an emptied team goes, and a freed unit is offered. */
+export async function settleTeamAfterRemoval(tx: Prisma.TransactionClient, params: { eventId: string; teamId: string; rsvpId: string }) {
+  const settled = await settleTeamAfterMemberLeft(tx, { teamId: params.teamId, eventId: params.eventId, leftRsvpId: params.rsvpId });
+  if (!settled.freedConfirmedUnit) return;
+  const event = await tx.event.findUnique({ where: { id: params.eventId }, select: { id: true, title: true, capacity: true, privacyType: true } });
+  if (event) await promoteOldestWaitlistedUnit(tx, event);
+}
+
+/**
+ * Restoring a team member: back into their team, taking its current status,
+ * only if it still exists with room. Joining never uses a unit.
+ */
+export async function teamForRestore(tx: Prisma.TransactionClient, params: { eventId: string; teamId: string }) {
+  await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${params.eventId} FOR UPDATE`;
+  const team = await tx.team.findFirst({
+    where: { id: params.teamId, eventId: params.eventId },
+    select: { id: true, status: true, _count: { select: { members: true } }, event: { select: { teamMaxSize: true } } },
+  });
+  if (!team || team.status === RsvpStatus.REJECTED || team.event.teamMaxSize == null || team._count.members >= team.event.teamMaxSize) return null;
+  return { id: team.id, status: team.status };
 }

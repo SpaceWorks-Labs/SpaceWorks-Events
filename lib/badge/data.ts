@@ -47,6 +47,7 @@ export function badgeStatusWhere(filter: BadgeStatusFilter): Prisma.RSVPWhereInp
 export const badgeRsvpInclude = {
   user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } },
   answers: { include: { field: { select: { key: true, label: true } } } },
+  team: { select: { name: true } },
 } satisfies Prisma.RSVPInclude;
 
 type BadgeRsvp = Prisma.RSVPGetPayload<{ include: typeof badgeRsvpInclude; }>;
@@ -60,6 +61,7 @@ export function badgeAttendeeFor(rsvp: BadgeRsvp): IdCardAttendee {
     checkInDetails: getCheckInDetails(rsvp.answers),
     registrationDetails: getRegistrationDetails(rsvp.answers),
     photoUrl: attendeePhotoUrl(rsvp.user),
+    teamName: rsvp.team?.name ?? null,
   };
 }
 

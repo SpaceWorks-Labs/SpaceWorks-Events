@@ -6,6 +6,7 @@ import { MoodTile } from "@/components/brand/MoodTile";
 import { ArrowLeft, ArrowUpRight, CalendarPlus, Check } from "lucide-react";
 import { TicketQrPanel } from "@/components/ticket/TicketQrPanel";
 import { CancelRsvpButton } from "@/components/ticket/CancelRsvpButton";
+import { TicketSeekerPanel, TicketTeamCard } from "@/components/team/TicketTeamSection";
 import { TicketDownloadButton } from "@/components/ticket/TicketDownloadButton";
 import { TicketStatusStorageSync } from "@/components/ticket/TicketStatusStorageSync";
 import { HideAfterLiveCheckIn, LiveCheckedInChip, LiveTicketCard, LiveTicketProvider } from "@/components/ticket/LiveTicket";
@@ -26,7 +27,15 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function TicketPage({ params, searchParams }: Props) {
-  const { rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const { teamSection, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const teamBlock = teamSection?.kind === "member" ? (
+    <TicketTeamCard ticketToken={rsvp.checkInToken} team={teamSection.team} manageHref={teamSection.manageHref} canLeave={teamSection.canLeave} eventPageHref={eventPageHref} />
+  ) : teamSection?.kind === "seeker" ? (
+    <TicketSeekerPanel ticketToken={rsvp.checkInToken} profile={teamSection.profile} invites={teamSection.invites} requests={teamSection.requests} seekers={teamSection.seekers} teams={teamSection.teams} />
+  ) : teamSection?.kind === "sign-in" ? (
+    <Callout tone="info">Sign in to the account you registered with to find a team.</Callout>
+  ) : null;
+
   const ticketMain = (
     <>
       <header className="bg-accent px-6 py-5 text-on-accent">
@@ -177,8 +186,10 @@ export default async function TicketPage({ params, searchParams }: Props) {
           </section>
         ) : null}
 
-        {/* Paid tickets are cancelled and refunded by the organiser. */}
-        {!isCheckedIn && rsvp.status !== "REJECTED" && !payment?.paid ? (
+        {teamBlock}
+
+        {/* Paid tickets are cancelled and refunded by the organiser; team members leave their team instead. */}
+        {!isCheckedIn && rsvp.status !== "REJECTED" && !payment?.paid && !inTeam ? (
           <HideAfterLiveCheckIn>
             <CancelRsvpButton checkInToken={rsvp.checkInToken} eventPageHref={eventPageHref} />
           </HideAfterLiveCheckIn>

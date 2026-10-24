@@ -22,6 +22,12 @@ function missing() {
     },
   });
 }
+/** Team name and role for one registration; solo registrants get an empty team and "Solo". */
+function teamCells(rsvp: { id: string; team?: { name: string; leaderRsvpId: string | null } | null }) {
+  if (!rsvp.team) return ["", "Solo"];
+  return [rsvp.team.name, rsvp.team.leaderRsvpId === rsvp.id ? "Leader" : "Member"];
+}
+
 
 function filename(eventTitle: string) {
   const safeTitle = eventTitle
@@ -52,6 +58,7 @@ export async function GET(_request: Request, context: RouteContext) {
       id: true,
       title: true,
       organisationId: true,
+      registrationMode: true,
       registrationForm: {
         select: { fields: { select: { id: true, label: true }, orderBy: { sortOrder: "asc" } } },
       },
@@ -70,6 +77,8 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!(await canAccessEvent({ userId: session.user.id, organisationId: event.organisationId, eventId: event.id, permission: EventPermission.MANAGE_REGISTRATIONS }))) return missing();
 
   const fields = event.registrationForm?.fields ?? [];
+  // TEAM events add Team and Team role columns (docs/TEAMS.md); other exports keep their columns.
+  const teamColumns = event.registrationMode === "TEAM";
   const lists = event.checkInLists;
   const origin = await getRequestOrigin();
   await recordAuditEvent({
@@ -84,7 +93,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        controller.enqueue(encoder.encode(`\uFEFF${buildCsv([["Name", "Email", "Status", "Registration Date", "Checked In At", "Ticket URL", "Ticket", "Order", "Order status", "Order total", ...fields.map((field) => field.label), ...lists.map((list) => `Check-in: ${list.name}${list.archived ? " (archived)" : ""}`)]])}\n`));
+        controller.enqueue(encoder.encode(`\uFEFF${buildCsv([["Name", "Email", "Status", ...(teamColumns ? ["Team", "Team role"] : []), "Registration Date", "Checked In At", "Ticket URL", "Ticket", "Order", "Order status", "Order total", ...fields.map((field) => field.label), ...lists.map((list) => `Check-in: ${list.name}${list.archived ? " (archived)" : ""}`)]])}\n`));
         let cursor: string | undefined;
 
         while (true) {
@@ -98,6 +107,7 @@ export async function GET(_request: Request, context: RouteContext) {
               ticketType: { select: { name: true } },
               order: { select: { reference: true, status: true, totalMinor: true, currency: true } },
               answers: { select: { fieldId: true, valueText: true, valueBool: true, valueNumber: true, valueDate: true } },
+              team: { select: { name: true, leaderRsvpId: true } },
               checkInListRecords: { select: { listId: true, checkedInAt: true } },
             },
           });
@@ -110,6 +120,7 @@ export async function GET(_request: Request, context: RouteContext) {
               rsvp.user?.name ?? rsvp.guestName ?? "",
               rsvp.user?.email ?? rsvp.guestEmail ?? "",
               rsvp.status,
+              ...(teamColumns ? teamCells(rsvp) : []),
               rsvp.createdAt.toISOString(),
               rsvp.checkedInAt?.toISOString() ?? "",
               `${origin}/ticket/${rsvp.checkInToken}`,

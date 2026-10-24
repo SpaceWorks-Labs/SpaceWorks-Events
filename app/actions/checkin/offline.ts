@@ -24,6 +24,7 @@ export async function downloadOfflineCheckInRoster(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
+      team: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -41,6 +42,7 @@ export async function downloadOfflineCheckInRoster(
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInDetails: getCheckInDetails(r.answers),
         registrationDetails: getRegistrationDetails(r.answers),
+        teamName: r.team?.name ?? null,
       })),
     },
   };

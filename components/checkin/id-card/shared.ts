@@ -11,7 +11,7 @@ import {
 import type { IdCardAttendee } from "@/lib/badge/types";
 
 export type { IdCardAttendee } from "@/lib/badge/types";
-export { printableFields } from "@/lib/badge/types";
+export { printableFields, withMergeFields } from "@/lib/badge/types";
 
 export type RegistrationField = { key: string; label: string };
 
@@ -304,8 +304,9 @@ export const SAVE_STATUS_LABELS: Record<BadgeSaveStatus, string> = {
 };
 
 /** Sample people for the designer: a typical name and a long one to test fitting. */
-export function sampleAttendee(fields: RegistrationField[], long = false): IdCardAttendee {
+export function sampleAttendee(fields: RegistrationField[], long = false, teamEvent = false): IdCardAttendee {
   return {
+    teamName: teamEvent ? (long ? "The Midnight Debugging Collective" : "Night Owls") : null,
     displayName: long ? "Alexandra Montgomery-Fitzgerald" : "Priya Raman",
     email: long ? "alexandra.montgomery-fitzgerald@example.com" : "priya@example.com",
     checkInQrToken: "preview-check-in-token",

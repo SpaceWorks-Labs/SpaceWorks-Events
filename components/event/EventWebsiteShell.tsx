@@ -93,6 +93,7 @@ export function EventWebsiteShell(p: Props) {
               capacity={p.event.capacity}
               state={{ cancelled: p.event.status === "CANCELLED", open: p.registrationOpen, full: p.registrationFull, approvalRequired: p.approvalRequired }}
               accentColor={p.page.accentColor}
+              team={p.team}
               viewerRsvp={p.viewerRsvp ?? null}
               tickets={p.tickets ?? []}
               heldCount={p.heldCount ?? 0}

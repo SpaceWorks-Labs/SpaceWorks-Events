@@ -64,6 +64,7 @@ The super-admin boundary is separate: access requires an authenticated email mat
 - Tenancy: `Organisation`, `Membership`, and `OrganisationInvite`.
 - Events: `Event` (including `listedPublicly` for listed approval-required events and an optional unique `shortCode`), `EventInvite`, `EventSeries`, `SeriesInvite`, and `EventInstance`.
 - Registration: `RSVP`, registration forms, fields (with help text, placeholder, and validated `settings` JSON), and typed answers.
+- Teams: `Event.registrationMode`, `teamMinSize`, `teamMaxSize` and `soloPolicy`; `Team` (status mirroring every member RSVP, unique per-event `nameKey`, join token, SHA-256 `manageTokenHash`, leader RSVP); `RSVP.teamId`; `TeamSeekerProfile` for solo registrants looking for a team; and `TeamJoinRequest` invitations and requests, at most one pending per team and RSVP. See [Team registration](TEAMS.md).
 - Communications: `EventBroadcast` records each organiser email, including its chosen `design`; each recipient is a separate `OutboxMessage`. `EventBroadcastDraft` holds one organiser's unsent Emails-tab composer per event (unique on event and user, private to that user, cascading with both); the dashboard send deletes it in the send transaction. The draft actions (`app/actions/broadcasts.ts`, bodies in `app/actions/broadcasts/drafts.ts`) share the send's access check, and the Emails view reads the draft through the same helper.
 - Feedback: feedback forms, fields, responses, typed answers, and optional certificate linkage.
 - Operations: `OutboxMessage`, `OperationalHeartbeat`, `AuditEvent`, `CheckInEvent`, `RsvpDeletionUndo`, and `Asset`.
@@ -71,6 +72,10 @@ The super-admin boundary is separate: access requires an authenticated email mat
 - Instance administration: the singleton `InstanceSetting` holds the new-account policy plus encrypted SMTP and Google SSO secrets and non-secret backup posture. It is readable and mutable only through the super-admin boundary.
 - Machine access: `ApiClient`, `ApiClientScope`, and hashed, rotatable `ApiCredential` records.
 - Outgoing webhooks: `WebhookEndpoint` (per organisation, at most 10; URL, subscribed event types, encrypted signing secret, enabled/auto-disabled state and failure counter) and `WebhookDelivery` (the durable queue and delivery log, one row per endpoint and event, unique on `endpointId`/`eventId`). See [Organisation webhooks](WEBHOOKS.md).
+
+### Team registration and capacity units
+
+On a `TEAM` event `Event.capacity` counts units: each team and each solo RSVP is one unit. Every path that changes capacity (`reserveRsvp` in `lib/rsvpCore.ts`, `lib/rsvpCapacity.ts`, cancellation, organiser delete and restore, the capacity check in `updateEvent`) and every team mutation in `lib/core/teams.ts` takes the same `SELECT ... FOR UPDATE` lock on the `Event` row first, then counts with `countConfirmedUnits` (`lib/teamUnits.ts`). `INDIVIDUAL` events keep the plain confirmed-RSVP query. Team status changes update the `Team` row with a conditional `updateMany` guarded by the expected status and move every member RSVP in the same transaction, so each member's status always equals the team's. A team id from the browser is always re-read with its `eventId`, and leader authority (a management-token hash or the signed-in leader) is re-checked under the lock. Server Actions in `app/actions/teams.ts` and `app/actions/team-admin.ts` authenticate, rate limit, audit, and revalidate around these cores. The `team-created` and `team-member-added` outbox kinds carry capabilities and are deleted after delivery.
 
 Refer to `prisma/schema.prisma` for the authoritative fields, constraints, indexes, and cascading behavior.
 

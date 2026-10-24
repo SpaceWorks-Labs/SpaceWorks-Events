@@ -7,6 +7,7 @@ import { Dropdown, Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import {
   ID_CARD_PAPER_PRESETS,
+  ID_CARD_TEAM_FIELD_KEY,
   matchPaperPreset,
   SPONSOR_LIMIT_MAX,
   type IdCardLayoutElement,
@@ -107,8 +108,11 @@ export function PaperSection({
   );
 }
 
-export function AnswersSection({ settings, fields, update }: { settings: IdCardPrintSettings; fields: RegistrationField[]; update: (patch: Partial<IdCardPrintSettings>) => void }) {
-  const options = fields.map((field) => ({ key: registrationFieldKey(field.key), label: field.label }));
+export function AnswersSection({ settings, fields, teamEvent, update }: { settings: IdCardPrintSettings; fields: RegistrationField[]; teamEvent: boolean; update: (patch: Partial<IdCardPrintSettings>) => void }) {
+  const options = [
+    ...(teamEvent ? [{ key: ID_CARD_TEAM_FIELD_KEY, label: "Team" }] : []),
+    ...fields.map((field) => ({ key: registrationFieldKey(field.key), label: field.label })),
+  ];
   const chosen = settings.printFieldKeys.flatMap((key) => options.find((option) => option.key === key) ?? []);
   const available = options.filter((option) => !settings.printFieldKeys.includes(option.key));
   const moveField = (index: number, by: -1 | 1) => {

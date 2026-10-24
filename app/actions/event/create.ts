@@ -10,7 +10,7 @@ import {
   isUserEmailVerified,
 } from "@/lib/permissions";
 import { isReservedEventSlug, slugifyTitle, withSlugSuffix } from "@/lib/slug";
-import { cloneEventSchema, createEventSchema } from "@/lib/validators";
+import { cloneEventSchema, createEventSchema, normalizedTeamSettings } from "@/lib/validators";
 import type { ActionResult } from "../org";
 import { flattenZodErrors } from "../utils";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
@@ -118,6 +118,7 @@ export async function createEvent(
         privacyType: data.privacyType ?? EventPrivacyType.PUBLIC,
         registrationClosesAt: data.registrationClosesAt ?? null,
         registrationLeadMinutes: data.registrationLeadMinutes ?? null,
+        ...(normalizedTeamSettings(data) ?? {}),
         page: {
           create: {
             isPublished: data.status === EventStatus.PUBLISHED,
@@ -226,6 +227,10 @@ export async function cloneEvent(
         status: EventStatus.DRAFT,
         privacyType: source.privacyType,
         listedPublicly: source.listedPublicly,
+        registrationMode: source.registrationMode,
+        teamMinSize: source.teamMinSize,
+        teamMaxSize: source.teamMaxSize,
+        soloPolicy: source.soloPolicy,
       },
     });
 

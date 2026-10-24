@@ -36,6 +36,11 @@
       "id": "app__account__security__page:loadAccountSecurityView"
     },
     {
+      "module": "lib/views/app__account__teams__teamId__page",
+      "name": "loadAccountTeamView",
+      "id": "app__account__teams__teamId__page:loadAccountTeamView"
+    },
+    {
       "module": "lib/views/app__auth__login__page",
       "name": "loadLoginView",
       "id": "app__auth__login__page:loadLoginView"
@@ -216,6 +221,11 @@
       "id": "app__orgSlug__eventSlug__speakers__speakerSlug__page:loadSpeakerView"
     },
     {
+      "module": "lib/views/app__orgSlug__eventSlug__team__joinToken__page",
+      "name": "loadTeamJoinView",
+      "id": "app__orgSlug__eventSlug__team__joinToken__page:loadTeamJoinView"
+    },
+    {
       "module": "lib/views/app__orgSlug__i__instanceId__opengraph-image",
       "name": "loadOpenGraphImage",
       "id": "app__orgSlug__i__instanceId__opengraph-image:loadOpenGraphImage"
@@ -354,6 +364,11 @@
       "module": "lib/views/app__super-admin__users__userId__page",
       "name": "loadSuperAdminUserDetailView",
       "id": "app__super-admin__users__userId__page:loadSuperAdminUserDetailView"
+    },
+    {
+      "module": "lib/views/app__team__token__page",
+      "name": "loadTeamManageView",
+      "id": "app__team__token__page:loadTeamManageView"
     },
     {
       "module": "lib/views/app__ticket__token__page",
@@ -1261,6 +1276,116 @@
       "module": "app/actions/shortLink",
       "name": "regenerateEventShortLink",
       "id": "shortLink:regenerateEventShortLink"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "approveTeam",
+      "id": "team-admin:approveTeam"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "rejectTeam",
+      "id": "team-admin:rejectTeam"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "promoteTeam",
+      "id": "team-admin:promoteTeam"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "renameTeamAsOrganiser",
+      "id": "team-admin:renameTeamAsOrganiser"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "moveTeamMember",
+      "id": "team-admin:moveTeamMember"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "deleteTeam",
+      "id": "team-admin:deleteTeam"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "renameTeamAction",
+      "id": "teams:renameTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "regenerateTeamJoinLinkAction",
+      "id": "teams:regenerateTeamJoinLinkAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "regenerateTeamManageLinkAction",
+      "id": "teams:regenerateTeamManageLinkAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "addTeamMemberAction",
+      "id": "teams:addTeamMemberAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "removeTeamMemberAction",
+      "id": "teams:removeTeamMemberAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "transferTeamLeadershipAction",
+      "id": "teams:transferTeamLeadershipAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "setTeamLookingForMembersAction",
+      "id": "teams:setTeamLookingForMembersAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "disbandTeamAction",
+      "id": "teams:disbandTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "inviteSeekerAction",
+      "id": "teams:inviteSeekerAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "respondToTeamRequestAction",
+      "id": "teams:respondToTeamRequestAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "cancelTeamInviteAction",
+      "id": "teams:cancelTeamInviteAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "leaveTeamAction",
+      "id": "teams:leaveTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "saveSeekerProfileAction",
+      "id": "teams:saveSeekerProfileAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "requestToJoinTeamAction",
+      "id": "teams:requestToJoinTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "respondToTeamInviteAction",
+      "id": "teams:respondToTeamInviteAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "cancelTeamRequestAction",
+      "id": "teams:cancelTeamRequestAction"
     },
     {
       "module": "app/actions/ticket-types",

@@ -1,9 +1,9 @@
 import "server-only";
 
-import type { RegistrationFieldType } from "@prisma/client";
+import type { RegistrationFieldType, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { loadRevenue } from "@/lib/payments/revenue";
-import type { EventReportMetrics, ReportCheckInSources, ReportQuestion, ReportRsvp, ReportRsvpMetrics } from "./eventReport/types";
+import type { EventReportMetrics, ReportCheckInSources, ReportQuestion, ReportRsvp, ReportRsvpMetrics, ReportTeamMetrics } from "./eventReport/types";
 
 export { createEventReportPdf } from "@/lib/eventReportPdf";
 export type {
@@ -43,6 +43,32 @@ export function calculateReportRsvpMetrics(rsvps: ReportRsvp[]): ReportRsvpMetri
   }
   metrics.noShows = Math.max(0, metrics.confirmed - metrics.checkedIn);
   return metrics;
+}
+
+/** Team counts from each registration's team and status. Rejected registrations are left out. */
+export function calculateReportTeamMetrics(rsvps: Array<{ status: RsvpStatus; teamId: string | null }>): ReportTeamMetrics {
+  const sizes = new Map<string, number>();
+  const confirmed = new Set<string>();
+  let soloRegistrants = 0;
+  let confirmedSoloRegistrants = 0;
+  for (const rsvp of rsvps) {
+    if (rsvp.status === "REJECTED") continue;
+    if (!rsvp.teamId) {
+      soloRegistrants += 1;
+      if (rsvp.status === "CONFIRMED") confirmedSoloRegistrants += 1;
+      continue;
+    }
+    sizes.set(rsvp.teamId, (sizes.get(rsvp.teamId) ?? 0) + 1);
+    if (rsvp.status === "CONFIRMED") confirmed.add(rsvp.teamId);
+  }
+  const members = [...sizes.values()].reduce((sum, size) => sum + size, 0);
+  return {
+    teams: sizes.size,
+    confirmedTeams: confirmed.size,
+    soloRegistrants,
+    confirmedSoloRegistrants,
+    averageTeamSize: sizes.size ? Math.round((members / sizes.size) * 10) / 10 : 0,
+  };
 }
 
 export function isReportAvailable(endDateTime: Date, now = new Date()) {
@@ -121,6 +147,7 @@ export async function getEventReportMetrics(eventId: string): Promise<EventRepor
       privacyType: true,
       tags: true,
       registrationClosesAt: true,
+      registrationMode: true,
       organisation: { select: { id: true, name: true } },
       page: { select: { accentColor: true, tagline: true } },
       venue: { select: { name: true, visibility: true } },
@@ -132,6 +159,7 @@ export async function getEventReportMetrics(eventId: string): Promise<EventRepor
           createdAt: true,
           waitlistedAt: true,
           promotedAt: true,
+          teamId: true,
           answers: { select: { fieldId: true, valueText: true, valueBool: true } },
           checkInEvents: { where: { action: "CHECKED_IN" }, orderBy: { occurredAt: "desc" }, take: 1, select: { source: true } },
         },
@@ -215,6 +243,7 @@ export async function getEventReportMetrics(eventId: string): Promise<EventRepor
     resourceCount: event.resources.length,
     broadcasts: event.broadcasts.map((broadcast) => ({ subject: broadcast.subject, sentAt: broadcast.createdAt, recipientCount: broadcast.recipientCount })),
     coOrganiserCount: event._count.collaborators,
+    teams: event.registrationMode === "TEAM" ? calculateReportTeamMetrics(event.rsvps) : null,
     waitlist: { joined: event.rsvps.filter((rsvp) => rsvp.waitlistedAt).length, promoted: event.rsvps.filter((rsvp) => rsvp.promotedAt).length },
     shortLinkVisits: event.shortCode ? event.shortLinkClickDays.reduce((sum, day) => sum + day.count, 0) : null,
     money: await loadRevenue({ eventId: event.id }, event.timezone),

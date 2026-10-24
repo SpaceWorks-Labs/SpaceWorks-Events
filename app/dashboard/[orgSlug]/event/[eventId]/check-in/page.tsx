@@ -64,6 +64,7 @@ export default async function EventCheckInPage({ params, searchParams }: Props) 
         eventId={event.id}
         eventTitle={event.title}
         registrationFields={registrationForm?.fields ?? []}
+        teamEvent={event.registrationMode === "TEAM"}
         stats={{ confirmed, checkedIn: checkedInCount }}
         recent={recent}
         badge={{ design: badgeDesignFor(badgeEvent), branding: badgeBrandingFor(badgeEvent), canSave: true }}

@@ -9,6 +9,7 @@ import { type ChipTone } from "@/components/ui/display";
 import { PaymentStatus } from "@prisma/client";
 import { refreshOrderFromProvider } from "@/lib/payments/checkout";
 import { isActiveHold } from "@/lib/payments/holds";
+import { loadTicketTeamSection } from "@/lib/teamTicketSection";
 import { formatMoney } from "@/lib/payments/money";
 type Props = {
   params: Promise<{ token: string; }>;
@@ -108,6 +109,9 @@ export async function loadTicketView({ params, searchParams }: Props) {
           mapLinkUrl: true,
           isOnline: true,
           slug: true,
+          organisationId: true,
+          registrationMode: true,
+          soloPolicy: true,
           page: { select: { accentColor: true } },
           organisation: { select: { slug: true, name: true } },
         },
@@ -210,5 +214,6 @@ export async function loadTicketView({ params, searchParams }: Props) {
     ? { active: isActiveHold(rsvp), expiresAt: rsvp.holdExpiresAt?.toISOString() ?? null, canPay: isActiveHold(rsvp) && payment?.status === PaymentStatus.PENDING }
     : null;
 
-  return { rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
+  const teamSection = await loadTicketTeamSection(rsvp, isCheckedIn);
+  return { teamSection, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
 }

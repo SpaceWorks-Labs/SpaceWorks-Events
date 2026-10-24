@@ -10,6 +10,8 @@ export type RsvpConfirmationPayload = {
   eventTitle: string;
   status: RsvpStatus;
   checkInToken: string;
+  /** Set for registrations on a TEAM event that belong to a team. */
+  teamName?: string;
 };
 
 export type RsvpStatusPayload = {
@@ -20,6 +22,8 @@ export type RsvpStatusPayload = {
   approved: boolean;
   checkInToken?: string;
   recipientName?: string;
+  /** Team status changes email each member, naming the team. */
+  teamName?: string;
 };
 
 export type PasswordResetPayload = {
@@ -105,7 +109,7 @@ export function isExpired(expiresAt: string | undefined, now = new Date()) {
 }
 
 export function containsCapability(kind: string, payload: Prisma.JsonValue) {
-  if (["rsvp-confirmation", "password-reset", "email-verification", "collaborator-invite", "sign-in-code"].includes(kind)) return true;
+  if (["rsvp-confirmation", "password-reset", "email-verification", "collaborator-invite", "sign-in-code", "team-created", "team-member-added"].includes(kind)) return true;
   return kind === "rsvp-status" && Boolean(payload && typeof payload === "object" && !Array.isArray(payload) && typeof (payload as Record<string, unknown>).checkInToken === "string");
 }
 
@@ -135,7 +139,8 @@ export function asRsvpConfirmationPayload(value: Prisma.JsonValue): RsvpConfirma
     !isEmail(payload.to) ||
     !isBoundedString(payload.eventTitle, 200) ||
     !isBoundedString(payload.checkInToken, 128) ||
-    !Object.values(RsvpStatus).includes(payload.status as RsvpStatus)
+    !Object.values(RsvpStatus).includes(payload.status as RsvpStatus) ||
+    (payload.teamName !== undefined && !isBoundedString(payload.teamName, 200))
   ) {
     return null;
   }
@@ -151,7 +156,8 @@ export function asRsvpStatusPayload(value: Prisma.JsonValue): RsvpStatusPayload 
     typeof payload.approved !== "boolean" ||
     (payload.approved && !isBoundedString(payload.checkInToken, 128)) ||
     (payload.checkInToken !== undefined && !isBoundedString(payload.checkInToken, 128)) ||
-    (payload.recipientName !== undefined && !isBoundedString(payload.recipientName, 200))
+    (payload.recipientName !== undefined && !isBoundedString(payload.recipientName, 200)) ||
+    (payload.teamName !== undefined && !isBoundedString(payload.teamName, 200))
   ) return null;
   return payload as RsvpStatusPayload;
 }

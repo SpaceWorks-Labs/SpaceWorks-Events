@@ -60,9 +60,9 @@ export function useLookupFlow({
           q.length < 2
             ? []
             : roster.rows
-                .filter((row) => row.displayName.toLowerCase().includes(q) || row.email?.toLowerCase().includes(q))
+                .filter((row) => row.displayName.toLowerCase().includes(q) || row.email?.toLowerCase().includes(q) || row.teamName?.toLowerCase().includes(q))
                 .slice(0, 12)
-                .map(({ rsvpId, displayName, email, status, checkedInAt }) => ({ rsvpId, displayName, email, status, checkedInAt })),
+                .map(({ rsvpId, displayName, email, status, checkedInAt, teamName }) => ({ rsvpId, displayName, email, status, checkedInAt, teamName })),
         );
       })();
       return;
@@ -107,6 +107,7 @@ export function useLookupFlow({
           checkInQrToken: attendee.ticketToken,
           checkInDetails: attendee.checkInDetails ?? [],
           registrationDetails: attendee.registrationDetails ?? [],
+          teamName: attendee.teamName ?? null,
           gate,
         });
         setScanIsOffline(true);

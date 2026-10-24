@@ -1,5 +1,6 @@
 import { EventPrivacyType, EventStatus } from "@prisma/client";
 import { z } from "zod";
+import { teamSettingsFields, validateTeamSettings } from "@/lib/validators/teams";
 import { isReservedEventSlug, isReservedOrganisationSlug } from "@/lib/slug";
 import { isUploadedImageUrl } from "@/lib/uploadUrl";
 import {
@@ -81,8 +82,10 @@ export const createEventSchema = z
       .optional()
       .default(EventPrivacyType.PUBLIC),
     ...registrationCutoffSchema,
+    ...teamSettingsFields,
   })
   .superRefine((data, ctx) => {
+    validateTeamSettings(data, ctx);
     validateEventScheduleAndLocation(data, ctx);
     if (data.registrationClosesAt && data.registrationLeadMinutes != null)
       ctx.addIssue({
@@ -162,8 +165,10 @@ export const updateEventSchema = z
     pageLogoUrl: eventPageLogoUrlSchema,
     pageAboutHtml: z.string().max(50_000).optional(),
     ...registrationCutoffSchema,
+    ...teamSettingsFields,
   })
   .superRefine((data, ctx) => {
+    validateTeamSettings(data, ctx);
     // A started event stays editable; updateEvent only rejects moving the start into the past.
     validateEventScheduleAndLocation(data, ctx, { requireFutureStart: false });
     if (data.registrationClosesAt && data.registrationLeadMinutes != null)

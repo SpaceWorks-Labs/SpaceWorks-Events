@@ -1,9 +1,12 @@
+import type { TeamRegistrationConfig } from "@/components/rsvp/TeamRegistrationFields";
 import type { RegistrationFieldDefinition } from "@/components/rsvp/registrationTypes";
 import type { RsvpStatus } from "@prisma/client";
 import type { PublicTicketType } from "@/lib/payments/tickets";
 import type { TicketingInfo } from "@/components/rsvp/PromoCodeField";
 
 export type Props = {
+  /** Team event settings (docs/TEAMS.md); null for individual registration. */
+  team?: TeamRegistrationConfig | null;
   orgSlug: string;
   organisation: { name: string; logoUrl: string | null };
   preview: boolean;

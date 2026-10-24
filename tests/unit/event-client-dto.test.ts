@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventPrivacyType, EventStatus, type Event } from "@prisma/client";
+import { EventPrivacyType, EventStatus, RegistrationMode, SoloPolicy, type Event } from "@prisma/client";
 import { toEventClientDto } from "@/lib/eventDto";
 
 describe("event browser DTO", () => {
@@ -32,6 +32,10 @@ describe("event browser DTO", () => {
       refundPolicyText: "",
       allowTransfers: false,
       transferCutoffHours: 24,
+      registrationMode: RegistrationMode.INDIVIDUAL,
+      teamMinSize: null,
+      teamMaxSize: null,
+      soloPolicy: SoloPolicy.SOLO_ALLOWED,
       shortCode: null,
       checkInStationPinHash: "bcrypt-secret",
       checkInStationPinEncrypted: "encrypted-secret",

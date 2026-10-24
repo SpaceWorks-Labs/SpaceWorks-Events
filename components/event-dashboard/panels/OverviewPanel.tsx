@@ -15,7 +15,7 @@ import { signupTrend } from "../overview/readiness";
  * with only the checklist items they can act on.
  */
 export async function OverviewPanel({ ctx }: { ctx: EventDashboardContext; }) {
-  const { event, permissions, organisation, now, counts, signupDates, requests, team, phase, items, heading, path, showWaiting, hasMain } = await loadOverviewPanel({ ctx });
+  const { event, permissions, organisation, now, counts, signupDates, requests, team, phase, items, heading, path, showWaiting, hasMain, pendingTotal } = await loadOverviewPanel({ ctx });
   const aside = (
     <>
       <ShareCard
@@ -68,7 +68,7 @@ export async function OverviewPanel({ ctx }: { ctx: EventDashboardContext; }) {
           <div className="flex min-w-0 flex-col gap-6">
             {signupDates ? <SignupsCard trend={signupTrend(signupDates, now)} /> : null}
             {showWaiting && requests && counts ? (
-              <WaitingForYou organisationSlug={organisation.slug} eventId={event.id} timeZone={event.timezone} referenceTime={now.toISOString()} requests={requests} pendingTotal={counts.pendingApproval} />
+              <WaitingForYou organisationSlug={organisation.slug} eventId={event.id} timeZone={event.timezone} referenceTime={now.toISOString()} requests={requests} pendingTotal={pendingTotal} />
             ) : null}
           </div>
           <aside className="flex min-w-0 flex-col gap-5">{aside}</aside>

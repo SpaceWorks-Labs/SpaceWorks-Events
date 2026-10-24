@@ -8,6 +8,7 @@ import { effectiveEventProgram } from "@/lib/eventProgram";
 import { plainTextToSafeHtml, sanitizeRichText } from "@/lib/richText";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { toFieldDefinition } from "@/lib/registrationFields";
+import { publicTeamRegistrationConfig } from "@/lib/publicTeamConfig";
 
 type Props = { params: Promise<{ orgSlug: string; eventSlug: string; }>; };
 
@@ -90,6 +91,7 @@ export default async function EventPage({ params }: Props) {
       ticketing={ticketing}
       approvalRequired={event.privacyType === EventPrivacyType.APPROVAL_REQUIRED}
       viewerRsvp={viewerRsvp ? { token: viewerRsvp.checkInToken, status: viewerRsvp.status } : null}
+      team={publicTeamRegistrationConfig(event)}
     />
   );
 }

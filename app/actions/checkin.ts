@@ -37,6 +37,8 @@ export type CheckInResultData = {
   checkInQrToken: string;
   checkInDetails: CheckInDetail[];
   registrationDetails: RegistrationDetail[];
+  /** TEAM events: the attendee's team name, shown at the desk and on badges. Not part of any API DTO. */
+  teamName?: string | null;
 };
 
 export type CheckInPreviewData = CheckInResultData & {
@@ -74,6 +76,7 @@ export async function previewCheckInByToken(
       checkInQrToken: rsvp.checkInToken,
       checkInDetails: getCheckInDetails(rsvp.answers),
       registrationDetails: getRegistrationDetails(rsvp.answers),
+      teamName: rsvp.team?.name ?? null,
       gate,
     },
   };
@@ -124,6 +127,7 @@ export async function checkInByToken(
         checkInQrToken: rsvp.checkInToken,
         checkInDetails: getCheckInDetails(rsvp.answers),
         registrationDetails: getRegistrationDetails(rsvp.answers),
+        teamName: rsvp.team?.name ?? null,
       },
     };
   }
@@ -154,6 +158,7 @@ export async function checkInByToken(
         checkInQrToken: rsvp.checkInToken,
         checkInDetails: getCheckInDetails(rsvp.answers),
         registrationDetails: getRegistrationDetails(rsvp.answers),
+        teamName: rsvp.team?.name ?? null,
       },
     };
   }
@@ -176,6 +181,7 @@ export async function checkInByToken(
       checkInQrToken: rsvp.checkInToken,
       checkInDetails: getCheckInDetails(rsvp.answers),
       registrationDetails: getRegistrationDetails(rsvp.answers),
+      teamName: rsvp.team?.name ?? null,
     },
   };
 }
@@ -233,6 +239,8 @@ export type LookupRow = {
   email: string | null;
   status: string;
   checkedInAt: string | null;
+  /** TEAM events: the attendee's team name. */
+  teamName?: string | null;
 };
 
 export type OfflineCheckInRosterRow = LookupRow & {
@@ -285,7 +293,7 @@ export async function lookupAttendeesForCheckIn(
       ],
     },
     take: 12,
-    include: { user: { select: { name: true, email: true } } },
+    include: { user: { select: { name: true, email: true } }, team: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -295,6 +303,7 @@ export async function lookupAttendeesForCheckIn(
     email: r.user?.email ?? r.guestEmail,
     status: r.status,
     checkedInAt: r.checkedInAt?.toISOString() ?? null,
+    teamName: r.team?.name ?? null,
   }));
 
   return { ok: true, data: { rows } };

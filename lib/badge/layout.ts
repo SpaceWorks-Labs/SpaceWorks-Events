@@ -12,7 +12,7 @@ import {
   type IdCardPrintSettings,
 } from "@/lib/idCardPrint";
 import { resolveBadgePalette, SYMBOL_ASPECT, type BadgePalette, type BadgeSymbolVariant } from "./palette";
-import { attendeeInitials, printableFields, type BadgeBranding, type IdCardAttendee } from "./types";
+import { attendeeInitials, printableFields, withMergeFields, type BadgeBranding, type IdCardAttendee } from "./types";
 
 /*
  * Turns a design, an attendee and the event's artwork into a flat list of
@@ -153,7 +153,8 @@ export function memberLine(label: string, value: string | null | undefined) {
   return label.trim() ? `${label.trim()} ${text}` : text;
 }
 
-export function buildBadgeScene({ settings, attendee, branding, measurer }: BadgeSceneInput): BadgeScene {
+export function buildBadgeScene({ settings: designSettings, attendee, branding, measurer }: BadgeSceneInput): BadgeScene {
+  const settings = withMergeFields(designSettings, attendee);
   const palette: BadgePalette = resolveBadgePalette(settings, branding.eventAccent);
   const mono = settings.colorMode === "mono";
   const decor = idCardTemplateDecor(settings.template, settings.widthMm, settings.heightMm);

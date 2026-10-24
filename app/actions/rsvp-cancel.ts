@@ -9,7 +9,8 @@ import { recordAuditEvent } from "@/lib/audit";
 import type { ActionResult } from "./org";
 import { z } from "zod";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { EventPrivacyType, RsvpStatus } from "@prisma/client";
+import { EventPrivacyType, RegistrationMode, RsvpStatus } from "@prisma/client";
+import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft } from "@/lib/teamUnits";
 import { NOT_FROM_PAID_ORDER } from "@/lib/rsvpCapacity";
 import { fillFromWaitlist } from "@/lib/payments/operations";
 import { lockSeriesDates, seatTargetOf } from "@/lib/payments/targets";
@@ -113,6 +114,18 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
       const what = current.status === "WAITLISTED" ? "left the waitlist for" : current.status === "PENDING_APPROVAL" ? "withdrawn your request to join" : "cancelled your place at";
       await notifyChat(tx, organisationId, "cancellation", `${current.guestName?.trim() || "A guest"} cancelled their place at ${title}.`);
       await noticeEach(tx, [to], { organisationId, subject: noticeSubject("Cancelled", title), lines: [`You've ${what} ${title}. Your ticket no longer works.`, "Changed your mind? Register again from the event page if places are still open."] });
+    }
+    // TEAM events (docs/TEAMS.md): the freed thing is a unit. A member frees
+    // nothing unless they were the last one (the empty team is deleted); a
+    // leader's leadership passes to the longest-standing member.
+    if (current.eventId) {
+      const event = await tx.event.findUnique({ where: { id: current.eventId }, select: { id: true, title: true, capacity: true, privacyType: true, registrationMode: true } });
+      if (event?.registrationMode === RegistrationMode.TEAM) {
+        let freedUnit = !current.teamId && current.status === RsvpStatus.CONFIRMED;
+        if (current.teamId) freedUnit = (await settleTeamAfterMemberLeft(tx, { teamId: current.teamId, eventId: event.id, leftRsvpId: current.id })).freedConfirmedUnit;
+        if (freedUnit) await promoteOldestWaitlistedUnit(tx, event);
+        return { error: null };
+      }
     }
     const privacyType = rsvp.event?.privacyType ?? rsvp.eventInstance?.series.privacyType;
     // A freed seat on an event, or on a date of a series that sells tickets,

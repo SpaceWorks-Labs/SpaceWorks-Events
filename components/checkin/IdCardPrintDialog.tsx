@@ -21,6 +21,8 @@ export function IdCardPrintDialog(props: {
   branding: BadgeBranding;
   attendee: IdCardAttendee | null;
   registrationFields: RegistrationField[];
+  /** TEAM event: the designer offers the Team line and the {{team}} merge field. */
+  teamEvent?: boolean;
 }) {
   const { open, onClose, attendee, source } = props;
   const { settings } = useIdCardSettings(source);
@@ -75,6 +77,7 @@ export function IdCardPrintDialog(props: {
             branding={props.branding}
             attendee={person}
             registrationFields={props.registrationFields}
+            teamEvent={props.teamEvent}
             onClose={person ? () => setDesigning(false) : close}
           />
         ) : person ? (

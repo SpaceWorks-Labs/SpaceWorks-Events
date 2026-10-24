@@ -11,5 +11,5 @@ export default async function VenueCheckInStationPage({ params }: Props) {
   const data = await loadVenueCheckInStationView({ params });
   if (!data.unlocked) return <CheckInStationUnlock organisationSlug={data.orgSlug} eventSlug={data.eventSlug} />;
   const { event, fields, confirmed, checkedIn, recent, badge } = data;
-  return <EventCheckInClient stationMode eventSlug={event.slug} organisationSlug={event.organisation.slug} organisationName={event.organisation.name} eventId={event.id} eventTitle={event.title} registrationFields={fields} stats={{ confirmed, checkedIn }} recent={recent} badge={badge} />;
+  return <EventCheckInClient stationMode teamEvent={event.teamEvent} eventSlug={event.slug} organisationSlug={event.organisation.slug} organisationName={event.organisation.name} eventId={event.id} eventTitle={event.title} registrationFields={fields} stats={{ confirmed, checkedIn }} recent={recent} badge={badge} />;
 }

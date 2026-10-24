@@ -20,6 +20,7 @@ import { sendAs } from "@/lib/email/transporter";
 import { asChatMessagePayload, deliverChatMessage } from "@/lib/chat/deliver";
 import { CHAT_MESSAGE_KIND } from "@/lib/chat/notify";
 import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload, asEmailVerificationPayload, asEventBroadcastPayload, asEventBroadcastTestPayload, asEventInvitePayload, asEventReminderPayload, asOperatorNoticePayload, asPasswordResetPayload, asRsvpConfirmationPayload, asRsvpStatusPayload, asSignInCodePayload, containsCapability, isExpired, messageId, retryDelayMs } from "./payloads";
+import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { attendeeName, broadcastEventSelect, broadcastVariablesFor, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 
 /** Deliver a small batch. Run this from a protected scheduler, never a request path. */
@@ -80,6 +81,7 @@ export async function deliverOutboxBatch(limit = 20) {
             checkInToken: payload.checkInToken,
             recipientName: attendeeName(rsvp),
             calendarEvent: calendarEvent(rsvp),
+            teamName: payload.teamName,
             messageId: stableMessageId,
           });
         } else {
@@ -261,6 +263,13 @@ export async function deliverOutboxBatch(limit = 20) {
         const payload = asPaymentEmailPayload(message.payload);
         if (!payload) throw new PermanentOutboxError();
         if ((await deliverPaymentEmail(payload, stableMessageId)) === "dropped") {
+          await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
+          continue;
+        }
+      } else if (isTeamMessageKind(message.kind)) {
+        const outcome = await deliverTeamMessage(message.kind, message.payload, stableMessageId);
+        if (!outcome) throw new PermanentOutboxError();
+        if (outcome === "dropped") {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }

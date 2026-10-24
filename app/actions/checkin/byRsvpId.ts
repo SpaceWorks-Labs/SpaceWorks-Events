@@ -33,6 +33,7 @@ export async function previewCheckInByRsvpId(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
+      team: { select: { name: true } },
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
@@ -49,6 +50,7 @@ export async function previewCheckInByRsvpId(
       checkInQrToken: rsvp.checkInToken,
       checkInDetails: getCheckInDetails(rsvp.answers),
       registrationDetails: getRegistrationDetails(rsvp.answers),
+      teamName: rsvp.team?.name ?? null,
       gate: gateCheckInForStatus(rsvp.status, Boolean(force)),
     },
   };
@@ -76,6 +78,7 @@ export async function checkInByRsvpId(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
+      team: { select: { name: true } },
       event: { select: { slug: true } },
       eventInstance: { select: { id: true } },
     },
@@ -107,6 +110,7 @@ export async function checkInByRsvpId(
         checkInQrToken: rsvp.checkInToken,
         checkInDetails: getCheckInDetails(rsvp.answers),
         registrationDetails: getRegistrationDetails(rsvp.answers),
+        teamName: rsvp.team?.name ?? null,
       },
     };
   }
@@ -137,6 +141,7 @@ export async function checkInByRsvpId(
         checkInQrToken: rsvp.checkInToken,
         checkInDetails: getCheckInDetails(rsvp.answers),
         registrationDetails: getRegistrationDetails(rsvp.answers),
+        teamName: rsvp.team?.name ?? null,
       },
     };
   }
@@ -159,6 +164,7 @@ export async function checkInByRsvpId(
       checkInQrToken: rsvp.checkInToken,
       checkInDetails: getCheckInDetails(rsvp.answers),
       registrationDetails: getRegistrationDetails(rsvp.answers),
+      teamName: rsvp.team?.name ?? null,
     },
   };
 }

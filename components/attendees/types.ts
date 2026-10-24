@@ -16,6 +16,8 @@ export type AttendeeRow = {
   /** Paid events: the ticket bought and the order it belongs to. */
   ticketName?: string | null;
   order?: AttendeeOrder | null;
+  /** TEAM events: the registration's team (null when solo; absent elsewhere). */
+  team?: { id: string; name: string; isLeader: boolean } | null;
   answers?: { label: string; value: string }[];
   rawAnswers?: Array<{
     fieldId: string;

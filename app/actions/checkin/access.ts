@@ -92,6 +92,7 @@ export async function resolveRsvpForToken(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
+      team: { select: { name: true } },
       event: { select: { id: true, organisationId: true, slug: true } },
       eventInstance: {
         include: { series: { select: { organisationId: true } } },

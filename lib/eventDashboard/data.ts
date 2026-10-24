@@ -89,6 +89,7 @@ export const loadAttendees = cache(async (eventId: string, origin: string) => {
     include: {
       user: { select: { id: true, name: true, email: true } },
       answers: { include: { field: true } },
+      team: { select: { id: true, name: true, leaderRsvpId: true } },
       ticketType: { select: { name: true } },
       order: { select: attendeeOrderSelect },
       checkInListRecords: { select: { checkedInAt: true, list: { select: { name: true, archived: true } } }, orderBy: { list: { sortOrder: "asc" } } },
@@ -110,6 +111,8 @@ export const loadAttendees = cache(async (eventId: string, origin: string) => {
       checkedInAt: record.checkedInAt.toISOString(),
     })),
     ticketUrl: `${origin}/ticket/${rsvp.checkInToken}`,
+    // TEAM events: the team this registration belongs to (null when solo).
+    team: rsvp.team ? { id: rsvp.team.id, name: rsvp.team.name, isLeader: rsvp.team.leaderRsvpId === rsvp.id } : null,
     ticketName: rsvp.ticketType?.name ?? null,
     order: rsvp.order && rsvp.order.totalMinor > BigInt(0) ? attendeeOrder(rsvp.order) : null,
     rawAnswers: rsvp.answers.map((answer) => ({

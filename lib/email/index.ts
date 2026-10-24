@@ -5,23 +5,23 @@ import { safeTimeZone } from "@/lib/timeZone";
 import { EMAIL_BUTTON_STYLE, EMAIL_COLORS, emailLayout } from "./brand";
 import { DEFAULT_BROADCAST_DESIGN, inlineBroadcastStyles, isBroadcastDesign, renderBroadcastDesign, type BroadcastBrand, type BroadcastDesignId } from "./broadcastDesigns";
 
-const HEADING_STYLE = `margin-top: 0; color: ${EMAIL_COLORS.ink}; font-size: 20px; font-weight: 600;`;
-const BODY_STYLE = `font-size: 16px; line-height: 1.5; color: ${EMAIL_COLORS.inkMuted}; margin-bottom: 24px;`;
+export const HEADING_STYLE = `margin-top: 0; color: ${EMAIL_COLORS.ink}; font-size: 20px; font-weight: 600;`;
+export const BODY_STYLE = `font-size: 16px; line-height: 1.5; color: ${EMAIL_COLORS.inkMuted}; margin-bottom: 24px;`;
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]!);
 }
 
-function headerText(value: string) {
+export function headerText(value: string) {
   return value.replace(/[\u0000-\u001F\u007F]+/g, " ").trim().slice(0, 240);
 }
 
-function greeting(name?: string) {
+export function greeting(name?: string) {
   const safeName = name?.replace(/[\u0000-\u001F\u007F]+/g, " ").trim().slice(0, 200);
   return safeName ? { html: `Hello ${escapeHtml(safeName)},`, text: `Hello ${safeName},` } : { html: "Hello,", text: "Hello," };
 }
 
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 
@@ -51,6 +51,8 @@ export async function sendRSVPConfirmation(params: {
   };
   messageId?: string;
   recipientName?: string;
+  /** Names the team for a registration on a TEAM event. */
+  teamName?: string;
 }): Promise<void> {
   const { transporter, from } = await getEmailTransport();
   const baseUrl = getBaseUrl();
@@ -86,7 +88,7 @@ export async function sendRSVPConfirmation(params: {
             <h2 style="${HEADING_STYLE}">RSVP Status: ${statusText}</h2>
             <p style="${BODY_STYLE}">
               ${salutation.html}<br><br>
-              Thank you for registering for <strong>${safeTitle}</strong>. ${statusMessage}
+              Thank you for registering for <strong>${safeTitle}</strong>${params.teamName ? ` with team <strong>${escapeHtml(params.teamName)}</strong>` : ""}. ${statusMessage}
             </p>
             ${eventDetails ? `
               <div style="margin: 24px 0; padding: 20px; border: 1px solid ${EMAIL_COLORS.line}; border-radius: 16px; background-color: ${EMAIL_COLORS.cream};">
@@ -120,7 +122,7 @@ export async function sendRSVPConfirmation(params: {
                 : ""
             }`);
 
-  const text = `RSVP ${statusText}: ${params.eventTitle}\n\n${salutation.text}\n\nThank you for registering for "${params.eventTitle}". ${statusMessage}${eventDetails ? `\n\nEvent details\nStarts: ${eventDetails.startsAt}\nEnds: ${eventDetails.endsAt}${eventDetails.location ? `\nLocation: ${eventDetails.location}` : ""}` : ""}${calendarUrl ? `\n\nAdd to Google Calendar: ${calendarUrl}\nAn .ics calendar invite is also attached for other calendar apps.` : ""}${ticketUrl && params.status === "CONFIRMED" ? `\n\nView your ticket here: ${ticketUrl}` : ""}\n\nBest regards,\nSpace Works Events`;
+  const text = `RSVP ${statusText}: ${params.eventTitle}\n\n${salutation.text}\n\nThank you for registering for "${params.eventTitle}"${params.teamName ? ` with team "${params.teamName}"` : ""}. ${statusMessage}${eventDetails ? `\n\nEvent details\nStarts: ${eventDetails.startsAt}\nEnds: ${eventDetails.endsAt}${eventDetails.location ? `\nLocation: ${eventDetails.location}` : ""}` : ""}${calendarUrl ? `\n\nAdd to Google Calendar: ${calendarUrl}\nAn .ics calendar invite is also attached for other calendar apps.` : ""}${ticketUrl && params.status === "CONFIRMED" ? `\n\nView your ticket here: ${ticketUrl}` : ""}\n\nBest regards,\nSpace Works Events`;
 
   if (!transporter) {
     // Email bodies can contain attendee PII and bearer ticket links. Mock
@@ -158,6 +160,8 @@ export async function sendApprovalNotification(params: {
   approved: boolean;
   messageId?: string;
   recipientName?: string;
+  /** Team status changes name the team the decision applied to. */
+  teamName?: string;
 }): Promise<void> {
   const { transporter, from } = await getEmailTransport();
 
@@ -165,9 +169,11 @@ export async function sendApprovalNotification(params: {
   const safeTitle = escapeHtml(params.eventTitle);
   const subjectTitle = headerText(params.eventTitle);
   const salutation = greeting(params.recipientName);
+  const safeTeam = params.teamName ? ` (team <strong>${escapeHtml(params.teamName)}</strong>)` : "";
+  const textTeam = params.teamName ? ` (team "${params.teamName}")` : "";
   const statusMessage = params.approved
-    ? `Great news! Your RSVP request for <strong>${safeTitle}</strong> has been approved by the organizer.`
-    : `We regret to inform you that your RSVP request for <strong>${safeTitle}</strong> has been declined by the organizer.`;
+    ? `Great news! Your RSVP request for <strong>${safeTitle}</strong>${safeTeam} has been approved by the organizer.`
+    : `We regret to inform you that your RSVP request for <strong>${safeTitle}</strong>${safeTeam} has been declined by the organizer.`;
 
   const html = emailLayout(`RSVP Update: ${statusText}`, `
             <h2 style="${HEADING_STYLE}">RSVP Update: ${statusText}</h2>
@@ -176,7 +182,7 @@ export async function sendApprovalNotification(params: {
               ${statusMessage}
             </p>`);
 
-  const text = `RSVP Update: ${statusText}\n\n${salutation.text}\n\n${params.approved ? `Your RSVP for "${params.eventTitle}" was approved!` : `Your RSVP for "${params.eventTitle}" was declined.`}\n\nBest regards,\nSpace Works Events`;
+  const text = `RSVP Update: ${statusText}\n\n${salutation.text}\n\n${params.approved ? `Your RSVP for "${params.eventTitle}"${textTeam} was approved!` : `Your RSVP for "${params.eventTitle}"${textTeam} was declined.`}\n\nBest regards,\nSpace Works Events`;
 
   if (!transporter) {
     console.log("[EMAIL MOCK] RSVP update queued");
@@ -337,3 +343,5 @@ export async function sendEventBroadcast(params: {
 
   await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
 }
+
+export { sendTeamCreatedEmail, sendTeamMemberAddedEmail } from "./team";

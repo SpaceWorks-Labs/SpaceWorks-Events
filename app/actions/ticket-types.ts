@@ -22,6 +22,8 @@ export async function saveTicketType(input: unknown): Promise<ActionResult<{ id:
   const { organisation, userId, owner } = context;
   const data = parsed.data;
   if ("eventId" in owner && data.kind === "PASS") return { ok: false, error: "Passes are for series." };
+  // Team registration does not take tickets yet: an event registers teams or sells tickets.
+  if ("eventId" in owner && (await prisma.event.count({ where: { id: owner.eventId, registrationMode: "TEAM" } })) > 0) return { ok: false, error: "This event registers teams, which can't be combined with tickets yet." };
 
   const existing = data.ticketTypeId
     ? await prisma.ticketType.findFirst({ where: { id: data.ticketTypeId, ...owner, archivedAt: null }, select: { id: true, accessCodeDigest: true, accessCodeHint: true } })

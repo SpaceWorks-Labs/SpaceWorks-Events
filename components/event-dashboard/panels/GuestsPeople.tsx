@@ -19,6 +19,8 @@ import { PaymentDialog } from "@/components/attendees/PaymentDialog";
 import { approveRsvp, promoteFromWaitlist, reacceptRsvp, rejectRsvp } from "@/app/actions/rsvp-lifecycle";
 import { undoCheckIn } from "@/app/actions/checkin";
 import { GuestRow, type GuestRowActions } from "@/components/event-dashboard/guests/GuestRow";
+import { useEventTabs } from "@/components/event-dashboard/EventDashboardTabs";
+import { MoveToTeamDialog, type MoveTargetTeam } from "@/components/event-dashboard/guests/MoveToTeamDialog";
 import {
   GUEST_FILTERS,
   countGuestFilters,
@@ -27,6 +29,7 @@ import {
   pageRange,
   type GuestKindFilter,
   type GuestStatusFilter,
+  type GuestTeamFilter,
 } from "@/components/event-dashboard/guests/guestList";
 import { FILTER_DOTS, PAGE_SIZE, type ActionResult, type GuestListTarget } from "./GuestsPeople/constants";
 
@@ -41,6 +44,8 @@ export function GuestsPeople({
   attendees,
   truncated,
   registrationFields,
+  teamMode = false,
+  teams = [],
   ticketTypes = [],
   canUndoCheckIn = true,
 }: {
@@ -53,6 +58,10 @@ export function GuestsPeople({
   attendees: AttendeeRow[];
   truncated: boolean;
   registrationFields: RegistrationFieldRow[];
+  /** TEAM event: show each guest's team, the In a team / Solo filter, and route status changes to Teams. */
+  teamMode?: boolean;
+  /** TEAM event: teams a solo registrant can be moved into. */
+  teams?: MoveTargetTeam[];
   /** Events that sell tickets: what a manually added guest can be given. */
   ticketTypes?: Array<{ id: string; name: string; priceMinor: number; currency: string; }>;
   /** Undo check-in is a CHECK_IN operation, separate from managing registrations. */
@@ -63,6 +72,8 @@ export function GuestsPeople({
   const [manualRsvpOpen, setManualRsvpOpen] = useState(false);
   const [status, setStatus] = useState<GuestStatusFilter>("all");
   const [kind, setKind] = useState<GuestKindFilter>("all");
+  const [team, setTeam] = useState<GuestTeamFilter>("all");
+  const { openTab } = useEventTabs();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [pending, startTransition] = useTransition();
@@ -71,12 +82,13 @@ export function GuestsPeople({
   const [paymentGuest, setPaymentGuest] = useState<AttendeeRow | null>(null);
   const [removeGuest, setRemoveGuest] = useState<AttendeeRow | null>(null);
   const [undoGuest, setUndoGuest] = useState<AttendeeRow | null>(null);
+  const [moveGuest, setMoveGuest] = useState<AttendeeRow | null>(null);
 
   const eventId = target.kind === "event" ? target.eventId : undefined;
   const scope = target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId };
 
   const counts = useMemo(() => countGuestFilters(attendees), [attendees]);
-  const visible = useMemo(() => filterGuests(attendees, { status, kind, query }), [attendees, status, kind, query]);
+  const visible = useMemo(() => filterGuests(attendees, { status, kind, team: teamMode ? team : "all", query }), [attendees, status, kind, team, teamMode, query]);
   const range = pageRange(visible.length, page, PAGE_SIZE);
   const pageRows = visible.slice(range.page * PAGE_SIZE, range.page * PAGE_SIZE + PAGE_SIZE);
 
@@ -116,6 +128,8 @@ export function GuestsPeople({
     remove: (guest) => setRemoveGuest(guest),
     // Orders on an event, or on a series date or pass, are refunded the same way.
     payment: (guest) => setPaymentGuest(guest),
+    openTeams: teamMode && target.kind === "event" ? () => openTab("guests", "teams") : undefined,
+    moveToTeam: teamMode && target.kind === "event" && teams.length > 0 ? (guest) => setMoveGuest(guest) : undefined,
   };
 
   function resetPage<T>(setter: (value: T) => void) {
@@ -187,11 +201,21 @@ export function GuestsPeople({
                   <option value="users">Signed-in users</option>
                 </Dropdown>
               </div>
+              {teamMode ? (
+                <div className="min-w-0 flex-1 sm:w-[140px] sm:flex-none">
+                  <label htmlFor="guest-team" className="sr-only">Team</label>
+                  <Dropdown id="guest-team" value={team} onChange={(event) => resetPage(setTeam)(event.target.value as GuestTeamFilter)} className="py-2 sm:text-sm">
+                    <option value="all">Teams and solo</option>
+                    <option value="team">In a team</option>
+                    <option value="solo">Solo</option>
+                  </Dropdown>
+                </div>
+              ) : null}
               <div className="w-full min-w-0 sm:w-[260px]">
                 <label htmlFor="guest-search" className="sr-only">Search guests by name or email</label>
                 <SearchInput
                   id="guest-search"
-                  placeholder="Search name or email"
+                  placeholder={teamMode ? "Search name, email or team" : "Search name or email"}
                   value={query}
                   onChange={(event) => resetPage(setQuery)(event.target.value)}
                   onClear={() => resetPage(setQuery)("")}
@@ -247,6 +271,17 @@ export function GuestsPeople({
       ) : null}
 
       {manualRsvpOpen && eventId ? <ManualRsvpDialog organisationSlug={organisationSlug} eventId={eventId} fields={registrationFields} ticketTypes={ticketTypes} onClose={() => setManualRsvpOpen(false)} onAdded={() => router.refresh()} /> : null}
+
+      {moveGuest && eventId ? (
+        <MoveToTeamDialog
+          organisationSlug={organisationSlug}
+          eventId={eventId}
+          person={{ rsvpId: moveGuest.id, name: guestDisplayName(moveGuest), teamId: moveGuest.team?.id ?? null }}
+          teams={teams}
+          onClose={() => setMoveGuest(null)}
+          onMoved={() => router.refresh()}
+        />
+      ) : null}
 
       {editGuest ? (
         <EditRsvpDialog

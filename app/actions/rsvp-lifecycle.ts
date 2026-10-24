@@ -15,6 +15,9 @@ import { attendeeEmail, attendeeName, loadRsvpContext, paidRequest, paymentOpera
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { reacceptRsvpFor, type ReacceptStatus } from "./rsvp-lifecycle/reaccept";
 
+/** Team registrations change status only as a whole team (docs/TEAMS.md). */
+const TEAM_MEMBER_TRANSITION_ERROR = "This registration belongs to a team. Approve, reject or promote the whole team from the Teams view.";
+
 export async function approveRsvp(input: unknown): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user?.id) {
@@ -43,6 +46,7 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR };
   if (rsvp.status !== RsvpStatus.PENDING_APPROVAL) {
     return { ok: false, error: "Only pending requests can be approved." };
   }
@@ -141,6 +145,7 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR };
   if (
     rsvp.status !== RsvpStatus.PENDING_APPROVAL &&
     rsvp.status !== RsvpStatus.WAITLISTED
@@ -160,7 +165,8 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
   const to = attendeeEmail(rsvp);
   const rejected = await prisma.$transaction(async (tx) => {
     const result = await tx.rSVP.updateMany({
-      where: { id: rsvp.id, status: { in: [RsvpStatus.PENDING_APPROVAL, RsvpStatus.WAITLISTED] } },
+      // `teamId: null`: an RSVP that joined a team meanwhile moves only with its team.
+      where: { id: rsvp.id, teamId: null, status: { in: [RsvpStatus.PENDING_APPROVAL, RsvpStatus.WAITLISTED] } },
       data: { status: RsvpStatus.REJECTED },
     });
     if (result.count === 1 && to) {
@@ -231,6 +237,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR };
   if (rsvp.status !== RsvpStatus.WAITLISTED) {
     return { ok: false, error: "Only waitlisted attendees can be promoted." };
   }

@@ -17,10 +17,12 @@ Dynamic segments are shown as `:name` for readability.
 | `/:orgSlug/:eventSlug` | Public event details and RSVP |
 | `/embed/:orgSlug/:eventSlug` | Framable public event details and RSVP for a host website |
 | `/:orgSlug/:eventSlug/feedback` | Event feedback form when open |
+| `/:orgSlug/:eventSlug/team/:joinToken` | Team join link ([Team registration](TEAMS.md)): the registration form with the team fixed. Same access rules as the event page; shows only the team name, size and maximum size; unknown, retired and other events' tokens are a 404; `noindex`, `no-referrer` |
 | `/:orgSlug/:eventSlug/check-in` | PIN-protected venue check-in station; usable by trusted on-site staff without an account |
 | `/:orgSlug/i/:instanceId` | Recurring-series instance and RSVP |
 | `/:shortCode` | Event short link: a 7-character code (letters and digits, always at least one uppercase letter, so it never matches a lowercase organisation slug) that temporarily redirects to the event's current public page. Unknown or unpublished codes return the same not-found page as an unknown organisation; lookups are rate-limited |
-| `/ticket/:token` | Attendee ticket status and QR page; tears off the QR stub live when the attendee is checked in |
+| `/ticket/:token` | Attendee ticket status and QR page; tears off the QR stub live when the attendee is checked in. On a team event it also shows the team (name, leader, member names), leaving the team, and the *Looking for a team* profile and list |
+| `/team/:token` | Team page for the leader ([Team registration](TEAMS.md)), opened by the opaque management token (stored only as a SHA-256 hash; regenerating it retires the old link). A signed-in leader reaches the same page at `/account/teams/:teamId` without the token. `noindex`, private cache, `no-referrer`; the ticket's check-in token never opens it |
 | `/order/:token` | The buyer's order (opaque access token): lines, discount and total, payment state with "Pay now" while the tickets are held, refunds, the refund policy it was bought under with "Cancel order" while that policy allows it, and each ticket with its attendee's details |
 | `/:orgSlug/ids` | An organisation's ID programmes that are taking card requests |
 | `/:orgSlug/ids/:programmeSlug` | Member ID join form (sign-in required; only while the programme is active with requests open) and the requester's own status |
@@ -33,6 +35,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/account` | Authenticated account profile settings |
 | `/account/security` | Authenticated password, MFA, recovery-code, and session controls |
 | `/account/registrations` | Authenticated list of the signed-in user's own registrations, tickets, certificates, and personal data download |
+| `/account/teams/:teamId` | Authenticated team page for the team's signed-in leader (linked from `/account/registrations`); a 404 for anyone else. Same controls as `/team/:token` except resetting the management link; `noindex`, private cache |
 | `/account/ids` | Authenticated ID wallet: the user's own member ID cards (linked to the account, or issued to its verified email) with a holographic flip viewer and downloads |
 | `/account/organisations` | Authenticated list of the user's memberships and roles, event co-organiser roles, pending co-organiser invites, and leave-organisation control (blocked for the sole owner) |
 
@@ -70,7 +73,7 @@ The super admin signs in with email and password; there is no separate authentic
 
 | Method and route | Authentication | Purpose |
 | --- | --- | --- |
-| `POST /api/rsvp` | Optional session | Submit an event or instance RSVP |
+| `POST /api/rsvp` | Optional session | Submit an event or instance RSVP; on a team event the optional `team` field creates a team, joins one by join token, or registers solo |
 | `POST /api/feedback` | Public, rate-limited | Submit feedback; email is used only for certificate-enabled forms |
 | `GET /api/exports/member-ids/:programmeId/cards/:memberId` | Session; programme organisation OWNER/ADMIN | One approved member's card: `format=pdf` (two pages, front and back) or `format=png&side=front|back` (300 dpi); audited, `no-store` |
 | `GET /api/exports/member-ids/:programmeId/cards` | Session; programme organisation OWNER/ADMIN | Every approved card as one PDF (up to 500) or `format=zip` with one PDF per member (up to 200); one bulk render per process; audited |
@@ -94,7 +97,7 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/v1/events/:eventId/orders` | Machine bearer credential + `orders:read` | Paginated order totals for one event; no buyer contact data, links or provider IDs |
 | `GET /api/v1/events/:eventId/participants` | Machine bearer credential + `participants:read` | Paginated minimal confirmed-participant roster, with attendance filtering; `include=attendance` also requires `participants:attendance:read` |
 
-Opaque ticket and certificate URLs are bearer capabilities. Do not log them or place them in analytics payloads.
+Opaque ticket, certificate, team join, and team management URLs are bearer capabilities. Do not log them or place them in analytics payloads.
 
 ## Health and recovery APIs
 

@@ -6,6 +6,7 @@ import type { RsvpStatus } from "@prisma/client";
 import { ArrowRight, Share2 } from "lucide-react";
 import { RsvpForm } from "@/components/rsvp/RsvpForm";
 import type { RegistrationFieldDefinition } from "@/components/rsvp/registrationTypes";
+import type { TeamRegistrationConfig } from "@/components/rsvp/TeamRegistrationFields";
 import { Button } from "@/components/ui/button";
 import { Callout, Chip, OrgLogo, ProgressBar } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogHeader } from "@/components/ui/dialog";
@@ -74,6 +75,8 @@ export function RegistrationCard(props: {
   title?: string;
   /** The event's accent. The sign-up dialog renders in a portal outside the page's accent scope, so it re-applies it. */
   accentColor?: string | null;
+  /** Team event settings (docs/TEAMS.md): counts become places (one per team or solo entrant). */
+  team?: TeamRegistrationConfig | null;
   /** The signed-in viewer's own registration from the server. */
   viewerRsvp?: { token: string; status: RsvpStatus } | null;
   /** Ticket types; empty for an event without them (free registration). */
@@ -84,7 +87,7 @@ export function RegistrationCard(props: {
   paidSalesOpen?: boolean;
   ticketing?: TicketingInfo | null;
 }) {
-  const { orgSlug, eventSlug, eventInstanceId, eventTitle, organisation, registrationFields, confirmedCount, capacity, state, accentColor, viewerRsvp = null, tickets = [], heldCount = 0, paidSalesOpen = false, ticketing = null } = props;
+  const { orgSlug, eventSlug, eventInstanceId, eventTitle, organisation, registrationFields, confirmedCount, capacity, state, accentColor, team, viewerRsvp = null, tickets = [], heldCount = 0, paidSalesOpen = false, ticketing = null } = props;
   const prices = tickets.filter((ticket) => ticket.priceMinor > 0);
   const cheapest = prices.length > 0 ? prices.reduce((low, ticket) => (ticket.priceMinor < low.priceMinor ? ticket : low)) : null;
   // Hidden tickets, pay what you want, fees and paid extras count as tickets too.
@@ -153,10 +156,11 @@ export function RegistrationCard(props: {
         {confirmedCount != null ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="font-semibold text-ink">{confirmedCount} going</span>
-              {spotsLeft != null ? <span className="text-ink-muted">{spotsLeft} {spotsLeft === 1 ? "spot" : "spots"} left</span> : null}
+              <span className="font-semibold text-ink">{team ? `${confirmedCount} ${confirmedCount === 1 ? "place" : "places"} taken` : `${confirmedCount} going`}</span>
+              {spotsLeft != null ? <span className="text-ink-muted">{spotsLeft} {team ? (spotsLeft === 1 ? "place" : "places") : spotsLeft === 1 ? "spot" : "spots"} left</span> : null}
             </div>
             {capacity != null ? <ProgressBar value={confirmedCount} max={capacity} label="Places taken" /> : null}
+            {team ? <p className="text-caption text-ink-muted">{team.soloPolicy === "TEAMS_ONLY" ? "Each team takes one place." : "Each team, and each solo entrant, takes one place."}</p> : null}
           </div>
         ) : null}
         {cheapest ? (
@@ -203,10 +207,13 @@ export function RegistrationCard(props: {
               paidSalesOpen={paidSalesOpen}
               ticketing={ticketing}
               paidRequest={state.approvalRequired ? "approval" : state.full ? "waitlist" : null}
-              onRsvpSaved={({ ticketToken, status }) => {
-                // Same as before: close the dialog and let the card switch to the ticket link.
+              team={team}
+              onRsvpSaved={({ ticketToken, status, teamMode }) => {
                 if (ticketToken) setSaved({ token: ticketToken, status });
-                setDialogOpen(false);
+                // A new team leader needs the form's done message (the team page
+                // link is on its way by email), so that dialog stays open.
+                // Otherwise close it and let the card switch to the ticket link.
+                if (teamMode !== "create") setDialogOpen(false);
               }}
             />
           </DialogBody>

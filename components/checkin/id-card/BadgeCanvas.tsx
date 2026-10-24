@@ -19,7 +19,7 @@ import {
 import { badgeImageUrls, memberLine } from "@/lib/badge/layout";
 import { resolveBadgePalette, SYMBOL_ASSET } from "@/lib/badge/palette";
 import { attendeeInitials, printableFields, type BadgeBranding, type IdCardAttendee } from "@/lib/badge/types";
-import { SAFE_MARGIN_MM } from "./shared";
+import { SAFE_MARGIN_MM, withMergeFields } from "./shared";
 import { BADGE_FONT_FAMILY } from "./BadgeCanvas/fonts";
 import { BadgeWatermark } from "./BadgeCanvas/BadgeWatermark";
 import type { CanvasInteraction } from "./BadgeCanvas/types";
@@ -36,7 +36,7 @@ export type { CanvasInteraction } from "./BadgeCanvas/types";
  * draws in real millimetres for the browser print sheet.
  */
 export function BadgeCanvas({
-  settings,
+  settings: designSettings,
   attendee,
   branding,
   pxPerMm = 1,
@@ -50,6 +50,8 @@ export function BadgeCanvas({
   unit?: "px" | "mm";
   interaction?: CanvasInteraction;
 }) {
+  // `{{team}}` is filled per attendee; geometry is unchanged, so dragging still edits the design.
+  const settings = withMergeFields(designSettings, attendee);
   const itemProps = useBadgeItemProps(settings, pxPerMm, interaction);
   const print = unit === "mm";
   const px = (mm: number) => (print ? `${mm}mm` : `${mm * pxPerMm}px`);

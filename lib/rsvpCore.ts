@@ -7,3 +7,4 @@ export { validateAndNormalizeAnswers } from "./rsvpCore/answers";
 export { decideRsvpStatus } from "./rsvpCore/reserve";
 export { submitRsvpCore } from "./rsvpCore/submit";
 export { submitManualGuestRsvpCore, submitManualTicketOrderCore } from "./rsvpCore/manual";
+export { TeamRegistrationError } from "./rsvpCore/team";

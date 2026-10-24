@@ -15,7 +15,8 @@ import { hasCapacityToRestoreConfirmedRsvp } from "@/lib/rsvpCapacity";
 import { noticeSubject, personEmail } from "@/lib/notices";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
-import { restoreListCheckIns, revalidatePath, revalidateRsvpPaths, snapshotSchema, UNDO_TTL_MS } from "./rsvp-admin/helpers";
+import { restoreListCheckIns, revalidatePath, revalidateRsvpPaths, settleTeamAfterRemoval, snapshotSchema, teamDeletionPayload, teamForRestore, UNDO_TTL_MS } from "./rsvp-admin/helpers";
+import { isTeamDeletionSnapshot, restoreTeamDeletionSnapshot } from "@/lib/core/teams";
 
 export async function addManualRsvp(
   input: unknown,
@@ -158,7 +159,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
     include: {
       answers: true,
       user: { select: { email: true } },
-      event: { select: { slug: true, title: true, endDateTime: true } },
+      event: { select: { slug: true, title: true, endDateTime: true, registrationMode: true } },
       eventInstance: { select: { endDateTime: true, series: { select: { title: true } } } },
       order: { select: { totalMinor: true } },
       checkInListRecords: { select: { listId: true, checkedInAt: true, source: true } },
@@ -168,7 +169,9 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
   // Paid tickets keep their money trail: they're cancelled (and refunded) as an order.
   if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead." };
 
+  const teamEvent = rsvp.eventId && rsvp.event?.registrationMode === "TEAM" ? rsvp.eventId : null;
   const snapshot = {
+    ...(teamEvent ? { teamId: rsvp.teamId } : {}),
     eventId: rsvp.eventId,
     eventInstanceId: rsvp.eventInstanceId,
     userId: rsvp.userId,
@@ -194,6 +197,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
   };
 
   const undo = await prisma.$transaction(async (tx) => {
+    const team = teamEvent ? await teamDeletionPayload(tx, { eventId: teamEvent, rsvpId: rsvp.id, snapshot }) : null;
     // Keep the short-lived undo table bounded even when no scheduled cleanup is
     // configured. Expired snapshots are never eligible for restoration.
     await tx.rsvpDeletionUndo.deleteMany({ where: { expiresAt: { lte: new Date() } } });
@@ -201,12 +205,13 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
       data: {
         organisationId: org.id,
         deletedByUserId: session.user.id,
-        payload: snapshot as Prisma.InputJsonValue,
+        payload: team?.payload ?? (snapshot as Prisma.InputJsonValue),
         expiresAt: new Date(Date.now() + UNDO_TTL_MS),
       },
       select: { id: true },
     });
     await tx.rSVP.delete({ where: { id: rsvp.id } });
+    if (teamEvent && team?.teamId) await settleTeamAfterRemoval(tx, { eventId: teamEvent, teamId: team.teamId, rsvpId: rsvp.id });
     return created;
   });
   // The guest is told once the undo window has passed, unless the removal was undone.
@@ -255,6 +260,13 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
     },
   });
   if (!undo) return { ok: false, error: "This undo has expired or is unavailable." };
+  if (isTeamDeletionSnapshot(undo.payload)) {
+    const restoredTeam = await restoreTeamDeletionSnapshot(undo, org.id);
+    if (!restoredTeam.ok || !restoredTeam.data) return restoredTeam.ok ? { ok: false, error: "Could not restore the team." } : restoredTeam;
+    revalidateRsvpPaths(org.slug, { eventId: restoredTeam.data.eventId, eventInstanceId: null, eventSlug: restoredTeam.data.eventSlug });
+    await recordAuditEvent({ action: "TEAM_RESTORED", actorUserId: session.user.id, organisationId: org.id, targetType: "Team", targetId: restoredTeam.data.teamId });
+    return { ok: true };
+  }
   const snapshot = snapshotSchema.safeParse(undo.payload);
   if (!snapshot.success) return { ok: false, error: "Could not restore this RSVP safely." };
   // Re-checked against the snapshot's own event or occurrence: the undo row is
@@ -269,9 +281,17 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
   if (!targetExists) return { ok: false, error: "The original event no longer exists." };
 
   let restoredId: string;
+  let refusal = "This RSVP cannot be restored because the event is now at capacity.";
   try {
     const restored = await prisma.$transaction(async (tx) => {
-      if (snapshot.data.status === RsvpStatus.CONFIRMED) {
+      let status = snapshot.data.status;
+      let teamId: string | null = null;
+      if (snapshot.data.teamId && snapshot.data.eventId) {
+        const team = await teamForRestore(tx, { eventId: snapshot.data.eventId, teamId: snapshot.data.teamId });
+        if (!team) { refusal = "This RSVP cannot be restored because its team no longer exists or is full."; return null; }
+        status = team.status;
+        teamId = team.id;
+      } else if (snapshot.data.status === RsvpStatus.CONFIRMED) {
         const target = snapshot.data.eventId ? { eventId: snapshot.data.eventId } : { eventInstanceId: snapshot.data.eventInstanceId! };
         if (!(await hasCapacityToRestoreConfirmedRsvp(tx, target))) return null;
       }
@@ -282,7 +302,8 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
           userId: snapshot.data.userId,
           guestEmail: snapshot.data.guestEmail,
           guestName: snapshot.data.guestName,
-          status: snapshot.data.status,
+          status,
+          ...(teamId ? { teamId } : {}),
           attendeeKey: snapshot.data.attendeeKey,
           checkInToken: snapshot.data.checkInToken,
           checkedInAt: snapshot.data.checkedInAt ? new Date(snapshot.data.checkedInAt) : null,
@@ -304,7 +325,7 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
       await tx.outboxMessage.deleteMany({ where: { kind: "operator-notice", status: "PENDING", payload: { path: ["undoId"], equals: undo.id } } });
       return created;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (!restored) return { ok: false, error: "This RSVP cannot be restored because the event is now at capacity." };
+    if (!restored) return { ok: false, error: refusal };
     restoredId = restored.id;
     emitWebhookEvent({ type: "registration.status_changed", rsvpId: restored.id, status: restored.status, previousStatus: "REMOVED" });
   } catch (error) {

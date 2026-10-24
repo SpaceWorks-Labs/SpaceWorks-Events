@@ -113,6 +113,34 @@ enum BroadcastAttendanceFilter {
   NOT_CHECKED_IN
 }
 
+/// How people register for a one-off event. TEAM events count capacity in
+/// registration units (a team or a solo registrant); see docs/TEAMS.md.
+enum RegistrationMode {
+  INDIVIDUAL
+  TEAM
+}
+
+/// Whether a TEAM event accepts registrations without a team, and whether
+/// solo registrants may list themselves as looking for a team.
+enum SoloPolicy {
+  TEAMS_ONLY
+  SOLO_ALLOWED
+  SOLO_WITH_MATCHING
+}
+
+/// INVITE: a team leader invited a seeker. REQUEST: a seeker asked to join.
+enum TeamJoinRequestDirection {
+  INVITE
+  REQUEST
+}
+
+enum TeamJoinRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
 enum OrderStatus {
   /// A paid request waiting for approval or a waitlist place; nothing is held or charged.
   REQUESTED
@@ -604,6 +632,17 @@ model Event {
   promoCodes       PromoCode[]
   checkInLists     CheckInList[]
 
+  /// TEAM turns on team registration (one-off events only; series stay
+  /// individual). Cannot change while the event has registrations.
+  registrationMode      RegistrationMode @default(INDIVIDUAL)
+  /// Teams below this size are flagged Incomplete and cannot be approved.
+  /// CHECK constraints keep 1 <= teamMinSize <= teamMaxSize, teamMaxSize >= 2,
+  /// and require teamMaxSize in TEAM mode.
+  teamMinSize           Int?
+  /// Enforced under the Event row lock; cannot drop below the largest team.
+  teamMaxSize           Int?
+  soloPolicy            SoloPolicy       @default(SOLO_ALLOWED)
+  teams            Team[]
   @@unique([organisationId, slug])
   @@index([organisationId])
   @@index([organisationId, status])
@@ -1334,6 +1373,13 @@ model RSVP {
   checkInListRecords CheckInListRecord[]
   checkInListEvents  CheckInListEvent[]
 
+  /// Team this registration belongs to (TEAM events only). Invariant: the
+  /// RSVP status always equals the team status. Null means a solo unit.
+  teamId          String?
+  team              Team?                   @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  ledTeam           Team?                   @relation("TeamLeader")
+  seekerProfile     TeamSeekerProfile?
+  teamJoinRequests  TeamJoinRequest[]
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
   @@index([userId, createdAt])
@@ -1345,6 +1391,7 @@ model RSVP {
   @@index([orderId])
   @@index([ticketTypeId, status])
   @@index([status, holdExpiresAt])
+  @@index([teamId])
 }
 
 /// Short-lived, server-created snapshots used to undo an organiser deletion.
@@ -1929,4 +1976,71 @@ model WebhookDelivery {
   @@index([endpointId, createdAt])
   @@index([organisationId, createdAt])
   @@index([createdAt])
+}
+
+/// A registration unit on a TEAM event. Capacity counts each team once,
+/// however many members it has. Every mutation locks the Event row first
+/// (lib/core/teams.ts) so team changes serialise with all capacity changes.
+model Team {
+  id                String     @id @default(cuid())
+  eventId           String
+  name              String
+  /// Lowercased, trimmed, whitespace-collapsed name; unique per event.
+  nameKey           String
+  /// Mirrors every member RSVP's status (updated together, guarded by the
+  /// expected previous status).
+  status            RsvpStatus
+  /// Opaque bearer value for the shareable join link. Regenerating retires
+  /// the old link. Reveals only team name and size.
+  joinToken         String     @unique
+  /// SHA-256 (hex) of the leader's team management token. The raw token is
+  /// shown once (in the team-created email) and never stored.
+  manageTokenHash   String     @unique
+  leaderRsvpId      String?    @unique
+  lookingForMembers Boolean    @default(false)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  leaderRsvp   RSVP?             @relation("TeamLeader", fields: [leaderRsvpId], references: [id], onDelete: SetNull)
+  members      RSVP[]            @relation("TeamMembers")
+  joinRequests TeamJoinRequest[]
+
+  @@unique([eventId, nameKey])
+  @@index([eventId, status, createdAt])
+}
+
+/// Opt-in "Looking for a team" listing for a solo registrant of a
+/// SOLO_WITH_MATCHING event. Shown only to the same event's team leaders and
+/// visible seekers, as display name + headline + skills.
+model TeamSeekerProfile {
+  id        String   @id @default(cuid())
+  rsvpId    String   @unique
+  headline  String
+  /// Up to 8 skills, each up to 30 characters.
+  skills    String[] @default([])
+  visible   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rsvp RSVP @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+}
+
+/// Leader invitation to a seeker (INVITE) or seeker request to a team
+/// (REQUEST). A partial unique index allows at most one PENDING row per
+/// team and RSVP. No email is sent for these in this version.
+model TeamJoinRequest {
+  id        String                   @id @default(cuid())
+  teamId    String
+  rsvpId    String
+  direction TeamJoinRequestDirection
+  status    TeamJoinRequestStatus    @default(PENDING)
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  rsvp RSVP @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, status])
+  @@index([rsvpId, status])
 }

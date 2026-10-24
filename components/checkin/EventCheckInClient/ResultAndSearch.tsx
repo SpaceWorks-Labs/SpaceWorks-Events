@@ -1,7 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import { Check, Info } from "lucide-react";
+import { Check, Info, Users } from "lucide-react";
 import type { CheckInResultData, LookupRow } from "@/app/actions/checkin";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/display";
@@ -39,6 +39,7 @@ export function LastResultCard({
       <div>
         <p className="text-[15px] font-semibold">{lastResult.kind === "already" ? "Already checked in" : "Checked in"}</p>
         <p className="break-words font-display text-[34px] font-semibold leading-none tracking-[-0.02em]">{lastResult.displayName}</p>
+        {lastResult.teamName ? <p className="mt-1.5 flex items-center gap-1.5 text-[15px] font-semibold"><Users aria-hidden className="size-4 shrink-0" /><span className="sr-only">Team: </span>{lastResult.teamName}</p> : null}
         <p className="mt-2 text-sm opacity-90">
           {lastResult.email ?? ""}
           {lastResult.email && lastResult.checkedInAt ? " · " : ""}
@@ -114,6 +115,7 @@ export function AttendeeSearch({
                 {row.displayName}
               </button>
               {row.email ? <p className="truncate text-sm text-ink-muted">{row.email}</p> : null}
+              {row.teamName ? <p className="truncate text-sm text-ink-secondary"><span className="sr-only">Team: </span>{row.teamName}</p> : null}
               <div className="mt-1 flex flex-wrap gap-1">
                 <StatusChip status={row.status} />
                 {row.checkedInAt ? <Chip size="sm" tone="success" icon={<Check />}>Checked in</Chip> : null}

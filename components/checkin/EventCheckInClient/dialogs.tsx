@@ -1,5 +1,6 @@
 "use client";
 
+import { Users } from "lucide-react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { CheckInPreviewData } from "@/app/actions/checkin";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export function ConfirmScanDialog({
             <>
               <p className="font-display text-[24px] font-semibold leading-tight text-ink">{scanPreview.displayName}</p>
               <p className="text-sm text-ink-muted">{scanPreview.email ?? "—"}</p>
+              {scanPreview.teamName ? <p className="flex items-center gap-1.5 text-sm font-semibold text-ink"><Users aria-hidden className="size-4 shrink-0" />Team: {scanPreview.teamName}</p> : null}
               <div className="flex flex-wrap gap-1.5 pt-1">
                 <StatusChip status={scanPreview.status} />
                 {scanPreview.alreadyCheckedIn ? <Chip size="sm" tone="neutral">Already checked in</Chip> : null}
@@ -90,6 +92,7 @@ export function AttendeeDetailsDialog({
             <>
               <p className="text-[19px] font-bold">{detailsAttendee.displayName}</p>
               <p className="text-sm text-ink-muted">{detailsAttendee.email ?? "No email address"}</p>
+              {detailsAttendee.teamName ? <p className="text-sm">Team: <span className="font-semibold">{detailsAttendee.teamName}</span></p> : null}
               <div className="flex flex-wrap gap-1.5">
                 <StatusChip status={detailsAttendee.status} />
                 {detailsAttendee.alreadyCheckedIn ? <Chip size="sm" tone="success">Already checked in</Chip> : null}

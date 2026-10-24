@@ -32,12 +32,14 @@ export function EventCheckInClient(props: {
   stationMode?: boolean;
   eventSlug?: string;
   registrationFields: Array<{ key: string; label: string }>;
+  /** TEAM event: team names on badges ({{team}} and the Team line). */
+  teamEvent?: boolean;
   stats: { confirmed: number; checkedIn: number };
   recent: CheckInRecentRow[];
   /** The event's saved badge design and artwork. Dashboard desks may edit it; stations only print it. */
   badge: { design: BadgeDesignSeed | null; branding: BadgeBranding; canSave: boolean };
 }) {
-  const { organisationSlug, organisationName, eventId, eventTitle, registrationFields, stats, recent, stationMode = false, eventSlug, badge } = props;
+  const { organisationSlug, organisationName, eventId, eventTitle, registrationFields, stats, recent, stationMode = false, eventSlug, badge, teamEvent = false } = props;
   const badgeSource = useMemo<BadgeDesignSource>(() => ({
     eventId,
     organisationSlug,
@@ -230,10 +232,12 @@ export function EventCheckInClient(props: {
           checkInQrToken: idCardAttendee.checkInQrToken,
           checkInDetails: idCardAttendee.checkInDetails,
           registrationDetails: idCardAttendee.registrationDetails,
+          teamName: idCardAttendee.teamName ?? null,
           // Station responses carry the managed photo URL; dashboard desks look it up when needed.
           photoUrl: (idCardAttendee as { photoUrl?: string | null }).photoUrl,
         } : null}
         registrationFields={registrationFields}
+        teamEvent={teamEvent}
       />
 
       <AttendeeDetailsDialog detailsAttendee={detailsAttendee} setDetailsAttendee={setDetailsAttendee} />
