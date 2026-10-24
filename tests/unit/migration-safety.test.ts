@@ -244,4 +244,15 @@ describe("production migration safety contracts", () => {
     expect(sql).toContain('"CheckInListEvent_rsvpId_fkey" FOREIGN KEY ("rsvpId") REFERENCES "RSVP"("id") ON DELETE SET NULL');
     expect(sql).toContain(`CHECK ("source" IN ('online', 'mobile-scan', 'mobile-manual'))`);
   });
+
+  it("adds judging operations settings without rewriting existing rows", () => {
+    const sql = readFileSync(resolve(root, "prisma/migrations/20261104030000_judging_ops/migration.sql"), "utf8");
+    expect(sql).not.toMatch(/\bDROP\b/i);
+    expect(sql).not.toMatch(/^\s*UPDATE\s/im);
+    expect(sql).toContain(`CREATE TYPE "ScoreNormalization" AS ENUM ('RAW', 'ZSCORE');`);
+    expect(sql).toContain('ALTER TABLE "Event" ADD COLUMN "reviewsPerProject" INTEGER;');
+    expect(sql).toContain('ALTER TABLE "Event" ADD COLUMN "scoreNormalization" "ScoreNormalization" NOT NULL DEFAULT \'RAW\';');
+    expect(sql).toContain('"Event_reviews_per_project_range"');
+    expect(sql).toContain('CHECK ("reviewsPerProject" IS NULL OR "reviewsPerProject" BETWEEN 1 AND 20)');
+  });
 });

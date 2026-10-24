@@ -93,6 +93,7 @@ export {
   disqualifySubmissionSchema,
   judgeAssignmentSchema,
   judgingStatusSchema,
+  scoreNormalizationSchema,
   judgeScoresSchema,
   judgeReviewSchema,
 } from "@/lib/validators/judging";

@@ -58,7 +58,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/dashboard/:orgSlug/members` | Members, roles, and invitations |
 | `/dashboard/:orgSlug/ids` | Member ID programmes (all members read; owners/admins create) |
 | `/dashboard/:orgSlug/ids/:programmeId` | Programme members (approve, reject, revoke, renew, email, download), import (CSV or public Google Sheet with column mapping), front/back card designer and settings; owners/admins only except the read-only member list |
-| `/dashboard/:orgSlug/event/:eventId` | Event overview, attendees, forms, invites, and feedback; plus **Judging** (`?tab=judging`) for hackathon submissions, rubric, judges, awards and results, shown only once the event uses judging. A co-organiser whose only grant is `JUDGE` sees just the judging workspace |
+| `/dashboard/:orgSlug/event/:eventId` | Event overview, attendees, forms, invites, and feedback; plus **Judging** (`?tab=judging`) for hackathon submissions, rubric, judges, progress and automatic assignment (`&sub=judging-progress`), awards and results, shown only once the event uses judging. A co-organiser whose only grant is `JUDGE` sees just the judging workspace |
 | `/dashboard/:orgSlug/event/:eventId/schedule` | Standalone-event programme planning and live delay management |
 | `/dashboard/:orgSlug/event/:eventId/check-in` | Online/offline check-in station; organisation admin or exact event `CHECK_IN` grant. `?list=<id>` opens the desk for one open custom check-in list instead of entry |
 | `/dashboard/:orgSlug/series/:seriesId` | Recurring-series management |
@@ -94,7 +94,7 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/feedback/certificate/:token` | Opaque token | Download an eligible JPEG certificate |
 | `GET /api/exports/events/:eventId/attendees` | Authenticated organisation admin or event collaborator with `MANAGE_REGISTRATIONS` | Audited full attendee CSV download |
 | `GET /api/exports/events/:eventId/attendee-emails` | Authenticated organisation admin or event collaborator with `MANAGE_REGISTRATIONS` | Audited (`ATTENDEE_LIST_EXPORTED`, format `emails`) unique names and emails for every registration matching the Guests · People filters (`status`, `kind`, `team`, `q`); `private, no-store`, empty 404 otherwise |
-| `GET /api/exports/events/:eventId/judging` | Authenticated organisation owner or admin | Audited (`JUDGING_SCORES_EXPORTED`) judging scores CSV: one row per judge review with the result score and rank, judge names, no emails or comments; `private, no-store`, empty 404 otherwise |
+| `GET /api/exports/events/:eventId/judging` | Authenticated organisation owner or admin | Audited (`JUDGING_SCORES_EXPORTED`) judging scores CSV: one row per judge review with the rank and result score under the event's score method, plus both the raw and the adjusted score, judge names, no emails or comments; `private, no-store`, empty 404 otherwise |
 | `GET /api/exports/account` | Authenticated user (own data only), rate limited per user (`dataExport`, 5/hour) | Audited (`ACCOUNT_DATA_EXPORTED`) personal JSON export; excludes secrets, hashes, and all bearer tokens |
 | `GET /api/uploads/:key` | Public application route | Stream an allowlisted organisation WebP derivative with immutable/nosniff response controls |
 | `/api/auth/*` | Auth.js | Session, provider, callback, and credential endpoints |

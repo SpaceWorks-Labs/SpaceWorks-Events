@@ -979,6 +979,11 @@
     },
     {
       "module": "app/actions/judging-admin",
+      "name": "changeScoreNormalization",
+      "id": "judging-admin:changeScoreNormalization"
+    },
+    {
+      "module": "app/actions/judging-admin",
       "name": "addJudgingCriterion",
       "id": "judging-admin:addJudgingCriterion"
     },
@@ -1078,6 +1083,26 @@
       "id": "judging-admin:unpublishJudgingResults"
     },
     {
+      "module": "app/actions/judging-ops",
+      "name": "previewJudgeAutoAssignment",
+      "id": "judging-ops:previewJudgeAutoAssignment"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "applyJudgeAutoAssignment",
+      "id": "judging-ops:applyJudgeAutoAssignment"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "saveReviewsPerProject",
+      "id": "judging-ops:saveReviewsPerProject"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "loadJudgingProgressPage",
+      "id": "judging-ops:loadJudgingProgressPage"
+    },
+    {
       "module": "app/actions/judging",
       "name": "loadJudgeSubmissionsPage",
       "id": "judging:loadJudgeSubmissionsPage"
@@ -1086,6 +1111,11 @@
       "module": "app/actions/judging",
       "name": "loadJudgeSubmission",
       "id": "judging:loadJudgeSubmission"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadNextJudgeSubmission",
+      "id": "judging:loadNextJudgeSubmission"
     },
     {
       "module": "app/actions/judging",

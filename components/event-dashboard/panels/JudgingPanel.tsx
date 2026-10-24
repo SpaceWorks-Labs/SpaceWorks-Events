@@ -15,6 +15,7 @@ import { JudgeWorkspace } from "@/components/event-dashboard/judging/JudgeWorksp
 import { SubTabs, type SubTab } from "../SubTabs";
 import { JudgingPanelAwards } from "./JudgingPanelAwards";
 import { JudgingPanelResults, JudgingPanelJudges } from "./JudgingPanelResults";
+import { JudgingPanelProgress } from "./JudgingPanelProgress";
 import { JudgingPanelRubric } from "./JudgingPanelRubric";
 import { JudgingPanelSetup } from "./JudgingPanelSetup";
 import type { JudgingLimits } from "./JudgingPanelShared";
@@ -36,7 +37,7 @@ const LIMITS: JudgingLimits = {
 /**
  * The event dashboard's Judging tab (docs/HACKATHON.md). Organisation owners
  * and admins (`canManageJudging`, the same check as the organiser RSVP
- * actions) get setup, rubric, submissions, judges, results, and awards. Anyone
+ * actions) get setup, rubric, submissions, judges, progress, results, and awards. Anyone
  * who can judge also gets the judge workspace. A JUDGE-only collaborator never
  * reaches this panel: the page shows them the workspace on its own.
  */
@@ -48,7 +49,7 @@ export async function JudgingPanel({ ctx }: { ctx: EventDashboardContext }) {
 
   const data = await loadJudgingPanel({ ctx });
   if (!data) return <NoPermission>You do not have permission to manage judging for this event.</NoPermission>;
-  const { scope, settings } = data;
+  const { scope, settings, progress } = data;
   const frozen = settings.judgingStatus !== "NOT_STARTED";
 
   const setup: SubTab = {
@@ -97,6 +98,15 @@ export async function JudgingPanel({ ctx }: { ctx: EventDashboardContext }) {
           // Invited judges only: organisers can always judge, so counting them would never show 0.
           count: data.judges.filter((judge) => judge.kind === "judge").length,
           content: <JudgingPanelJudges judges={data.judges} judgesSeeAll={settings.judgesSeeAll} />,
+        },
+        {
+          value: "judging-progress",
+          label: "Progress",
+          content: progress ? (
+            <JudgingPanelProgress scope={scope} initial={progress.data} judges={progress.judges} timezone={settings.timezone} now={ctx.now.toISOString()} />
+          ) : (
+            <NoPermission>You do not have permission to manage judging for this event.</NoPermission>
+          ),
         },
         {
           value: "judging-score",
