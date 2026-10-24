@@ -19,6 +19,12 @@ import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { submitRsvpCore } from "@/lib/rsvpCore";
 import { enqueueRsvpStatusNotification, enqueueTeamMemberAdded } from "@/lib/outbox";
 import {
+  captureSubmissionSnapshotTx,
+  restoreSubmissionSnapshotTx,
+  retireSoloSubmissionForTeamTx,
+  submissionSnapshotSchema,
+} from "@/lib/core/submissionLifecycle";
+import {
   assignTeamLeaderTx,
   countConfirmedUnits,
   emitTeamWebhooks,
@@ -672,6 +678,9 @@ async function moveSoloRsvpIntoTeamTx(
   }
   const size = await tx.rSVP.count({ where: { teamId: team.id } });
   if (!hasFreeSpace(event, size)) return fail("This team is already full.");
+  // An entrant is a team or a single RSVP: the solo project can't come along.
+  const retired = await retireSoloSubmissionForTeamTx(tx, { rsvpId: rsvp.id, eventId: event.id, by: "entrant" });
+  if (!retired.ok) return fail(retired.error);
   const moved = await tx.rSVP.updateMany({
     where: { id: rsvp.id, eventId: event.id, teamId: null, status: rsvp.status },
     data: { teamId: team.id, status: team.status },
@@ -829,6 +838,12 @@ export async function organiserMoveMember(
     }
     const size = await tx.rSVP.count({ where: { teamId: target.id } });
     if (!hasFreeSpace(event, size)) return fail("That team is already full.");
+    // A solo registration's own project can't come into the team (a team
+    // member's project stays with the team they leave).
+    if (!rsvp.teamId) {
+      const retired = await retireSoloSubmissionForTeamTx(tx, { rsvpId: rsvp.id, eventId: event.id, by: "organiser" });
+      if (!retired.ok) return fail(retired.error);
+    }
     const moved = await tx.rSVP.updateMany({
       where: { id: rsvp.id, eventId: event.id, teamId: rsvp.teamId, status: rsvp.status },
       data: { teamId: target.id, status: target.status },
@@ -912,6 +927,8 @@ const teamDeletionSnapshotSchema = z.object({
     createdAt: z.string().datetime(),
   }),
   rsvps: z.array(teamSnapshotRsvpSchema).min(1).max(200),
+  /** The team's project and its judging record, recreated on undo. Absent in older snapshots. */
+  submission: submissionSnapshotSchema.nullable().optional(),
 });
 
 /** True when an undo row holds a whole-team deletion (see `organiserDeleteTeam`). */
@@ -928,8 +945,13 @@ const teamSnapshotInclude = {
 
 type TeamWithSnapshotMembers = Prisma.TeamGetPayload<{ include: typeof teamSnapshotInclude }>;
 
-/** The whole-team undo payload restored by `restoreTeamDeletionSnapshot`. */
-function teamDeletionSnapshot(team: TeamWithSnapshotMembers, eventId: string) {
+/**
+ * The whole-team undo payload restored by `restoreTeamDeletionSnapshot`,
+ * including the team's project with its scores, reviews, assignments, and
+ * award places, which the deletion cascades away.
+ */
+async function teamDeletionSnapshot(tx: Prisma.TransactionClient, team: TeamWithSnapshotMembers, eventId: string) {
+  const submission = await captureSubmissionSnapshotTx(tx, { eventId, teamId: team.id });
   return {
     kind: "team" as const,
     eventId,
@@ -966,6 +988,7 @@ function teamDeletionSnapshot(team: TeamWithSnapshotMembers, eventId: string) {
         source: record.source,
       })),
     })),
+    submission,
   };
 }
 
@@ -981,7 +1004,7 @@ export async function soleMemberTeamSnapshotTx(
 ) {
   const team = await tx.team.findFirst({ where: { id: params.teamId, eventId: params.eventId }, include: teamSnapshotInclude });
   if (!team || team.members.length !== 1 || team.members[0]!.id !== params.rsvpId) return null;
-  return teamDeletionSnapshot(team, params.eventId);
+  return teamDeletionSnapshot(tx, team, params.eventId);
 }
 
 /**
@@ -999,7 +1022,7 @@ export async function organiserDeleteTeam(ctx: OrganiserEventContext, teamId: st
       include: teamSnapshotInclude,
     });
     if (!team) return fail(TEAM_NOT_FOUND);
-    const snapshot = teamDeletionSnapshot(team, event.id);
+    const snapshot = await teamDeletionSnapshot(tx, team, event.id);
     await tx.rsvpDeletionUndo.deleteMany({ where: { expiresAt: { lte: new Date() } } });
     // An empty team (should not exist) is deleted without an undo snapshot.
     const undo = snapshot.rsvps.length > 0
@@ -1105,6 +1128,7 @@ export async function restoreTeamDeletionSnapshot(
         ? data.team.leaderRsvpId
         : data.rsvps[0]!.id;
       await tx.team.update({ where: { id: data.team.id }, data: { leaderRsvpId } });
+      if (data.submission) await restoreSubmissionSnapshotTx(tx, data.submission, { eventId: event.id, teamId: data.team.id });
       await tx.rsvpDeletionUndo.delete({ where: { id: undo.id } });
       return { ok: true, data: { eventId: event.id, eventSlug: event.slug, teamId: data.team.id } };
     });

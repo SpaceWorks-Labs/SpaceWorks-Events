@@ -3,7 +3,7 @@ import { getEmailTransport } from "./transporter";
 import { EMAIL_BUTTON_STYLE, EMAIL_COLORS, emailLayout } from "./brand";
 import { BODY_STYLE, escapeHtml, getBaseUrl, greeting, headerText, HEADING_STYLE } from "./index";
 
-function button(url: string, label: string) {
+export function emailButton(url: string, label: string) {
   const safeUrl = escapeHtml(url);
   return `<p style="margin:28px 0;"><a href="${safeUrl}" style="${EMAIL_BUTTON_STYLE}">${escapeHtml(label)}</a></p>
           <p style="font-size:13px; color:${EMAIL_COLORS.inkMuted}; overflow-wrap:anywhere;">${safeUrl}</p>`;
@@ -44,7 +44,7 @@ export async function sendTeamCreatedEmail(params: {
           <h2 style="${HEADING_STYLE}">Your team page</h2>
           <p style="${BODY_STYLE}">${salutation.html}<br><br>${intro}</p>
           <p style="${BODY_STYLE}">Use your private team page to add or remove members, rename the team and share the join link. Keep this link to yourself: anyone with it can manage the team.</p>
-          ${button(manageUrl, "Manage your team")}
+          ${emailButton(manageUrl, "Manage your team")}
           <h3 style="margin:24px 0 8px; color:${EMAIL_COLORS.ink}; font-size:16px; font-weight:600;">Invite teammates</h3>
           <p style="${BODY_STYLE}">Share this join link with your teammates so they can register into your team:</p>
           <p style="font-size:13px; color:${EMAIL_COLORS.inkMuted}; overflow-wrap:anywhere;"><a href="${escapeHtml(joinUrl)}" style="color:${EMAIL_COLORS.teal};">${escapeHtml(joinUrl)}</a></p>`);
@@ -86,7 +86,7 @@ export async function sendTeamMemberAddedEmail(params: {
           <h2 style="${HEADING_STYLE}">You're on the team</h2>
           <p style="${BODY_STYLE}">${salutation.html}<br><br>${who} to team <strong>${escapeHtml(params.teamName)}</strong> for <strong>${escapeHtml(params.eventTitle)}</strong>. ${statusLine}</p>
           <p style="${BODY_STYLE}">Your registration page shows your ticket and your team, and lets you leave the team if you can't make it.</p>
-          ${button(ticketUrl, "View your registration")}`);
+          ${emailButton(ticketUrl, "View your registration")}`);
   const text = `${subject}\n\n${salutation.text}\n\n${whoText} to team "${params.teamName}" for "${params.eventTitle}". ${statusLine}\n\nView your registration: ${ticketUrl}\n\nBest regards,\nSpace Works Events`;
   if (!transporter) {
     console.log("[EMAIL MOCK] team member ticket queued");

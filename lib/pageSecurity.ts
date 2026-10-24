@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-/** Pages whose URL is itself the credential: `/ticket/{token}`, `/team/{token}`, `/{org}/{event}/team/{joinToken}`. */
+/** Pages whose URL is itself the credential: `/ticket/{token}`, `/team/{token}`, `/submit/{token}`, `/{org}/{event}/team/{joinToken}`. */
 function isCapabilityPage(pathname: string): boolean {
-  return /^\/(?:ticket|team)\/[^/]+\/?$/.test(pathname) || /^\/[^/]+\/[^/]+\/team\/[^/]+\/?$/.test(pathname);
+  return /^\/(?:ticket|team|submit)\/[^/]+\/?$/.test(pathname) || /^\/[^/]+\/[^/]+\/team\/[^/]+\/?$/.test(pathname);
 }
 
 export function pageSecurity(request: NextRequest) {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { loadAccountTeamView } from "@/lib/views/app__account__teams__teamId__page";
 import { TeamPageView } from "@/components/team/TeamPageView";
+import { SubmissionSection } from "@/components/submission/SubmissionSection";
 
 type Props = {
   params: Promise<{ teamId: string }>;
@@ -21,6 +22,6 @@ export const metadata: Metadata = {
  */
 export default async function AccountTeamPage({ params }: Props) {
   // The reader authenticates; the account layout is not an authorization boundary.
-  const { data, teamRef } = await loadAccountTeamView({ params });
-  return <TeamPageView data={data} teamRef={teamRef} tokenPage={false} />;
+  const { data, teamRef, submission, eventId } = await loadAccountTeamView({ params });
+  return <TeamPageView data={data} teamRef={teamRef} tokenPage={false} submission={<SubmissionSection view={submission} submissionRef={{ eventId }} />} />;
 }

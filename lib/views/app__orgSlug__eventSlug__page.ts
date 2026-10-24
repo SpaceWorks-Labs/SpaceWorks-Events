@@ -10,6 +10,8 @@ import { countConfirmedForEvent, countHeldForEvent } from "@/lib/rsvpCapacity";
 import { listPublicTicketTypes } from "@/lib/payments/tickets";
 import { DEFAULT_CURRENCY } from "@/lib/payments/money";
 import { canAcceptOnlinePayments } from "@/lib/payments/settings";
+import { isProjectGalleryVisible } from "@/lib/core/judging";
+import { projectGalleryPath, resultsPath } from "@/lib/submissionToken";
 import { ticketingInfo, viewerIsMember } from "@/lib/payments/ticketing";
 type Props = { params: Promise<{ orgSlug: string; eventSlug: string; }>; };
 export async function loadRouteMetadata({ params }: Props): Promise<Metadata> {
@@ -149,5 +151,10 @@ export async function loadEventView({ params }: Props) {
   // Paid tickets are on sale only while the installation allows it and the
   // organisation's account is fully connected.
   const paidSalesOpen = ticketing?.sellsPaid ? await canAcceptOnlinePayments(org.id) : false;
-  return { org, preview, event: eventForView(event), page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing };
+  // Hackathon pages (docs/HACKATHON.md): linked only once each is live.
+  const judging = {
+    resultsHref: event.submissionsEnabled && event.resultsPublishedAt ? resultsPath(org.slug, event.slug) : null,
+    projectsHref: isProjectGalleryVisible(event) ? projectGalleryPath(org.slug, event.slug) : null,
+  };
+  return { judging, org, preview, event: eventForView(event), page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing };
 }

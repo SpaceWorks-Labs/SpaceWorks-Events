@@ -14,6 +14,8 @@ import { CheckInPanel } from "@/components/event-dashboard/panels/CheckInPanel";
 import { FeedbackPanel } from "@/components/event-dashboard/panels/FeedbackPanel";
 import { AnalyticsPanel } from "@/components/event-dashboard/panels/AnalyticsPanel";
 import { SettingsPanel } from "@/components/event-dashboard/panels/SettingsPanel";
+import { JudgingPanel } from "@/components/event-dashboard/panels/JudgingPanel";
+import { JudgeWorkspace } from "@/components/event-dashboard/judging/JudgeWorkspace";
 
 type Props = {
   params: Promise<{ orgSlug: string; eventId: string; }>;
@@ -22,7 +24,20 @@ type Props = {
 export const metadata = { title: "Manage event", robots: { index: false, follow: false } };
 
 export default async function EventManagePage({ params }: Props) {
-  const { organisation, event, stats, permissions, ctx, publicPath, counts } = await loadEventManageView({ params });
+  const view = await loadEventManageView({ params });
+  if (view.judgeOnly) {
+    const { organisation, event, ctx } = view;
+    return (
+      <div className="flex flex-col gap-6">
+        <EventManageHeader
+          back={{ href: `/dashboard/${organisation.slug}`, label: "All events" }}
+          event={{ title: event.title, status: event.status, privacyType: event.privacyType, startDateTime: event.startDateTime, endDateTime: event.endDateTime, timezone: event.timezone, accentColor: event.page?.accentColor }}
+        />
+        <JudgeWorkspace ctx={ctx} />
+      </div>
+    );
+  }
+  const { organisation, event, stats, permissions, ctx, publicPath, counts, showJudging } = view;
   return (
     <div className="flex flex-col gap-6">
       <EventManageHeader
@@ -63,15 +78,17 @@ export default async function EventManagePage({ params }: Props) {
 
       <EventDashboardTabs
         badges={{ guests: counts?.pendingApproval ?? 0 }}
+        hidden={showJudging ? [] : ["judging"]}
         panels={{
           overview: <OverviewPanel ctx={ctx} />,
           guests: <GuestsPanel ctx={ctx} />,
           page: <EventPagePanel ctx={ctx} />,
           emails: <EmailsPanel ctx={ctx} />,
           "check-in": <CheckInPanel ctx={ctx} />,
+          judging: showJudging ? <JudgingPanel ctx={ctx} /> : null,
           feedback: <FeedbackPanel ctx={ctx} />,
           analytics: <AnalyticsPanel ctx={ctx} />,
-          settings: <SettingsPanel ctx={ctx} />,
+          settings: <SettingsPanel ctx={ctx} judgingInUse={showJudging} />,
         }}
       />
     </div>

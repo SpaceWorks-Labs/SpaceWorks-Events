@@ -1,6 +1,7 @@
 import { Prisma, RsvpStatus } from "@prisma/client";
 import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { soleMemberTeamSnapshotTx } from "@/lib/core/teams";
+import { submissionSnapshotSchema } from "@/lib/core/submissionLifecycle";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { z } from "zod";
@@ -23,6 +24,8 @@ export const snapshotSchema = z.object({
   createdAt: z.string().datetime(),
   /** Team the RSVP belonged to (TEAM events); restored into it only if it still exists with room. */
   teamId: z.string().min(1).max(128).nullable().optional(),
+  /** A solo registrant's project and its judging record (docs/HACKATHON.md), recreated on undo. */
+  submission: submissionSnapshotSchema.nullable().optional(),
   answers: z.array(z.object({
     fieldId: z.string().min(1),
     valueText: z.string().nullable(),

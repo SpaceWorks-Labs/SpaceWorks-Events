@@ -8,7 +8,7 @@ import { eventCapabilities, seriesCapabilities, type EventCapabilities, type Ser
  * `grant` names the single EventPermission that unlocks a flag for someone
  * who is not an organisation owner/admin; `null` means owners/admins only.
  */
-const EVENT_MATRIX: Record<keyof EventCapabilities, EventPermission | null> = {
+const EVENT_MATRIX: Record<Exclude<keyof EventCapabilities, "isJudgeOnly">, EventPermission | null> = {
   isAdmin: null,
   canManageRegistrations: EventPermission.MANAGE_REGISTRATIONS,
   canExportAttendees: EventPermission.MANAGE_REGISTRATIONS,
@@ -34,6 +34,8 @@ const EVENT_MATRIX: Record<keyof EventCapabilities, EventPermission | null> = {
   canEmbedEvent: null,
   canDeleteEvent: null,
   canManageCollaborators: null,
+  canJudge: EventPermission.JUDGE,
+  canManageJudging: null,
 };
 
 const SERIES_MATRIX: Record<keyof SeriesCapabilities, EventPermission | null> = {
@@ -65,11 +67,13 @@ const cases = ROLES.flatMap((role) => GRANTS.map(([name, grant]) => [role ?? "no
 
 describe("eventCapabilities", () => {
   it("covers every flag in the matrix", () => {
-    expect(Object.keys(eventCapabilities(null, [])).sort()).toEqual(Object.keys(EVENT_MATRIX).sort());
+    expect(Object.keys(eventCapabilities(null, [])).sort()).toEqual([...Object.keys(EVENT_MATRIX), "isJudgeOnly"].sort());
   });
 
   it.each(cases)("%s with %s", (_role, _grant, role, grant) => {
-    expect(eventCapabilities(role, grant)).toEqual(expected(EVENT_MATRIX, role, grant));
+    // Judge-only: a non-member whose only grant is JUDGE (docs/HACKATHON.md).
+    const isJudgeOnly = role === null && grant.length === 1 && grant[0] === EventPermission.JUDGE;
+    expect(eventCapabilities(role, grant)).toEqual({ ...expected(EVENT_MATRIX, role, grant), isJudgeOnly });
   });
 
   it("never lets a co-organiser with every grant delete, clone, embed, publish or manage collaborators", () => {

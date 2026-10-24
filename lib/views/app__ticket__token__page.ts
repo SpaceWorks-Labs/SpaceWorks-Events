@@ -9,7 +9,7 @@ import { type ChipTone } from "@/components/ui/display";
 import { PaymentStatus } from "@prisma/client";
 import { refreshOrderFromProvider } from "@/lib/payments/checkout";
 import { isActiveHold } from "@/lib/payments/holds";
-import { loadTicketTeamSection } from "@/lib/teamTicketSection";
+import { loadTicketTeamSection, ticketSubmissionMode, ticketViewerId } from "@/lib/teamTicketSection";
 import { formatMoney } from "@/lib/payments/money";
 type Props = {
   params: Promise<{ token: string; }>;
@@ -112,7 +112,9 @@ export async function loadTicketView({ params, searchParams }: Props) {
           organisationId: true,
           registrationMode: true,
           soloPolicy: true,
-          page: { select: { accentColor: true } },
+          status: true,
+          submissionsEnabled: true,
+          page: { select: { accentColor: true, isPublished: true } },
           organisation: { select: { slug: true, name: true } },
         },
       },
@@ -214,6 +216,8 @@ export async function loadTicketView({ params, searchParams }: Props) {
     ? { active: isActiveHold(rsvp), expiresAt: rsvp.holdExpiresAt?.toISOString() ?? null, canPay: isActiveHold(rsvp) && payment?.status === PaymentStatus.PENDING }
     : null;
 
-  const teamSection = await loadTicketTeamSection(rsvp, isCheckedIn);
-  return { teamSection, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
+  const viewerId = await ticketViewerId(rsvp);
+  const teamSection = await loadTicketTeamSection(rsvp, isCheckedIn, viewerId);
+  const submissionMode = ticketSubmissionMode(rsvp, viewerId);
+  return { teamSection, submissionMode, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
 }

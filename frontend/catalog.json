@@ -36,6 +36,11 @@
       "id": "app__account__security__page:loadAccountSecurityView"
     },
     {
+      "module": "lib/views/app__account__submissions__eventId__page",
+      "name": "loadAccountSubmissionView",
+      "id": "app__account__submissions__eventId__page:loadAccountSubmissionView"
+    },
+    {
       "module": "lib/views/app__account__teams__teamId__page",
       "name": "loadAccountTeamView",
       "id": "app__account__teams__teamId__page:loadAccountTeamView"
@@ -206,6 +211,26 @@
       "id": "app__orgSlug__eventSlug__page:loadEventView"
     },
     {
+      "module": "lib/views/app__orgSlug__eventSlug__projects__page",
+      "name": "loadProjectsMetadata",
+      "id": "app__orgSlug__eventSlug__projects__page:loadProjectsMetadata"
+    },
+    {
+      "module": "lib/views/app__orgSlug__eventSlug__projects__page",
+      "name": "loadProjectsView",
+      "id": "app__orgSlug__eventSlug__projects__page:loadProjectsView"
+    },
+    {
+      "module": "lib/views/app__orgSlug__eventSlug__results__page",
+      "name": "loadResultsMetadata",
+      "id": "app__orgSlug__eventSlug__results__page:loadResultsMetadata"
+    },
+    {
+      "module": "lib/views/app__orgSlug__eventSlug__results__page",
+      "name": "loadResultsView",
+      "id": "app__orgSlug__eventSlug__results__page:loadResultsView"
+    },
+    {
       "module": "lib/views/app__orgSlug__eventSlug__schedule__page",
       "name": "loadEventScheduleView",
       "id": "app__orgSlug__eventSlug__schedule__page:loadEventScheduleView"
@@ -279,6 +304,11 @@
       "module": "lib/views/app__page",
       "name": "loadView",
       "id": "app__page:loadView"
+    },
+    {
+      "module": "lib/views/app__submit__token__page",
+      "name": "loadSubmitView",
+      "id": "app__submit__token__page:loadSubmitView"
     },
     {
       "module": "lib/views/app__super-admin__activity__page",
@@ -391,6 +421,11 @@
       "id": "app__verify__token__page:loadVerifyView"
     },
     {
+      "module": "lib/views/components__event-dashboard__judging__JudgeWorkspace",
+      "name": "loadJudgeWorkspace",
+      "id": "components__event-dashboard__judging__JudgeWorkspace:loadJudgeWorkspace"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__AnalyticsPanel",
       "name": "loadAnalyticsPanel",
       "id": "components__event-dashboard__panels__AnalyticsPanel:loadAnalyticsPanel"
@@ -424,6 +459,11 @@
       "module": "lib/views/components__event-dashboard__panels__GuestsPanel",
       "name": "loadGuestsPanel",
       "id": "components__event-dashboard__panels__GuestsPanel:loadGuestsPanel"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__panels__JudgingPanel",
+      "name": "loadJudgingPanel",
+      "id": "components__event-dashboard__panels__JudgingPanel:loadJudgingPanel"
     },
     {
       "module": "lib/views/components__event-dashboard__panels__OverviewPanel",
@@ -908,6 +948,116 @@
       "id": "invites:removeSeriesInvite"
     },
     {
+      "module": "app/actions/judging-admin",
+      "name": "saveJudgingSettings",
+      "id": "judging-admin:saveJudgingSettings"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "changeJudgingStatus",
+      "id": "judging-admin:changeJudgingStatus"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "addJudgingCriterion",
+      "id": "judging-admin:addJudgingCriterion"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "editJudgingCriterion",
+      "id": "judging-admin:editJudgingCriterion"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "removeJudgingCriterion",
+      "id": "judging-admin:removeJudgingCriterion"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "reorderJudgingCriteria",
+      "id": "judging-admin:reorderJudgingCriteria"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "addEventAward",
+      "id": "judging-admin:addEventAward"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "editEventAward",
+      "id": "judging-admin:editEventAward"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "removeEventAward",
+      "id": "judging-admin:removeEventAward"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "reorderEventAwards",
+      "id": "judging-admin:reorderEventAwards"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "setEventAwardWinner",
+      "id": "judging-admin:setEventAwardWinner"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "removeEventAwardWinner",
+      "id": "judging-admin:removeEventAwardWinner"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "disqualifyProject",
+      "id": "judging-admin:disqualifyProject"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "reinstateProject",
+      "id": "judging-admin:reinstateProject"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "assignProjectJudge",
+      "id": "judging-admin:assignProjectJudge"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "unassignProjectJudge",
+      "id": "judging-admin:unassignProjectJudge"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "loadProjectReviews",
+      "id": "judging-admin:loadProjectReviews"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "publishJudgingResults",
+      "id": "judging-admin:publishJudgingResults"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "unpublishJudgingResults",
+      "id": "judging-admin:unpublishJudgingResults"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadJudgeSubmission",
+      "id": "judging:loadJudgeSubmission"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "saveJudgeScoresAction",
+      "id": "judging:saveJudgeScoresAction"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "saveJudgeReviewAction",
+      "id": "judging:saveJudgeReviewAction"
+    },
+    {
       "module": "app/actions/media",
       "name": "uploadOrganisationLogo",
       "id": "media:uploadOrganisationLogo"
@@ -1276,6 +1426,26 @@
       "module": "app/actions/shortLink",
       "name": "regenerateEventShortLink",
       "id": "shortLink:regenerateEventShortLink"
+    },
+    {
+      "module": "app/actions/submissions",
+      "name": "saveSubmissionDraftAction",
+      "id": "submissions:saveSubmissionDraftAction"
+    },
+    {
+      "module": "app/actions/submissions",
+      "name": "submitSubmissionAction",
+      "id": "submissions:submitSubmissionAction"
+    },
+    {
+      "module": "app/actions/submissions",
+      "name": "withdrawSubmissionAction",
+      "id": "submissions:withdrawSubmissionAction"
+    },
+    {
+      "module": "app/actions/submissions",
+      "name": "requestSubmissionLinkAction",
+      "id": "submissions:requestSubmissionLinkAction"
     },
     {
       "module": "app/actions/team-admin",

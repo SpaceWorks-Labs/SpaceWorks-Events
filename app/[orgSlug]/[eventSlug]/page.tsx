@@ -15,7 +15,7 @@ type Props = { params: Promise<{ orgSlug: string; eventSlug: string; }>; };
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function EventPage({ params }: Props) {
-  const { org, preview, event, page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing } = await loadEventView({ params });
+  const { judging, org, preview, event, page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing } = await loadEventView({ params });
   return (
     <EventWebsiteShell
       orgSlug={org.slug}
@@ -92,6 +92,7 @@ export default async function EventPage({ params }: Props) {
       approvalRequired={event.privacyType === EventPrivacyType.APPROVAL_REQUIRED}
       viewerRsvp={viewerRsvp ? { token: viewerRsvp.checkInToken, status: viewerRsvp.status } : null}
       team={publicTeamRegistrationConfig(event)}
+      judging={judging}
     />
   );
 }

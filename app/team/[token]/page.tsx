@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { loadTeamManageView } from "@/lib/views/app__team__token__page";
 import { TeamPageView } from "@/components/team/TeamPageView";
+import { SubmissionSection } from "@/components/submission/SubmissionSection";
 
 type Props = {
   params: Promise<{ token: string }>;
@@ -18,6 +19,6 @@ export const metadata: Metadata = {
 };
 
 export default async function TeamManagePage({ params }: Props) {
-  const { data, teamRef } = await loadTeamManageView({ params });
-  return <TeamPageView data={data} teamRef={teamRef} tokenPage />;
+  const { data, teamRef, submission } = await loadTeamManageView({ params });
+  return <TeamPageView data={data} teamRef={teamRef} tokenPage submission={<SubmissionSection view={submission} submissionRef={{ manageToken: teamRef.manageToken }} />} />;
 }

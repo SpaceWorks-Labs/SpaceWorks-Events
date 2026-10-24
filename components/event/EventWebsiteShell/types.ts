@@ -7,6 +7,11 @@ import type { TicketingInfo } from "@/components/rsvp/PromoCodeField";
 export type Props = {
   /** Team event settings (docs/TEAMS.md); null for individual registration. */
   team?: TeamRegistrationConfig | null;
+  /**
+   * Hackathon pages (docs/HACKATHON.md): each href is set only when that page
+   * is live (results published; gallery public after the window closed).
+   */
+  judging?: { resultsHref: string | null; projectsHref: string | null } | null;
   orgSlug: string;
   organisation: { name: string; logoUrl: string | null };
   preview: boolean;

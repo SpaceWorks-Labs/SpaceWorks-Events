@@ -3,6 +3,9 @@ import type { Event } from "@prisma/client";
 /** Event data that is safe to serialize into browser component props. */
 export type EventClientDto = Omit<Event,
   "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion"
+  // Judging settings have their own DTOs (lib/core/judging.ts).
+  | "submissionsEnabled" | "submissionsOpenAt" | "submissionsCloseAt" | "judgingStatus" | "judgesSeeAll"
+  | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt"
 >;
 
 export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {

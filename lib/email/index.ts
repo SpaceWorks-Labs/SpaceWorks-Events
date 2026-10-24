@@ -345,3 +345,4 @@ export async function sendEventBroadcast(params: {
 }
 
 export { sendTeamCreatedEmail, sendTeamMemberAddedEmail } from "./team";
+export { sendResultsPublishedEmail, sendSubmissionLinkEmail, sendSubmissionReceivedEmail } from "./judging";

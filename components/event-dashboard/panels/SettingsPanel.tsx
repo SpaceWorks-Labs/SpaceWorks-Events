@@ -3,13 +3,14 @@ import { toEventClientDto } from "@/lib/eventDto";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { CollaboratorInvitePanel } from "@/components/event/CollaboratorInvitePanel";
 import { EventManageMore } from "@/components/dashboard/EventManageMore";
+import { JudgingSettingsCard } from "./JudgingPanelSetup";
 import { TicketTypesManager } from "@/components/event-dashboard/settings/TicketTypesManager";
 import { AddOnsManager } from "@/components/event-dashboard/settings/AddOnsManager";
 import { PromoCodesManager, RefundPolicyControl, TransfersControl } from "@/components/event-dashboard/settings/PromoCodesManager";
 import { NoPermission } from "./shared";
 
-export async function SettingsPanel({ ctx }: { ctx: EventDashboardContext; }) {
-  const { permissions, organisation, event, collaborators, pending, tickets } = await loadSettingsPanel({ ctx });
+export async function SettingsPanel({ ctx, judgingInUse = false }: { ctx: EventDashboardContext; judgingInUse?: boolean; }) {
+  const { permissions, organisation, event, collaborators, pending, tickets, judgingCard } = await loadSettingsPanel({ ctx, judgingInUse });
   return (
     <div className="flex flex-col gap-5">
       {tickets ? (
@@ -45,6 +46,7 @@ export async function SettingsPanel({ ctx }: { ctx: EventDashboardContext; }) {
           pendingInvites={pending.map((invite) => ({ id: invite.id, email: invite.email, expiresAt: invite.expiresAt.toISOString(), permissions: invite.permissions }))}
         />
       ) : null}
+      {judgingCard ? <JudgingSettingsCard scope={judgingCard.scope} settings={judgingCard.settings} now={ctx.now.toISOString()} /> : null}
       {/* Address, clone, embed and delete are organisation-admin actions on the server. */}
       {permissions.isAdmin ? (
         <EventManageMore organisationSlug={organisation.slug} event={toEventClientDto(event)} />

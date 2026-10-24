@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventPrivacyType, EventStatus, RegistrationMode, SoloPolicy, type Event } from "@prisma/client";
+import { EventPrivacyType, EventStatus, JudgingStatus, RegistrationMode, SoloPolicy, type Event } from "@prisma/client";
 import { toEventClientDto } from "@/lib/eventDto";
 
 describe("event browser DTO", () => {
@@ -36,6 +36,14 @@ describe("event browser DTO", () => {
       teamMinSize: null,
       teamMaxSize: null,
       soloPolicy: SoloPolicy.SOLO_ALLOWED,
+      submissionsEnabled: true,
+      submissionsOpenAt: null,
+      submissionsCloseAt: null,
+      judgingStatus: JudgingStatus.OPEN,
+      judgesSeeAll: false,
+      projectGalleryPublic: false,
+      resultsPublishedAt: null,
+      resultsAnnouncedAt: new Date("2034-01-03T00:00:00Z"),
       shortCode: null,
       checkInStationPinHash: "bcrypt-secret",
       checkInStationPinEncrypted: "encrypted-secret",
@@ -49,5 +57,8 @@ describe("event browser DTO", () => {
     expect(serialized).not.toContain("encrypted-secret");
     expect(serialized).not.toContain("ticket-secret");
     expect(serialized).not.toContain("checkInStation");
+    expect(serialized).not.toContain("judgingStatus");
+    expect(serialized).not.toContain("judgesSeeAll");
+    expect(serialized).not.toContain("resultsAnnouncedAt");
   });
 });

@@ -17,6 +17,7 @@ import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { restoreListCheckIns, revalidatePath, revalidateRsvpPaths, settleTeamAfterRemoval, snapshotSchema, teamDeletionPayload, teamForRestore, UNDO_TTL_MS } from "./rsvp-admin/helpers";
 import { isTeamDeletionSnapshot, restoreTeamDeletionSnapshot } from "@/lib/core/teams";
+import { captureSubmissionSnapshotTx, restoreSubmissionSnapshotTx, type SubmissionSnapshot } from "@/lib/core/submissionLifecycle";
 import { emitTeamWebhooks, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 
 export async function addManualRsvp(
@@ -171,7 +172,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
   if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead." };
 
   const teamEvent = rsvp.eventId && rsvp.event?.registrationMode === "TEAM" ? rsvp.eventId : null;
-  const snapshot = {
+  const snapshot: Record<string, unknown> & { teamId?: string | null; submission?: SubmissionSnapshot | null; } = {
     ...(teamEvent ? { teamId: rsvp.teamId } : {}),
     eventId: rsvp.eventId,
     eventInstanceId: rsvp.eventInstanceId,
@@ -200,6 +201,15 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
   const promotedWebhooks: RegistrationStatusWebhook[] = [];
   const undo = await prisma.$transaction(async (tx) => {
     const team = teamEvent ? await teamDeletionPayload(tx, { eventId: teamEvent, rsvpId: rsvp.id, snapshot }) : null;
+    // Same lock order as entrant submission writes (Event, then RSVP).
+    if (!teamEvent && rsvp.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${rsvp.eventId} FOR UPDATE`;
+    // A solo registration's project (and its scores) cascades with the RSVP;
+    // keep it in the undo snapshot so restoring brings it back.
+    let payload = team?.payload ?? (snapshot as Prisma.InputJsonValue);
+    if (rsvp.eventId && !team?.teamId) {
+      snapshot.submission = await captureSubmissionSnapshotTx(tx, { eventId: rsvp.eventId, rsvpId: rsvp.id });
+      payload = snapshot as Prisma.InputJsonValue;
+    }
     // Keep the short-lived undo table bounded even when no scheduled cleanup is
     // configured. Expired snapshots are never eligible for restoration.
     await tx.rsvpDeletionUndo.deleteMany({ where: { expiresAt: { lte: new Date() } } });
@@ -207,7 +217,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
       data: {
         organisationId: org.id,
         deletedByUserId: session.user.id,
-        payload: team?.payload ?? (snapshot as Prisma.InputJsonValue),
+        payload,
         expiresAt: new Date(Date.now() + UNDO_TTL_MS),
       },
       select: { id: true },
@@ -323,6 +333,9 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
         },
       });
       await restoreListCheckIns(tx, snapshot.data.eventId, created.id, snapshot.data.listCheckIns);
+      if (snapshot.data.submission && snapshot.data.eventId && !teamId) {
+        await restoreSubmissionSnapshotTx(tx, snapshot.data.submission, { eventId: snapshot.data.eventId, rsvpId: created.id });
+      }
       await tx.rsvpDeletionUndo.delete({ where: { id: undo.id } });
       // The removal notice waiting out the undo window is no longer true.
       await tx.outboxMessage.deleteMany({ where: { kind: "operator-notice", status: "PENDING", payload: { path: ["undoId"], equals: undo.id } } });

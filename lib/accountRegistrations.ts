@@ -83,6 +83,8 @@ const eventSelect = {
   isOnline: true,
   status: true,
   privacyType: true,
+  // Hackathon events (docs/HACKATHON.md): whether to link the entrant's project page.
+  submissionsEnabled: true,
   page: { select: { isPublished: true } },
   organisation: { select: { name: true, slug: true } },
 } satisfies Prisma.EventSelect;
@@ -135,6 +137,8 @@ export type AccountRegistrationRow = {
   cancelToken: string | null;
   /** Team registrations: the team name, and for its leader the signed-in team page. */
   team: { name: string; isLeader: boolean; manageHref: string | null } | null;
+  /** Events taking hackathon submissions: the signed-in project page (team or solo). */
+  submissionHref: string | null;
 };
 
 export type AccountCertificateRow = {
@@ -228,7 +232,24 @@ function toRow(item: Normalised, now: Date): AccountRegistrationRow {
     eventHref: item.eventHref,
     cancelToken: cancellable ? rsvp.checkInToken : null,
     team: teamView(rsvp),
+    submissionHref: submissionHref(rsvp),
   };
+}
+
+/**
+ * The project page resolves only for this signed-in account's own
+ * registration (`resolveEntrantForUser`); the event id alone grants nothing.
+ * Like the page itself, it is offered only while the event is published and
+ * its website released.
+ */
+export function submissionHref(rsvp: {
+  status: RsvpStatus;
+  event: { id: string; submissionsEnabled: boolean; status: EventStatus; page: { isPublished: boolean } | null } | null;
+}): string | null {
+  const event = rsvp.event;
+  if (!event?.submissionsEnabled || rsvp.status === RsvpStatus.REJECTED) return null;
+  if (event.status !== EventStatus.PUBLISHED || event.page?.isPublished !== true) return null;
+  return `/account/submissions/${encodeURIComponent(event.id)}`;
 }
 
 /** The leader link resolves only for the signed-in leader (`resolveLeaderForUser`); the id alone grants nothing. */

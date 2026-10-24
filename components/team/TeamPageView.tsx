@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { SoloPolicy } from "@prisma/client";
 import { formatDayShort, formatTime, formatTimeZoneName } from "@/lib/format/datetime";
 import { safeTimeZone } from "@/lib/timeZone";
@@ -11,7 +12,13 @@ import { TeamManager } from "./TeamManager";
  * (`/team/{token}`) or by a signed-in leader (`/account/teams/{teamId}`).
  * Its data comes from the page's guarded view reader.
  */
-export function TeamPageView({ data, teamRef, tokenPage }: { data: TeamPageData; teamRef: TeamRef; tokenPage: boolean }) {
+export function TeamPageView({ data, teamRef, tokenPage, submission = null }: {
+  data: TeamPageData;
+  teamRef: TeamRef;
+  tokenPage: boolean;
+  /** The team's submission section (components/submission), when the event takes submissions. */
+  submission?: ReactNode;
+}) {
   const { page, seekers, accentColor } = data;
   const timeZone = safeTimeZone(page.event.timezone);
   const start = page.event.startDateTime;
@@ -35,6 +42,7 @@ export function TeamPageView({ data, teamRef, tokenPage }: { data: TeamPageData;
         members={page.members}
         pendingRequests={page.pendingRequests}
         seekers={seekers}
+        submissionSlot={submission}
       />
     </div>
   );

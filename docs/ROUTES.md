@@ -17,11 +17,14 @@ Dynamic segments are shown as `:name` for readability.
 | `/:orgSlug/:eventSlug` | Public event details and RSVP |
 | `/embed/:orgSlug/:eventSlug` | Framable public event details and RSVP for a host website |
 | `/:orgSlug/:eventSlug/feedback` | Event feedback form when open |
+| `/:orgSlug/:eventSlug/projects` | Hackathon project gallery ([Hackathon judging](HACKATHON.md)): submitted projects' titles, summaries, team or entrant names, and links, once the submission window has closed and the organiser made the gallery public. Same access rules as the event page; otherwise a real 404 |
+| `/:orgSlug/:eventSlug/results` | Hackathon results: awards, places, winning project titles, team or entrant names, and links, once the organiser has published results. Never scores or judge comments. Same access rules as the event page; otherwise a real 404 |
 | `/:orgSlug/:eventSlug/team/:joinToken` | Team join link ([Team registration](TEAMS.md)): the registration form with the team fixed. Same access rules as the event page; shows only the team name, size and maximum size; unknown, retired and other events' tokens are a 404; a signed-in person's own solo registration for the event (or a ticket this browser remembers) can join the team instead of registering again; `noindex`, `no-referrer` |
 | `/:orgSlug/:eventSlug/check-in` | PIN-protected venue check-in station; usable by trusted on-site staff without an account |
 | `/:orgSlug/i/:instanceId` | Recurring-series instance and RSVP |
 | `/:shortCode` | Event short link: a 7-character code (letters and digits, always at least one uppercase letter, so it never matches a lowercase organisation slug) that temporarily redirects to the event's current public page. Unknown or unpublished codes return the same not-found page as an unknown organisation; lookups are rate-limited |
 | `/ticket/:token` | Attendee ticket status and QR page; tears off the QR stub live when the attendee is checked in. On a team event it also shows the team (name, leader, member names), leaving the team, **Join a team** with a pasted join link for a solo registration, and the *Looking for a team* profile and list |
+| `/submit/:token` | A solo registrant's project page, opened by the emailed submission link (requested from the ticket page; stored only as a SHA-256 hash; requesting a new one retires the old link). Draft, submit, edit while the window is open, and withdraw. Unknown and retired tokens are a 404; `noindex`, `no-referrer`, never cached |
 | `/team/:token` | Team page for the leader ([Team registration](TEAMS.md)), opened by the opaque management token (stored only as a SHA-256 hash; regenerating it retires the old link). A signed-in leader reaches the same page at `/account/teams/:teamId` without the token. `noindex`, private cache, `no-referrer`; the ticket's check-in token never opens it |
 | `/order/:token` | The buyer's order (opaque access token): lines, discount and total, payment state with "Pay now" while the tickets are held, refunds, the refund policy it was bought under with "Cancel order" while that policy allows it, and each ticket with its attendee's details |
 | `/:orgSlug/ids` | An organisation's ID programmes that are taking card requests |
@@ -36,6 +39,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/account/security` | Authenticated password, MFA, recovery-code, and session controls |
 | `/account/registrations` | Authenticated list of the signed-in user's own registrations, tickets, certificates, and personal data download |
 | `/account/teams/:teamId` | Authenticated team page for the team's signed-in leader (linked from `/account/registrations`); a 404 for anyone else. Same controls as `/team/:token` except resetting the management link; `noindex`, private cache |
+| `/account/submissions/:eventId` | Authenticated project page for a signed-in entrant (any member of a team, or the owner of a solo registration), linked from `/account/registrations` and the ticket. A 404 for anyone without a registration on the event; `noindex`, `no-referrer` |
 | `/account/ids` | Authenticated ID wallet: the user's own member ID cards (linked to the account, or issued to its verified email) with a holographic flip viewer and downloads |
 | `/account/organisations` | Authenticated list of the user's memberships and roles, event co-organiser roles, pending co-organiser invites, and leave-organisation control (blocked for the sole owner) |
 
@@ -54,7 +58,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/dashboard/:orgSlug/members` | Members, roles, and invitations |
 | `/dashboard/:orgSlug/ids` | Member ID programmes (all members read; owners/admins create) |
 | `/dashboard/:orgSlug/ids/:programmeId` | Programme members (approve, reject, revoke, renew, email, download), import (CSV or public Google Sheet with column mapping), front/back card designer and settings; owners/admins only except the read-only member list |
-| `/dashboard/:orgSlug/event/:eventId` | Event overview, attendees, forms, invites, and feedback |
+| `/dashboard/:orgSlug/event/:eventId` | Event overview, attendees, forms, invites, and feedback; plus **Judging** (`?tab=judging`) for hackathon submissions, rubric, judges, awards and results, shown only once the event uses judging. A co-organiser whose only grant is `JUDGE` sees just the judging workspace |
 | `/dashboard/:orgSlug/event/:eventId/schedule` | Standalone-event programme planning and live delay management |
 | `/dashboard/:orgSlug/event/:eventId/check-in` | Online/offline check-in station; organisation admin or exact event `CHECK_IN` grant. `?list=<id>` opens the desk for one open custom check-in list instead of entry |
 | `/dashboard/:orgSlug/series/:seriesId` | Recurring-series management |
@@ -89,6 +93,7 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/ticket/:token/events` | Opaque token, rate-limited per IP (`ticketEvents`, 60/min) | Server-Sent Events: initial `state`, then one `checked-in` event when the attendee is admitted; `: ping` every 25 s, closes after at most 10 minutes |
 | `GET /api/feedback/certificate/:token` | Opaque token | Download an eligible JPEG certificate |
 | `GET /api/exports/events/:eventId/attendees` | Authenticated organisation admin or event collaborator with `MANAGE_REGISTRATIONS` | Audited full attendee CSV download |
+| `GET /api/exports/events/:eventId/judging` | Authenticated organisation owner or admin | Audited (`JUDGING_SCORES_EXPORTED`) judging scores CSV: one row per judge review with the result score and rank, judge names, no emails or comments; `private, no-store`, empty 404 otherwise |
 | `GET /api/exports/account` | Authenticated user (own data only), rate limited per user (`dataExport`, 5/hour) | Audited (`ACCOUNT_DATA_EXPORTED`) personal JSON export; excludes secrets, hashes, and all bearer tokens |
 | `GET /api/uploads/:key` | Public application route | Stream an allowlisted organisation WebP derivative with immutable/nosniff response controls |
 | `/api/auth/*` | Auth.js | Session, provider, callback, and credential endpoints |
@@ -97,7 +102,7 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/v1/events/:eventId/orders` | Machine bearer credential + `orders:read` | Paginated order totals for one event; no buyer contact data, links or provider IDs |
 | `GET /api/v1/events/:eventId/participants` | Machine bearer credential + `participants:read` | Paginated minimal confirmed-participant roster, with attendance filtering; `include=attendance` also requires `participants:attendance:read` |
 
-Opaque ticket, certificate, team join, and team management URLs are bearer capabilities. Do not log them or place them in analytics payloads.
+Opaque ticket, certificate, team join, team management, and submission URLs are bearer capabilities. Do not log them or place them in analytics payloads.
 
 ## Health and recovery APIs
 
