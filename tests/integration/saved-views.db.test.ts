@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { EventPermission, EventStatus, JudgingStatus, MembershipRole, RegistrationMode, RsvpStatus, SubmissionStatus, type Event } from "@prisma/client";
+import { EventPermission, MembershipRole, RegistrationMode, RsvpStatus, SubmissionStatus, type Event } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
@@ -15,6 +14,7 @@ import { loadJudgingResultsPage } from "@/lib/core/judging";
 import { countEventTeamsForOrganiser, listEventTeamsForOrganiser } from "@/lib/core/teams";
 import { listAttendeesPage } from "@/lib/eventDashboard/attendees";
 import { resolveJudgingOrganiser } from "@/lib/judgingAccess";
+import { createEvent, orgSlug, otherOrgSlug, rsvp, suffix, team } from "./helpers/savedViews";
 
 /*
  * Saved views against PostgreSQL (docs/FEATURES.md, "Saved views"): the
@@ -25,9 +25,6 @@ import { resolveJudgingOrganiser } from "@/lib/judgingAccess";
  * checked in, Looking for members, Not submitted, Unscored / fewer than 2).
  */
 
-const suffix = randomUUID().replaceAll("-", "");
-const orgSlug = `views-${suffix}`;
-const otherOrgSlug = `views-other-${suffix}`;
 const startedAt = new Date();
 let organisationId = "";
 let otherOrganisationId = "";
@@ -35,61 +32,6 @@ const users: Record<"owner" | "admin" | "member" | "registrar" | "judge" | "othe
 let teamEvent: Event;
 let otherEvent: Event;
 let foreignEvent: Event;
-let sequence = 0;
-
-async function createEvent(orgId: string, mode: RegistrationMode = RegistrationMode.TEAM): Promise<Event> {
-  return prisma.event.create({
-    data: {
-      organisationId: orgId,
-      title: `Views ${suffix}`,
-      slug: `views-${suffix}-${randomUUID().slice(0, 8)}`,
-      startDateTime: new Date("2035-01-01T10:00:00.000Z"),
-      endDateTime: new Date("2035-01-02T10:00:00.000Z"),
-      timezone: "UTC",
-      status: EventStatus.PUBLISHED,
-      registrationMode: mode,
-      teamMinSize: mode === RegistrationMode.TEAM ? 2 : undefined,
-      teamMaxSize: mode === RegistrationMode.TEAM ? 4 : undefined,
-      submissionsEnabled: true,
-      judgingStatus: JudgingStatus.OPEN,
-      page: { create: { isPublished: true } },
-    },
-  });
-}
-
-async function rsvp(event: Event, options: { status?: RsvpStatus; teamId?: string | null; checkedIn?: boolean; name?: string } = {}) {
-  sequence += 1;
-  return prisma.rSVP.create({
-    data: {
-      eventId: event.id,
-      guestEmail: `guest-${sequence}-${suffix}@example.test`,
-      guestName: options.name ?? `Guest ${sequence}`,
-      attendeeKey: `guest:guest-${sequence}-${suffix}@example.test`,
-      status: options.status ?? RsvpStatus.CONFIRMED,
-      teamId: options.teamId ?? null,
-      checkedInAt: options.checkedIn ? new Date() : null,
-      createdAt: new Date(Date.UTC(2030, 0, 1, 0, sequence)),
-    },
-  });
-}
-
-async function team(event: Event, name: string, options: { status?: RsvpStatus; members?: number; looking?: boolean } = {}) {
-  sequence += 1;
-  const created = await prisma.team.create({
-    data: {
-      eventId: event.id,
-      name,
-      nameKey: name.toLowerCase(),
-      status: options.status ?? RsvpStatus.CONFIRMED,
-      joinToken: `join-${randomUUID()}`,
-      manageTokenHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
-      lookingForMembers: options.looking ?? false,
-      createdAt: new Date(Date.UTC(2030, 0, 1, 0, sequence)),
-    },
-  });
-  for (let index = 0; index < (options.members ?? 2); index += 1) await rsvp(event, { status: options.status ?? RsvpStatus.CONFIRMED, teamId: created.id });
-  return created;
-}
 
 const scope = (surface: string, event: Event = teamEvent, slug = orgSlug) => ({ organisationSlug: slug, eventId: event.id, surface });
 

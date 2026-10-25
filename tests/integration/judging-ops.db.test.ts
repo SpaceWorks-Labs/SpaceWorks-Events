@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { EventPermission, EventStatus, JudgingStatus, MembershipRole, RegistrationMode, SubmissionStatus, type Event } from "@prisma/client";
+import { JudgingStatus, SubmissionStatus } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
@@ -8,105 +7,26 @@ vi.mock("@/lib/actionRateLimit", () => ({ isActionRateLimited: async () => false
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { prisma } from "@/lib/db";
-import { submitRsvpCore } from "@/lib/rsvpCore";
-import { resolveJudgeContext, resolveJudgingOrganiser, type JudgingOrganiserContext } from "@/lib/judgingAccess";
+import { resolveJudgeContext, resolveJudgingOrganiser } from "@/lib/judgingAccess";
 import { loadSubmissionForJudge } from "@/lib/core/judging";
 import { applyAutoAssignment, loadJudgingProgress, loadJudgingProgressPage, previewAutoAssignment, setReviewsPerProject } from "@/lib/core/judgingOps";
 import { applyJudgeAutoAssignment, loadJudgingProgressPage as loadProgressPageAction, previewJudgeAutoAssignment, saveReviewsPerProject } from "@/app/actions/judging-ops";
+import { createEvent, grantJudges, HOUR, judgeIds, organisationId, organiser, orgSlug, otherOrganisationId, project, score, setUpJudgingOps, tearDownJudgingOps, users } from "./helpers/judgingOps";
 
 /*
  * Automatic judge assignment and the Progress dashboard against PostgreSQL
  * (docs/HACKATHON.md): owner/admin only, event and organisation scoping,
  * conflicts of interest, preview then apply under the lock, the CHECK on
  * reviewsPerProject, and the progress lists (below target, judges,
- * outliers, stale reviews).
+ * outliers, stale reviews). Shared setup: tests/integration/helpers/judgingOps.ts.
  */
 
-const suffix = randomUUID().replaceAll("-", "");
-const orgSlug = `judging-ops-${suffix}`;
-const otherOrgSlug = `judging-ops-other-${suffix}`;
-const startedAt = new Date();
-const HOUR = 3_600_000;
-let organisationId = "";
-let otherOrganisationId = "";
-const users: Record<"owner" | "admin2" | "j1" | "j2" | "j3" | "j4" | "outsider", string> = { owner: "", admin2: "", j1: "", j2: "", j3: "", j4: "", outsider: "" };
-let sequence = 0;
-
-async function createEvent(orgId: string, slugPrefix = "ops"): Promise<Event> {
-  return prisma.event.create({
-    data: {
-      organisationId: orgId,
-      title: `Judging ops ${suffix}`,
-      slug: `${slugPrefix}-${suffix}-${randomUUID().slice(0, 8)}`,
-      startDateTime: new Date(Date.now() + 24 * HOUR),
-      endDateTime: new Date(Date.now() + 48 * HOUR),
-      timezone: "UTC",
-      status: EventStatus.PUBLISHED,
-      registrationMode: RegistrationMode.INDIVIDUAL,
-      submissionsEnabled: true,
-      judgingStatus: JudgingStatus.OPEN,
-      page: { create: { isPublished: true } },
-    },
-  });
-}
-
-async function register(event: Event, userId: string | null = null) {
-  sequence += 1;
-  const result = await submitRsvpCore(
-    { orgSlug, eventSlug: event.slug, ...(userId ? {} : { guestEmail: `entrant-${sequence}-${suffix}@example.test` }), name: `Entrant ${sequence}`, answers: {} },
-    { userId },
-  );
-  if (!result.ok || !result.data) throw new Error(`registration failed: ${result.ok ? "no data" : result.error}`);
-  return prisma.rSVP.findUniqueOrThrow({ where: { checkInToken: result.data.ticketToken } });
-}
-
-async function project(event: Event, title: string, userId: string | null = null, status: SubmissionStatus = SubmissionStatus.SUBMITTED) {
-  const rsvp = await register(event, userId);
-  return prisma.submission.create({ data: { eventId: event.id, rsvpId: rsvp.id, title, status, submittedAt: status === SubmissionStatus.DRAFT ? null : new Date() } });
-}
-
-async function grantJudges(event: Event, ...judgeIds: string[]) {
-  for (const userId of judgeIds) await prisma.eventCollaborator.create({ data: { eventId: event.id, userId, permissions: [EventPermission.JUDGE] } });
-}
-
-async function organiser(event: Event): Promise<JudgingOrganiserContext> {
-  const ctx = await resolveJudgingOrganiser(users.owner, orgSlug, event.id);
-  if (!ctx) throw new Error("organiser context missing");
-  return ctx;
-}
-
-async function score(event: Event, submissionId: string, judgeUserId: string, value: number, submitted: boolean) {
-  const criterion = await prisma.judgingCriterion.findFirstOrThrow({ where: { eventId: event.id } });
-  await prisma.judgeScore.create({ data: { submissionId, judgeUserId, criterionId: criterion.id, score: value } });
-  if (submitted) await prisma.judgeReview.create({ data: { submissionId, judgeUserId, submittedAt: new Date() } });
-}
-
-const judgeIds = () => [users.j1, users.j2, users.j3, users.j4];
-
 describe.sequential("judging operations", () => {
-  beforeAll(async () => {
-    const [org, other] = await Promise.all([
-      prisma.organisation.create({ data: { name: `Judging ops ${suffix}`, slug: orgSlug } }),
-      prisma.organisation.create({ data: { name: `Judging ops other ${suffix}`, slug: otherOrgSlug } }),
-    ]);
-    organisationId = org.id;
-    otherOrganisationId = other.id;
-    for (const key of Object.keys(users) as Array<keyof typeof users>) {
-      const user = await prisma.user.create({ data: { name: `User ${key}`, email: `${key}-${suffix}@example.test`, emailVerified: new Date() } });
-      users[key] = user.id;
-    }
-    await prisma.membership.create({ data: { userId: users.owner, organisationId, role: MembershipRole.OWNER } });
-    await prisma.membership.create({ data: { userId: users.admin2, organisationId, role: MembershipRole.ADMIN } });
-    await prisma.membership.create({ data: { userId: users.owner, organisationId: otherOrganisationId, role: MembershipRole.OWNER } });
-  });
+  beforeAll(setUpJudgingOps);
 
   afterAll(async () => {
     session.userId = null;
-    for (const id of [organisationId, otherOrganisationId]) if (id) await prisma.organisation.delete({ where: { id } });
-    await prisma.user.deleteMany({ where: { id: { in: Object.values(users).filter(Boolean) } } });
-    await prisma.outboxMessage.deleteMany({ where: { createdAt: { gte: startedAt } } });
-    await prisma.auditEvent.deleteMany({ where: { createdAt: { gte: startedAt }, action: { in: ["JUDGES_AUTO_ASSIGNED", "JUDGING_REVIEW_TARGET_UPDATED"] } } });
-    await prisma.$disconnect();
+    await tearDownJudgingOps();
   });
 
   it("keeps reviewsPerProject in 1..20 with a CHECK constraint", async () => {

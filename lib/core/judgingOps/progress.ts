@@ -1,0 +1,236 @@
+import "server-only";
+
+/** The judging Progress dashboard: build the whole model, then page each list. */
+
+import { SubmissionStatus } from "@prisma/client";
+import { prisma } from "@/lib/db";
+import { conflictKeysFor, hasConflictOfInterest, listEligibleJudges, type ConflictKeys, type EligibleJudgeDto } from "@/lib/core/judging";
+import { entrantDisplayName } from "@/lib/judgingDto";
+import { judgeWeightedPercent } from "@/lib/judgingScore";
+import { pairKey } from "@/lib/judgingAssignment";
+import { numberedPage } from "@/lib/judgingOrganiserPaging";
+import {
+  completionPercent,
+  effectiveReviewTarget,
+  findOutliers,
+  isStaleReview,
+  JUDGING_PROGRESS_PAGE_SIZE,
+  judgingProgressQuerySchema,
+  type JudgingProgressSection,
+} from "@/lib/judgingProgress";
+import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
+import { opsEventSelect } from "./shared";
+import type {
+  JudgingProgressDto,
+  JudgingProgressSectionDto,
+  JudgingProgressSummary,
+  ProgressBelowTargetRow,
+  ProgressJudgeRow,
+  ProgressOutlierRow,
+  ProgressStaleRow,
+} from "./progressTypes";
+
+// ---------------------------------------------------------------------------
+// Progress dashboard
+// ---------------------------------------------------------------------------
+
+type ProgressModel = {
+  summary: JudgingProgressSummary;
+  belowTarget: ProgressBelowTargetRow[];
+  judges: ProgressJudgeRow[];
+  outliers: ProgressOutlierRow[];
+  stale: ProgressStaleRow[];
+};
+
+/**
+ * Compute the whole Progress model for the event (bounded by the event's own
+ * projects, judges and reviews, as the results table is). Counted reviews,
+ * conflicts of interest and eligibility follow `loadJudgingResults`.
+ */
+async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Promise<ProgressModel | null> {
+  const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: opsEventSelect });
+  if (!event) return null;
+  const submittedOnly = { eventId: event.id, status: SubmissionStatus.SUBMITTED };
+  const [projects, criteria, eligible, reviews, scores, assignments] = await Promise.all([
+    prisma.submission.findMany({
+      where: submittedOnly,
+      select: { id: true, title: true, teamId: true, rsvpId: true, team: { select: { name: true } }, rsvp: { select: { guestName: true, user: { select: { name: true } } } } },
+      orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
+    }),
+    prisma.judgingCriterion.findMany({ where: { eventId: event.id }, select: { id: true, weight: true, maxScore: true }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
+    listEligibleJudges(ctx),
+    prisma.judgeReview.findMany({ where: { submission: submittedOnly }, select: { submissionId: true, judgeUserId: true, submittedAt: true } }),
+    prisma.judgeScore.findMany({ where: { submission: submittedOnly }, select: { submissionId: true, judgeUserId: true, criterionId: true, score: true, updatedAt: true } }),
+    prisma.judgeAssignment.findMany({ where: { eventId: event.id, submission: submittedOnly }, select: { submissionId: true, judgeUserId: true } }),
+  ]);
+  const judgeById = new Map<string, EligibleJudgeDto>(eligible.map((judge) => [judge.userId, judge]));
+  const conflicts: Map<string, ConflictKeys> = await conflictKeysFor(prisma, event.id, [...judgeById.keys()]);
+  const projectById = new Map(projects.map((row) => [row.id, row]));
+  // A pair counts only when the judge can still judge the event and has no conflict with that entrant.
+  const valid = (judgeUserId: string, submissionId: string) => {
+    const project = projectById.get(submissionId);
+    return Boolean(project && judgeById.has(judgeUserId) && !hasConflictOfInterest(project, conflicts.get(judgeUserId)));
+  };
+
+  const submittedPairs = new Set<string>();
+  for (const review of reviews) if (review.submittedAt && valid(review.judgeUserId, review.submissionId)) submittedPairs.add(pairKey(review.judgeUserId, review.submissionId));
+
+  type Started = { judgeUserId: string; submissionId: string; scored: number; lastSavedAt: Date };
+  const scoreIndex = new Map<string, number>();
+  const startedPairs = new Map<string, Started>();
+  for (const row of scores) {
+    const key = pairKey(row.judgeUserId, row.submissionId);
+    scoreIndex.set(`${key}\u0000${row.criterionId}`, row.score);
+    if (submittedPairs.has(key) || !valid(row.judgeUserId, row.submissionId)) continue;
+    const entry = startedPairs.get(key) ?? { judgeUserId: row.judgeUserId, submissionId: row.submissionId, scored: 0, lastSavedAt: row.updatedAt };
+    entry.scored += 1;
+    if (row.updatedAt > entry.lastSavedAt) entry.lastSavedAt = row.updatedAt;
+    startedPairs.set(key, entry);
+  }
+
+  const validAssignments = assignments.filter((row) => valid(row.judgeUserId, row.submissionId));
+  const target = effectiveReviewTarget(event.reviewsPerProject);
+
+  // Per project.
+  const reviewsByProject = new Map<string, string[]>();
+  for (const key of submittedPairs) {
+    const [judgeUserId, submissionId] = key.split("\u0000") as [string, string];
+    reviewsByProject.set(submissionId, [...(reviewsByProject.get(submissionId) ?? []), judgeUserId]);
+  }
+  const startedByProject = new Map<string, number>();
+  for (const entry of startedPairs.values()) startedByProject.set(entry.submissionId, (startedByProject.get(entry.submissionId) ?? 0) + 1);
+  const assignedByProject = new Map<string, number>();
+  for (const row of validAssignments) assignedByProject.set(row.submissionId, (assignedByProject.get(row.submissionId) ?? 0) + 1);
+
+  let towardsTarget = 0;
+  const belowTarget: ProgressBelowTargetRow[] = [];
+  const outliers: ProgressOutlierRow[] = [];
+  for (const project of projects) {
+    const judges = reviewsByProject.get(project.id) ?? [];
+    towardsTarget += Math.min(judges.length, target);
+    if (judges.length < target) {
+      belowTarget.push({
+        submissionId: project.id,
+        title: project.title,
+        entrantName: entrantDisplayName(project),
+        reviews: judges.length,
+        inProgress: startedByProject.get(project.id) ?? 0,
+        assigned: assignedByProject.get(project.id) ?? 0,
+        missing: target - judges.length,
+      });
+    }
+    const percents = judges
+      .map((judgeUserId) => ({ judgeUserId, percent: judgeWeightedPercent(criteria, (criterionId) => scoreIndex.get(`${pairKey(judgeUserId, project.id)}\u0000${criterionId}`)) }))
+      .filter((entry): entry is { judgeUserId: string; percent: number } => entry.percent != null)
+      .sort((a, b) => (a.judgeUserId < b.judgeUserId ? -1 : 1));
+    for (const flag of findOutliers(percents)) {
+      outliers.push({
+        submissionId: project.id,
+        title: project.title,
+        judgeUserId: flag.judgeUserId,
+        judgeName: judgeById.get(flag.judgeUserId)?.name ?? "Judge",
+        score: flag.score,
+        othersMean: flag.othersMean,
+        difference: flag.difference,
+        judges: percents.length,
+        rule: flag.rule,
+      });
+    }
+  }
+  belowTarget.sort((a, b) => a.reviews - b.reviews || a.assigned - b.assigned || a.title.localeCompare(b.title) || (a.submissionId < b.submissionId ? -1 : 1));
+  outliers.sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference) || a.title.localeCompare(b.title) || (a.judgeUserId < b.judgeUserId ? -1 : 1));
+
+  // Per judge: invited judges always; organisers once they have assignments, scores or reviews.
+  const assignedByJudge = new Map<string, Set<string>>();
+  for (const row of validAssignments) assignedByJudge.set(row.judgeUserId, (assignedByJudge.get(row.judgeUserId) ?? new Set()).add(row.submissionId));
+  const startedByJudge = new Map<string, number>();
+  for (const entry of startedPairs.values()) startedByJudge.set(entry.judgeUserId, (startedByJudge.get(entry.judgeUserId) ?? 0) + 1);
+  const submittedByJudge = new Map<string, Set<string>>();
+  for (const key of submittedPairs) {
+    const [judgeUserId, submissionId] = key.split("\u0000") as [string, string];
+    submittedByJudge.set(judgeUserId, (submittedByJudge.get(judgeUserId) ?? new Set()).add(submissionId));
+  }
+  const judgeRows: ProgressJudgeRow[] = [];
+  for (const judge of eligible) {
+    const assignedSet = assignedByJudge.get(judge.userId) ?? new Set<string>();
+    const submittedSet = submittedByJudge.get(judge.userId) ?? new Set<string>();
+    const started = startedByJudge.get(judge.userId) ?? 0;
+    if (judge.kind === "admin" && assignedSet.size === 0 && submittedSet.size === 0 && started === 0) continue;
+    const expected = event.judgesSeeAll ? projects.filter((project) => !hasConflictOfInterest(project, conflicts.get(judge.userId))).length : assignedSet.size;
+    const done = event.judgesSeeAll ? submittedSet.size : [...submittedSet].filter((id) => assignedSet.has(id)).length;
+    judgeRows.push({
+      userId: judge.userId,
+      name: judge.name,
+      email: judge.email,
+      kind: judge.kind,
+      assigned: expected,
+      started,
+      submitted: submittedSet.size,
+      completion: completionPercent(done, expected),
+    });
+  }
+  judgeRows.sort((a, b) => a.completion - b.completion || a.name.localeCompare(b.name) || (a.userId < b.userId ? -1 : 1));
+
+  const stale: ProgressStaleRow[] = [...startedPairs.values()]
+    .filter((entry) => isStaleReview(entry.lastSavedAt, now))
+    .sort((a, b) => a.lastSavedAt.getTime() - b.lastSavedAt.getTime() || (a.submissionId < b.submissionId ? -1 : 1) || (a.judgeUserId < b.judgeUserId ? -1 : 1))
+    .map((entry) => ({
+      submissionId: entry.submissionId,
+      title: projectById.get(entry.submissionId)?.title ?? "Project",
+      judgeUserId: entry.judgeUserId,
+      judgeName: judgeById.get(entry.judgeUserId)?.name ?? "Judge",
+      scored: entry.scored,
+      criteria: criteria.length,
+      lastSavedAt: entry.lastSavedAt.toISOString(),
+    }));
+
+  return {
+    summary: {
+      target,
+      targetIsDefault: event.reviewsPerProject == null,
+      reviewsPerProject: event.reviewsPerProject,
+      judgingStatus: event.judgingStatus,
+      judgesSeeAll: event.judgesSeeAll,
+      projects: projects.length,
+      projectsAtTarget: projects.length - belowTarget.length,
+      reviewsCounted: submittedPairs.size,
+      coverage: completionPercent(towardsTarget, projects.length * target),
+    },
+    belowTarget,
+    judges: judgeRows,
+    outliers,
+    stale,
+  };
+}
+
+/** The Progress tab: the summary and the first page of every list. Null when the event is gone. */
+export async function loadJudgingProgress(ctx: JudgingOrganiserContext, now: Date = new Date()): Promise<JudgingProgressDto | null> {
+  const model = await buildProgressModel(ctx, now);
+  if (!model) return null;
+  return {
+    summary: model.summary,
+    belowTarget: numberedPage(model.belowTarget, 1, JUDGING_PROGRESS_PAGE_SIZE),
+    judges: numberedPage(model.judges, 1, JUDGING_PROGRESS_PAGE_SIZE),
+    outliers: numberedPage(model.outliers, 1, JUDGING_PROGRESS_PAGE_SIZE),
+    stale: numberedPage(model.stale, 1, JUDGING_PROGRESS_PAGE_SIZE),
+  };
+}
+
+/** One numbered page of one Progress list (a page past the end shows the last page). */
+export async function loadJudgingProgressPage(ctx: JudgingOrganiserContext, input: unknown, now: Date = new Date()): Promise<JudgingProgressSectionDto | null> {
+  const parsed = judgingProgressQuerySchema.safeParse(input);
+  if (!parsed.success) return null;
+  const model = await buildProgressModel(ctx, now);
+  if (!model) return null;
+  const { section, page } = parsed.data as { section: JudgingProgressSection; page: number };
+  switch (section) {
+    case "below-target":
+      return { section, page: numberedPage(model.belowTarget, page, JUDGING_PROGRESS_PAGE_SIZE) };
+    case "judges":
+      return { section, page: numberedPage(model.judges, page, JUDGING_PROGRESS_PAGE_SIZE) };
+    case "outliers":
+      return { section, page: numberedPage(model.outliers, page, JUDGING_PROGRESS_PAGE_SIZE) };
+    case "stale":
+      return { section, page: numberedPage(model.stale, page, JUDGING_PROGRESS_PAGE_SIZE) };
+  }
+}

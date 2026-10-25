@@ -16,6 +16,7 @@ import { GET as exportTeams } from "@/app/api/exports/events/[eventId]/teams/rou
 import { GET as exportJudging } from "@/app/api/exports/events/[eventId]/judging/route";
 import { loadFeedbackResponsesPage } from "@/app/actions/feedback-form";
 import { FEEDBACK_RESPONSES_PAGE_SIZE } from "@/lib/eventDashboard/feedbackResponses";
+import { csv, expectBare404 } from "./helpers/filteredExports";
 
 /*
  * Filtered CSV exports (Guests · People, Guests · Teams, Judging →
@@ -44,56 +45,10 @@ const minutes = (n: number) => new Date(base.getTime() + n * 60_000);
 const squad = (i: number) => `Squad ${String(i).padStart(3, "0")}`;
 const FORMULA_TEAM = '=HYPERLINK("https://evil.example")';
 
-/** A small RFC 4180 reader for the response bodies. */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
-  const body = text.replace(/^﻿/, "");
-  for (let i = 0; i < body.length; i += 1) {
-    const char = body[i]!;
-    if (quoted) {
-      if (char === '"' && body[i + 1] === '"') {
-        cell += '"';
-        i += 1;
-      } else if (char === '"') quoted = false;
-      else cell += char;
-    } else if (char === '"') quoted = true;
-    else if (char === ",") {
-      row.push(cell);
-      cell = "";
-    } else if (char === "\n") {
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
-    } else cell += char;
-  }
-  if (cell || row.length) {
-    row.push(cell);
-    rows.push(row);
-  }
-  return rows;
-}
-
-async function csv(response: Response) {
-  expect(response.status).toBe(200);
-  expect(response.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
-  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
-  const [header, ...rows] = parseCsv(await response.text());
-  return { header: header!, rows };
-}
-
 function request(path: string, query = "") {
   return new Request(`https://events.example.test/api/exports/events/${event.id}/${path}${query ? `?${query}` : ""}`);
 }
 const ctxFor = (target: Event) => ({ params: Promise.resolve({ eventId: target.id }) });
-
-async function expectBare404(response: Response) {
-  expect(response.status).toBe(404);
-  expect(await response.text()).toBe("");
-}
 
 beforeAll(async () => {
   const [org, otherOrg] = await Promise.all([

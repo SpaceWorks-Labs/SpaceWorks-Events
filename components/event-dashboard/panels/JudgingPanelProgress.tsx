@@ -1,18 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useState } from "react";
 import { Shuffle } from "lucide-react";
-import { loadJudgingProgressPage, saveReviewsPerProject } from "@/app/actions/judging-ops";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, CardHeader, Chip, EmptyState, ProgressBar, StatTile } from "@/components/ui/display";
-import { Field, Input } from "@/components/ui/field";
+import { Card, CardHeader, Chip, ProgressBar, StatTile } from "@/components/ui/display";
 import { FilterChip } from "@/components/ui/choice";
-import { PageNumberPager } from "@/components/ui/page-number-pager";
-import { Spinner } from "@/components/ui/spinner";
-import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
+import { TD, TH, TR } from "@/components/ui/table";
 import { formatRelativeTime } from "@/lib/format/datetime";
-import { numberedPageLabel, type NumberedPage } from "@/lib/judgingOrganiserPaging";
-import { DEFAULT_REVIEWS_PER_PROJECT, REVIEWS_PER_PROJECT_MAX, REVIEWS_PER_PROJECT_MIN, STALE_REVIEW_HOURS, type JudgingProgressSection } from "@/lib/judgingProgress";
+import { DEFAULT_REVIEWS_PER_PROJECT, STALE_REVIEW_HOURS, type JudgingProgressSection } from "@/lib/judgingProgress";
 import type {
   JudgingProgressDto,
   ProgressBelowTargetRow,
@@ -25,8 +20,10 @@ import { NO_SAVED_VIEWS, viewParam, type SavedViewDto, type ViewParams } from "@
 import { SavedViewsMenu } from "@/components/event-dashboard/views/SavedViewsMenu";
 import { useInitialViewParams, useSyncViewToUrl } from "@/components/event-dashboard/views/useViewUrl";
 import { AutoAssignDialog } from "./JudgingAutoAssignDialog";
-import { formatScore, useJudgingAction, type JudgingScope } from "./JudgingPanelShared";
+import { formatScore, type JudgingScope } from "./JudgingPanelShared";
 import { progressTargetLine, signedPoints } from "./judgingOpsCopy";
+import { ProgressSection } from "./JudgingPanelProgress/ProgressSection";
+import { TargetForm } from "./JudgingPanelProgress/TargetForm";
 
 type ProgressShow = "all" | JudgingProgressSection;
 
@@ -274,154 +271,5 @@ export function JudgingPanelProgress({
         defaultPerProject={summary.reviewsPerProject ?? DEFAULT_REVIEWS_PER_PROJECT}
       />
     </div>
-  );
-}
-
-function TargetForm({ scope, reviewsPerProject }: { scope: JudgingScope; reviewsPerProject: number | null }) {
-  const [value, setValue] = useState(reviewsPerProject == null ? "" : String(reviewsPerProject));
-  const [error, setError] = useState<string | undefined>();
-  const { run, busy } = useJudgingAction();
-  const saved = reviewsPerProject == null ? "" : String(reviewsPerProject);
-  return (
-    <form
-      className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setError(undefined);
-        run(
-          "target",
-          () => saveReviewsPerProject({ ...scope, reviewsPerProject: value.trim() === "" ? null : value.trim() }),
-          "Review target saved.",
-          (result) => {
-            if (!result.ok) setError(result.fieldErrors?.reviewsPerProject?.[0] ?? result.error);
-          },
-        );
-      }}
-    >
-      <Field
-        label="Target judges per project"
-        helperText={`Leave empty for the default of ${DEFAULT_REVIEWS_PER_PROJECT}.`}
-        error={error}
-        className="sm:max-w-[260px]"
-      >
-        <Input
-          type="number"
-          inputMode="numeric"
-          min={REVIEWS_PER_PROJECT_MIN}
-          max={REVIEWS_PER_PROJECT_MAX}
-          step={1}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-        />
-      </Field>
-      <Button type="submit" variant="secondary" loading={busy === "target"} loadingLabel="Saving…" disabled={value.trim() === saved} className="sm:mb-[22px]">
-        Save target
-      </Button>
-    </form>
-  );
-}
-
-/**
- * One Progress list as numbered pages. The first page arrives with the
- * server render; other pages come from `loadJudgingProgressPage`. A refresh
- * after a change (a new `initial`) re-reads the page showing.
- */
-function ProgressSection<R>({
-  scope,
-  section,
-  initial,
-  title,
-  description,
-  noun,
-  empty,
-  head,
-  renderRow,
-}: {
-  scope: JudgingScope;
-  section: JudgingProgressSection;
-  initial: NumberedPage<R>;
-  title: string;
-  description: string;
-  noun: string;
-  empty: string;
-  head: ReactNode;
-  renderRow: (row: R) => ReactNode;
-}) {
-  const [data, setData] = useState<NumberedPage<R>>(initial);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const seq = useRef(0);
-  const pageRef = useRef(1);
-  const headingId = `judging-progress-${section}`;
-
-  const fetchPage = useCallback(
-    async (page: number) => {
-      const mine = ++seq.current;
-      setLoading(true);
-      setError(null);
-      let res: Awaited<ReturnType<typeof loadJudgingProgressPage>>;
-      try {
-        res = await loadJudgingProgressPage({ ...scope, section, page });
-      } catch {
-        res = { ok: false, error: "Couldn't load the list. Try again." };
-      }
-      if (mine !== seq.current) return;
-      setLoading(false);
-      if (!res.ok || !res.data || res.data.section !== section) {
-        setError(res.ok ? "Couldn't load the list. Try again." : res.error);
-        return;
-      }
-      setData(res.data.page as unknown as NumberedPage<R>);
-      pageRef.current = res.data.page.page;
-    },
-    [scope, section],
-  );
-
-  // A server refresh: show page 1 as rendered, or re-read the page showing.
-  const firstRun = useRef(true);
-  useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      if (pageRef.current === 1) {
-        seq.current += 1;
-        setLoading(false);
-        setError(null);
-        setData(initial);
-        return;
-      }
-      void fetchPage(pageRef.current);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [initial, fetchPage]);
-
-  return (
-    <Card as="section" aria-labelledby={headingId}>
-      <CardHeader title={<span id={headingId}>{title}</span>} description={description} />
-      {data.total === 0 ? (
-        <EmptyState>{empty}</EmptyState>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-caption text-ink-muted" role="status">
-              {numberedPageLabel({ start: data.start, total: data.total, shown: data.rows.length }, noun)}
-            </p>
-            {loading ? <Spinner label="Loading" /> : null}
-          </div>
-          {error ? (
-            <Callout tone="danger" role="alert">
-              {error}
-            </Callout>
-          ) : null}
-          <Table label={title}>
-            <THead>{head}</THead>
-            <TBody>{data.rows.map(renderRow)}</TBody>
-          </Table>
-          <PageNumberPager label={`${title} pages`} page={data.page} totalPages={data.totalPages} disabled={loading} onPage={(page) => void fetchPage(page)} />
-        </div>
-      )}
-    </Card>
   );
 }

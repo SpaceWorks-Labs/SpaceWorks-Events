@@ -2,11 +2,11 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Info, RotateCcw, Search, X } from "lucide-react";
+import { Check, Info, RotateCcw, Search } from "lucide-react";
 import { checkInToList, loadListRosterPage, lookupListAttendees, undoListCheckIn, type ListLookupRow } from "@/app/actions/checkin-lists";
 import { Button, IconButton } from "@/components/ui/button";
 import { FilterChip, Switch } from "@/components/ui/choice";
-import { Callout, Chip, ProgressBar, type ChipTone } from "@/components/ui/display";
+import { Callout, Chip, ProgressBar } from "@/components/ui/display";
 import { Input, Textarea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/menu";
 import { useToast } from "@/components/feedback/ToastProvider";
@@ -17,6 +17,8 @@ import { formatTime } from "@/lib/format/datetime";
 import { showingLabel } from "@/lib/keysetCursor";
 import type { ListRosterPage } from "@/lib/eventDashboard/checkInLists";
 import { useDebouncedValue, useServerPages, type ServerPageResult } from "@/components/event-dashboard/guests/useServerPages";
+import { ResultPanel } from "./CheckInListDesk/ResultPanel";
+import { NO_COUNTS, SEARCH_DELAY_MS, STATUS_CHIPS, type DeskResult, type ListDeskRosterRow, type RosterFilter, type RosterView } from "./CheckInListDesk/types";
 
 /*
  * The check-in desk for one custom list ("Swag", "Lunch – Day 1"). Scanning a
@@ -24,31 +26,7 @@ import { useDebouncedValue, useServerPages, type ServerPageResult } from "@/comp
  * list straight away, with undo. Entry check-in is never changed from here.
  */
 
-export type ListDeskRosterRow = {
-  rsvpId: string;
-  displayName: string;
-  email: string | null;
-  status: string;
-  entryCheckedInAt: string | null;
-  listCheckedInAt: string | null;
-  eligible: boolean;
-};
-
-type RosterFilter = "all" | "collected" | "notCollected";
-
-type DeskResult =
-  | { kind: "success" | "already"; rsvpId: string; displayName: string; email: string | null; message: string; checkedInAt: string }
-  | { kind: "refused"; message: string; needsForce: boolean; retry?: { rawInput?: string; rsvpId?: string } };
-
-const STATUS_CHIPS: Record<string, { label: string; tone: ChipTone }> = {
-  WAITLISTED: { label: "Waitlist", tone: "warning" },
-  PENDING_APPROVAL: { label: "To approve", tone: "warning" },
-  REJECTED: { label: "Declined", tone: "danger" },
-};
-
-const SEARCH_DELAY_MS = 300;
-const NO_COUNTS: Record<RosterFilter, number> = { all: 0, collected: 0, notCollected: 0 };
-type RosterView = { filter: RosterFilter; query: string };
+export type { ListDeskRosterRow } from "./CheckInListDesk/types";
 
 export function CheckInListDesk(props: {
   organisationSlug: string;
@@ -321,42 +299,5 @@ export function CheckInListDesk(props: {
         ) : null}
       </section>
     </div>
-  );
-}
-
-function ResultPanel({ result, listName, timeZone, pending, onNext, onUndo, onForce }: {
-  result: DeskResult;
-  listName: string;
-  timeZone: string;
-  pending: boolean;
-  onNext: () => void;
-  onUndo: (rsvpId: string, displayName: string) => void;
-  onForce: (retry: { rawInput?: string; rsvpId?: string }) => void;
-}) {
-  if (result.kind === "refused") {
-    return (
-      <section data-testid="list-result" className={cn("flex flex-col gap-3 rounded-xl p-6", result.needsForce ? "border-2 border-warning-solid bg-warning-bg text-warning-fg" : "bg-danger-bg text-danger-fg")}>
-        <p className="text-[15px] font-semibold">{result.needsForce ? "On the waitlist" : `Not added to ${listName}`}</p>
-        <p className="text-body-ui">{result.message}</p>
-        <div className="flex flex-wrap gap-2">
-          {result.needsForce && result.retry ? (
-            <Button size="sm" variant="primary" onClick={() => onForce(result.retry!)} disabled={pending}>Admit anyway</Button>
-          ) : null}
-          <Button size="sm" variant="secondary" startIcon={<X />} onClick={onNext}>Scan again</Button>
-        </div>
-      </section>
-    );
-  }
-  const success = result.kind === "success";
-  return (
-    <section data-testid="list-result" className={cn("flex flex-col gap-3 rounded-xl p-6", success ? "bg-success-solid text-white" : "bg-emphasis text-ink")}>
-      <p className="text-[15px] font-semibold">{success ? `Checked in to ${listName} at ${formatTime(result.checkedInAt, timeZone)}` : result.message}</p>
-      <p className="break-words font-display text-[30px] font-extrabold leading-none tracking-[-0.03em]">{result.displayName}</p>
-      {result.email ? <p className="text-sm opacity-90">{result.email}</p> : null}
-      <div className="mt-1 flex flex-wrap gap-2">
-        <Button size="sm" variant={success ? "inverse" : "secondary"} startIcon={<X />} onClick={onNext}>Next guest</Button>
-        <Button size="sm" variant={success ? "inverse" : "quiet"} startIcon={<RotateCcw />} onClick={() => onUndo(result.rsvpId, result.displayName)} disabled={pending}>Undo</Button>
-      </div>
-    </section>
   );
 }

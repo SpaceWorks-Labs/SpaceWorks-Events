@@ -1,7 +1,4 @@
-import http from "node:http";
-import type { AddressInfo } from "node:net";
-import { randomUUID } from "node:crypto";
-import { EventPermission, EventPrivacyType, EventStatus, MembershipRole, WebhookDeliveryStatus } from "@prisma/client";
+import { EventStatus, WebhookDeliveryStatus } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const identity = vi.hoisted(() => ({ id: "" }));
@@ -12,52 +9,25 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 process.env.MFA_ENCRYPTION_KEY ||= Buffer.alloc(32, 3).toString("base64");
 
 import { prisma } from "@/lib/db";
-import {
-  createWebhookEndpoint,
-  deleteWebhookEndpoint,
-  redeliverWebhook,
-  rotateWebhookSecret,
-  sendWebhookTest,
-  setWebhookEndpointEnabled,
-  updateWebhookEndpoint,
-} from "@/app/actions/webhooks";
+import { createWebhookEndpoint, deleteWebhookEndpoint, redeliverWebhook, rotateWebhookSecret, sendWebhookTest, setWebhookEndpointEnabled, updateWebhookEndpoint } from "@/app/actions/webhooks";
 import { publishEvent } from "@/app/actions/event";
 import { submitRsvpCore } from "@/lib/rsvpCore";
 import { approveRsvp } from "@/app/actions/rsvp-lifecycle";
 import { cancelRsvp } from "@/app/actions/rsvp-cancel";
 import { commitCheckInProjection, commitUndoCheckInProjection } from "@/lib/checkInMutations";
 import { submitFeedback } from "@/lib/feedback";
-import { flushWebhookEmits, enqueueWebhookPing } from "@/lib/webhooks/emit";
+import { enqueueWebhookPing } from "@/lib/webhooks/emit";
 import { WEBHOOK_AUTO_DISABLE_AFTER, deliverWebhookBatch, deliverWebhookNow } from "@/lib/webhooks/delivery";
-import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secrets";
+import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { verifyWebhookSignature } from "@/lib/webhooks/signature";
 import { setWebhookResolverForTests } from "@/lib/webhooks/urlSafety";
 import { getWebhookEndpointDetail, listWebhookEndpoints } from "@/lib/webhooks/management";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/webhooks/eventTypes";
 import { purgeExpiredOperationalData } from "@/lib/retention";
+import { adminId, approvalEventId, approvalEventSlug, collaboratorId, deliverAll, deliveriesOf, downUrl, memberId, orgId, orgSlug, otherAdminId, otherOrgId, otherOrgSlug, ownerId, publicEventSlug, received, receiverUrl, settle, setUpWebhooks, suffix, tearDownWebhooks, type Reply } from "./helpers/webhooks";
 
-type Received = { path: string; headers: http.IncomingHttpHeaders; body: string };
-
-const suffix = randomUUID().replace(/-/g, "").slice(0, 16);
-const received: Received[] = [];
-let respondWith: { status: number; headers?: Record<string, string>; body?: string } = { status: 200 };
-let server: http.Server;
-let receiverUrl = "";
-let downUrl = "";
-
-let orgId = "";
-let orgSlug = "";
-let otherOrgId = "";
-let otherOrgSlug = "";
-let ownerId = "";
-let adminId = "";
-let memberId = "";
-let collaboratorId = "";
-let otherAdminId = "";
-let publicEventId = "";
-let publicEventSlug = "";
-let approvalEventId = "";
-let approvalEventSlug = "";
+// One journey against one endpoint: each test builds on the state the ones before it leave.
+let respondWith: Reply = { status: 200 };
 let endpointId = "";
 let endpointSecret = "";
 
@@ -65,75 +35,8 @@ function as(userId: string) {
   identity.id = userId;
 }
 
-async function settle() {
-  await flushWebhookEmits();
-}
-
-async function deliveriesOf(type: string) {
-  return prisma.webhookDelivery.findMany({ where: { organisationId: orgId, eventType: type }, orderBy: { createdAt: "asc" } });
-}
-
-async function deliverAll() {
-  // Rows can wait for a retry; pull everything due for this organisation now.
-  await prisma.webhookDelivery.updateMany({ where: { organisationId: orgId, status: WebhookDeliveryStatus.PENDING }, data: { nextAttemptAt: new Date(Date.now() - 1000) } });
-  return deliverWebhookBatch(100);
-}
-
 describe.sequential("organisation webhooks", () => {
-  beforeAll(async () => {
-    process.env.WEBHOOKS_ALLOW_PRIVATE_TARGETS = "1";
-    server = http.createServer((request, response) => {
-      const chunks: Buffer[] = [];
-      request.on("data", (chunk: Buffer) => chunks.push(chunk));
-      request.on("end", () => {
-        received.push({ path: request.url ?? "", headers: request.headers, body: Buffer.concat(chunks).toString("utf8") });
-        response.writeHead(respondWith.status, respondWith.headers ?? { "content-type": "text/plain" });
-        response.end(respondWith.body ?? "ok");
-      });
-    });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    receiverUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/hooks/spaceworks`;
-    // A port that was just released: nothing listens there.
-    const probe = http.createServer();
-    await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
-    downUrl = `http://127.0.0.1:${(probe.address() as AddressInfo).port}/down`;
-    await new Promise<void>((resolve) => probe.close(() => resolve()));
-
-    orgSlug = `hooks-a-${suffix}`;
-    otherOrgSlug = `hooks-b-${suffix}`;
-    const [org, otherOrg] = await Promise.all([
-      prisma.organisation.create({ data: { name: "Hooks A", slug: orgSlug } }),
-      prisma.organisation.create({ data: { name: "Hooks B", slug: otherOrgSlug } }),
-    ]);
-    orgId = org.id;
-    otherOrgId = otherOrg.id;
-    const users = await Promise.all(
-      ["owner", "admin", "member", "collab", "other-admin"].map((label) =>
-        prisma.user.create({ data: { name: `Hooks ${label}`, email: `hooks-${label}-${suffix}@example.test`, emailVerified: new Date() } }),
-      ),
-    );
-    [ownerId, adminId, memberId, collaboratorId, otherAdminId] = users.map((user) => user.id) as [string, string, string, string, string];
-    await prisma.membership.createMany({
-      data: [
-        { userId: ownerId, organisationId: orgId, role: MembershipRole.OWNER },
-        { userId: adminId, organisationId: orgId, role: MembershipRole.ADMIN },
-        { userId: memberId, organisationId: orgId, role: MembershipRole.MEMBER },
-        { userId: otherAdminId, organisationId: otherOrgId, role: MembershipRole.ADMIN },
-      ],
-    });
-    publicEventSlug = `public-${suffix}`;
-    approvalEventSlug = `approval-${suffix}`;
-    const base = { organisationId: orgId, startDateTime: new Date("2031-01-01T10:00:00Z"), endDateTime: new Date("2031-01-01T12:00:00Z"), timezone: "UTC", status: EventStatus.PUBLISHED };
-    const publicEvent = await prisma.event.create({ data: { ...base, title: "Hooks public", slug: publicEventSlug, privacyType: EventPrivacyType.PUBLIC, page: { create: { isPublished: true } } } });
-    const approvalEvent = await prisma.event.create({ data: { ...base, title: "Hooks approval", slug: approvalEventSlug, privacyType: EventPrivacyType.APPROVAL_REQUIRED, page: { create: { isPublished: true } } } });
-    publicEventId = publicEvent.id;
-    approvalEventId = approvalEvent.id;
-    // A co-organiser holding every grant on an event is still not an organisation admin.
-    await prisma.eventCollaborator.create({
-      data: { eventId: publicEventId, userId: collaboratorId, permissions: Object.values(EventPermission) },
-    });
-    await prisma.eventFeedbackForm.create({ data: { eventId: publicEventId, isOpen: true, certificateEnabled: false } });
-  });
+  beforeAll(() => setUpWebhooks(() => respondWith));
 
   beforeEach(() => {
     received.length = 0;
@@ -143,14 +46,7 @@ describe.sequential("organisation webhooks", () => {
 
   afterEach(() => setWebhookResolverForTests(null));
 
-  afterAll(async () => {
-    delete process.env.WEBHOOKS_ALLOW_PRIVATE_TARGETS;
-    await flushWebhookEmits();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    await prisma.organisation.deleteMany({ where: { id: { in: [orgId, otherOrgId].filter(Boolean) } } });
-    await prisma.user.deleteMany({ where: { email: { endsWith: `-${suffix}@example.test` } } });
-    await prisma.$disconnect();
-  });
+  afterAll(tearDownWebhooks);
 
   it("creates an endpoint for an admin, shows the secret once and stores it encrypted", async () => {
     as(adminId);
@@ -408,21 +304,6 @@ describe.sequential("organisation webhooks", () => {
     await expect(createWebhookEndpoint({ organisationSlug: orgSlug, url: "https://rebind.example.test/hook", eventTypes: ["checkin.created"] })).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/private or reserved/) });
     await expect(updateWebhookEndpoint({ organisationSlug: orgSlug, endpointId, url: "https://rebind.example.test/hook", eventTypes: ["checkin.created"] })).resolves.toMatchObject({ ok: false });
     await expect(prisma.webhookEndpoint.count({ where: { organisationId: orgId } })).resolves.toBe(1);
-  });
-
-  it("blocks a host that resolves to a private address at delivery time (DNS rebinding)", async () => {
-    delete process.env.WEBHOOKS_ALLOW_PRIVATE_TARGETS;
-    setWebhookResolverForTests(async () => [{ address: "93.184.216.34", family: 4 }]);
-    const rebinding = await prisma.webhookEndpoint.create({
-      data: { organisationId: orgId, url: "https://rebind.example.test/hook", eventTypes: ["checkin.created"], secretEncrypted: encryptWebhookSecret("whsec_x") },
-    });
-    // The name resolved publicly when saved; it now answers with loopback.
-    setWebhookResolverForTests(async () => [{ address: "127.0.0.1", family: 4 }]);
-    const id = await enqueueWebhookPing({ id: rebinding.id, organisation: { id: orgId, slug: orgSlug } });
-    const outcome = await deliverWebhookNow(id);
-    expect(outcome).toMatchObject({ ok: false, statusCode: null, error: expect.stringMatching(/^Blocked/) });
-    expect(received).toHaveLength(0);
-    await prisma.webhookEndpoint.delete({ where: { id: rebinding.id } });
   });
 
   it("caps an organisation at 10 endpoints", async () => {

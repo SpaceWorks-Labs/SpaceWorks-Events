@@ -5,6 +5,7 @@ vi.mock("@/lib/db", () => ({ prisma: {} }));
 vi.mock("@/lib/rsvpCore", () => ({ submitRsvpCore: vi.fn() }));
 vi.mock("@/lib/core/rsvpCancel", () => ({ cancelRsvpForUser: vi.fn() }));
 vi.mock("@/lib/permissions", () => ({ canManageEvents: vi.fn(), getMembership: vi.fn() }));
+vi.mock("@/lib/eventAccess", () => ({ canManageRegistrationsFor: vi.fn() }));
 
 import { joinPageTeamDto, seekerDisplayName, seekerListDto, teamJoinRequestDto, teamPageDto } from "@/lib/core/teams";
 

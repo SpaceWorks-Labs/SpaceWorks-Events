@@ -2,18 +2,15 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AtSign, Download, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout, EmptyState } from "@/components/ui/display";
-import { Dropdown, SearchInput } from "@/components/ui/field";
-import { cn } from "@/lib/cn";
 import type { AttendeeRow } from "@/components/attendees/types";
 import { ManualRsvpDialog } from "@/components/attendees/ManualRsvpDialog";
 import { EditRsvpDialog } from "@/components/attendees/EditRsvpDialog";
 import type { RegistrationFieldRow } from "@/components/registration/EventRegistrationFormEditor";
 import { ConfirmationDialog } from "@/components/feedback/ConfirmationDialog";
 import { useToast } from "@/components/feedback/ToastProvider";
-import { deleteRsvp, restoreRsvp } from "@/app/actions/rsvp-admin";
+import { RemoveGuestDialog } from "./GuestsPeople/RemoveGuestDialog";
 import { PaymentDialog } from "@/components/attendees/PaymentDialog";
 import { approveRsvp, promoteFromWaitlist, reacceptRsvp, rejectRsvp } from "@/app/actions/rsvp-lifecycle";
 import { undoCheckIn } from "@/app/actions/checkin";
@@ -21,7 +18,6 @@ import { GuestRow, type GuestRowActions } from "@/components/event-dashboard/gue
 import { useEventTabs } from "@/components/event-dashboard/EventDashboardTabs";
 import { MoveToTeamDialog } from "@/components/event-dashboard/guests/MoveToTeamDialog";
 import {
-  GUEST_FILTERS,
   guestDisplayName,
   type GuestKindFilter,
   type GuestStatusFilter,
@@ -33,9 +29,9 @@ import { attendeeViewSearchParams } from "@/lib/attendeeListQuery";
 import { showingLabel } from "@/lib/keysetCursor";
 import type { AttendeesPage } from "@/lib/eventDashboard/attendees";
 import { viewParam, type SavedViewDto, type ViewParams } from "@/lib/savedViews";
-import { SavedViewsMenu } from "@/components/event-dashboard/views/SavedViewsMenu";
 import { useInitialViewParams, useSyncViewToUrl } from "@/components/event-dashboard/views/useViewUrl";
-import { FILTER_DOTS, NO_COUNTS, SEARCH_DELAY_MS, type ActionResult, type GuestListTarget, type Meta, type View } from "./GuestsPeople/constants";
+import { NO_COUNTS, SEARCH_DELAY_MS, type ActionResult, type GuestListTarget, type Meta, type View } from "./GuestsPeople/constants";
+import { GuestFilters, GuestsHeaderActions } from "./GuestsPeople/Toolbar";
 
 export type { GuestListTarget } from "./GuestsPeople/constants";
 
@@ -179,39 +175,18 @@ export function GuestsPeople({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-h4 text-ink">{title}</h2>
         {target.kind === "event" ? (
-          <div className="flex flex-wrap gap-2">
-            {savedViews ? (
-              <SavedViewsMenu
-                surface="GUESTS_PEOPLE"
-                scope={{ organisationSlug, eventId: target.eventId }}
-                params={viewParams}
-                onApply={applyView}
-                initialViews={savedViews}
-                teamMode={teamMode}
-              />
-            ) : null}
-            {emailExportHref && shownTotal > 0 ? (
-              <Button asChild variant="secondary" startIcon={<AtSign />}>
-                <a href={emailExportHref} title="Export emails for every guest matching these filters">Export emails</a>
-              </Button>
-            ) : (
-              <Button variant="secondary" startIcon={<AtSign />} disabled title="No guests match these filters">
-                Export emails
-              </Button>
-            )}
-            {csvExportHref && shownTotal > 0 ? (
-              <Button asChild variant="secondary" startIcon={<Download />}>
-                <a href={csvExportHref} title="Export every guest matching these filters, with their answers">Export CSV</a>
-              </Button>
-            ) : (
-              <Button variant="secondary" startIcon={<Download />} disabled title="No guests match these filters">
-                Export CSV
-              </Button>
-            )}
-            <Button variant="primary" startIcon={<Plus />} onClick={() => setManualRsvpOpen(true)}>
-              Add guest
-            </Button>
-          </div>
+          <GuestsHeaderActions
+            organisationSlug={organisationSlug}
+            eventId={target.eventId}
+            savedViews={savedViews}
+            viewParams={viewParams}
+            applyView={applyView}
+            teamMode={teamMode}
+            emailExportHref={emailExportHref}
+            csvExportHref={csvExportHref}
+            shownTotal={shownTotal}
+            setManualRsvpOpen={setManualRsvpOpen}
+          />
         ) : null}
       </div>
 
@@ -221,61 +196,18 @@ export function GuestsPeople({
         </EmptyState>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1.5">
-              {GUEST_FILTERS.map(({ value, label }) => {
-                const on = status === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => setStatus(value)}
-                    className={cn(
-                      "inline-flex min-h-[38px] items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors",
-                      on ? "border-primary bg-primary text-on-primary" : "border-line-strong bg-panel text-ink hover:bg-subtle",
-                    )}
-                  >
-                    <span aria-hidden className={cn("size-2 rounded-full", value === "all" && on ? "bg-on-primary" : FILTER_DOTS[value])} />
-                    {label}
-                    <span className="font-medium tabular-nums">{counts[value]}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex w-full min-w-0 flex-wrap gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
-              <div className="min-w-0 flex-1 sm:w-[160px] sm:flex-none">
-                <label htmlFor="guest-kind" className="sr-only">Registration type</label>
-                <Dropdown id="guest-kind" value={kind} onChange={(event) => setKind(event.target.value as GuestKindFilter)} className="py-2 sm:text-sm">
-                  <option value="all">Everyone</option>
-                  <option value="guests">Guests only</option>
-                  <option value="users">Signed-in users</option>
-                </Dropdown>
-              </div>
-              {teamMode ? (
-                <div className="min-w-0 flex-1 sm:w-[140px] sm:flex-none">
-                  <label htmlFor="guest-team" className="sr-only">Team</label>
-                  <Dropdown id="guest-team" value={team} onChange={(event) => setTeam(event.target.value as GuestTeamFilter)} className="py-2 sm:text-sm">
-                    <option value="all">Teams and solo</option>
-                    <option value="team">In a team</option>
-                    <option value="solo">Solo</option>
-                  </Dropdown>
-                </div>
-              ) : null}
-              <div className="w-full min-w-0 sm:w-[260px]">
-                <label htmlFor="guest-search" className="sr-only">Search guests by name or email</label>
-                <SearchInput
-                  id="guest-search"
-                  placeholder={teamMode ? "Search name, email or team" : "Search name or email"}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onClear={() => setQuery("")}
-                  autoComplete="off"
-                  className="py-2 sm:text-sm"
-                />
-              </div>
-            </div>
-          </div>
+          <GuestFilters
+            status={status}
+            setStatus={setStatus}
+            counts={counts}
+            kind={kind}
+            setKind={setKind}
+            teamMode={teamMode}
+            team={team}
+            setTeam={setTeam}
+            query={query}
+            setQuery={setQuery}
+          />
 
           {list.error ? <Callout tone="danger" role="alert">{list.error}</Callout> : null}
 
@@ -357,45 +289,15 @@ export function GuestsPeople({
         }}
       />
 
-      <ConfirmationDialog
-        open={Boolean(removeGuest)}
-        title="Remove Attendee"
-        message={`Are you sure you want to remove ${removeGuest?.user?.name ?? removeGuest?.guestName ?? removeGuest?.guestEmail ?? "this attendee"}'s RSVP registration?`}
-        confirmLabel="Remove"
-        loading={pending}
-        onCancel={() => setRemoveGuest(null)}
-        onConfirm={() => {
-          if (!removeGuest) return;
-          const guest = removeGuest;
-          setRemoveGuest(null);
-          startTransition(async () => {
-            const res = await deleteRsvp({ organisationSlug, rsvpId: guest.id, ...scope });
-            if (!res.ok) {
-              showToast(res.error, "error");
-              return;
-            }
-            showToast(
-              "Attendee removed",
-              "success",
-              {
-                label: "Undo",
-                onClick: () => {
-                  startTransition(async () => {
-                    const restored = await restoreRsvp({ organisationSlug, undoId: res.data!.undoId });
-                    if (restored.ok) {
-                      showToast("Attendee restored", "success");
-                      router.refresh();
-                    } else {
-                      showToast(restored.error, "error");
-                    }
-                  });
-                },
-              },
-              10000,
-            );
-            router.refresh();
-          });
-        }}
+      <RemoveGuestDialog
+        organisationSlug={organisationSlug}
+        scope={scope}
+        removeGuest={removeGuest}
+        setRemoveGuest={setRemoveGuest}
+        pending={pending}
+        startTransition={startTransition}
+        showToast={showToast}
+        router={router}
       />
     </div>
   );

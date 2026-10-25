@@ -7,7 +7,6 @@ import type { RsvpStatus } from "@prisma/client";
 import type { RegistrationFieldDefinition } from "@/components/rsvp/registrationTypes";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/display";
-import { Field, Input } from "@/components/ui/field";
 import { RegistrationQuestions, focusQuestion, useRegistrationAnswers } from "@/components/rsvp/QuestionField";
 import { identityErrors } from "@/components/rsvp/registrationAnswers";
 import { TeamRegistrationFields, useTeamRegistration, type TeamRegistrationConfig } from "@/components/rsvp/TeamRegistrationFields";
@@ -19,6 +18,7 @@ import { Radio, RadioGroup } from "@/components/ui/choice";
 import { AttendeeFields } from "./RsvpForm/AttendeeFields";
 import { postRsvp, safeJsonParse, storageKey } from "./RsvpForm/helpers";
 import { FramedCheckoutNotice, RsvpDone } from "./RsvpForm/states";
+import { GuestIdentityFields, SignedInNameField } from "./RsvpForm/IdentityFields";
 
 export function RsvpForm(props: {
   orgSlug: string;
@@ -267,21 +267,7 @@ export function RsvpForm(props: {
         {ticketSection}
         {awaitingLink ? null : (
           <>
-            <div data-question-key="__name">
-              <Field label="Name" optional={!requireName} required={requireName} error={identity.name} helperText={!requireName ? `Leave blank to use ${session.user.name}.` : undefined}>
-                <Input
-                  name="name"
-                  autoComplete="name"
-                  value={name}
-                  placeholder={session.user.name ?? ""}
-                  onChange={(event) => {
-                    setName(event.target.value);
-                    if (identity.name && event.target.value.trim()) setIdentity((current) => ({ ...current, name: undefined }));
-                  }}
-                  maxLength={200}
-                />
-              </Field>
-            </div>
+            <SignedInNameField name={name} setName={setName} identity={identity} setIdentity={setIdentity} requireName={requireName} accountName={session.user.name} />
             {questions}
             <Button variant="accent" size="lg" fullWidth loading={pending} loadingLabel="Registering…" onClick={submit}>
               {submitLabel}
@@ -309,37 +295,7 @@ export function RsvpForm(props: {
       {awaitingLink ? null : (
         <>
           <p className="text-body-ui text-ink-muted">Your details</p>
-          <div data-question-key="__name">
-            <Field label="Name" required error={identity.name}>
-              <Input
-                name="name"
-                autoComplete="name"
-                value={name}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  if (identity.name && event.target.value.trim()) setIdentity((current) => ({ ...current, name: undefined }));
-                }}
-                maxLength={200}
-              />
-            </Field>
-          </div>
-          <div data-question-key="__email">
-            <Field label="Email" required error={identity.email} helperText="We’ll send your ticket here.">
-              <Input
-                name="guestEmail"
-                type="email"
-                autoComplete="email"
-                value={guestEmail}
-                onChange={(event) => {
-                  setGuestEmail(event.target.value);
-                  if (identity.email) {
-                    const recheck = identityErrors({ name, email: event.target.value, requireName: false, requireEmail: true }).email;
-                    setIdentity((current) => ({ ...current, email: recheck }));
-                  }
-                }}
-              />
-            </Field>
-          </div>
+          <GuestIdentityFields name={name} setName={setName} guestEmail={guestEmail} setGuestEmail={setGuestEmail} identity={identity} setIdentity={setIdentity} />
           {questions}
           <Button variant="accent" size="lg" fullWidth type="submit" loading={pending} loadingLabel="Registering…">
             {submitLabel}

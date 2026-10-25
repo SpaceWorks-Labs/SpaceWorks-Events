@@ -1,27 +1,20 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Crown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, Callout, Card, CardHeader, Chip } from "@/components/ui/display";
 import { ConfirmDialog } from "@/components/ui/dialog";
-import { Field, Input, SearchInput } from "@/components/ui/field";
+import { Field, Input } from "@/components/ui/field";
 import { SwitchRow } from "@/components/ui/choice";
-import {
-  cancelTeamRequestAction,
-  leaveTeamAction,
-  loadTicketInvitesPageAction,
-  loadTicketRequestsPageAction,
-  loadTicketSeekersPageAction,
-  loadTicketTeamsPageAction,
-  requestToJoinTeamAction,
-  respondToTeamInviteAction,
-  saveSeekerProfileAction,
-} from "@/app/actions/teams";
+import { leaveTeamAction } from "@/app/actions/teams";
 import { RSVP_STORAGE_PREFIX } from "@/components/rsvp/RsvpForm/helpers";
-import { EMPTY_CURSOR_PAGE, ShowMoreFooter, useCursorList, type CursorListPage } from "./useCursorList";
+import { ShowMoreFooter } from "./useCursorList";
+import { OtherSeekersList, TeamsLookingList } from "./TicketTeamSection/LookingLists";
+import type { TicketSeekerPanelProps } from "./TicketTeamSection/types";
+import { useSeekerPanel } from "./TicketTeamSection/useSeekerPanel";
 
 /** Drop a cached RSVP marker for this ticket so event pages stop showing "registered". */
 function forgetStoredTicket(token: string) {
@@ -138,176 +131,35 @@ export function TicketTeamCard(props: {
   );
 }
 
-type SeekerItem = { id: string; displayName: string; headline: string; skills: string[] };
-type LookingTeam = { id: string; name: string; size: number; maxSize: number | null; requested: boolean };
-type SeekerInvite = { id: string; teamName: string; size: number; maxSize: number | null };
-type SeekerRequest = { id: string; teamId: string; teamName: string };
-
-// Mirrors lib/validators.ts; the client bundle must not import server validators.
-const SEEKER_HEADLINE_MAX_LENGTH = 120;
-const SEEKER_MAX_SKILLS = 8;
-const SEEKER_SKILL_MAX_LENGTH = 30;
-const UNSAFE_TEXT = /[<>\u0000-\u001F\u007F]/;
-
-function parseSkills(value: string) {
-  return value
-    .split(",")
-    .map((skill) => skill.trim())
-    .filter(Boolean);
-}
-
-/** Field messages before the request; the server still decides. */
-function seekerProfileErrors(headline: string, skills: string[]) {
-  const errors: Record<string, string[]> = {};
-  const line = headline.trim();
-  if (!line) errors.headline = ["Add a short headline so teams know what you bring."];
-  else if (line.length > SEEKER_HEADLINE_MAX_LENGTH) errors.headline = [`Keep the headline to ${SEEKER_HEADLINE_MAX_LENGTH} characters.`];
-  else if (UNSAFE_TEXT.test(line)) errors.headline = ["Remove the < and > characters from the headline."];
-  if (skills.length > SEEKER_MAX_SKILLS) errors.skills = [`Add up to ${SEEKER_MAX_SKILLS} skills.`];
-  else if (skills.some((skill) => skill.length > SEEKER_SKILL_MAX_LENGTH)) errors.skills = [`Keep each skill to ${SEEKER_SKILL_MAX_LENGTH} characters.`];
-  else if (skills.some((skill) => UNSAFE_TEXT.test(skill))) errors.skills = ["Remove the < and > characters from your skills."];
-  return errors;
-}
-
-/**
- * Server field errors keyed for this form: Zod reports one skill's problem as
- * `skills.N`, which is shown on the Skills field.
- */
-function profileFieldErrors(fieldErrors: Record<string, string[]> | undefined) {
-  const errors: Record<string, string[]> = {};
-  for (const [key, messages] of Object.entries(fieldErrors ?? {})) {
-    const field = key === "skills" || key.startsWith("skills.") ? "skills" : key;
-    if (field !== "headline" && field !== "skills") continue;
-    errors[field] = [...(errors[field] ?? []), ...messages];
-  }
-  return errors;
-}
-
 /**
  * Looking for a team (SOLO_WITH_MATCHING) on a solo registrant's ticket page:
  * their own profile, invitations to answer, their requests, and, while they
  * are listed, the other seekers and the teams looking for members.
  */
-export function TicketSeekerPanel(props: {
-  ticketToken: string;
-  profile: { headline: string; skills: string[]; visible: boolean } | null;
-  /** First pages; "Show more" and searches fetch the rest through read-only actions. */
-  invites: CursorListPage<SeekerInvite>;
-  requests: CursorListPage<SeekerRequest>;
-  /** Null while the holder isn't listed (the lists are only for visible seekers). */
-  seekers: CursorListPage<SeekerItem> | null;
-  teams: CursorListPage<LookingTeam> | null;
-}) {
-  const { ticketToken, profile, seekers, teams } = props;
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
-  const [editing, setEditing] = useState(!profile);
-  const [headline, setHeadline] = useState(profile?.headline ?? "");
-  const [skills, setSkills] = useState(profile?.skills.join(", ") ?? "");
-  const [visible, setVisible] = useState(profile?.visible ?? true);
-  const [errors, setErrors] = useState<Record<string, string[]>>({});
-  const [syncedProfile, setSyncedProfile] = useState(profile);
-  const invites = useCursorList(props.invites, (_query, cursor) => loadTicketInvitesPageAction(ticketToken, { cursor }));
-  const requests = useCursorList(props.requests, (_query, cursor) => loadTicketRequestsPageAction(ticketToken, { cursor }));
-  const seekerList = useCursorList(seekers ?? EMPTY_CURSOR_PAGE, (query, cursor) => loadTicketSeekersPageAction(ticketToken, { query, cursor }));
-  const teamList = useCursorList(teams ?? EMPTY_CURSOR_PAGE, (query, cursor) => loadTicketTeamsPageAction(ticketToken, { query, cursor }));
-
-  /** Put the saved values back in the form fields. */
-  function resetForm(saved: typeof profile) {
-    setHeadline(saved?.headline ?? "");
-    setSkills(saved?.skills.join(", ") ?? "");
-    setVisible(saved?.visible ?? true);
-    setErrors({});
-  }
-
-  // After a save, the refresh brings the stored profile (trimmed, duplicate
-  // skills dropped). While the form is closed, show exactly that next time.
-  if (syncedProfile !== profile) {
-    setSyncedProfile(profile);
-    if (!editing) resetForm(profile);
-  }
-
-  function startEditing() {
-    resetForm(profile);
-    setFeedback(null);
-    setEditing(true);
-  }
-
-  function cancelEditing() {
-    resetForm(profile);
-    setEditing(false);
-  }
-
-  function run(id: string, task: () => Promise<void>) {
-    setFeedback(null);
-    setBusyId(id);
-    startTransition(async () => {
-      try {
-        await task();
-      } finally {
-        setBusyId(null);
-      }
-    });
-  }
-
-  function save(e: FormEvent) {
-    e.preventDefault();
-    const parsedSkills = parseSkills(skills);
-    const local = seekerProfileErrors(headline, parsedSkills);
-    setErrors(local);
-    if (Object.keys(local).length) return;
-    run("profile", async () => {
-      const res = await saveSeekerProfileAction(ticketToken, { headline, skills: parsedSkills, visible });
-      if (!res.ok) {
-        const shown = profileFieldErrors(res.fieldErrors);
-        setErrors(shown);
-        // Always say something: an error with no field to show it on goes in the banner.
-        if (!Object.keys(shown).length) setFeedback({ tone: "danger", message: res.error });
-        return;
-      }
-      setEditing(false);
-      setFeedback({ tone: "success", message: visible ? "You're on the Looking for a team list." : "You're hidden from the list." });
-      router.refresh();
-    });
-  }
-
-  function setListed(next: boolean) {
-    if (!profile) return;
-    run("visibility", async () => {
-      const res = await saveSeekerProfileAction(ticketToken, { headline: profile.headline, skills: profile.skills, visible: next });
-      if (!res.ok) return setFeedback({ tone: "danger", message: res.error });
-      setVisible(next);
-      router.refresh();
-    });
-  }
-
-  function answerInvite(requestId: string, accept: boolean) {
-    run(requestId, async () => {
-      const res = await respondToTeamInviteAction(ticketToken, requestId, accept);
-      if (!res.ok) return setFeedback({ tone: "danger", message: res.error });
-      setFeedback({ tone: "success", message: accept ? "You joined the team." : "Invitation declined." });
-      router.refresh();
-    });
-  }
-
-  function requestJoin(team: LookingTeam) {
-    run(team.id, async () => {
-      const res = await requestToJoinTeamAction(ticketToken, team.id);
-      if (!res.ok) return setFeedback({ tone: "danger", message: res.error });
-      setFeedback({ tone: "success", message: `Request sent to ${team.name}. Their leader can accept it from the team page.` });
-      router.refresh();
-    });
-  }
-
-  function withdraw(requestId: string) {
-    run(requestId, async () => {
-      const res = await cancelTeamRequestAction(ticketToken, requestId);
-      if (!res.ok) return setFeedback({ tone: "danger", message: res.error });
-      router.refresh();
-    });
-  }
+export function TicketSeekerPanel(props: TicketSeekerPanelProps) {
+  const { profile, seekers, teams } = props;
+  const s = useSeekerPanel(props);
+  const {
+    pending,
+    busyId,
+    feedback,
+    editing,
+    headline,
+    setHeadline,
+    skills,
+    setSkills,
+    visible,
+    setVisible,
+    errors,
+    invites,
+    requests,
+    startEditing,
+    cancelEditing,
+    save,
+    setListed,
+    answerInvite,
+    withdraw,
+  } = s;
 
   return (
     <Card as="section" aria-labelledby="ticket-seeker-title">
@@ -407,122 +259,9 @@ export function TicketSeekerPanel(props: {
         </div>
       ) : null}
 
-      {teams ? (
-        <div className="mt-5 border-t border-line pt-5">
-          <h3 className="text-label text-ink">
-            Teams looking for members
-            {!teamList.query.trim() && teamList.total > 0 ? <span className="font-normal text-ink-muted"> · {teamList.total}</span> : null}
-          </h3>
-          {teamList.total > 0 || teamList.items.length > 0 || teamList.query ? (
-            <div className="mt-2">
-              <label htmlFor="ticket-team-search" className="sr-only">Search teams by name</label>
-              <SearchInput
-                id="ticket-team-search"
-                placeholder="Search team names"
-                value={teamList.query}
-                onChange={(e) => teamList.setQuery(e.target.value)}
-                onClear={() => teamList.setQuery("")}
-                autoComplete="off"
-                maxLength={100}
-                className="py-2 sm:text-sm"
-              />
-            </div>
-          ) : null}
-          {teamList.error ? <Callout tone="danger" role="alert" className="mt-2">{teamList.error}</Callout> : null}
-          {teamList.loading === "replace" ? (
-            <p role="status" className="mt-2 text-body-ui text-ink-muted">Searching…</p>
-          ) : teamList.items.length === 0 ? (
-            <p className="mt-2 text-body-ui text-ink-muted">
-              {teamList.query.trim() ? "No teams match that search." : "No teams are looking for members right now."}
-            </p>
-          ) : (
-            <ul className="mt-2 flex flex-col divide-y divide-line" id={teamList.listId} aria-busy={teamList.loading != null}>
-              {teamList.items.map((team) => (
-                <li key={team.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <p className="min-w-0 text-body-ui text-ink">
-                    <span className="block truncate font-semibold">{team.name}</span>
-                    <span className="text-sm text-ink-muted">{team.maxSize != null ? `${team.size} of ${team.maxSize}` : team.size} members</span>
-                  </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={pending || team.requested}
-                    loading={busyId === team.id}
-                    onClick={() => requestJoin(team)}
-                  >
-                    {team.requested ? "Requested" : "Ask to join"}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {teamList.loading !== "replace" ? (
-            <ShowMoreFooter
-              shown={teamList.items.length}
-              total={teamList.total}
-              hasMore={teamList.nextCursor != null}
-              loading={teamList.loading === "more"}
-              onMore={teamList.loadMore}
-            />
-          ) : null}
-        </div>
-      ) : null}
+      {teams ? <TeamsLookingList s={s} /> : null}
 
-      {seekers ? (
-        <div className="mt-5 border-t border-line pt-5">
-          <h3 className="text-label text-ink">
-            Others looking for a team
-            {!seekerList.query.trim() && seekerList.total > 0 ? <span className="font-normal text-ink-muted"> · {seekerList.total}</span> : null}
-          </h3>
-          {seekerList.total > 0 || seekerList.items.length > 0 || seekerList.query ? (
-            <div className="mt-2">
-              <label htmlFor="ticket-seeker-search" className="sr-only">Search by skill, headline or first name</label>
-              <SearchInput
-                id="ticket-seeker-search"
-                placeholder="Search skills, headline or first name"
-                value={seekerList.query}
-                onChange={(e) => seekerList.setQuery(e.target.value)}
-                onClear={() => seekerList.setQuery("")}
-                autoComplete="off"
-                maxLength={100}
-                className="py-2 sm:text-sm"
-              />
-            </div>
-          ) : null}
-          {seekerList.error ? <Callout tone="danger" role="alert" className="mt-2">{seekerList.error}</Callout> : null}
-          {seekerList.loading === "replace" ? (
-            <p role="status" className="mt-2 text-body-ui text-ink-muted">Searching…</p>
-          ) : seekerList.items.length === 0 ? (
-            <p className="mt-2 text-body-ui text-ink-muted">{seekerList.query.trim() ? "No one matches that search." : "No one else is listed yet."}</p>
-          ) : (
-            <ul className="mt-2 flex flex-col divide-y divide-line" id={seekerList.listId} aria-busy={seekerList.loading != null}>
-              {seekerList.items.map((seeker) => (
-                <li key={seeker.id} className="flex min-w-0 items-start gap-3 py-2.5">
-                  <Avatar name={seeker.displayName} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-label text-ink">{seeker.displayName}</p>
-                    <p className="break-words text-sm text-ink-secondary">{seeker.headline}</p>
-                    {seeker.skills.length ? (
-                      <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Skills">
-                        {seeker.skills.map((skill) => <li key={skill}><Chip tone="outline" size="sm">{skill}</Chip></li>)}
-                      </ul>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {seekerList.loading !== "replace" ? (
-            <ShowMoreFooter
-              shown={seekerList.items.length}
-              total={seekerList.total}
-              hasMore={seekerList.nextCursor != null}
-              loading={seekerList.loading === "more"}
-              onMore={seekerList.loadMore}
-            />
-          ) : null}
-        </div>
-      ) : null}
+      {seekers ? <OtherSeekersList s={s} /> : null}
     </Card>
   );
 }
