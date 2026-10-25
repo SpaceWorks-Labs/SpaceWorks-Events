@@ -20,7 +20,7 @@ puts the website in the `spaceworks-events-frontend` container next to the
 backend, behind one Caddy (see [Hosting layouts](DEPLOYMENT_VPS.md#hosting-layouts)).
 This guide covers the Netlify variant.
 
-The [SpaceWorks reference](https://github.com/SpaceWorks-HQ/SpaceWorks) uses a
+The [SpaceWorks reference](https://github.com/SpaceWorks-Labs/SpaceWorks) uses a
 Vite frontend and Django API. Events keeps its Next.js UI, sessions and Server
 Actions through explicit backend contracts. Both deployments must use the same
 reviewed source revision. The backend uses `DEPLOYMENT_MODE=backend`, which hides

@@ -14,8 +14,8 @@ the way SpaceWorks publishes `spaceworks-backend` and `spaceworks-frontend`:
 
 | Image | Dockerfile target | Roles (the container command) |
 | --- | --- | --- |
-| `ghcr.io/spaceworks-hq/spaceworks-events-backend` | `runner` | `node server.js` (default): the application and API. `migrate`: apply pending database migrations once and exit. `worker`: send queued email within seconds. `beat`: run the timed jobs (payment holds and reminders, waitlists, event reminders, retention, backup alerts). Both run the same server with `SWE_PROCESS_ROLE` set, listening on loopback only. `node docker/vps/<tool>.mjs`: the VPS operator tools (setup, SMTP and external-storage configuration, certificate renewal, super-admin recovery, preflight, checks, SMTP check, smoke test), run as root. |
-| `ghcr.io/spaceworks-hq/spaceworks-events-frontend` | `frontend` | `node frontend/server.js`: the website alone (the `frontend/` workspace). It holds no database, Redis, storage or mail credentials and calls the backend through the authenticated gateway. |
+| `ghcr.io/spaceworks-labs/spaceworks-events-backend` | `runner` | `node server.js` (default): the application and API. `migrate`: apply pending database migrations once and exit. `worker`: send queued email within seconds. `beat`: run the timed jobs (payment holds and reminders, waitlists, event reminders, retention, backup alerts). Both run the same server with `SWE_PROCESS_ROLE` set, listening on loopback only. `node docker/vps/<tool>.mjs`: the VPS operator tools (setup, SMTP and external-storage configuration, certificate renewal, super-admin recovery, preflight, checks, SMTP check, smoke test), run as root. |
+| `ghcr.io/spaceworks-labs/spaceworks-events-frontend` | `frontend` | `node frontend/server.js`: the website alone (the `frontend/` workspace). It holds no database, Redis, storage or mail credentials and calls the backend through the authenticated gateway. |
 
 Releases before 0.9.1 published `spaceworks-events`, `-migrator` and `-ops`
 instead. Those packages have been deleted. An installation still on 0.9.0

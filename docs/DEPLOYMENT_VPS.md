@@ -10,7 +10,7 @@ check-in and the operator tools) and the **frontend** (the website). PostgreSQL
 standard images in the same Compose file. Node.js, PostgreSQL and Redis do not
 need to be installed on the host.
 
-This follows the service separation used by [SpaceWorks](https://github.com/SpaceWorks-HQ/SpaceWorks),
+This follows the service separation used by [SpaceWorks](https://github.com/SpaceWorks-Labs/SpaceWorks),
 with the transport and privacy requirements of this Events application. Use
 `compose.production.yml` through `scripts/vps-compose.sh`. The root
 `docker-compose.yml` is for development and `compose.staging.yml` is for tests.
@@ -46,7 +46,7 @@ with the transport and privacy requirements of this Events application. Use
 As root or a user with `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SpaceWorks-HQ/SpaceWorks-Events/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SpaceWorks-Labs/SpaceWorks-Events/main/install.sh | bash
 ```
 
 The bootstrap checks for Linux, the architecture, root or sudo and `curl`/`tar`,
@@ -215,7 +215,7 @@ public hostname. Build images locally below, or use a trusted build host and
 transfer the same versioned images to the VPS.
 
 ```bash
-git clone https://github.com/SpaceWorks-HQ/SpaceWorks-Events.git
+git clone https://github.com/SpaceWorks-Labs/SpaceWorks-Events.git
 cd SpaceWorks-Events
 git checkout <reviewed-commit-or-tag>
 SWE_VERSION="vps-$(git rev-parse --short HEAD)"
@@ -444,10 +444,10 @@ backup=/root/<time>
 version=$(cat "$backup/version")   # a release such as 0.1.0-main.42.<commit>, or vps-<commit>
 case "$version" in vps-*) ref=${version#vps-} ;; *) ref=v$version ;; esac
 commit=$(curl -fsSL -H 'Accept: application/vnd.github.sha' \
-  "https://api.github.com/repos/SpaceWorks-HQ/SpaceWorks-Events/commits/$ref")
+  "https://api.github.com/repos/SpaceWorks-Labs/SpaceWorks-Events/commits/$ref")
 release=/opt/spaceworks-events/releases/$commit
 mkdir -p "$release"
-curl -fsSL "https://codeload.github.com/SpaceWorks-HQ/SpaceWorks-Events/tar.gz/$commit" | tar -xz -C "$release" --strip-components=1
+curl -fsSL "https://codeload.github.com/SpaceWorks-Labs/SpaceWorks-Events/tar.gz/$commit" | tar -xz -C "$release" --strip-components=1
 echo "$commit" > "$release/.release"
 case "$version" in vps-*) ;; *) echo "$version" > "$release/.release-version" ;; esac
 install -d -m 0700 /etc/spaceworks-events

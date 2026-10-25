@@ -6,7 +6,7 @@
 SWE_DIR=${SWE_DIR:-/opt/spaceworks-events}
 SWE_DEFAULT_CONFIG_DIR=/etc/spaceworks-events
 # shellcheck disable=SC2034 # used by the scripts that source this file
-SWE_DEFAULT_REPOSITORY=SpaceWorks-HQ/SpaceWorks-Events
+SWE_DEFAULT_REPOSITORY=SpaceWorks-Labs/SpaceWorks-Events
 
 say() { printf '[Space Works Events] %s\n' "$*"; }
 warn() { printf '[Space Works Events] WARNING: %s\n' "$*" >&2; }

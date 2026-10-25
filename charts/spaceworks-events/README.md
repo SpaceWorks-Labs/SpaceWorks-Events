@@ -6,7 +6,7 @@ without Kubernetes, use the
 
 ## Images
 
-The chart uses one image, `ghcr.io/spaceworks-hq/spaceworks-events-backend`,
+The chart uses one image, `ghcr.io/spaceworks-labs/spaceworks-events-backend`,
 which every green build of `main` publishes (see
 [Releases and container images](../../docs/CONTAINER_IMAGES.md)). The web
 Deployment runs it as the application, the worker and beat Deployments run its
@@ -33,11 +33,11 @@ Create a `values-production.yaml` outside source control:
 
 ```yaml
 image:
-  repository: ghcr.io/spaceworks-hq/spaceworks-events-backend
+  repository: ghcr.io/spaceworks-labs/spaceworks-events-backend
   tag: "VERSION"
 migration:
   image:
-    repository: ghcr.io/spaceworks-hq/spaceworks-events-backend
+    repository: ghcr.io/spaceworks-labs/spaceworks-events-backend
     tag: "VERSION"
 ingress:
   enabled: true

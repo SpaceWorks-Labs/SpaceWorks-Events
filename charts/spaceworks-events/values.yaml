@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/spaceworks-hq/spaceworks-events-backend
+  repository: ghcr.io/spaceworks-labs/spaceworks-events-backend
   tag: ""
   pullPolicy: IfNotPresent
 
@@ -78,7 +78,7 @@ migration:
   # Runs the backend image's `migrate` role once per release.
   enabled: true
   image:
-    repository: ghcr.io/spaceworks-hq/spaceworks-events-backend
+    repository: ghcr.io/spaceworks-labs/spaceworks-events-backend
     tag: ""
     pullPolicy: IfNotPresent
   backoffLimit: 1

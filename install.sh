@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Space Works Events VPS installer:
-#   curl -fsSL https://raw.githubusercontent.com/SpaceWorks-HQ/SpaceWorks-Events/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/SpaceWorks-Labs/SpaceWorks-Events/main/install.sh | bash
 # Installs the latest GitHub Release (or --release TAG) with its published
 # container images, or builds a branch or commit from source with --ref. It
 # downloads that source into temporary storage and runs its guided setup, which
@@ -39,7 +39,7 @@ What it does
 Options
   --release TAG install or update to this release (default: the latest release)
   --ref REF     build a branch, tag or commit from source instead of a release
-  --repo O/N    install from a fork (default: SpaceWorks-HQ/SpaceWorks-Events)
+  --repo O/N    install from a fork (default: SpaceWorks-Labs/SpaceWorks-Events)
   --dir PATH    installation directory (default: /opt/spaceworks-events)
   --update      update an existing installation without the menu
   --help        show this guide and exit
@@ -140,9 +140,9 @@ main() {
   if [[ -z "$repository" && -z "$installed" && -z "$pending" && "$action" != update ]]; then
     repository=$(prompt "
 Install from which GitHub repository? Press Enter for the official one.
-Repository [SpaceWorks-HQ/SpaceWorks-Events]: ")
+Repository [SpaceWorks-Labs/SpaceWorks-Events]: ")
   fi
-  repository=${repository:-SpaceWorks-HQ/SpaceWorks-Events}
+  repository=${repository:-SpaceWorks-Labs/SpaceWorks-Events}
   [[ "$repository" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9_.-]{1,100}$ && "$repository" != */. && "$repository" != */.. ]] \
     || die 'The repository must be a GitHub owner/name.'
   RUN_ENV=(env "SWE_DIR=$install_dir" "SWE_REPOSITORY=$repository")

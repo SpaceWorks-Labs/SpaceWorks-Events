@@ -151,10 +151,10 @@ On a 64-bit Linux server (Ubuntu/Debian, Fedora/RHEL/Alma/Rocky, Arch or openSUS
 as root or a user with `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SpaceWorks-HQ/SpaceWorks-Events/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SpaceWorks-Labs/SpaceWorks-Events/main/install.sh | bash
 ```
 
-It checks the server, picks the latest [release](https://github.com/SpaceWorks-HQ/SpaceWorks-Events/releases)
+It checks the server, picks the latest [release](https://github.com/SpaceWorks-Labs/SpaceWorks-Events/releases)
 and asks every question first: the layout (by default the website and API
 containers both on this VPS, at `events.example.com` and `api.events.example.com`;
 or one app container on one hostname; or the website on Netlify), hostnames, the
@@ -230,7 +230,7 @@ repository root**, and use `frontend/netlify.toml`. Deploy the same source revis
 on both hosts. Follow the [Netlify + VPS guide](docs/DEPLOYMENT_SPLIT.md) for DNS,
 OAuth, exact environment settings, development and verification.
 
-The [SpaceWorks reference](https://github.com/SpaceWorks-HQ/SpaceWorks) uses a
+The [SpaceWorks reference](https://github.com/SpaceWorks-Labs/SpaceWorks) uses a
 Vite/Django split. Events preserves its Next.js server rendering and uses explicit,
 authenticated backend contracts for this arrangement.
 
@@ -263,7 +263,7 @@ flowchart LR
 ```
 
 <p>
-  <a href="https://render.com/deploy?repo=https://github.com/SpaceWorks-HQ/SpaceWorks-Events">
+  <a href="https://render.com/deploy?repo=https://github.com/SpaceWorks-Labs/SpaceWorks-Events">
     <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" />
   </a>
 </p>
@@ -325,8 +325,8 @@ layout.
 - **Organisers' own brands come first** on their event pages: logos, covers and accent colours are never
   restyled.
 
-The brand kit lives in the [Space Works design system](https://github.com/SpaceWorks-HQ/SpaceWorks-Design)
-(`SpaceWorks-HQ/SpaceWorks-Design`); how this app applies it is in [docs/DESIGN.md](docs/DESIGN.md).
+The brand kit lives in the [Space Works design system](https://github.com/SpaceWorks-Labs/SpaceWorks-Design)
+(`SpaceWorks-Labs/SpaceWorks-Design`); how this app applies it is in [docs/DESIGN.md](docs/DESIGN.md).
 Rebuild the README artwork with `npm run readme:art`.
 
 ## Documentation
@@ -366,13 +366,13 @@ npm run readme:art           # README banner and colour swatches
 
 Bug reports, ideas and pull requests are all welcome.
 
-- [Report a bug](https://github.com/SpaceWorks-HQ/SpaceWorks-Events/issues/new) or
-  [start a discussion](https://github.com/SpaceWorks-HQ/SpaceWorks-Events/discussions).
+- [Report a bug](https://github.com/SpaceWorks-Labs/SpaceWorks-Events/issues/new) or
+  [start a discussion](https://github.com/SpaceWorks-Labs/SpaceWorks-Events/discussions).
 - Branch from `dev` (`feat/<short-name>` or `fix/<short-name>`) and open your pull request against `dev`,
   the integration branch.
 - `main` is production. Only [@Shaan-Shoukath](https://github.com/Shaan-Shoukath) merges to `main`.
 - Found a security issue? Please report it privately through GitHub's
-  [private vulnerability reporting](https://github.com/SpaceWorks-HQ/SpaceWorks-Events/security/advisories/new),
+  [private vulnerability reporting](https://github.com/SpaceWorks-Labs/SpaceWorks-Events/security/advisories/new),
   not in a public issue.
 
 Read the [contributing guide](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before your first pull request.
@@ -386,7 +386,7 @@ this project grew from.** Thank you, Abhiram, for building it in the open.
 
 - **Member IDs** are inspired by Aarannu, a community digital ID project by Shaan Shoukath.
 - **Brand.** The Space Works identity (logo, colours, voice) comes from the
-  [Space Works design system](https://github.com/SpaceWorks-HQ/SpaceWorks-Design).
+  [Space Works design system](https://github.com/SpaceWorks-Labs/SpaceWorks-Design).
 - **Fonts.** Gilroy by Radomir Tinkov, and
   [Unbounded](https://github.com/googlefonts/unbounded) by the Unbounded Project Authors under the
   SIL Open Font License 1.1.

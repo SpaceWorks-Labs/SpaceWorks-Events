@@ -155,7 +155,7 @@ It must print `Production environment preflight passed.`
 
 ## 7. Render (application)
 
-1. Push the repository to GitHub (`SpaceWorks-HQ/SpaceWorks-Events`).
+1. Push the repository to GitHub (`SpaceWorks-Labs/SpaceWorks-Events`).
 2. In Render choose **New → Blueprint**, connect the repository, and select
    the branch to deploy. Render reads [`render.yaml`](../render.yaml): one
    Docker web service, free plan, health check `/api/health`.

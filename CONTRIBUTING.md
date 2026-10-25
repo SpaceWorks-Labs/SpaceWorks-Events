@@ -2,15 +2,15 @@
 
 Thanks for helping make free maker and community events easier to run. Space Works
 Events is built in the open at
-[github.com/SpaceWorks-HQ/SpaceWorks-Events](https://github.com/SpaceWorks-HQ/SpaceWorks-Events).
+[github.com/SpaceWorks-Labs/SpaceWorks-Events](https://github.com/SpaceWorks-Labs/SpaceWorks-Events).
 
 ## Ways to help
 
-- **Report a bug.** [Open an issue](https://github.com/SpaceWorks-HQ/SpaceWorks-Events/issues/new)
+- **Report a bug.** [Open an issue](https://github.com/SpaceWorks-Labs/SpaceWorks-Events/issues/new)
   with what you expected, what happened, and the steps to repeat it. Include your
   browser or device and, for self-hosted installs, the version you run.
 - **Suggest an idea.** Start a thread in
-  [Discussions](https://github.com/SpaceWorks-HQ/SpaceWorks-Events/discussions). Describe the
+  [Discussions](https://github.com/SpaceWorks-Labs/SpaceWorks-Events/discussions). Describe the
   problem your community has before the solution you have in mind.
 - **Send a pull request.** For anything larger than a small fix, open an issue or
   discussion first so we can agree on the approach.

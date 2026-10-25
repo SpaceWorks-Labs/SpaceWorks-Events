@@ -1,5 +1,5 @@
 /** Public links for the Space Works Events open-source repository, shared by the footer and public pages. */
-export const GITHUB_REPO = "SpaceWorks-HQ/SpaceWorks-Events";
+export const GITHUB_REPO = "SpaceWorks-Labs/SpaceWorks-Events";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
 export const SETUP_GUIDE_URL = `${GITHUB_URL}/blob/main/docs/DEPLOYMENT_VPS.md`;
 /** The one-line VPS installer (install.sh on main), as shown on the landing page and in the README. */

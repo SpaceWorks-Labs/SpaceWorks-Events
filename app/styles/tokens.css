@@ -3,7 +3,7 @@
  * shadow, and motion value used by components comes from here; components
  * never hard-code hex values.
  *
- * Source of truth: SpaceWorks-HQ/SpaceWorks-Design (`tokens/tokens.css`,
+ * Source of truth: SpaceWorks-Labs/SpaceWorks-Design (`tokens/tokens.css`,
  * `docs/ui-brand-spec.md`). The `--yy-` prefix is kept from the upstream Yuyu
  * code base so existing utilities keep working; the values are Space Works.
  * Every text/background pair below reaches WCAG AA (4.5:1); disabled text is

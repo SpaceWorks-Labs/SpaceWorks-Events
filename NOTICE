@@ -6,7 +6,7 @@ the terms of the GNU Affero General Public License as published by the Free
 Software Foundation, either version 3 of the License, or (at your option) any
 later version. See the LICENSE file for the full text.
 
-Source code: https://github.com/SpaceWorks-HQ/SpaceWorks-Events
+Source code: https://github.com/SpaceWorks-Labs/SpaceWorks-Events
 
 Space Works Events is built on Yuyu by Abhiram N J
 (https://github.com/twilighty-abhi/yuyu), the event platform whose UX,
@@ -17,7 +17,7 @@ Member IDs are inspired by Aarannu, a community digital ID project by
 Shaan Shoukath.
 
 The Space Works name, logo and visual identity come from the Space Works
-design system (https://github.com/SpaceWorks-HQ/SpaceWorks-Design).
+design system (https://github.com/SpaceWorks-Labs/SpaceWorks-Design).
 
 Fonts in public/brand/fonts keep their own licences and are not covered by
 the AGPL (see public/brand/fonts/LICENSES):
