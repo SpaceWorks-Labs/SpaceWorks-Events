@@ -20,7 +20,7 @@ function encryptionKey() {
   }
   // Its own HKDF label keeps webhook-secret ciphertext from being
   // interchangeable with MFA seeds or instance settings secrets.
-  return Buffer.from(crypto.hkdfSync("sha256", key, Buffer.alloc(0), "yuyu-org-webhook-signing-secret-v1", 32));
+  return Buffer.from(crypto.hkdfSync("sha256", key, Buffer.alloc(0), "spaceworks-org-webhook-signing-secret-v1", 32));
 }
 
 export function encryptWebhookSecret(value: string) {

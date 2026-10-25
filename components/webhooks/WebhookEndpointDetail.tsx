@@ -116,7 +116,7 @@ export function WebhookEndpointDetail(props: {
 
       {endpoint.state === "auto_disabled" ? (
         <Callout tone="danger" title="Turned off automatically">
-          Yuyu stopped sending to this endpoint after {props.autoDisableAfter} failed deliveries in a row{endpoint.disabledLabel ? ` (${endpoint.disabledLabel})` : ""}. Fix the receiver, send a test, then turn it back on.
+          Space Works stopped sending to this endpoint after {props.autoDisableAfter} failed deliveries in a row{endpoint.disabledLabel ? ` (${endpoint.disabledLabel})` : ""}. Fix the receiver, send a test, then turn it back on.
         </Callout>
       ) : null}
 
@@ -254,7 +254,7 @@ export function WebhookEndpointDetail(props: {
       <ConfirmationDialog
         open={confirm === "disable"}
         title="Turn off this endpoint?"
-        message="Yuyu stops sending events to it. Events that are waiting to be retried are marked as failed; you can redeliver them later."
+        message="Space Works stops sending events to it. Events that are waiting to be retried are marked as failed; you can redeliver them later."
         confirmLabel="Disable endpoint"
         loading={pending}
         onCancel={() => setConfirm(null)}

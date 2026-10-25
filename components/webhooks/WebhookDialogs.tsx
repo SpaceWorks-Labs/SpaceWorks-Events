@@ -16,10 +16,10 @@ export function WebhookSecretDialog(props: { secret: string | null; onClose: () 
   return (
     <Dialog open={Boolean(props.secret)} onOpenChange={(next) => { if (!next) props.onClose(); }}>
       <DialogContent size="md">
-        <DialogHeader title="Copy your signing secret" description="Use it to check the x-yuyu-signature header on every request." />
+        <DialogHeader title="Copy your signing secret" description="Use it to check the x-spaceworks-signature header on every request." />
         <DialogBody className="flex flex-col gap-4">
           <Callout tone="warning">
-            Yuyu shows this secret only once. Store it with the receiving application; if it is lost, rotate it.
+            Space Works shows this secret only once. Store it with the receiving application; if it is lost, rotate it.
           </Callout>
           <code data-testid="webhook-secret" className="block select-all break-all rounded-md bg-inverse px-4 py-3 font-mono text-sm text-on-inverse">
             {props.secret}
@@ -80,11 +80,11 @@ export function WebhookEndpointFormDialog(props: {
         >
           <DialogHeader
             title={props.mode === "create" ? "Add webhook endpoint" : "Edit webhook endpoint"}
-            description="Yuyu sends a signed POST request to this URL when the events you choose happen."
+            description="Space Works sends a signed POST request to this URL when the events you choose happen."
           />
           <DialogBody className="flex flex-col gap-5">
             <Field label="Endpoint URL" required helperText="A public https:// address on port 443 or 8443.">
-              <Input name="url" type="url" inputMode="url" autoComplete="off" spellCheck={false} maxLength={2048} placeholder="https://example.com/yuyu-webhooks" defaultValue={props.initial?.url} />
+              <Input name="url" type="url" inputMode="url" autoComplete="off" spellCheck={false} maxLength={2048} placeholder="https://example.com/spaceworks-webhooks" defaultValue={props.initial?.url} />
             </Field>
             <Field label="Description" optional>
               <Input name="description" maxLength={200} defaultValue={props.initial?.description} />

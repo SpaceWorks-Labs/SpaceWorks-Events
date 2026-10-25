@@ -240,7 +240,7 @@ test("teams submit from their team page and a solo registrant through the emaile
   const token = String((await outboxPayload("submission-link", (payload) => payload.rsvpId === rsvp.id)).token);
   const page = await context.newPage();
   await page.goto(`/submit/${token}`);
-  // The solo project page has Yuyu's site chrome: a main landmark for the skip link.
+  // The solo project page has the Space Works site chrome: a main landmark for the skip link.
   await expect(page.locator("main#main-content")).toContainText("Your project");
   await waitForHydration(page, "form button");
   await page.getByLabel(/^Project title/).fill(`Solo Project ${suffix}`);

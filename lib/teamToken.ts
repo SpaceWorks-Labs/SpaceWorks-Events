@@ -56,7 +56,7 @@ export function joinTokenFromInput(value: unknown): string | null {
   } catch {
     return null;
   }
-  // A link pasted without its scheme ("yuyu.example/org/event/team/…") keeps
+  // A link pasted without its scheme ("events.example/org/event/team/…") keeps
   // the host as a leading segment, so only the last four segments count.
   const segments = path.split("/").filter(Boolean);
   if (segments.length < 4 || segments[segments.length - 2] !== "team") return null;

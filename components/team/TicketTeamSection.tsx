@@ -20,13 +20,14 @@ import {
   respondToTeamInviteAction,
   saveSeekerProfileAction,
 } from "@/app/actions/teams";
+import { RSVP_STORAGE_PREFIX } from "@/components/rsvp/RsvpForm/helpers";
 import { EMPTY_CURSOR_PAGE, ShowMoreFooter, useCursorList, type CursorListPage } from "./useCursorList";
 
 /** Drop a cached RSVP marker for this ticket so event pages stop showing "registered". */
 function forgetStoredTicket(token: string) {
   try {
     for (const key of Object.keys(localStorage)) {
-      if (!key.startsWith("yuyu:rsvp:")) continue;
+      if (!key.startsWith(RSVP_STORAGE_PREFIX)) continue;
       try {
         const value = localStorage.getItem(key);
         const parsed = value ? (JSON.parse(value) as { ticketToken?: string }) : null;

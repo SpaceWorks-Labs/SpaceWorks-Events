@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chromeFor } from "@/components/chrome/ChromeSwitch";
 
 describe("chromeFor", () => {
-  it("gives the bearer capability pages Yuyu's site chrome (header, main landmark and page gutter)", () => {
+  it("gives the bearer capability pages the Space Works site chrome (header, main landmark and page gutter)", () => {
     expect(chromeFor("/ticket/abc")).toBe("site");
     // The team management page renders no chrome of its own (docs/TEAMS.md).
     expect(chromeFor("/team/abc")).toBe("site");

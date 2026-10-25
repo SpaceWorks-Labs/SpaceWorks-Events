@@ -265,7 +265,7 @@ test("the team page shows the join link and is a private, unindexed page", async
   await expectCapabilityHeaders(await page.request.get(`/team/${manageToken}`), "/team/:token");
 
   await page.goto(`/team/${manageToken}`);
-  // The page sits in Yuyu's site chrome: header, a main landmark (skip-link target) and the page gutter.
+  // The page sits in the Space Works site chrome: header, a main landmark (skip-link target) and the page gutter.
   const main = page.locator("main#main-content");
   await expect(main).toBeVisible();
   const joinCard = main.locator("section", { has: page.locator("#team-join-link") });
@@ -359,11 +359,11 @@ test("a solo registrant joins the team by pasting its link on their ticket page"
   await expect(card).toBeVisible();
   await waitForHydration(page, 'section:has(#ticket-join-team-title) input');
   // A management link is not a join link and is refused.
-  await card.getByRole("textbox", { name: /^Team link/ }).fill(`https://yuyu.example/team/${manageToken}`);
+  await card.getByRole("textbox", { name: /^Team link/ }).fill(`https://events.example/team/${manageToken}`);
   await card.getByRole("button", { name: "Join this team" }).click();
   await expect(card.getByText(/Paste the full team link/)).toBeVisible();
   // The join link, pasted without its scheme, moves this registration in.
-  await card.getByRole("textbox", { name: /^Team link/ }).fill(`yuyu.example${joinPath}`);
+  await card.getByRole("textbox", { name: /^Team link/ }).fill(`events.example${joinPath}`);
   await card.getByRole("button", { name: "Join this team" }).click();
   await expect(page.getByRole("heading", { level: 2, name: teamName })).toBeVisible();
 

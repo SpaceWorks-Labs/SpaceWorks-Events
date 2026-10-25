@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 /**
  * Webhook signing (docs/WEBHOOKS.md#verifying-signatures).
  *
- * `x-yuyu-signature: t=<unix seconds>,v1=<hex HMAC-SHA256>` where the HMAC key
+ * `x-spaceworks-signature: t=<unix seconds>,v1=<hex HMAC-SHA256>` where the HMAC key
  * is the full endpoint secret (including its `whsec_` prefix, UTF-8) and the
  * signed message is `<t>.<raw request body>`.
  */

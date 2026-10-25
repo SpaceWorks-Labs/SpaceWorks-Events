@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chromeFor } from "@/components/chrome/ChromeSwitch";
 
 describe("chromeFor on entrant capability pages", () => {
-  it("gives the solo submission link and the team page Yuyu's site chrome (header, main landmark, page gutter)", () => {
+  it("gives the solo submission link and the team page the Space Works site chrome (header, main landmark, page gutter)", () => {
     // /submit/{token} renders no chrome of its own (docs/HACKATHON.md).
     expect(chromeFor("/submit/abc")).toBe("site");
     expect(chromeFor("/team/abc")).toBe("site");

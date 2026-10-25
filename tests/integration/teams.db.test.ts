@@ -797,7 +797,7 @@ describe.sequential("team registration integration", () => {
     const request = await createJoinRequest({ direction: "REQUEST", seeker: holder, teamId: waitingTeam.team.id });
     if (!request.ok || !request.data) throw new Error("join request failed");
 
-    const link = `https://yuyu.example${teamJoinPath(orgSlug, event.slug, team.joinToken)}`;
+    const link = `https://events.example${teamJoinPath(orgSlug, event.slug, team.joinToken)}`;
     await expect(joinTeamWithExistingRsvp(holder, link)).resolves.toEqual({
       ok: true,
       data: { status: RsvpStatus.CONFIRMED, teamName: "Link joiners" },
@@ -839,7 +839,7 @@ describe.sequential("team registration integration", () => {
     for (const token of [otherTeam.joinToken, foreignTeam.joinToken]) {
       await expect(joinTeamWithExistingRsvp(holder, token)).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/no longer valid/) });
     }
-    await expect(joinTeamWithExistingRsvp(holder, `https://yuyu.example/team/${full.joinToken}`)).resolves.toMatchObject({ ok: false });
+    await expect(joinTeamWithExistingRsvp(holder, `https://events.example/team/${full.joinToken}`)).resolves.toMatchObject({ ok: false });
     await expect(joinTeamWithExistingRsvp(holder, full.joinToken)).resolves.toEqual({ ok: false, error: "This team is already full." });
 
     await prisma.rSVP.update({ where: { id: solo.rsvpId }, data: { checkedInAt: new Date() } });

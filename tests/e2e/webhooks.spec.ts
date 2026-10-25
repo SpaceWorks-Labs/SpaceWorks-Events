@@ -40,7 +40,7 @@ test.beforeAll(async () => {
     });
   });
   await new Promise<void>((resolve) => receiver.listen(0, "127.0.0.1", resolve));
-  receiverUrl = `http://127.0.0.1:${(receiver.address() as AddressInfo).port}/yuyu-hooks`;
+  receiverUrl = `http://127.0.0.1:${(receiver.address() as AddressInfo).port}/spaceworks-hooks`;
 
   const organisation = await prisma.organisation.create({ data: { name: `Webhooks ${suffix.slice(0, 8)}`, slug: orgSlug } });
   organisationId = organisation.id;
@@ -110,8 +110,8 @@ test("an admin adds an endpoint, sees the secret once and sends a test", async (
 
   expect(received).toHaveLength(1);
   const [request] = received;
-  expect(request!.headers["x-yuyu-event-type"]).toBe("ping");
-  const match = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(String(request!.headers["x-yuyu-signature"]));
+  expect(request!.headers["x-spaceworks-event-type"]).toBe("ping");
+  const match = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(String(request!.headers["x-spaceworks-signature"]));
   expect(match).not.toBeNull();
   const expected = crypto.createHmac("sha256", secret).update(`${match![1]}.${request!.body}`).digest("hex");
   expect(match![2]).toBe(expected);

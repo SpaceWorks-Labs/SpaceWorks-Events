@@ -19,10 +19,10 @@ describe("EventManageMore first render", () => {
   it("renders the embed snippets the same whether or not a window exists, so hydration matches the server HTML", () => {
     const server = renderToString(createElement(EventManageMore, { organisationSlug: "org", event }));
     // The browser's first (hydrating) render must not read window.location: React #418 otherwise.
-    vi.stubGlobal("window", { location: { origin: "https://yuyu.example" } });
+    vi.stubGlobal("window", { location: { origin: "https://events.example" } });
     const hydrating = renderToString(createElement(EventManageMore, { organisationSlug: "org", event }));
     expect(hydrating).toBe(server);
-    expect(server).not.toContain("https://yuyu.example");
+    expect(server).not.toContain("https://events.example");
     expect(server).toContain("/embed/org/hack");
   });
 });

@@ -182,7 +182,7 @@ export function parseWebhookUrl(raw: string, options: { allowPrivate: boolean })
   }
   const httpAllowed = options.allowPrivate && url.protocol === "http:";
   if (url.protocol !== "https:" && !httpAllowed) return { ok: false, error: "Webhook URLs must use https://." };
-  if (url.username || url.password) return { ok: false, error: "Remove the user name or password from the URL; Yuyu signs each request instead." };
+  if (url.username || url.password) return { ok: false, error: "Remove the user name or password from the URL; Space Works signs each request instead." };
   url.hash = "";
   const host = bareHostname(url);
   if (!host) return { ok: false, error: "Enter a valid URL, starting with https://." };
@@ -215,7 +215,7 @@ export function webhookHostLabel(rawUrl: string) {
 export type ResolvedAddress = { address: string; family: 4 | 6 };
 type Resolver = (hostname: string) => Promise<ResolvedAddress[]>;
 
-const RESOLVER_KEY = Symbol.for("yuyu.webhooks.testResolver");
+const RESOLVER_KEY = Symbol.for("spaceworks.webhooks.testResolver");
 
 async function systemResolver(hostname: string): Promise<ResolvedAddress[]> {
   const records = await dns.promises.lookup(hostname, { all: true, verbatim: true });

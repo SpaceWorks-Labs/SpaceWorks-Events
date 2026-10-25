@@ -133,10 +133,10 @@ describe("webhook target rules", () => {
   });
 
   it("accepts public https URLs on 443 and 8443 and drops the fragment", () => {
-    expect(parseWebhookUrl("https://hooks.example.com/yuyu?x=1#frag", strict)).toEqual({ ok: true, url: "https://hooks.example.com/yuyu?x=1", host: "hooks.example.com" });
-    expect(parseWebhookUrl("https://hooks.example.com:8443/yuyu", strict).ok).toBe(true);
-    expect(parseWebhookUrl("https://hooks.example.com:443/yuyu", strict).ok).toBe(true);
-    expect(parseWebhookUrl("https://93.184.216.34/yuyu", strict).ok).toBe(true);
+    expect(parseWebhookUrl("https://hooks.example.com/spaceworks?x=1#frag", strict)).toEqual({ ok: true, url: "https://hooks.example.com/spaceworks?x=1", host: "hooks.example.com" });
+    expect(parseWebhookUrl("https://hooks.example.com:8443/spaceworks", strict).ok).toBe(true);
+    expect(parseWebhookUrl("https://hooks.example.com:443/spaceworks", strict).ok).toBe(true);
+    expect(parseWebhookUrl("https://93.184.216.34/spaceworks", strict).ok).toBe(true);
   });
 
   it("allows http and loopback only with the development/test flag", () => {

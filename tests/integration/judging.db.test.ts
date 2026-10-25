@@ -588,7 +588,7 @@ describe.sequential("hackathon judging integration", () => {
     expect(canManageWebhooks(await getMembership(judge.userId, organisationId))).toBe(false);
     authMock.mockResolvedValue({ user: { id: judge.userId } });
     try {
-      const response = await exportAttendees(new Request("https://yuyu.example.test/api/exports"), { params: Promise.resolve({ eventId: event.id }) });
+      const response = await exportAttendees(new Request("https://events.example.test/api/exports"), { params: Promise.resolve({ eventId: event.id }) });
       expect(response.status).toBe(404);
     } finally {
       authMock.mockResolvedValue(null);

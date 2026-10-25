@@ -47,7 +47,7 @@ describe("saved view params", () => {
   });
 
   it("round-trips through the address bar and clears other surfaces' keys", () => {
-    const url = new URL("https://yuyu.example/dashboard/club/event/e1?tab=guests&sub=people&status=waitlist&scored=unscored&show=judges");
+    const url = new URL("https://events.example/dashboard/club/event/e1?tab=guests&sub=people&status=waitlist&scored=unscored&show=judges");
     expect(viewParamsFromSearchParams("GUESTS_PEOPLE", url.searchParams)).toEqual({ status: "waitlist" });
     applyViewParamsToUrl(url, "JUDGING_RESULTS", { scored: "unscored", q: "robo", status: "x" });
     expect(url.searchParams.get("tab")).toBe("guests");
@@ -61,7 +61,7 @@ describe("saved view params", () => {
   });
 
   it("builds a link to the surface's tab with the view applied", () => {
-    const link = new URL(viewLink("https://yuyu.example/dashboard/club/event/e1?tab=overview&q=old", "JUDGING_SUBMISSIONS", { status: "DRAFT" }));
+    const link = new URL(viewLink("https://events.example/dashboard/club/event/e1?tab=overview&q=old", "JUDGING_SUBMISSIONS", { status: "DRAFT" }));
     expect(link.searchParams.get("tab")).toBe("judging");
     expect(link.searchParams.get("sub")).toBe("judging-submissions");
     expect(link.searchParams.get("status")).toBe("DRAFT");

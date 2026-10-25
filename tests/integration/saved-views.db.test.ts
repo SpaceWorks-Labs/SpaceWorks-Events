@@ -294,7 +294,7 @@ describe.sequential("filters behind the presets", () => {
     await rsvp(event);
     await rsvp(event);
     await rsvp(event, { status: RsvpStatus.WAITLISTED });
-    const page = await listAttendeesPage({ kind: "event", eventId: event.id, organisationId }, { status: "notCheckedIn" }, { origin: "https://yuyu.example", teamMode: false });
+    const page = await listAttendeesPage({ kind: "event", eventId: event.id, organisationId }, { status: "notCheckedIn" }, { origin: "https://events.example", teamMode: false });
     expect(page.rows).toHaveLength(2);
     expect(page.counts).toMatchObject({ all: 4, going: 3, checkedIn: 1, notCheckedIn: 2, waitlist: 1 });
   });

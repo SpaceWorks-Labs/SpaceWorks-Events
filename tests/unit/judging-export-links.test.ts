@@ -46,7 +46,7 @@ function renderResults() {
       criteria: [],
       judgingStatus: "CLOSED",
       resultsPublishedAt: null,
-      resultsUrl: "https://yuyu.example/org/hack/results",
+      resultsUrl: "https://events.example/org/hack/results",
       exportHref: "/api/exports/events/event_1/judging",
       timezone: "UTC",
     }),

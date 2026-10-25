@@ -1,5 +1,6 @@
 "use client";
 
+import { storageKey } from "@/components/rsvp/RsvpForm/helpers";
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -113,7 +114,7 @@ export function JoinWithSavedTicket(props: { orgSlug: string; eventSlug: string;
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
-        const raw = window.localStorage.getItem(`yuyu:rsvp:${orgSlug}:e:${eventSlug}`);
+        const raw = window.localStorage.getItem(storageKey({ orgSlug, eventSlug }));
         const parsed = raw ? (JSON.parse(raw) as { ticketToken?: unknown }) : null;
         setTicketToken(typeof parsed?.ticketToken === "string" ? parsed.ticketToken : null);
       } catch {

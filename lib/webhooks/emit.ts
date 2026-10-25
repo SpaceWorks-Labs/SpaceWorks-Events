@@ -49,7 +49,7 @@ export type WebhookEmission =
   | { type: "event.published" | "event.cancelled"; eventId: string; previousStatus: EventStatus | null }
   | { type: "feedback.submitted"; feedbackResponseId: string };
 
-const PENDING_KEY = Symbol.for("yuyu.webhooks.pendingEmits");
+const PENDING_KEY = Symbol.for("spaceworks.webhooks.pendingEmits");
 
 function pendingEmits() {
   const g = globalThis as typeof globalThis & { [PENDING_KEY]?: Set<Promise<void>> };
@@ -239,7 +239,7 @@ export async function enqueueWebhookPing(endpoint: { id: string; organisation: {
     type: "ping" satisfies WebhookDataType,
     createdAt: new Date(),
     organisation: endpoint.organisation,
-    data: { endpointId: endpoint.id, message: "This is a test event from Yuyu." },
+    data: { endpointId: endpoint.id, message: "This is a test event from Space Works Events." },
   });
   const row = await prisma.webhookDelivery.create({
     data: {

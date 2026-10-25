@@ -35,7 +35,7 @@ const STALE_LEASE_MS = 5 * 60_000;
 const BATCH_SIZE = 25;
 const CONCURRENCY = 5;
 const RESPONSE_EXCERPT_BYTES = 512;
-const USER_AGENT = "Yuyu-Webhooks/1";
+const USER_AGENT = "SpaceWorks-Webhooks/1";
 
 /** Nominal wait after failed attempt n (1-based): 1 m, 5 m, 30 m, 1 h, 3 h, 6 h, 12 h ≈ 22.6 h in total. */
 export const WEBHOOK_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 30 * 60_000, 60 * 60_000, 3 * 60 * 60_000, 6 * 60 * 60_000, 12 * 60 * 60_000] as const;
@@ -247,9 +247,9 @@ async function deliverClaimed(row: ClaimedRow): Promise<DeliveryOutcome> {
       headers: {
         "content-type": "application/json",
         "user-agent": USER_AGENT,
-        "x-yuyu-event-id": row.eventId,
-        "x-yuyu-event-type": row.eventType,
-        "x-yuyu-signature": webhookSignatureHeader(secret, timestamp, body),
+        "x-spaceworks-event-id": row.eventId,
+        "x-spaceworks-event-type": row.eventType,
+        "x-spaceworks-signature": webhookSignatureHeader(secret, timestamp, body),
       },
     });
     statusCode = result.statusCode;

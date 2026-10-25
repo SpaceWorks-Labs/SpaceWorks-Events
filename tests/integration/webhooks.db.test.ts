@@ -92,7 +92,7 @@ describe.sequential("organisation webhooks", () => {
       });
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    receiverUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/hooks/yuyu`;
+    receiverUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/hooks/spaceworks`;
     // A port that was just released: nothing listens there.
     const probe = http.createServer();
     await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
@@ -171,7 +171,7 @@ describe.sequential("organisation webhooks", () => {
 
     const audit = await prisma.auditEvent.findFirstOrThrow({ where: { action: "WEBHOOK_ENDPOINT_CREATED", targetId: endpointId } });
     expect(audit.metadata).toEqual({ host: new URL(receiverUrl).host, eventTypeCount: WEBHOOK_EVENT_TYPES.length });
-    expect(JSON.stringify(audit.metadata)).not.toContain("/hooks/yuyu");
+    expect(JSON.stringify(audit.metadata)).not.toContain("/hooks/spaceworks");
   });
 
   it("refuses members, co-organisers and other organisations' admins", async () => {
@@ -264,13 +264,13 @@ describe.sequential("organisation webhooks", () => {
     expect(result.delivered).toBeGreaterThanOrEqual(7);
     expect(received.length).toBe(result.delivered);
     for (const request of received) {
-      expect(request.path).toBe("/hooks/yuyu");
+      expect(request.path).toBe("/hooks/spaceworks");
       expect(request.headers["content-type"]).toBe("application/json");
-      expect(request.headers["user-agent"]).toBe("Yuyu-Webhooks/1");
+      expect(request.headers["user-agent"]).toBe("SpaceWorks-Webhooks/1");
       const envelope = JSON.parse(request.body) as { id: string; type: string };
-      expect(request.headers["x-yuyu-event-id"]).toBe(envelope.id);
-      expect(request.headers["x-yuyu-event-type"]).toBe(envelope.type);
-      expect(verifyWebhookSignature({ secret: endpointSecret, header: request.headers["x-yuyu-signature"] as string, body: request.body })).toBe(true);
+      expect(request.headers["x-spaceworks-event-id"]).toBe(envelope.id);
+      expect(request.headers["x-spaceworks-event-type"]).toBe(envelope.type);
+      expect(verifyWebhookSignature({ secret: endpointSecret, header: request.headers["x-spaceworks-signature"] as string, body: request.body })).toBe(true);
     }
     const rows = await prisma.webhookDelivery.findMany({ where: { organisationId: orgId } });
     expect(rows.every((row) => row.status === WebhookDeliveryStatus.SUCCEEDED && row.lastStatusCode === 200 && row.responseTimeMs !== null && row.attempts === 1)).toBe(true);
@@ -285,7 +285,7 @@ describe.sequential("organisation webhooks", () => {
     const [first, second] = await Promise.all([deliverWebhookBatch(100), deliverWebhookBatch(100)]);
     expect(first.delivered + second.delivered).toBe(6);
     expect(received).toHaveLength(6);
-    expect(new Set(received.map((request) => request.headers["x-yuyu-event-id"])).size).toBe(6);
+    expect(new Set(received.map((request) => request.headers["x-spaceworks-event-id"])).size).toBe(6);
   });
 
   it("retries a 500 later with backoff and counts the failure", async () => {
@@ -316,7 +316,7 @@ describe.sequential("organisation webhooks", () => {
     const id = await enqueueWebhookPing({ id: endpointId, organisation: { id: orgId, slug: orgSlug } });
     const outcome = await deliverWebhookNow(id);
     expect(outcome).toMatchObject({ ok: false, statusCode: 302, error: expect.stringMatching(/^Redirect not followed \(HTTP 302\)/) });
-    expect(received.map((request) => request.path)).toEqual(["/hooks/yuyu"]);
+    expect(received.map((request) => request.path)).toEqual(["/hooks/spaceworks"]);
     await prisma.webhookDelivery.update({ where: { id }, data: { status: WebhookDeliveryStatus.FAILED } });
   });
 
@@ -325,7 +325,7 @@ describe.sequential("organisation webhooks", () => {
     as(adminId);
     const result = await redeliverWebhook({ organisationSlug: orgSlug, endpointId, deliveryId: failed.id });
     expect(result).toMatchObject({ ok: true, data: { delivered: true, statusCode: 200 } });
-    expect(received.at(-1)!.headers["x-yuyu-event-id"]).toBe(failed.eventId);
+    expect(received.at(-1)!.headers["x-spaceworks-event-id"]).toBe(failed.eventId);
     await expect(prisma.webhookDelivery.findUniqueOrThrow({ where: { id: failed.id } })).resolves.toMatchObject({ status: WebhookDeliveryStatus.SUCCEEDED });
     // Successful rows cannot be redelivered.
     await expect(redeliverWebhook({ organisationSlug: orgSlug, endpointId, deliveryId: failed.id })).resolves.toMatchObject({ ok: false });
@@ -334,14 +334,14 @@ describe.sequential("organisation webhooks", () => {
   it("sends a test ping and rotates the secret", async () => {
     as(ownerId);
     await expect(sendWebhookTest({ organisationSlug: orgSlug, endpointId })).resolves.toMatchObject({ ok: true, data: { delivered: true, statusCode: 200 } });
-    expect(received.at(-1)!.headers["x-yuyu-event-type"]).toBe("ping");
+    expect(received.at(-1)!.headers["x-spaceworks-event-type"]).toBe("ping");
     const rotated = await rotateWebhookSecret({ organisationSlug: orgSlug, endpointId });
     if (!rotated.ok || !rotated.data) throw new Error("rotate failed");
     expect(rotated.data.secret).not.toBe(endpointSecret);
     await sendWebhookTest({ organisationSlug: orgSlug, endpointId });
     const last = received.at(-1)!;
-    expect(verifyWebhookSignature({ secret: rotated.data.secret, header: last.headers["x-yuyu-signature"] as string, body: last.body })).toBe(true);
-    expect(verifyWebhookSignature({ secret: endpointSecret, header: last.headers["x-yuyu-signature"] as string, body: last.body })).toBe(false);
+    expect(verifyWebhookSignature({ secret: rotated.data.secret, header: last.headers["x-spaceworks-signature"] as string, body: last.body })).toBe(true);
+    expect(verifyWebhookSignature({ secret: endpointSecret, header: last.headers["x-spaceworks-signature"] as string, body: last.body })).toBe(false);
     endpointSecret = rotated.data.secret;
     const audit = await prisma.auditEvent.findFirstOrThrow({ where: { action: "WEBHOOK_SECRET_ROTATED", targetId: endpointId } });
     expect(JSON.stringify(audit.metadata)).not.toContain("whsec_");
@@ -391,7 +391,7 @@ describe.sequential("organisation webhooks", () => {
     // receiver because the socket uses the pinned, already-checked address.
     setWebhookResolverForTests(async () => [{ address: "127.0.0.1", family: 4 }]);
     const port = new URL(receiverUrl).port;
-    await prisma.webhookEndpoint.update({ where: { id: endpointId }, data: { url: `http://pinned.example.test:${port}/hooks/yuyu` } });
+    await prisma.webhookEndpoint.update({ where: { id: endpointId }, data: { url: `http://pinned.example.test:${port}/hooks/spaceworks` } });
     const id = await enqueueWebhookPing({ id: endpointId, organisation: { id: orgId, slug: orgSlug } });
     await expect(deliverWebhookNow(id)).resolves.toMatchObject({ ok: true, statusCode: 200 });
     expect(received.at(-1)!.headers.host).toBe(`pinned.example.test:${port}`);
@@ -454,7 +454,7 @@ describe.sequential("organisation webhooks", () => {
     expect(audits.map((audit) => audit.action)).toEqual(expect.arrayContaining(["WEBHOOK_ENDPOINT_CREATED", "WEBHOOK_SECRET_ROTATED", "WEBHOOK_ENDPOINT_AUTO_DISABLED", "WEBHOOK_ENDPOINT_ENABLED", "WEBHOOK_ENDPOINT_DISABLED", "WEBHOOK_ENDPOINT_DELETED"]));
     for (const audit of audits) {
       const metadata = JSON.stringify(audit.metadata);
-      expect(metadata).not.toMatch(/whsec_|\/hooks\/yuyu|http:/);
+      expect(metadata).not.toMatch(/whsec_|\/hooks\/spaceworks|http:/);
     }
   });
 });
