@@ -56,14 +56,14 @@ describe("VPS installer", () => {
       expect(lib(`source_version '${dir}' ${commit}`).stdout).toBe("0.1.0-main.42.0123456789ab");
       expect(lib(`source_version '${dir}' ffffffffffff${commit.slice(12)}`).status).not.toBe(0);
       const settings = (version: string) => lib(
-        `set_image_settings '${dir}/compose.env' ${version} SpaceWorks-HQ/SpaceWorks-Events; cat '${dir}/compose.env'`,
+        `set_image_settings '${dir}/compose.env' ${version} SpaceWorks-Labs/SpaceWorks-Events; cat '${dir}/compose.env'`,
       ).stdout;
       // A 0.9.0 installation's separate migrator/ops image settings are dropped.
       writeFileSync(path.join(directory, "compose.env"), "SWE_VERSION='0.9.0-main.1.0123456789ab'\nSWE_APP_IMAGE='x'\nSWE_MIGRATOR_IMAGE='y'\nSWE_OPS_IMAGE='z'\n");
       expect(settings("0.1.0-main.42.0123456789ab")).toBe([
         "SWE_VERSION='0.9.0-main.1.0123456789ab'",
-        "SWE_BACKEND_IMAGE='ghcr.io/spaceworks-hq/spaceworks-events-backend'",
-        "SWE_FRONTEND_IMAGE='ghcr.io/spaceworks-hq/spaceworks-events-frontend'", "",
+        "SWE_BACKEND_IMAGE='ghcr.io/spaceworks-labs/spaceworks-events-backend'",
+        "SWE_FRONTEND_IMAGE='ghcr.io/spaceworks-labs/spaceworks-events-frontend'", "",
       ].join("\n"));
       expect(settings("vps-0123456789ab")).toBe("SWE_VERSION='0.9.0-main.1.0123456789ab'\nSWE_BACKEND_IMAGE=''\nSWE_FRONTEND_IMAGE=''\n");
     } finally { rmSync(directory, { recursive: true, force: true }); }
@@ -115,7 +115,7 @@ describe("VPS installer", () => {
     expect(check("is_safe_path", "/etc/spaceworks-events")).toBe(true);
     expect(check("is_safe_path", "/etc/space works")).toBe(false);
     expect(check("is_safe_path", "relative")).toBe(false);
-    expect(check("is_repository", "SpaceWorks-HQ/SpaceWorks-Events")).toBe(true);
+    expect(check("is_repository", "SpaceWorks-Labs/SpaceWorks-Events")).toBe(true);
     expect(check("is_repository", "owner/..")).toBe(false);
     expect(lib("release_version 0123456789abcdef0123456789abcdef01234567").stdout).toBe("vps-0123456789ab");
   });

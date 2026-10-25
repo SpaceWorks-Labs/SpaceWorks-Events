@@ -183,7 +183,7 @@ opt-in fake provider), so no feature ships working on only one of them.
 
 ## 7. Delivery
 
-`feat/payments-core` ([PR #16](https://github.com/SpaceWorks-HQ/SpaceWorks-Events/pull/16))
+`feat/payments-core` ([PR #16](https://github.com/SpaceWorks-Labs/SpaceWorks-Events/pull/16))
 is not merged yet. Fold in `Order`, `OrderLine`, `PaymentCheckoutAttempt` and
 the per-event currency there. Rework PRs 2 and 3 onto orders, then add:
 

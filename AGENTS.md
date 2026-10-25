@@ -135,7 +135,7 @@ scripts/seed-demo.mjs` seeds a demo organiser, organisation and event.
 
 ## Design system
 
-The UI follows the Space Works brand ([SpaceWorks-HQ/SpaceWorks-Design](https://github.com/SpaceWorks-HQ/SpaceWorks-Design)
+The UI follows the Space Works brand ([SpaceWorks-Labs/SpaceWorks-Design](https://github.com/SpaceWorks-Labs/SpaceWorks-Design)
 is the source of truth; `docs/DESIGN.md` maps it onto this app). Colours come
 only from the tokens in `app/styles/tokens.css` via the Tailwind utilities in
 `app/globals.css` (`bg-canvas`, `bg-panel`, `bg-primary`, `bg-sidebar`,

@@ -50,7 +50,7 @@ port private and expose it only through the trusted proxy.
 
 Every green build of `main` publishes public images to GitHub Packages that
 work for any installation (see [Releases and container images](CONTAINER_IMAGES.md)):
-pull `ghcr.io/spaceworks-hq/spaceworks-events-backend:<version>` and skip this
+pull `ghcr.io/spaceworks-labs/spaceworks-events-backend:<version>` and skip this
 section. The same image runs the application and, with the command `migrate`,
 the one-shot migrations. The commands below build your own image instead.
 
@@ -60,7 +60,7 @@ export SWE_VERSION=1.0.0
 docker build \
   --target runner \
   --secret id=NEXT_SERVER_ACTIONS_ENCRYPTION_KEY,env=NEXT_SERVER_ACTIONS_ENCRYPTION_KEY --build-arg NEXT_PUBLIC_BASE_URL="$NEXT_PUBLIC_BASE_URL" \
-  --tag ghcr.io/spaceworks-hq/spaceworks-events-backend:${SWE_VERSION} \
+  --tag ghcr.io/spaceworks-labs/spaceworks-events-backend:${SWE_VERSION} \
   .
 ```
 
@@ -129,11 +129,11 @@ For a new empty database, run the image's one-shot `migrate` role before
 starting the application:
 
 ```bash
-docker pull ghcr.io/spaceworks-hq/spaceworks-events-backend:${SWE_VERSION}
+docker pull ghcr.io/spaceworks-labs/spaceworks-events-backend:${SWE_VERSION}
 
 docker run --rm \
   --env-file /secure/path/swevents.env \
-  ghcr.io/spaceworks-hq/spaceworks-events-backend:${SWE_VERSION} migrate
+  ghcr.io/spaceworks-labs/spaceworks-events-backend:${SWE_VERSION} migrate
 
 node --env-file=/secure/path/swevents.env scripts/verify-production-schema.mjs
 node --env-file=/secure/path/swevents.env scripts/check-instance-secrets.mjs
@@ -152,7 +152,7 @@ docker run -d \
   --restart unless-stopped \
   --env-file /secure/path/swevents.env \
   --publish 127.0.0.1:3000:3000 \
-  ghcr.io/spaceworks-hq/spaceworks-events-backend:${SWE_VERSION}
+  ghcr.io/spaceworks-labs/spaceworks-events-backend:${SWE_VERSION}
 ```
 
 If the proxy is another container, use a private Docker network instead of a
@@ -209,7 +209,7 @@ docker run -d \
   --restart unless-stopped \
   --env-file /secure/path/swevents.env \
   --publish 127.0.0.1:3000:3000 \
-  ghcr.io/spaceworks-hq/spaceworks-events-backend:${SWE_VERSION}
+  ghcr.io/spaceworks-labs/spaceworks-events-backend:${SWE_VERSION}
 ```
 
 Remove `swevents-previous` only after the new release is healthy. Reverting the
@@ -229,10 +229,10 @@ listen on loopback only and need no published port:
 ```bash
 docker run -d --name swevents-worker --restart unless-stopped \
   --env-file /secure/path/swevents.env \
-  ghcr.io/spaceworks-hq/spaceworks-events-backend:${SWE_VERSION} worker
+  ghcr.io/spaceworks-labs/spaceworks-events-backend:${SWE_VERSION} worker
 docker run -d --name swevents-beat --restart unless-stopped \
   --env-file /secure/path/swevents.env \
-  ghcr.io/spaceworks-hq/spaceworks-events-backend:${SWE_VERSION} beat
+  ghcr.io/spaceworks-labs/spaceworks-events-backend:${SWE_VERSION} beat
 ```
 
 Replace them with the application container on every upgrade. Monitor the

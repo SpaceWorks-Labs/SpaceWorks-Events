@@ -148,7 +148,7 @@ whose `/var/lib/docker` is a volume (in nested Docker, also set
 Push the branch, then as a sudo user:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SpaceWorks-HQ/SpaceWorks-Events/<branch>/install.sh | bash -s -- --ref <branch>
+curl -fsSL https://raw.githubusercontent.com/SpaceWorks-Labs/SpaceWorks-Events/<branch>/install.sh | bash -s -- --ref <branch>
 ```
 
 Check that invalid answers are asked again, that cancelling at the summary changes
