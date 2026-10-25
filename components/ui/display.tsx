@@ -27,18 +27,24 @@ const chipTones: Record<ChipTone, string> = {
   outline: "border border-line-strong bg-panel text-ink-secondary",
 };
 
-export function Chip({ tone = "neutral", icon, className, children, size = "md" }: { tone?: ChipTone; icon?: ReactNode; className?: string; children: ReactNode; size?: "sm" | "md" }) {
+/**
+ * A small status/label pill. Long labels truncate to one line by default; pass
+ * `wrap` when every word matters (e.g. user-named award badges) so the label
+ * wraps onto further lines instead of being cut off.
+ */
+export function Chip({ tone = "neutral", icon, className, children, size = "md", wrap = false }: { tone?: ChipTone; icon?: ReactNode; className?: string; children: ReactNode; size?: "sm" | "md"; wrap?: boolean }) {
   return (
     <span
       className={cn(
         "inline-flex min-h-6 max-w-full items-center gap-1 whitespace-nowrap rounded-full font-semibold leading-4 [&_svg]:size-3.5 [&_svg]:shrink-0",
         size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-[13px]",
+        wrap && "items-start whitespace-normal rounded-xl [&>span:first-child]:mt-px",
         chipTones[tone],
         className,
       )}
     >
       {icon ? <span aria-hidden className="inline-flex">{icon}</span> : null}
-      <span className="truncate">{children}</span>
+      <span className={wrap ? "min-w-0 break-words [overflow-wrap:anywhere]" : "truncate"}>{children}</span>
     </span>
   );
 }
