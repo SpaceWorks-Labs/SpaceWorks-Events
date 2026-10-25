@@ -175,4 +175,4 @@ co-organise on `/dashboard/:orgSlug`.
 - Custom check-in lists are web-only for now: offline check-in, the venue
   station and series occurrences do not reach them. The cores in
   `lib/core/checkinLists.ts` already take a `source` (`mobile-scan`,
-  `mobile-manual`) for a future mobile client.
+  `mobile-manual`) for a future mobile check-in client.

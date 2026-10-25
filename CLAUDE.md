@@ -25,11 +25,15 @@ Vitest, and Playwright. Deployment supports Docker standalone output, the Render
 
 The product currently includes organisations and member roles, public/private
 events and RRULE-based series, custom RSVP forms and waitlists, event short
-links, QR tickets with live check-in updates and offline check-in, ID card /
+links, QR tickets with live check-in updates, offline check-in and custom
+check-in lists, ID card /
 badge generation (server-saved designs, colour and logos, PDF/PNG and bulk
 sheets in `lib/badge/`), feedback and layered certificates, designed broadcast and
 transactional email, optional paid tickets through each organisation's own
-Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), a personal account area (registrations, organisations,
+Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), team registration
+(`docs/TEAMS.md`), hackathon submissions, judging and results
+(`docs/HACKATHON.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
+organiser lists with saved views and filtered CSV exports, a personal account area (registrations, organisations,
 data export), and a separate super-admin operations, insights, and
 instance-settings area, plus a tenant-bound machine API. Treat this as a production-oriented application:
 tenant isolation, privacy, and secure operations are core behaviour rather

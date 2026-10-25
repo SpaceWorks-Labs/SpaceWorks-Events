@@ -186,4 +186,4 @@ Webhook URLs are entered by tenant admins, so Space Works only sends to the publ
 - Webhooks need outbound HTTPS (443 and 8443) from every app process to your receivers.
 - Migration `20261103010000_org_webhooks` adds the `WebhookEndpoint` and `WebhookDelivery` tables; it is additive.
 - If `MFA_ENCRYPTION_KEY` changes without re-encryption, deliveries fail with "Signing secret unreadable" (not counted against the endpoint); rotate each endpoint's secret.
-- Not yet available: webhook management in the mobile API, more event types (series status, invitations, schedule changes), per-endpoint ordering guarantees, and email notification of an automatic disable.
+- Not yet available: more event types (series status, invitations, schedule changes), per-endpoint ordering guarantees, and email notification of an automatic disable.

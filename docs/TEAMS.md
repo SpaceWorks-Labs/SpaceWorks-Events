@@ -48,8 +48,7 @@ Displays follow the same rule. The public registration card shows places taken
 in units. Organiser screens (event header, analytics, overview, dashboard home
 and organisation event lists, super-admin activity) show units against capacity
 ("3 / 3 teams & solo places", or "teams" when solo registration is off) and
-the number of people going separately. The mobile organiser `EventCounts`
-carries `capacityUsed` for the same purpose (docs/MOBILE_API.md).
+the number of people going separately.
 
 ## Team status
 
@@ -189,6 +188,10 @@ to 30 characters).
   values (trimmed, duplicate skills dropped).
 
 ## Organisers
+
+Organisation owners and admins, and anyone holding the event's
+`MANAGE_REGISTRATIONS` grant, manage teams (`resolveOrganiserEvent`, the
+same `canManageRegistrationsFor` check as individual registrations).
 
 - Guests tab gets a **Teams** view: name, status, size and min/max, an
   *Incomplete* badge below `teamMinSize`, leader, and members. It is paged on

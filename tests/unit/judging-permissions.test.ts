@@ -4,9 +4,10 @@ import { hasNonJudgePermission, judgingPermissionsFor } from "@/lib/judgingPermi
 import { eventCapabilities } from "@/lib/eventDashboard/capabilities";
 
 /** Every dashboard flag except the judging ones. */
+const JUDGING_FLAGS = new Set(["canJudge", "canManageJudging", "isJudgeOnly"]);
+
 function outsideJudging(role: null, grant: EventPermission[]) {
-  const { canJudge: _canJudge, canManageJudging: _canManageJudging, isJudgeOnly: _isJudgeOnly, ...rest } = eventCapabilities(role, grant);
-  return rest;
+  return Object.fromEntries(Object.entries(eventCapabilities(role, grant)).filter(([key]) => !JUDGING_FLAGS.has(key)));
 }
 import { PERMISSION_OPTIONS, permissionChipLabels } from "@/components/event-dashboard/settings/helpers";
 
