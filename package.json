@@ -75,7 +75,7 @@
     "sanitize-html": "^2.18.1",
     "sharp": "^0.35.4",
     "tailwind-merge": "3.7.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.0"
