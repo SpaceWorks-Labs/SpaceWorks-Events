@@ -144,7 +144,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
         <section aria-labelledby="order-cancel" className="flex flex-col gap-2 border-t border-line pt-5">
           <h2 id="order-cancel" className="text-h4 text-ink">Can&apos;t make it?</h2>
           <p className="text-body-ui text-ink-secondary">
-            Cancelling gives up every ticket in this order{order.cancellation.refund ? ` and refunds ${order.cancellation.refund}` : ""}.
+            Cancelling gives up every ticket in this order{order.cancellation.refund ? ` and refunds ${order.cancellation.refund}` : ""}.{order.cancellation.team ? ` This is the team ticket for ${order.cancellation.team}, so everyone in the team loses their place too.` : ""}
           </p>
           <div><CancelOrderButton orderToken={order.token} refund={order.cancellation.refund} /></div>
         </section>

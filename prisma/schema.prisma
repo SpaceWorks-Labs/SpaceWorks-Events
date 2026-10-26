@@ -131,6 +131,14 @@ enum SoloPolicy {
   SOLO_WITH_MATCHING
 }
 
+/// Who pays on a TEAM event that sells tickets (docs/TEAMS.md).
+enum TeamTicketMode {
+  /// Everyone buys their own ticket: the leader when creating the team, members when joining.
+  PER_MEMBER
+  /// The leader buys one ticket for the whole team; members join free.
+  PER_TEAM
+}
+
 /// INVITE: a team leader invited a seeker. REQUEST: a seeker asked to join.
 enum TeamJoinRequestDirection {
   INVITE
@@ -333,6 +341,7 @@ model User {
   judgeScores                  JudgeScore[]
   judgeReviews                 JudgeReview[]
   savedViews                   SavedView[]
+  prizePayoutsRecorded         PrizePayout[] @relation("PrizePayoutRecordedBy")
 }
 
 model Account {
@@ -411,6 +420,7 @@ model Organisation {
   chatChannels      ChatChannel[]
   processedWebhookEvents ProcessedWebhookEvent[]
   orders            Order[]
+  prizePayouts      PrizePayout[]
   payments          Payment[]
   paymentDisputes   PaymentDispute[]
   webhookEndpoints  WebhookEndpoint[]
@@ -686,6 +696,8 @@ model Event {
   /// Enforced under the Event row lock; cannot drop below the largest team.
   teamMaxSize           Int?
   soloPolicy            SoloPolicy       @default(SOLO_ALLOWED)
+  /// With tickets: who pays. Locked after the first sale.
+  teamTicketMode        TeamTicketMode   @default(PER_MEMBER)
   teams            Team[]
   /// Hackathon submissions and judging (docs/HACKATHON.md, one-off events).
   submissionsEnabled                  Boolean          @default(false)
@@ -708,7 +720,13 @@ model Event {
   reviewsPerProject                   Int?
   /// How result scores are combined across judges.
   scoreNormalization                  ScoreNormalization @default(RAW)
+  /// Fee to submit a project, in minor units of the event's currency; null
+  /// is free. Paid once per entrant through the normal checkout (Order.submissionId).
+  submissionFeeMinor                  BigInt?
+  /// Refund the entry fee in full when an organiser disqualifies the project.
+  submissionFeeRefundOnDisqualify     Boolean          @default(true)
   submissions         Submission[]
+  prizePayouts        PrizePayout[]
   judgingCriteria     JudgingCriterion[]
   judgeAssignments    JudgeAssignment[]
   awards              EventAward[]
@@ -800,6 +818,17 @@ model Order {
   refundPolicy   Json?
   /// A day-long payment link's reminder was emailed (once).
   paymentReminderSentAt DateTime?
+  /// TEAM events: the team this order pays for. A leader's order created it
+  /// (the leader's registration is in the team from the start); a member's
+  /// order in PER_MEMBER mode joins it once paid (the registration has no
+  /// team until then).
+  teamId         String?
+  /// Set on a leader's order: the name of the team it creates. It tells a
+  /// leader's order from a member's even after the team is gone.
+  teamName       String?
+  /// A hackathon entry fee: the project it pays for. Such an order has no
+  /// registrations; once paid, the project is submitted.
+  submissionId   String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -809,6 +838,8 @@ model Order {
   instance     EventInstance? @relation(fields: [eventInstanceId], references: [id], onDelete: SetNull)
   buyer        User?        @relation("OrderBuyer", fields: [buyerUserId], references: [id], onDelete: SetNull)
   promoCode    PromoCode?   @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  submission   Submission?  @relation(fields: [submissionId], references: [id], onDelete: SetNull)
   lines        OrderLine[]
   payments     Payment[]
   rsvps        RSVP[]
@@ -819,6 +850,8 @@ model Order {
   @@index([eventInstanceId])
   @@index([status, holdExpiresAt])
   @@index([buyerUserId, createdAt])
+  @@index([teamId])
+  @@index([submissionId])
 }
 
 /// One priced line of an order. Amounts are frozen at purchase.
@@ -1669,14 +1702,19 @@ model CheckInList {
   archived             Boolean  @default(false)
   /// Guests must already be checked in at entry before they can be marked here.
   requiresEntryCheckIn Boolean  @default(false)
+  /// Only guests whose confirmed order bought this add-on, up to the quantity
+  /// bought per order (meals, swag, workshops).
+  addOnId              String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
   event   Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  addOn   AddOn?              @relation(fields: [addOnId], references: [id], onDelete: NoAction)
   records CheckInListRecord[]
   history CheckInListEvent[]
 
   @@index([eventId, archived, sortOrder])
+  @@index([addOnId])
 }
 
 /// One person checked into one custom list. Unique on (listId, rsvpId), so a
@@ -1958,6 +1996,7 @@ model AddOn {
   event      Event?       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   series     EventSeries? @relation(fields: [eventSeriesId], references: [id], onDelete: Cascade)
   orderLines OrderLine[]
+  checkInLists CheckInList[]
 
   @@index([eventId, sortOrder])
   @@index([eventSeriesId, sortOrder])
@@ -2104,6 +2143,7 @@ model Team {
   leaderRsvp   RSVP?             @relation("TeamLeader", fields: [leaderRsvpId], references: [id], onDelete: SetNull)
   members      RSVP[]            @relation("TeamMembers")
   joinRequests TeamJoinRequest[]
+  orders       Order[]
 
   submission   Submission?
   @@unique([eventId, nameKey])
@@ -2177,6 +2217,8 @@ model Submission {
   scores      JudgeScore[]
   reviews     JudgeReview[]
   awardWins   EventAwardWinner[]
+  entryFeeOrders Order[]
+  prizePayouts PrizePayout[]
 
   @@index([eventId, status])
 }
@@ -2280,10 +2322,13 @@ model EventAward {
   /// Up to 500 characters.
   description String   @default("")
   position    Int      @default(0)
+  /// Prize money per winner, in minor units of the event's currency; null is none.
+  prizeMinor  BigInt?
   createdAt   DateTime @default(now())
 
   event   Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   winners EventAwardWinner[]
+  payouts PrizePayout[]
 
   @@index([eventId, position])
 }
@@ -2302,5 +2347,43 @@ model EventAwardWinner {
 
   @@unique([awardId, place])
   @@unique([awardId, submissionId])
+  @@index([submissionId])
+}
+
+/// Prize money paid to an award winner, recorded by an owner or admin
+/// (docs/HACKATHON.md). Append-only (database trigger): only the references
+/// may be cleared when what they point at is deleted. A mistake is undone by a
+/// reversal row (`reversesId`), at most one per payout. Names are copied so
+/// the record survives the award or project being deleted.
+model PrizePayout {
+  id               String               @id @default(cuid())
+  organisationId   String
+  eventId          String?
+  awardId          String?
+  submissionId     String?
+  awardName        String
+  projectTitle     String
+  recipientName    String
+  amountMinor      BigInt
+  currency         String
+  method           OfflinePaymentMethod
+  reference        String?
+  note             String               @default("")
+  paidAt           DateTime
+  reversesId       String?              @unique
+  recordedByUserId String?
+  createdAt        DateTime             @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?       @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  award        EventAward?  @relation(fields: [awardId], references: [id], onDelete: SetNull)
+  submission   Submission?  @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  reverses     PrizePayout? @relation("PrizePayoutReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy   PrizePayout? @relation("PrizePayoutReversal")
+  recordedBy   User?        @relation("PrizePayoutRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([awardId])
   @@index([submissionId])
 }

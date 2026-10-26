@@ -25,14 +25,15 @@ const toSummary = (list: CheckInListSummary): CheckInListSummary => ({
   sortOrder: list.sortOrder,
   archived: list.archived,
   requiresEntryCheckIn: list.requiresEntryCheckIn,
+  addOn: list.addOn,
 });
 
-const summarySelect = { id: true, name: true, sortOrder: true, archived: true, requiresEntryCheckIn: true } as const;
+const summarySelect = { id: true, name: true, sortOrder: true, archived: true, requiresEntryCheckIn: true, addOn: { select: { id: true, name: true } } } as const;
 
 export async function createCheckInListForUser(actorUserId: string | null, input: unknown): Promise<ActionResult<CheckInListSummary>> {
   const parsed = createCheckInListSchema.safeParse(input);
   if (!parsed.success) return fail("Check the list name.", { fieldErrors: flattenZodErrors(parsed.error) });
-  const { organisationSlug, eventId, name, requiresEntryCheckIn } = parsed.data;
+  const { organisationSlug, eventId, name, requiresEntryCheckIn, addOnId } = parsed.data;
   const ctx = await resolveEvent(actorUserId, organisationSlug, eventId, "manage", "create");
   if (!ctx.ok) return ctx;
 
@@ -42,8 +43,10 @@ export async function createCheckInListForUser(actorUserId: string | null, input
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${ctx.event.id} FOR UPDATE`;
       const aggregate = await tx.checkInList.aggregate({ where: { eventId: ctx.event.id }, _count: { _all: true }, _max: { sortOrder: true } });
       if (aggregate._count._all >= MAX_CHECK_IN_LISTS) return null;
+      // A paid extra (meal, swag, workshop) limits the list to its buyers.
+      if (addOnId && !(await tx.addOn.findFirst({ where: { id: addOnId, eventId: ctx.event.id, archivedAt: null }, select: { id: true } }))) return "addOn" as const;
       const list = await tx.checkInList.create({
-        data: { eventId: ctx.event.id, name, requiresEntryCheckIn: Boolean(requiresEntryCheckIn), sortOrder: (aggregate._max.sortOrder ?? -1) + 1 },
+        data: { eventId: ctx.event.id, name, requiresEntryCheckIn: Boolean(requiresEntryCheckIn), addOnId: addOnId ?? null, sortOrder: (aggregate._max.sortOrder ?? -1) + 1 },
         select: summarySelect,
       });
       await recordAuditEvent({
@@ -52,12 +55,13 @@ export async function createCheckInListForUser(actorUserId: string | null, input
         organisationId: ctx.org.id,
         targetType: "CheckInList",
         targetId: list.id,
-        metadata: { eventId: ctx.event.id, requiresEntryCheckIn: list.requiresEntryCheckIn },
+        metadata: { eventId: ctx.event.id, requiresEntryCheckIn: list.requiresEntryCheckIn, addOn: Boolean(list.addOn) },
         client: tx,
       });
       return list;
     });
     if (!created) return fail(`An event can have up to ${MAX_CHECK_IN_LISTS} check-in lists.`);
+    if (created === "addOn") return fail("Choose an extra this event sells.");
     revalidateLists(ctx.org.slug, ctx.event.id);
     return { ok: true, data: toSummary(created) };
   } catch (error) {

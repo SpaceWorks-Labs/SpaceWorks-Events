@@ -1,9 +1,10 @@
 import "server-only";
 
-import { EventPrivacyType, OrderStatus, PaymentStatus, RsvpStatus, type Prisma } from "@prisma/client";
+import { EventPrivacyType, OrderStatus, PaymentStatus, RegistrationMode, RsvpStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
+import { emitTeamWebhooks, promoteOldestWaitlistedUnit, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { enqueuePaymentEmail } from "../email";
 import { HOLD_EXTENSION_CAP_MS, PAYMENT_LINK_HOLD_MS } from "../holds";
 import { providerMinimumMinor } from "../money";
@@ -66,8 +67,9 @@ export async function declineRequestedOrder(params: { orderId: string; organisat
 export async function offerNextWaitlisted(target: SeatTarget, now = new Date()): Promise<boolean> {
   let owner: { organisationId: string; privacyType: EventPrivacyType; title: string; seriesId: string | null; } | null = null;
   if ("eventId" in target) {
-    const event = await prisma.event.findUnique({ where: { id: target.eventId }, select: { organisationId: true, privacyType: true, title: true } });
-    owner = event ? { ...event, seriesId: null } : null;
+    const event = await prisma.event.findUnique({ where: { id: target.eventId }, select: { organisationId: true, privacyType: true, title: true, registrationMode: true } });
+    if (event?.registrationMode === RegistrationMode.TEAM) return promoteNextTeamUnit(target.eventId);
+    owner = event ? { organisationId: event.organisationId, privacyType: event.privacyType, title: event.title, seriesId: null } : null;
   } else {
     const date = await prisma.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: { eventSeriesId: true, series: { select: { organisationId: true, privacyType: true, title: true } } } });
     owner = date ? { ...date.series, seriesId: date.eventSeriesId } : null;
@@ -93,6 +95,24 @@ export async function offerNextWaitlisted(target: SeatTarget, now = new Date()):
     if (promoted.count === 1 && to) await enqueueRsvpStatusNotification(tx, { to, eventTitle: owner.title, approved: true, checkInToken: next.checkInToken });
     return promoted.count === 1;
   });
+}
+
+/**
+ * TEAM events (docs/TEAMS.md) promote whole units: the oldest waitlisted
+ * team or solo registration, when a unit is free. Paid team places are paid
+ * up front, so only free registrations ever wait.
+ */
+async function promoteNextTeamUnit(eventId: string) {
+  const webhooks: RegistrationStatusWebhook[] = [];
+  const promoted = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+    const event = await tx.event.findUnique({ where: { id: eventId }, select: { id: true, title: true, capacity: true, privacyType: true } });
+    const unit = event ? await promoteOldestWaitlistedUnit(tx, event) : null;
+    if (unit) webhooks.push(...unit.webhooks);
+    return unit != null;
+  });
+  emitTeamWebhooks(webhooks);
+  return promoted;
 }
 
 /** Offer every free seat, in waitlist order, until the seats or the waitlist run out. Returns how many were offered. */

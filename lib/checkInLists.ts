@@ -31,7 +31,7 @@ export const checkInListNameSchema = z
   .refine((value) => !/\p{Cc}/u.test(value), "Use letters, numbers and punctuation only.");
 
 export const createCheckInListSchema = z
-  .object({ ...target, name: checkInListNameSchema, requiresEntryCheckIn: z.boolean().optional() })
+  .object({ ...target, name: checkInListNameSchema, requiresEntryCheckIn: z.boolean().optional(), addOnId: id.optional() })
   .strict();
 
 export const updateCheckInListSchema = z

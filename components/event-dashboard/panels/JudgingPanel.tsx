@@ -14,6 +14,7 @@ import {
 import { JudgeWorkspace } from "@/components/event-dashboard/judging/JudgeWorkspace";
 import { SubTabs, type SubTab } from "../SubTabs";
 import { JudgingPanelAwards } from "./JudgingPanelAwards";
+import { PrizePayoutsPanel } from "./PrizePayoutsPanel";
 import { JudgingPanelResults, JudgingPanelJudges } from "./JudgingPanelResults";
 import { JudgingPanelProgress } from "./JudgingPanelProgress";
 import { JudgingPanelRubric } from "./JudgingPanelRubric";
@@ -145,6 +146,8 @@ export async function JudgingPanel({ ctx }: { ctx: EventDashboardContext }) {
           count: data.awards.length,
           content: <JudgingPanelAwards scope={scope} awards={data.awards} submittedCount={data.counts.SUBMITTED} resultsPublished={Boolean(settings.resultsPublishedAt)} limits={LIMITS} />,
         },
+        // Prize money is for owners and admins only (docs/HACKATHON.md).
+        ...(permissions.isAdmin ? [{ value: "judging-prizes", label: "Prizes", content: <PrizePayoutsPanel ctx={ctx} /> }] : []),
       ]}
     />
   );

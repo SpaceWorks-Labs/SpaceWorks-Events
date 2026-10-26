@@ -177,6 +177,8 @@ export type EntrantSubmissionDto = {
   declined: boolean;
   canEdit: boolean;
   submission: (ProjectLinks & { title: string; summary: string; status: SubmissionStatus; submittedAt: Date | null }) | null;
+  /** The event's entry fee (docs/HACKATHON.md), and whether this entrant has paid it. */
+  entryFee: { amountMinor: bigint; currency: string; paid: boolean } | null;
 };
 
 export function entrantSubmissionView(row: (ProjectLinks & { title: string; summary: string; status: SubmissionStatus; submittedAt: Date | null }) | null): EntrantSubmissionDto["submission"] {

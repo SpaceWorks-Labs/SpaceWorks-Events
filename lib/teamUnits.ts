@@ -11,11 +11,27 @@ import { emitWebhookEvent, type RsvpWebhookSnapshot, type WebhookEmission } from
  * Event row lock (`SELECT ... FOR UPDATE`), so unit counts cannot race.
  */
 
-/** Confirmed units: confirmed teams plus confirmed solo RSVPs (no team). */
-export async function countConfirmedUnits(tx: Prisma.TransactionClient, eventId: string): Promise<number> {
-  const teams = await tx.team.count({ where: { eventId, status: RsvpStatus.CONFIRMED } });
-  const solo = await tx.rSVP.count({ where: { eventId, teamId: null, status: RsvpStatus.CONFIRMED } });
+/**
+ * Units that take a place: confirmed teams and solo RSVPs (no team), plus
+ * those whose first payment is under way (a new team or a solo ticket held
+ * while the buyer pays, docs/TEAMS.md). A member paying to join a team has
+ * no team yet and takes no unit.
+ */
+export async function countConfirmedUnits(tx: Prisma.TransactionClient, eventId: string, now = new Date()): Promise<number> {
+  const teams = await tx.team.count({
+    where: { eventId, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, members: { some: { holdExpiresAt: { gt: now } } } }] },
+  });
+  const solo = await tx.rSVP.count({
+    where: { eventId, teamId: null, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now }, order: { teamId: null } }] },
+  });
   return teams + solo;
+}
+
+/** Places taken in a team: its members, and anyone whose hold is paying to join it. */
+export async function teamPlacesTaken(tx: Prisma.TransactionClient, teamId: string, now = new Date()): Promise<number> {
+  const members = await tx.rSVP.count({ where: { teamId } });
+  const joining = await tx.rSVP.count({ where: { teamId: null, status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now }, order: { teamId } } });
+  return members + joining;
 }
 
 /**

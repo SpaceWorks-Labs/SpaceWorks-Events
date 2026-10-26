@@ -471,6 +471,11 @@
       "id": "components__event-dashboard__panels__OverviewPanel:loadOverviewPanel"
     },
     {
+      "module": "lib/views/components__event-dashboard__panels__PrizePayoutsPanel",
+      "name": "loadPrizePayoutsPanel",
+      "id": "components__event-dashboard__panels__PrizePayoutsPanel:loadPrizePayoutsPanel"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__SettingsPanel",
       "name": "loadSettingsPanel",
       "id": "components__event-dashboard__panels__SettingsPanel:loadSettingsPanel"
@@ -716,6 +721,11 @@
       "module": "app/actions/checkin",
       "name": "loadRecentCheckIns",
       "id": "checkin:loadRecentCheckIns"
+    },
+    {
+      "module": "app/actions/entry-fee",
+      "name": "saveEntryFee",
+      "id": "entry-fee:saveEntryFee"
     },
     {
       "module": "app/actions/event-collaborators",
@@ -1368,6 +1378,21 @@
       "id": "payment-settings:saveReceiptDetails"
     },
     {
+      "module": "app/actions/prizes",
+      "name": "setAwardPrizeAction",
+      "id": "prizes:setAwardPrizeAction"
+    },
+    {
+      "module": "app/actions/prizes",
+      "name": "recordPrizePayoutAction",
+      "id": "prizes:recordPrizePayoutAction"
+    },
+    {
+      "module": "app/actions/prizes",
+      "name": "reversePrizePayoutAction",
+      "id": "prizes:reversePrizePayoutAction"
+    },
+    {
       "module": "app/actions/promo",
       "name": "checkPromoCode",
       "id": "promo:checkPromoCode"
@@ -1741,6 +1766,11 @@
       "module": "app/actions/ticket-types",
       "name": "saveTransferPolicy",
       "id": "ticket-types:saveTransferPolicy"
+    },
+    {
+      "module": "app/actions/ticket-types",
+      "name": "saveTeamTicketMode",
+      "id": "ticket-types:saveTeamTicketMode"
     },
     {
       "module": "app/actions/webhooks",

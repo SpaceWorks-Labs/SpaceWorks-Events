@@ -30,6 +30,8 @@ Creating, editing, rotating, enabling, disabling, deleting and automatic disabli
 | `feedback.submitted` | Someone submits the event's feedback form |
 | `ping` | **Send test**. Always delivered to the endpoint being tested; it cannot be subscribed to |
 
+Paid tickets raise the same registration events: `registration.created` when an order is placed (pending payment), `registration.status_changed` from `PENDING_PAYMENT` when it is paid (online, by hand or waived), and `CANCELLED` when an order's tickets are cancelled (by the buyer, an organiser, or an event cancellation), including the members of a team cancelled with its team ticket.
+
 Events are emitted from the server-side commit points only, after the database transaction has committed. Emitting only inserts queue rows in the background, so it never fails or slows the action that caused it. `event.*` covers standalone events; series status changes are not sent. Registration and check-in events cover series occurrences too (see `kind` below).
 
 ## Request format

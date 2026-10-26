@@ -26,6 +26,8 @@ export type TeamRegistrationConfig = {
   soloPolicy: SoloPolicyValue;
   teamMinSize: number | null;
   teamMaxSize: number | null;
+  /** With tickets: everyone buys their own, or the leader pays once for the team. */
+  ticketMode?: "PER_MEMBER" | "PER_TEAM";
   /** Opened from a team join link: the team is shown and fixed. Never carries member names. */
   joinTeam?: { joinToken: string; name: string; size: number; maxSize: number | null };
 };

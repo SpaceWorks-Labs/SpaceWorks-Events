@@ -8,4 +8,4 @@ export { PaymentOperationError } from "./operations/shared";
 export { declineRequestedOrder, fillFromWaitlist, fillWaitlists, offerNextWaitlisted, offerRequestedOrder, sendPaymentLink } from "./operations/waitlist";
 export { reacceptDeclinedOrder } from "./operations/reaccept";
 export { amendOfflinePayment, settleOrderByHand } from "./operations/settle";
-export { buyerCancellation, cancelOrderAsBuyer, refundOrder } from "./operations/refund";
+export { buyerCancellation, cancelOrderAsBuyer, refundOrder, refundWholeOrderTx, submitRefunds } from "./operations/refund";

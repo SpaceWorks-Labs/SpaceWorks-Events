@@ -19,6 +19,7 @@ import { AttendeeFields } from "./RsvpForm/AttendeeFields";
 import { postRsvp, safeJsonParse, storageKey } from "./RsvpForm/helpers";
 import { FramedCheckoutNotice, RsvpDone } from "./RsvpForm/states";
 import { GuestIdentityFields, SignedInNameField } from "./RsvpForm/IdentityFields";
+import { teamTicketing } from "./RsvpForm/teamTickets";
 
 export function RsvpForm(props: {
   orgSlug: string;
@@ -44,8 +45,12 @@ export function RsvpForm(props: {
   // Tickets an access code revealed join the public ones.
   const [unlocked, setUnlocked] = useState<PublicTicketType[]>([]);
   const [accessCode, setAccessCode] = useState<string | null>(null);
-  const tickets = useMemo(() => [...listed, ...unlocked.filter((ticket) => !listed.some((other) => other.id === ticket.id))], [listed, unlocked]);
-  const sellsTicketTypes = tickets.length > 0 || Boolean(ticketing?.accessCodes);
+  const teamState = useTeamRegistration(team);
+  const offered = useMemo(() => [...listed, ...unlocked.filter((ticket) => !listed.some((other) => other.id === ticket.id))], [listed, unlocked]);
+  // Team events seat one person per order; a PER_TEAM member joins free.
+  const teamTickets = teamTicketing(team, teamState.mode, offered);
+  const tickets = teamTickets.tickets;
+  const sellsTicketTypes = teamTickets.showTickets && (tickets.length > 0 || Boolean(ticketing?.accessCodes));
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [addOnQuantities, setAddOnQuantities] = useState<Record<string, number>>({});
   const [payAtDesk, setPayAtDesk] = useState(false);
@@ -92,7 +97,6 @@ export function RsvpForm(props: {
 
   const fields = useMemo(() => registrationFields ?? [], [registrationFields]);
   const questionsState = useRegistrationAnswers(fields);
-  const teamState = useTeamRegistration(team);
   const [identity, setIdentity] = useState<{ name?: string; email?: string }>({});
   const formRef = useRef<HTMLDivElement & HTMLFormElement>(null);
   const requireName = !session?.user?.name?.trim();
@@ -196,7 +200,12 @@ export function RsvpForm(props: {
   }
 
   const questions = <RegistrationQuestions controller={questionsState} />;
-  const teamFields = <TeamRegistrationFields controller={teamState} />;
+  const teamFields = (
+    <>
+      <TeamRegistrationFields controller={teamState} />
+      {teamTickets.note && (tickets.length > 0 || ticketing?.accessCodes) ? <p className="text-caption text-ink-muted">{teamTickets.note}</p> : null}
+    </>
+  );
   const ticketSection = sellsTicketTypes ? (
     <div data-question-key="__ticket" className="flex flex-col gap-3">
       {tickets.length > 0 ? (
@@ -237,7 +246,7 @@ export function RsvpForm(props: {
       ) : null}
     </div>
   ) : null;
-  const submitLabel = totalMinor <= 0
+  const submitLabel = !sellsTicketTypes || totalMinor <= 0
     ? "Register"
     : atDesk
       ? `Reserve, pay ${formatMoney(totalMinor, currency)} at the desk`

@@ -81,3 +81,10 @@ export const transferSchema = z.object({
   allowTransfers: z.boolean(),
   cutoffHours: z.number().int().min(0).max(8760).default(24),
 }).strict().refine(oneTarget, "Choose an event or a series.");
+
+/** TEAM events with tickets: everyone pays for themselves, or the leader pays once for the team. */
+export const teamTicketModeSchema = z.object({
+  organisationSlug: target.organisationSlug,
+  eventId: z.string().trim().min(1).max(128),
+  mode: z.enum(["PER_MEMBER", "PER_TEAM"]),
+}).strict();

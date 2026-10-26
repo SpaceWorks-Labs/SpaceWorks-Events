@@ -1,5 +1,5 @@
 import { Prisma, RsvpStatus } from "@prisma/client";
-import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft, type RegistrationStatusWebhook } from "@/lib/teamUnits";
+import { promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft, teamPlacesTaken, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { soleMemberTeamSnapshotTx } from "@/lib/core/teams";
 import { submissionSnapshotSchema } from "@/lib/core/submissionLifecycle";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
@@ -105,8 +105,9 @@ export async function teamForRestore(tx: Prisma.TransactionClient, params: { eve
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${params.eventId} FOR UPDATE`;
   const team = await tx.team.findFirst({
     where: { id: params.teamId, eventId: params.eventId },
-    select: { id: true, status: true, _count: { select: { members: true } }, event: { select: { teamMaxSize: true } } },
+    select: { id: true, status: true, event: { select: { teamMaxSize: true } } },
   });
-  if (!team || team.status === RsvpStatus.REJECTED || team.event.teamMaxSize == null || team._count.members >= team.event.teamMaxSize) return null;
+  if (!team || team.status === RsvpStatus.REJECTED || team.status === RsvpStatus.PENDING_PAYMENT || team.event.teamMaxSize == null) return null;
+  if (await teamPlacesTaken(tx, team.id) >= team.event.teamMaxSize) return null;
   return { id: team.id, status: team.status };
 }

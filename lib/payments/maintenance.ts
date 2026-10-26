@@ -8,6 +8,7 @@ import { enqueuePaymentEmail } from "./email";
 import { fillFromWaitlist } from "./operations";
 import { lockOrderTargets, seatTargetOf } from "./targets";
 import { submitPendingRefund } from "./refunds";
+import { releaseUnpaidTeam } from "./teamOrders";
 
 const BATCH = 25;
 /** Refunds still pending at the provider are re-checked this long after submission. */
@@ -39,6 +40,8 @@ async function releaseOrder(orderId: string, now: Date): Promise<"expired" | "se
     if (order?.status !== OrderStatus.PENDING || (order.holdExpiresAt && order.holdExpiresAt > now)) return "skipped" as const;
     await tx.paymentCheckoutAttempt.updateMany({ where: { status: CheckoutAttemptStatus.OPEN, payment: { orderId } }, data: { status: CheckoutAttemptStatus.EXPIRED } });
     await tx.order.update({ where: { id: orderId }, data: { status: OrderStatus.EXPIRED, holdExpiresAt: null, holdCapAt: null } });
+    // A team whose leader never paid goes, freeing its name (docs/TEAMS.md).
+    await releaseUnpaidTeam(tx, orderId);
     // The registrations stay as ended holds (no longer counted toward
     // capacity); ordering again replaces them.
     // A cancelled event's buyers were already told why; "time ran out" would be wrong.

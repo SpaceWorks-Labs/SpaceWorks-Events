@@ -32,12 +32,14 @@ beforeEach(() => {
 });
 
 describe("countConfirmedUnits", () => {
-  it("counts confirmed teams plus confirmed solo registrations", async () => {
+  it("counts confirmed teams and solo registrations, plus new teams and solo tickets held while paying", async () => {
     tx.team.count.mockResolvedValue(2);
     tx.rSVP.count.mockResolvedValue(3);
-    await expect(countConfirmedUnits(tx as never, "event_1")).resolves.toBe(5);
-    expect(tx.team.count).toHaveBeenCalledWith({ where: { eventId: "event_1", status: RsvpStatus.CONFIRMED } });
-    expect(tx.rSVP.count).toHaveBeenCalledWith({ where: { eventId: "event_1", teamId: null, status: RsvpStatus.CONFIRMED } });
+    const now = new Date("2035-01-01T00:00:00.000Z");
+    await expect(countConfirmedUnits(tx as never, "event_1", now)).resolves.toBe(5);
+    expect(tx.team.count).toHaveBeenCalledWith({ where: { eventId: "event_1", OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, members: { some: { holdExpiresAt: { gt: now } } } }] } });
+    // A member paying to join a team (Order.teamId set) takes no unit.
+    expect(tx.rSVP.count).toHaveBeenCalledWith({ where: { eventId: "event_1", teamId: null, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now }, order: { teamId: null } }] } });
   });
 
   it("keeps the plain confirmed-RSVP query for INDIVIDUAL events", async () => {

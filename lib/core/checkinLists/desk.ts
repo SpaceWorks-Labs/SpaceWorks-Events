@@ -164,7 +164,7 @@ export async function listRosterPageForUser(actorUserId: string | null, input: u
   const { organisationSlug, eventId, listId, filter, query, cursor } = parsed.data;
   const ctx = await resolveEvent(actorUserId, organisationSlug, eventId, "checkIn", "search");
   if (!ctx.ok) return ctx;
-  const list = await prisma.checkInList.findFirst({ where: { id: listId, eventId: ctx.event.id }, select: { id: true, requiresEntryCheckIn: true } });
+  const list = await prisma.checkInList.findFirst({ where: { id: listId, eventId: ctx.event.id }, select: { id: true, requiresEntryCheckIn: true, addOnId: true } });
   if (!list) return fail("List not found.");
   return { ok: true, data: await loadCheckInListRosterPage(ctx.event.id, list, { filter, query: query?.trim() ?? "", cursor: cursor ?? null }) };
 }

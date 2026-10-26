@@ -13,9 +13,11 @@ import { priceOrder, PricingError, type AddOnItem, type OrderItem } from "./pric
 import { isValidPromoCode, lockPromoCode, promoCodeDigest, PromoCodeError } from "./promo";
 import { lockSellable, passesTaken, type OrderTarget, type Slot } from "./targets";
 import { ticketSalesState } from "./tickets";
+import { OrderError } from "./orderError";
+import { placeTeamOrderRegistration, planTeamOrder } from "./teamOrders";
+import type { TeamRegistrationIntent } from "@/lib/validators";
 
-/** A rule refused the order; the message is safe to show the buyer. */
-export class OrderError extends Error {}
+export { OrderError } from "./orderError";
 
 /** Who collects a paid order, resolved before the reservation transaction. */
 export type PaymentContext = { organisationId: string; provider: OnlineProvider | "OFFLINE"; testMode: boolean; };
@@ -74,6 +76,8 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   addOns?: AddOnItem[];
   /** Set when an organiser adds the guest by hand. */
   manual?: ManualPayment;
+  /** TEAM events: solo, create a team, or join one (docs/TEAMS.md); omitted is solo. */
+  team?: TeamRegistrationIntent;
   now?: Date;
 }) {
   const now = params.now ?? new Date();
@@ -82,6 +86,8 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   if (!sellable || (params.enforceOpen && !sellable.open)) {
     throw new OrderError(isPass ? "There are no dates left to buy a pass for." : "This event is not open for registration.");
   }
+  if (params.team && params.team.mode !== "solo" && !("eventId" in params.target)) throw new OrderError("Team registration is only available for one-off events.");
+  const teamPlan = "eventId" in params.target ? await planTeamOrder(tx, { eventId: params.target.eventId, intent: params.team, manual: Boolean(params.manual), now }) : null;
 
   const types = await tx.ticketType.findMany({
     where: { ...sellable.owner, kind: sellable.typeKind, archivedAt: null },
@@ -117,6 +123,7 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
     if (error instanceof PricingError || error instanceof PromoCodeError) throw new OrderError(error.message);
     throw error;
   }
+  if (teamPlan && priced.seats !== 1) throw new OrderError("On a team event each person registers for themselves: choose one ticket.");
   const ticketLines = priced.lines.filter((line) => line.kind === "TICKET");
   for (const line of ticketLines) {
     const type = types.find((candidate) => candidate.id === line.ticketTypeId)!;
@@ -151,6 +158,8 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
       fullest = slot;
     }
   }
+  // TEAM events count units, not people; joining a team takes none.
+  if (teamPlan) left = teamPlan.unitsLeft;
   const totalMinor = priced.totalMinor;
   let typesFit = true;
   for (const line of ticketLines) {
@@ -201,10 +210,13 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
       const minimum = providerMinimumMinor(params.payment.provider, currency);
       if (totalMinor < minimum) throw new OrderError(`The total is below the smallest payment the provider accepts (${formatMoney(minimum, currency)}).`);
     }
-    if (sellable.privacyType === EventPrivacyType.APPROVAL_REQUIRED && !manual) {
+    if (sellable.privacyType === EventPrivacyType.APPROVAL_REQUIRED && !manual && !teamPlan) {
       // Sign up first; pay after approval, through a payment link.
       status = RsvpStatus.PENDING_APPROVAL;
       orderStatus = OrderStatus.REQUESTED;
+    } else if (!fits && teamPlan) {
+      // A team place is paid for up front, so it never waits on the waitlist.
+      throw new OrderError(!typesFit ? "That ticket is sold out." : teamPlan.kind === "create" ? "There are no places left for new teams." : "There are no places left.");
     } else if (!fits && atDesk) {
       throw new OrderError("There's no free place right now, so it can't be reserved to pay at the desk.");
     } else if (!fits) {
@@ -222,7 +234,7 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
       orderStatus = OrderStatus.PENDING;
     }
   } else {
-    status = freeStatus({ left, seats: priced.seats, privacyType: sellable.privacyType });
+    status = teamPlan?.kind === "join" ? teamPlan.team.status : freeStatus({ left, seats: priced.seats, privacyType: sellable.privacyType });
     if (isPass && status === RsvpStatus.WAITLISTED) throw new OrderError(`${fullest!.label} is full, so passes can't be given out.`);
     orderStatus = OrderStatus.CONFIRMED;
   }
@@ -276,6 +288,8 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
     }
   }
 
+  const placedTeam = teamPlan ? await placeTeamOrderRegistration(tx, teamPlan, { eventId: (params.target as { eventId: string; }).eventId, orderId: order.id, rsvpId: rsvps[0]!.id, status, email: params.buyer.email }) : null;
+
   let paymentId: string | null = null;
   if (paid && params.payment && (orderStatus === OrderStatus.PENDING || orderStatus === OrderStatus.CONFIRMED)) {
     const description = isPass ? `${sellable.title} pass` : sellable.slots[0]!.label;
@@ -295,7 +309,7 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   if (orderStatus !== OrderStatus.PENDING) {
     // One email per person: a pass's ticket page lists its other dates.
     for (const rsvp of rsvps) {
-      if (rsvp.email && rsvp.first) await enqueueRsvpConfirmation(tx, { to: rsvp.email, eventTitle: sellable.slots[0]!.label, status, checkInToken: rsvp.checkInToken });
+      if (rsvp.email && rsvp.first) await enqueueRsvpConfirmation(tx, { to: rsvp.email, eventTitle: sellable.slots[0]!.label, status, checkInToken: rsvp.checkInToken, ...(placedTeam?.teamName ? { teamName: placedTeam.teamName } : {}) });
     }
   }
   if (orderStatus === OrderStatus.CONFIRMED && rsvps.some((rsvp) => !rsvp.email)) await enqueueOrderEmail(tx, { to: params.buyer.email, orderId: order.id, notice: "attendee-details" });
@@ -304,5 +318,5 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
     await notifyChat(tx, sellable.organisationId, "registration", `${params.buyer.name || "Someone"} booked ${rsvps.length} ${rsvps.length === 1 ? "ticket" : "tickets"} for ${sellable.slots[0]!.label}.`);
   }
   const count = await tx.rSVP.count({ where: sellable.slots[0]!.target });
-  return { orderId: order.id, reference: order.reference, accessToken: order.accessToken, status, buyerRsvpId: rsvps[0]!.id, buyerTicketToken: rsvps[0]!.checkInToken, paymentId, count };
+  return { orderId: order.id, reference: order.reference, accessToken: order.accessToken, status, buyerRsvpId: rsvps[0]!.id, buyerTicketToken: rsvps[0]!.checkInToken, paymentId, count, teamId: placedTeam?.teamId ?? null, rsvpIds: rsvps.map((rsvp) => rsvp.id) };
 }

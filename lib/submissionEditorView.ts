@@ -5,6 +5,7 @@ import { formatDayTime, formatTimeZoneName } from "@/lib/format/datetime";
 import { safeTimeZone } from "@/lib/timeZone";
 import type { SubmissionEditorView } from "@/components/submission/SubmissionEditor";
 import { windowPhase } from "@/components/submission/submissionWindow";
+import { formatMoney } from "@/lib/payments/money";
 
 /**
  * The entrant's own submission, loaded through the core (which re-checks the
@@ -28,6 +29,7 @@ export async function loadSubmissionEditorView(auth: EntrantAuth, now = new Date
     confirmed: view.confirmed,
     declined: view.declined,
     canEdit: view.canEdit,
+    entryFee: view.entryFee ? { label: formatMoney(view.entryFee.amountMinor, view.entryFee.currency), paid: view.entryFee.paid } : null,
     submission: view.submission
       ? {
           title: view.submission.title,

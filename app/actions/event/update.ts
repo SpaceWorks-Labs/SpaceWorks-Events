@@ -22,8 +22,8 @@ const EVENT_UPDATE_REFUSALS = {
   capacity: "Capacity cannot be lower than the current confirmed attendance.",
   capacityUnits: "Capacity cannot be lower than the number of teams and solo registrants who already have a place.",
   mode: "Team registration can't be turned on or off once people have registered.",
-  tickets: "Team registration can't be used with tickets yet. Remove this event's tickets first.",
   teamSize: "Maximum team size cannot be lower than the largest current team.",
+  groupTickets: "Group tickets can't be used with team registration: each person registers for themselves. Take them off sale first.",
 } as const;
 
 export async function updateEvent(input: unknown): Promise<ActionResult> {
@@ -116,9 +116,8 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
         if (teamSettings.registrationMode !== locked.registrationMode && (await tx.rSVP.count({ where: { eventId: event.id } })) > 0) {
           return "mode" as const;
         }
-        // Team registration doesn't take tickets yet: an event sells tickets or registers teams.
-        if (teamSettings.registrationMode === RegistrationMode.TEAM && (await tx.ticketType.count({ where: { eventId: event.id, archivedAt: null } })) > 0) {
-          return "tickets" as const;
+        if (teamSettings.registrationMode === RegistrationMode.TEAM && (await tx.ticketType.count({ where: { eventId: event.id, archivedAt: null, seatsPerTicket: { gt: 1 } } })) > 0) {
+          return "groupTickets" as const;
         }
         if (teamSettings.registrationMode === RegistrationMode.TEAM && teamSettings.teamMaxSize != null) {
           const largest = await tx.rSVP.groupBy({

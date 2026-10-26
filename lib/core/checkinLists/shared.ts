@@ -18,6 +18,8 @@ export type CheckInListSummary = {
   sortOrder: number;
   archived: boolean;
   requiresEntryCheckIn: boolean;
+  /** Only guests whose order bought this extra, up to the quantity bought. */
+  addOn: { id: string; name: string; } | null;
 };
 
 export type ListCheckInResultData = {

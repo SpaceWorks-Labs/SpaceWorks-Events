@@ -5,7 +5,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
 import { retireSoloSubmissionForTeamTx } from "@/lib/core/submissionLifecycle";
-import { countConfirmedUnits, promoteOldestWaitlistedUnit, setTeamStatusTx, settleTeamAfterMemberLeft } from "@/lib/teamUnits";
+import { countConfirmedUnits, promoteOldestWaitlistedUnit, setTeamStatusTx, settleTeamAfterMemberLeft, teamPlacesTaken } from "@/lib/teamUnits";
+import { refundWholeOrderTx, submitRefunds } from "@/lib/payments/operations";
+import { leadsPaidTeam, paidOrdersOfTeam } from "@/lib/payments/teamOrders";
 import { teamNameSchema } from "@/lib/validators";
 import {
   fail,
@@ -39,7 +41,8 @@ export async function transitionTeamStatus(
   action: TeamTransition,
 ): Promise<TeamResult<{ status: RsvpStatus }>> {
   if (!teamId || teamId.length > 128) return fail(TEAM_NOT_FOUND);
-  return teamTransaction(async (tx, webhooks): Promise<TeamResult<{ status: RsvpStatus }>> => {
+  const refundIds: string[] = [];
+  const result = await teamTransaction(async (tx, webhooks): Promise<TeamResult<{ status: RsvpStatus }>> => {
     const event = await lockEvent(tx, ctx.eventId);
     if (!event || event.organisationId !== ctx.organisationId) return fail("Event not found.");
     const team = await tx.team.findFirst({ where: { id: teamId, eventId: event.id }, select: { id: true, status: true } });
@@ -50,6 +53,10 @@ export async function transitionTeamStatus(
       const rejected = await setTeamStatusTx(tx, { teamId: team.id, eventId: event.id, eventTitle: event.title, from: [team.status], to: RsvpStatus.REJECTED });
       if (!rejected) return changed;
       webhooks.push(...rejected);
+      // Paid places come back in full: the organiser turned the team down.
+      for (const orderId of await paidOrdersOfTeam(tx, team.id)) {
+        refundIds.push(...(await refundWholeOrderTx(tx, { orderId, reason: "Team rejected by the organiser", actorUserId: ctx.userId })));
+      }
       return { ok: true, data: { status: RsvpStatus.REJECTED } };
     }
     if (action === "approve") {
@@ -70,6 +77,8 @@ export async function transitionTeamStatus(
     webhooks.push(...confirmed);
     return { ok: true, data: { status: RsvpStatus.CONFIRMED } };
   });
+  await submitRefunds(refundIds);
+  return result;
 }
 
 const moveMemberSchema = z.object({ rsvpId: z.string().trim().min(1).max(128), targetTeamId: z.string().trim().min(1).max(128) }).strict();
@@ -90,8 +99,12 @@ export async function organiserMoveMember(
       select: { id: true, teamId: true, status: true, checkedInAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } },
     });
     if (!rsvp) return fail("RSVP not found.");
+    if (rsvp.status === RsvpStatus.PENDING_PAYMENT) return fail("This person is still paying for their ticket.");
+    // A PER_TEAM leader's ticket paid for their team; it can't move with them.
+    if (await leadsPaidTeam(tx, rsvp.id)) return fail("This person paid for their team's ticket, so they can't move to another team.");
     const target = await tx.team.findFirst({ where: { id: parsed.data.targetTeamId, eventId: event.id }, select: { id: true, name: true, status: true } });
     if (!target) return fail(TEAM_NOT_FOUND);
+    if (target.status === RsvpStatus.PENDING_PAYMENT) return fail("That team's leader is still paying for it.");
     if (rsvp.teamId === target.id) return fail("This person is already in that team.");
     if (target.status === RsvpStatus.REJECTED) return fail("A rejected team can't take new members.");
     // A checked-in person is at the event: moving them into a team without a
@@ -99,8 +112,7 @@ export async function organiserMoveMember(
     if (rsvp.checkedInAt && target.status !== RsvpStatus.CONFIRMED) {
       return fail("This person has already checked in, so they can only move to a confirmed team.");
     }
-    const size = await tx.rSVP.count({ where: { teamId: target.id } });
-    if (!hasFreeSpace(event, size)) return fail("That team is already full.");
+    if (!hasFreeSpace(event, await teamPlacesTaken(tx, target.id))) return fail("That team is already full.");
     // A solo registration's own project can't come into the team (a team
     // member's project stays with the team they leave).
     if (!rsvp.teamId) {

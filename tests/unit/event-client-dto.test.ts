@@ -36,6 +36,9 @@ describe("event browser DTO", () => {
       teamMinSize: null,
       teamMaxSize: null,
       soloPolicy: SoloPolicy.SOLO_ALLOWED,
+      teamTicketMode: "PER_MEMBER",
+      submissionFeeMinor: BigInt(500),
+      submissionFeeRefundOnDisqualify: true,
       submissionsEnabled: true,
       submissionsOpenAt: null,
       submissionsCloseAt: null,
@@ -64,5 +67,6 @@ describe("event browser DTO", () => {
     expect(serialized).not.toContain("resultsAnnouncedAt");
     expect(serialized).not.toContain("reviewsPerProject");
     expect(serialized).not.toContain("scoreNormalization");
+    expect(serialized).not.toContain("submissionFee");
   });
 });

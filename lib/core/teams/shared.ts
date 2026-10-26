@@ -81,6 +81,7 @@ const lockedEventSelect = {
   capacity: true,
   privacyType: true,
   registrationMode: true,
+  teamTicketMode: true,
   teamMinSize: true,
   teamMaxSize: true,
   soloPolicy: true,

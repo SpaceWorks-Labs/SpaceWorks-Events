@@ -9,6 +9,7 @@ import { checkoutLineName } from "./pricing";
 import { submitPendingRefund } from "./refunds";
 import { paymentReturnUrl } from "./returnLink";
 import { settlePaidNotification } from "./settlement";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
 import { loadPaymentAccount } from "./settings";
 
@@ -126,6 +127,7 @@ export async function refreshOrderFromProvider(orderId: string) {
       checkoutId: attempt.externalId, reference: attempt.id, paymentId: paid.paymentId, amountMinor: paid.amountMinor, currency: paid.currency,
     }));
     for (const refundId of result.refundIds) await submitPendingRefund(refundId).catch(() => undefined);
+    for (const webhook of result.webhooks ?? []) emitWebhookEvent(webhook);
     return;
   }
 }
@@ -168,6 +170,7 @@ export async function closeOpenAttempts(orderId: string, now = new Date()): Prom
         checkoutId: attempt.externalId, reference: attempt.id, paymentId: paid.paymentId, amountMinor: paid.amountMinor, currency: paid.currency,
       }, now));
       for (const refundId of result.refundIds) await submitPendingRefund(refundId).catch(() => undefined);
+      for (const webhook of result.webhooks ?? []) emitWebhookEvent(webhook);
       return "settled";
     }
   }

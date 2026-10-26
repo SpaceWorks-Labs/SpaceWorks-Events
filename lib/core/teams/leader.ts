@@ -14,6 +14,9 @@ import {
 import { generateTeamManageToken, generateTeamToken, teamJoinPath, teamManagePath } from "@/lib/teamToken";
 import { addTeamMemberSchema, renameTeamSchema } from "@/lib/validators";
 import { resolveRsvpByTicketToken } from "./resolvers";
+import { teamPlacesTaken } from "@/lib/teamUnits";
+import { hasPaidOrder, PAID_MEMBER_REFUSAL } from "@/lib/payments/teamOrders";
+import { sellsTickets } from "@/lib/rsvpCore/orders";
 import {
   fail,
   hasFreeSpace,
@@ -59,13 +62,15 @@ export async function addTeamMemberByLeader(
       const team = await lockedLeaderTeam(tx, auth);
       if (!team) return fail(TEAM_NOT_FOUND);
       if (team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");
+      if (team.status === RsvpStatus.PENDING_PAYMENT) return fail("Finish paying for your team before adding members.");
+      // When everyone pays for themselves, members buy their own ticket.
+      if (event.teamTicketMode === "PER_MEMBER" && (await sellsTickets({ eventId: event.id }))) return fail("Members buy their own ticket here: share your team's join link instead.");
       // Same rule as public guest registration (rsvpCore): an entered address
       // on the invite list proves nothing, so invite-only events never issue a
       // guest ticket here. Invitees sign in with the invited account and use
       // the join link instead.
       if (event.privacyType === EventPrivacyType.INVITE_ONLY) return fail(INVITE_ONLY_ADD_REFUSED);
-      const size = await tx.rSVP.count({ where: { teamId: team.id } });
-      if (!hasFreeSpace(event, size)) return fail("Your team is already full.");
+      if (!hasFreeSpace(event, await teamPlacesTaken(tx, team.id))) return fail("Your team is already full.");
       const rsvp = await tx.rSVP.create({
         data: {
           eventId: event.id,
@@ -109,6 +114,7 @@ export async function removeTeamMember(auth: TeamLeaderAuth, rsvpId: string): Pr
     });
     if (!member) return fail("Member not found.");
     if (member.checkedInAt) return fail("This member has already checked in.");
+    if (await hasPaidOrder(tx, { id: member.id })) return fail(PAID_MEMBER_REFUSAL);
     await tx.rSVP.delete({ where: { id: member.id } });
     // The team side of the registration cancels it, as when the member leaves.
     webhooks.push({ type: "registration.status_changed", rsvpId: member.id, status: "CANCELLED", previousStatus: member.status, snapshot: rsvpWebhookSnapshot(member) });
@@ -229,6 +235,7 @@ export async function disbandTeam(auth: TeamLeaderAuth): Promise<TeamResult<{ ca
     if (!team) return fail(TEAM_NOT_FOUND);
     const checkedIn = await tx.rSVP.count({ where: { teamId: team.id, checkedInAt: { not: null } } });
     if (checkedIn > 0) return fail("Someone in this team has already checked in, so it can't be disbanded.");
+    if (await hasPaidOrder(tx, { teamId: team.id })) return fail(PAID_MEMBER_REFUSAL);
     const members = await tx.rSVP.findMany({
       where: { teamId: team.id, eventId: event.id },
       select: { ...rsvpWebhookSnapshotSelect, status: true },

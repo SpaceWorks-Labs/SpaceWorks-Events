@@ -62,6 +62,20 @@ At checkout the seats are held for 30 minutes while the buyer pays. Approval
 requests and waitlist places get a payment link that holds the seats for 24
 hours, with one reminder a few hours before it ends.
 
+## Teams, entry fees, prizes and extras
+
+- **Team events** can sell tickets: every member pays, or the leader pays once
+  for the team. Team places are paid up front; rejecting a team refunds it.
+  See [Tickets in TEAMS.md](TEAMS.md#tickets).
+- **Hackathon entry fees** are paid through the same checkout when a project
+  is submitted, and refunded in full on disqualification when the event says
+  so. See [Entry fees](HACKATHON.md#entry-fees).
+- **Prize money** paid to winners by hand is recorded in an append-only payout
+  ledger by owners and admins. See [Prize money](HACKATHON.md#prize-money).
+- **Check-in lists for an extra**: a list can admit only the buyers of an
+  extra (lunch, a T-shirt, a workshop), as many times as each confirmed order
+  bought it; its collected / eligible counts follow the quantity sold.
+
 ## After the sale
 
 - **Receipts:** a PDF receipt for every paid order, from the order page and the

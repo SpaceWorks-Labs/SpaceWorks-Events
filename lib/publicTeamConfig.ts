@@ -1,4 +1,4 @@
-import { RegistrationMode, type SoloPolicy } from "@prisma/client";
+import { RegistrationMode, type SoloPolicy, type TeamTicketMode } from "@prisma/client";
 import type { TeamRegistrationConfig } from "@/components/rsvp/TeamRegistrationFields";
 
 /**
@@ -11,7 +11,8 @@ export function publicTeamRegistrationConfig(event: {
   teamMinSize: number | null;
   teamMaxSize: number | null;
   soloPolicy: SoloPolicy;
+  teamTicketMode: TeamTicketMode;
 }): TeamRegistrationConfig | null {
   if (event.registrationMode !== RegistrationMode.TEAM) return null;
-  return { soloPolicy: event.soloPolicy, teamMinSize: event.teamMinSize, teamMaxSize: event.teamMaxSize };
+  return { soloPolicy: event.soloPolicy, teamMinSize: event.teamMinSize, teamMaxSize: event.teamMaxSize, ticketMode: event.teamTicketMode };
 }

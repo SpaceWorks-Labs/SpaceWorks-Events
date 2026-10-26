@@ -6,7 +6,7 @@ import { flattenZodErrors } from "@/app/actions/utils";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { validateAndNormalizeAnswers } from "./answers";
 import { submitInstanceRsvp } from "./instance";
-import { sellsTickets, submitTicketOrder } from "./orders";
+import { joinsFree, sellsTickets, submitTicketOrder } from "./orders";
 import { reserveRsvp } from "./reserve";
 import { isUniqueViolationOn, TeamRegistrationError, teamRegistrationFailure } from "./team";
 import { isRsvpTargetClosedError, resolveAttendeeEmail } from "./shared";
@@ -124,8 +124,7 @@ export async function submitRsvpCore(
       });
       if ("error" in validated) return { ok: false, error: validated.error };
 
-      if (await sellsTickets({ eventId: event.id })) {
-        if (teamIntent && teamIntent.mode !== "solo") return notTeamEvent;
+      if (!joinsFree(event, teamIntent) && await sellsTickets({ eventId: event.id })) {
         return submitTicketOrder({
           target: { eventId: event.id },
           organisationId: event.organisationId,
@@ -133,6 +132,7 @@ export async function submitRsvpCore(
           buyer: { userId, email: emailRes.email, name: submittedName || existingName, attendeeKey },
           answers: validated.rows,
           setUserName: !existingName && submittedName ? submittedName : null,
+          team: teamIntent,
         });
       }
 

@@ -8,6 +8,8 @@ import {
   TeamJoinRequestDirection,
   TeamJoinRequestStatus,
 } from "@prisma/client";
+import { teamPlacesTaken } from "@/lib/teamUnits";
+import { LEADER_STILL_PAYING } from "@/lib/rsvpCore/team";
 import { prisma } from "@/lib/db";
 import { flattenZodErrors } from "@/app/actions/utils";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
@@ -76,6 +78,7 @@ export async function createJoinRequest(
         const team = await lockedLeaderTeam(tx, params.leader);
         if (!team) return fail(TEAM_NOT_FOUND);
         if (team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");
+        if (team.status === RsvpStatus.PENDING_PAYMENT) return fail("Finish paying for your team first.");
         const profile = await tx.teamSeekerProfile.findFirst({
           where: { id: params.seekerProfileId, visible: true, rsvp: { eventId: event.id, teamId: null, status: { not: RsvpStatus.REJECTED } } },
           select: { rsvpId: true },
@@ -100,8 +103,7 @@ export async function createJoinRequest(
         teamId = team.id;
         rsvpId = rsvp.id;
       }
-      const size = await tx.rSVP.count({ where: { teamId } });
-      if (!hasFreeSpace(event, size)) return fail("This team is already full.");
+      if (!hasFreeSpace(event, await teamPlacesTaken(tx, teamId))) return fail("This team is already full.");
       const request = await tx.teamJoinRequest.create({
         data: { teamId, rsvpId, direction: params.direction === "INVITE" ? TeamJoinRequestDirection.INVITE : TeamJoinRequestDirection.REQUEST },
         select: { id: true },
@@ -207,11 +209,12 @@ async function moveSoloRsvpIntoTeamTx(
 ): Promise<TeamResult<{ status: RsvpStatus }>> {
   if (rsvp.teamId) return fail("This registration is already in a team.");
   if (team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");
+  if (team.status === RsvpStatus.PENDING_PAYMENT) return fail(LEADER_STILL_PAYING);
+  if (rsvp.status === RsvpStatus.PENDING_PAYMENT) return fail("Finish paying for your ticket first.");
   if (rsvp.checkedInAt && team.status !== RsvpStatus.CONFIRMED) {
     return fail("This registration has already checked in, so it can only join a team that has a place.");
   }
-  const size = await tx.rSVP.count({ where: { teamId: team.id } });
-  if (!hasFreeSpace(event, size)) return fail("This team is already full.");
+  if (!hasFreeSpace(event, await teamPlacesTaken(tx, team.id))) return fail("This team is already full.");
   // An entrant is a team or a single RSVP: the solo project can't come along.
   const retired = await retireSoloSubmissionForTeamTx(tx, { rsvpId: rsvp.id, eventId: event.id, by: "entrant" });
   if (!retired.ok) return fail(retired.error);

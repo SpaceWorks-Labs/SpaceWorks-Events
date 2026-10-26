@@ -7,7 +7,7 @@ import { ManageCheckInListsDialog } from "@/components/checkin/ManageCheckInList
 
 const cardClass = "flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-panel p-5";
 
-export function CheckInListsCard({ organisationSlug, eventId, lists, checkInHref, canManage, className }: {
+export function CheckInListsCard({ organisationSlug, eventId, lists, checkInHref, canManage, className, addOns = [] }: {
   organisationSlug: string;
   eventId: string;
   lists: CheckInListView[];
@@ -15,13 +15,15 @@ export function CheckInListsCard({ organisationSlug, eventId, lists, checkInHref
   checkInHref: string | null;
   canManage: boolean;
   className?: string;
+  /** Extras the event sells, for lists limited to their buyers. */
+  addOns?: Array<{ id: string; name: string }>;
 }) {
   const open = lists.filter((list) => !list.archived);
   return (
     <section aria-labelledby="checkin-lists-title" className={cn(cardClass, className)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="checkin-lists-title" className="text-h4 text-ink">Check-in lists</h2>
-        {canManage ? <ManageCheckInListsDialog organisationSlug={organisationSlug} eventId={eventId} lists={lists} /> : null}
+        {canManage ? <ManageCheckInListsDialog organisationSlug={organisationSlug} eventId={eventId} lists={lists} addOns={addOns} /> : null}
       </div>
       <p className="text-sm text-ink-secondary">
         Track more than the door: swag, meals or workshops. Each list counts who has collected it, separately from entry check-in.
@@ -37,6 +39,7 @@ export function CheckInListsCard({ organisationSlug, eventId, lists, checkInHref
                 <p className="text-caption text-ink-muted">
                   <span className="font-semibold text-ink">{list.collected}</span> / {list.eligible} collected
                   {list.requiresEntryCheckIn ? " · after entry check-in" : ""}
+                  {list.addOn ? ` · buyers of ${list.addOn.name}` : ""}
                 </p>
               </div>
               {checkInHref ? (

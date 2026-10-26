@@ -213,7 +213,8 @@ export function RegistrationCard(props: {
               tickets={tickets}
               paidSalesOpen={paidSalesOpen}
               ticketing={ticketing}
-              paidRequest={state.approvalRequired ? "approval" : state.full ? "waitlist" : null}
+              // Team places are paid for up front (docs/TEAMS.md), never requested first.
+              paidRequest={team ? null : state.approvalRequired ? "approval" : state.full ? "waitlist" : null}
               team={team}
               onRsvpSaved={({ ticketToken, status, teamMode }) => {
                 if (ticketToken) setSaved({ token: ticketToken, status });

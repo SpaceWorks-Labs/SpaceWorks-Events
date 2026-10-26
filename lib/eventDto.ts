@@ -6,6 +6,8 @@ export type EventClientDto = Omit<Event,
   // Judging settings have their own DTOs (lib/core/judging.ts).
   | "submissionsEnabled" | "submissionsOpenAt" | "submissionsCloseAt" | "judgingStatus" | "judgesSeeAll"
   | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization"
+  // The entry fee is a BigInt and lives with the judging settings too.
+  | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
 >;
 
 export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {
@@ -42,6 +44,7 @@ export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "c
     teamMinSize: event.teamMinSize,
     teamMaxSize: event.teamMaxSize,
     soloPolicy: event.soloPolicy,
+    teamTicketMode: event.teamTicketMode,
     createdAt: event.createdAt,
   };
 }

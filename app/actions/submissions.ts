@@ -99,12 +99,14 @@ export async function saveSubmissionDraftAction(ref: unknown, input: unknown): P
 }
 
 /** Save and submit. The core queues the `submission-received` email on the first transition to SUBMITTED. */
-export async function submitSubmissionAction(ref: unknown, input: unknown): Promise<ActionResult<{ status: string }>> {
+export async function submitSubmissionAction(ref: unknown, input: unknown): Promise<ActionResult<{ status: string; checkoutUrl?: string }>> {
   const entrant = await resolveEntrant(ref);
   if (!entrant) return { ok: false, error: LINK_EXPIRED };
   if (await isActionRateLimited("action", entrantSubject(entrant.auth))) return { ok: false, error: TOO_MANY };
   const result = await submitSubmission(entrant.auth, input);
   if (!result.ok) return result;
+  // An unpaid entry fee: the project waits as a draft while the entrant pays.
+  if (result.data.checkoutUrl) return { ok: true, data: { status: result.data.status, checkoutUrl: result.data.checkoutUrl } };
   await audit(entrant, "SUBMISSION_SUBMITTED", result.data.submissionId);
   return { ok: true, data: { status: result.data.status } };
 }

@@ -290,9 +290,49 @@ with a deliberate error code (`TEAM_REQUIRED`). No API DTO gains team fields yet
 
 ## Tickets
 
-Team registration doesn't take tickets yet: an event either sells tickets or
-registers teams. Turning team registration on is refused while the event has
-tickets, and adding a ticket to a team event is refused.
+A team event can sell tickets (`lib/payments/teamOrders.ts`). Each order seats
+exactly one person, so group tickets are refused on team events (and team mode
+is refused while an event has group tickets). **Tickets → Who pays for teams**
+(`Event.teamTicketMode`, owners, admins and `EDIT_DETAILS` co-organisers, fixed
+after the first sale, audited `TEAM_TICKET_MODE_UPDATED`) chooses:
+
+- **Every member** (`PER_MEMBER`, the default): the leader buys a ticket when
+  creating the team, members buy theirs when joining (the join link shows the
+  tickets), and solo registrants buy their own. A leader can't add members by
+  email: members pay for themselves.
+- **The leader, once per team** (`PER_TEAM`): the leader's ticket covers the
+  team; members join free from the join link once it is paid.
+
+Paid places are paid **up front**, never requested first:
+
+- A leader's order creates the team in `PENDING_PAYMENT` with the leader as
+  its only member, so "member status = team status" holds. It takes a unit
+  while the hold lasts (`countConfirmedUnits` counts confirmed units plus held
+  new teams and solo tickets), and nobody can join, be invited or be moved into
+  it until it is paid. `Order.teamId` and `Order.teamName` mark the leader's
+  order. When the hold ends unpaid the team is deleted and its name freed.
+- A member paying to join (`PER_MEMBER`) has no team until the payment lands:
+  their registration is `PENDING_PAYMENT` with `teamId` null and
+  `Order.teamId` naming the team. The hold keeps their place in the team
+  (`teamPlacesTaken` counts members plus live joining holds) but takes no unit.
+- On payment (webhook, return page, hold expiry or settled by hand) the place
+  is confirmed, or waits for approval (`PENDING_APPROVAL`) on an
+  approval-required event; a joining member takes the team's status. The
+  leader's team page link is emailed then. If the place was lost (the hold
+  ended and the unit or team place was taken, or the team was rejected or
+  removed), the payment is refunded in full instead.
+- A paid team or solo place never waits on the waitlist: a full event refuses
+  it. Free tickets keep the usual waitlist and promotion of whole units.
+- **Rejecting a team** refunds every paid order of its members in full.
+  Approving or promoting changes no money.
+- Registrations from a paid order are cancelled **as an order** (the order
+  page under the refund policy, or Guests → Payment): a cancelled member leaves
+  their team as if they had cancelled, and cancelling a `PER_TEAM` leader's
+  order cancels the whole team (members are emailed). Leaders can't remove paid
+  members or disband a team with paid members, and organisers can't delete such
+  a team; leaving from the ticket page points paid members to the order page.
+- Payments, settlement and cancellations raise the usual registration
+  webhooks.
 
 ## Tests
 

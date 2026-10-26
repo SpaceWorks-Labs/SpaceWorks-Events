@@ -28,19 +28,26 @@ export const loadCheckInLists = cache(async (eventId: string): Promise<CheckInLi
     prisma.checkInList.findMany({
       where: { eventId },
       orderBy: [{ archived: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true, sortOrder: true, archived: true, requiresEntryCheckIn: true },
+      select: { id: true, name: true, sortOrder: true, archived: true, requiresEntryCheckIn: true, addOn: { select: { id: true, name: true } } },
     }),
     prisma.rSVP.count({ where: { eventId, status: "CONFIRMED" } }),
     prisma.rSVP.count({ where: { eventId, status: "CONFIRMED", checkedInAt: { not: null } } }),
     prisma.checkInListRecord.groupBy({ by: ["listId"], where: { list: { eventId } }, _count: { _all: true } }),
   ]);
   const collectedByList = new Map(collected.map((row) => [row.listId, row._count._all]));
-  return lists.map((list) => ({
+  // A list for an extra counts what was bought in confirmed orders.
+  const bought = await Promise.all(lists.map((list) => (list.addOn
+    ? prisma.orderLine.aggregate({ _sum: { quantity: true }, where: { addOnId: list.addOn.id, order: { eventId, status: "CONFIRMED" } } }).then((sum) => sum._sum.quantity ?? 0)
+    : null)));
+  return lists.map((list, index) => ({
     ...list,
     collected: collectedByList.get(list.id) ?? 0,
-    eligible: list.requiresEntryCheckIn ? confirmedAtEntry : confirmed,
+    eligible: bought[index] ?? (list.requiresEntryCheckIn ? confirmedAtEntry : confirmed),
   }));
 });
+
+/** Extras on sale for an event, for limiting a new check-in list to their buyers. */
+export const loadListAddOns = cache(async (eventId: string) => prisma.addOn.findMany({ where: { eventId, archivedAt: null }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true } }));
 
 /** Guests per page in "Guests for <list>"; "Show more" fetches the next one. */
 export const LIST_ROSTER_PAGE_SIZE = 100;
@@ -80,7 +87,7 @@ export type ListRosterPage = {
  * registration order (`createdAt, id` keyset), filtered, searched and
  * counted in PostgreSQL. The first page also carries the chip counts.
  */
-export async function loadCheckInListRosterPage(eventId: string, list: { id: string; requiresEntryCheckIn: boolean }, input: unknown = {}): Promise<ListRosterPage> {
+export async function loadCheckInListRosterPage(eventId: string, list: { id: string; requiresEntryCheckIn: boolean; addOnId?: string | null; addOn?: { id: string; } | null }, input: unknown = {}): Promise<ListRosterPage> {
   const empty: ListRosterPage = { rows: [], nextCursor: null, counts: null };
   const parsed = listRosterViewSchema.safeParse(input ?? {});
   if (!parsed.success) return empty;
@@ -91,6 +98,9 @@ export async function loadCheckInListRosterPage(eventId: string, list: { id: str
   const inList: Prisma.RSVPWhereInput = { checkInListRecords: { some: { listId: list.id } } };
   const notInList: Prisma.RSVPWhereInput = { status: "CONFIRMED", checkInListRecords: { none: { listId: list.id } } };
   const and: Prisma.RSVPWhereInput[] = [{ eventId, OR: [{ status: "CONFIRMED" }, inList] }];
+  // A list for an extra shows only guests whose order bought it.
+  const addOnId = list.addOnId ?? list.addOn?.id;
+  if (addOnId) and.push({ order: { status: "CONFIRMED", lines: { some: { addOnId } } } });
   if (query) {
     const contains = containsText(query);
     and.push({ OR: [{ guestName: contains }, { guestEmail: contains }, { user: { name: contains } }, { user: { email: contains } }] });

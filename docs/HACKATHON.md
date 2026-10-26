@@ -339,6 +339,41 @@ interest. Rules are pure functions in `lib/judgingProgress.ts`.
   link, own registration, or submission link) stands in for the invite list,
   as on the ticket and team pages; the publication rule still applies.
 
+## Entry fees
+
+- **Settings → Project entry fee** (`Event.submissionFeeMinor`, owners, admins
+  and `EDIT_DETAILS` co-organisers, needs paid events and a connected payment
+  account, audited `ENTRY_FEE_UPDATED`): a fee paid once per entrant when they
+  submit a project, and whether it is refunded in full when the project is
+  disqualified (`submissionFeeRefundOnDisqualify`, on by default).
+- **Submit** with the fee unpaid saves the project as a draft and opens the
+  organiser's checkout for an order with no registrations
+  (`Order.submissionId`, one `FEE` line, a 30-minute hold;
+  `lib/payments/entryFees.ts`). A live hold is reused. When the payment lands
+  the order is confirmed and the project submitted (audited `ENTRY_FEE_PAID`,
+  *submission received* emailed); a late payment is still accepted, since no
+  places are held. Entry fees appear in the orders CSV and the Money
+  reports like other orders.
+- A project already paid for stays paid if it is withdrawn and submitted
+  again. Disqualifying refunds a paid fee in full when the setting is on;
+  reinstating charges nothing. Cancelling the event refunds fees with the
+  tickets.
+
+## Prize money
+
+- An award can carry a **prize per winner** (`EventAward.prizeMinor`, in the
+  event's currency). Judging → **Prizes** (organisation owners and admins
+  only) sets it, lists each winner with what has been paid, and records
+  payouts made by hand: who was paid, the amount (never more than the prize in
+  total), cash / UPI / bank transfer / card terminal / other, a reference, the
+  day and a note (`lib/prizes.ts`, audited `AWARD_PRIZE_UPDATED`,
+  `PRIZE_PAYOUT_RECORDED`, `PRIZE_PAYOUT_REVERSED`, chat event *Payouts*).
+- `PrizePayout` is an append-only ledger: a database trigger refuses any
+  change except clearing a reference when the award, project, event or user is
+  deleted (names are copied onto the row). A mistake is undone by a
+  **reversal** row for the same amount and currency (`reversesId`, at most one
+  per payout, checked by a second trigger); the original stays on record.
+
 ## Tests
 
 - Integration (`tests/integration/judging.db.test.ts`): submissions refused

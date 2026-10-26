@@ -50,6 +50,8 @@ export async function loadOrderView({ params, searchParams }: Props) {
       ...ORDER_SUBJECT_SELECT,
       eventId: true,
       eventSeriesId: true,
+      teamName: true,
+      event: { select: { ...ORDER_SUBJECT_SELECT.event.select, teamTicketMode: true } },
       rsvps: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -111,7 +113,11 @@ export async function loadOrderView({ params, searchParams }: Props) {
     refunded: refundedMinor > BigInt(0) ? { amount: formatMoney(refundedMinor, order.currency), pending: refunds.some((refund) => refund.status === PaymentRefundStatus.PENDING) } : null,
     /** The policy this order was bought under, and what cancelling now returns. */
     refundPolicy: order.totalMinor > BigInt(0) && policy ? `${describeRefundPolicy(policy)}${policy.text ? ` ${policy.text}` : ""}` : null,
-    cancellation: cancellation ? { refund: cancellation.refundMinor > BigInt(0) ? formatMoney(cancellation.refundMinor, order.currency) : null } : null,
+    cancellation: cancellation ? {
+      refund: cancellation.refundMinor > BigInt(0) ? formatMoney(cancellation.refundMinor, order.currency) : null,
+      // A PER_TEAM leader's ticket covers the team: cancelling it cancels everyone in it (docs/TEAMS.md).
+      team: order.teamName != null && order.event?.teamTicketMode === "PER_TEAM" ? order.teamName : null,
+    } : null,
     free: order.totalMinor === BigInt(0),
     lines: order.lines.map((line) => ({ id: line.id, label: checkoutLineName(line), amount: formatMoney(line.totalMinor, order.currency) })),
     event: subject

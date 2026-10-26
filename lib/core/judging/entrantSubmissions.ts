@@ -30,6 +30,9 @@ import {
   WINDOW_CLOSED,
 } from "./shared";
 import { entrantWhere, lockedEntrant, lockEntrantRow } from "./entrantAuth";
+import { entryFeeOwed, entryFeePaid } from "@/lib/payments/entryFees";
+import { DEFAULT_CURRENCY } from "@/lib/payments/money";
+import { openEntryFeeCheckout } from "@/lib/payments/entryFeeCheckout";
 
 // ---------------------------------------------------------------------------
 // Entrant actions
@@ -41,11 +44,11 @@ async function writeSubmission(
   auth: EntrantAuth,
   input: unknown,
   mode: "draft" | "submit",
-): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus }>> {
+): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; feeBuyer?: { email: string; name: string } }>> {
   const parsed = submissionContentSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
   try {
-    return await prisma.$transaction(async (tx): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus }>> => {
+    return await prisma.$transaction(async (tx): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; feeBuyer?: { email: string; name: string } }>> => {
       const event = await lockEventShared(tx, auth.eventId);
       if (!event) return fail(EVENT_NOT_FOUND);
       await lockEntrantRow(tx, auth);
@@ -59,8 +62,11 @@ async function writeSubmission(
 
       const now = new Date();
       const wasSubmitted = existing?.status === SubmissionStatus.SUBMITTED;
-      const status = mode === "submit" || wasSubmitted ? SubmissionStatus.SUBMITTED : SubmissionStatus.DRAFT;
-      const submittedAt = mode === "submit" && !wasSubmitted ? now : wasSubmitted ? existing.submittedAt ?? now : null;
+      // An entry fee is paid first; the project is submitted when it lands.
+      const feeOwed = mode === "submit" && !wasSubmitted && (await entryFeeOwed(tx, event.id, existing?.id ?? null)) != null;
+      if (feeOwed && !entrant.submitter.email) return fail("Add an email address to your registration before paying the entry fee.");
+      const status = (mode === "submit" && !feeOwed) || wasSubmitted ? SubmissionStatus.SUBMITTED : SubmissionStatus.DRAFT;
+      const submittedAt = mode === "submit" && !wasSubmitted && !feeOwed ? now : wasSubmitted ? existing.submittedAt ?? now : null;
       const content = {
         title: parsed.data.title,
         summary: parsed.data.summary,
@@ -76,6 +82,7 @@ async function writeSubmission(
             data: { ...content, eventId: entrant.eventId, teamId: entrant.teamId, rsvpId: entrant.rsvpId },
             select: { id: true, status: true },
           });
+      if (feeOwed) return ok({ submissionId: saved.id, status: saved.status, feeBuyer: { email: entrant.submitter.email!, name: entrant.submitter.name ?? entrant.displayName } });
       if (mode === "submit" && !wasSubmitted && entrant.submitter.email) {
         await enqueueSubmissionReceived(tx, {
           to: entrant.submitter.email,
@@ -98,9 +105,20 @@ export function saveSubmissionDraft(auth: EntrantAuth, input: unknown) {
   return writeSubmission(auth, input, "draft");
 }
 
-/** Save and submit. Queues `submission-received` to the person acting when the project becomes SUBMITTED. */
-export function submitSubmission(auth: EntrantAuth, input: unknown) {
-  return writeSubmission(auth, input, "submit");
+/**
+ * Save and submit. Queues `submission-received` to the person acting when the
+ * project becomes SUBMITTED. With an unpaid entry fee the project is saved as
+ * a draft and `checkoutUrl` opens the fee's payment page; it is submitted
+ * once paid.
+ */
+export async function submitSubmission(auth: EntrantAuth, input: unknown): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; checkoutUrl?: string }>> {
+  const written = await writeSubmission(auth, input, "submit");
+  if (!written.ok || !written.data.feeBuyer) return written;
+  const { submissionId, status, feeBuyer } = written.data;
+  const userId = auth.kind === "team-member" || auth.kind === "solo-owner" ? auth.userId : null;
+  const checkout = await openEntryFeeCheckout({ eventId: auth.eventId, submissionId, buyer: { userId, ...feeBuyer } });
+  if ("error" in checkout) return fail(checkout.error);
+  return ok("url" in checkout ? { submissionId, status, checkoutUrl: checkout.url } : { submissionId, status });
 }
 
 /** Withdraw a draft or submitted project while the window is open. Withdrawn projects can be re-submitted. */
@@ -145,8 +163,12 @@ export async function loadEntrantSubmission(auth: EntrantAuth, now: Date = new D
   if (!entrant) return null;
   const submission = await prisma.submission.findFirst({
     where: entrantWhere(entrant),
-    select: { title: true, summary: true, repoUrl: true, demoUrl: true, videoUrl: true, status: true, submittedAt: true },
+    select: { id: true, title: true, summary: true, repoUrl: true, demoUrl: true, videoUrl: true, status: true, submittedAt: true },
   });
+  const fee = await prisma.event.findUnique({ where: { id: event.id }, select: { submissionFeeMinor: true, currency: true } });
+  const entryFee = fee?.submissionFeeMinor
+    ? { amountMinor: fee.submissionFeeMinor, currency: fee.currency ?? DEFAULT_CURRENCY, paid: submission ? await entryFeePaid(prisma, submission.id) : false }
+    : null;
   const isOpen = isSubmissionWindowOpen(event, now);
   const confirmed = entrant.status === RsvpStatus.CONFIRMED;
   return {
@@ -159,6 +181,7 @@ export async function loadEntrantSubmission(auth: EntrantAuth, now: Date = new D
     declined: entrant.status === RsvpStatus.REJECTED,
     canEdit: isOpen && confirmed && submission?.status !== SubmissionStatus.DISQUALIFIED,
     submission: entrantSubmissionView(submission),
+    entryFee,
   };
 }
 

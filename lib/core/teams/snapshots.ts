@@ -4,6 +4,7 @@ import { Prisma, RegistrationMode, RsvpStatus } from "@prisma/client";
 import { z } from "zod";
 import { captureSubmissionSnapshotTx, restoreSubmissionSnapshotTx, submissionSnapshotSchema } from "@/lib/core/submissionLifecycle";
 import { countConfirmedUnits, promoteOldestWaitlistedUnit, rsvpWebhookSnapshot } from "@/lib/teamUnits";
+import { hasPaidOrder } from "@/lib/payments/teamOrders";
 import { CHECK_IN_LIST_SOURCES, MAX_CHECK_IN_LISTS } from "@/lib/checkInLists";
 import { teamTokenSchema } from "@/lib/validators";
 import { fail, isUniqueViolation, lockEvent, TEAM_NOT_FOUND, teamTransaction, type OrganiserEventContext, type TeamResult } from "./shared";
@@ -146,6 +147,7 @@ export async function organiserDeleteTeam(ctx: OrganiserEventContext, teamId: st
       include: teamSnapshotInclude,
     });
     if (!team) return fail(TEAM_NOT_FOUND);
+    if (await hasPaidOrder(tx, { teamId: team.id })) return fail("Someone in this team paid for their ticket. Cancel paid tickets under Payment (with a refund), or reject the team, first.");
     const snapshot = await teamDeletionSnapshot(tx, team, event.id);
     await tx.rsvpDeletionUndo.deleteMany({ where: { expiresAt: { lte: new Date() } } });
     // An empty team (should not exist) is deleted without an undo snapshot.

@@ -4,7 +4,9 @@ import { TicketVisibility, type RefundPolicyKind } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { describeRefundPolicy } from "./refundPolicy";
-import { listPublicAddOns, type PublicTicketType } from "./tickets";
+import { DEFAULT_CURRENCY } from "./money";
+import { canAcceptOnlinePayments } from "./settings";
+import { listPublicAddOns, listPublicTicketTypes, type PublicTicketType } from "./tickets";
 
 type Owner = { eventId: string; } | { eventSeriesId: string; };
 
@@ -36,4 +38,13 @@ export async function ticketingInfo(owner: Owner, tickets: PublicTicketType[], c
     refundPolicy: describeRefundPolicy({ kind: policy.refundPolicyKind, hours: policy.refundPolicyHours, percent: policy.refundPolicyPercent, text: policy.refundPolicyText }),
     refundPolicyText: policy.refundPolicyText,
   };
+}
+
+/** Everything a one-off event's public registration form needs to sell tickets (the event page, a team join link). */
+export async function publicEventTicketing(organisationId: string, event: { id: string; currency: string | null; refundPolicyKind: RefundPolicyKind; refundPolicyHours: number | null; refundPolicyPercent: number | null; refundPolicyText: string; }) {
+  const currency = event.currency ?? DEFAULT_CURRENCY;
+  const tickets = await listPublicTicketTypes({ eventId: event.id }, currency, new Date(), { member: await viewerIsMember(organisationId) });
+  const ticketing = await ticketingInfo({ eventId: event.id }, tickets, currency, event);
+  const paidSalesOpen = ticketing?.sellsPaid ? await canAcceptOnlinePayments(organisationId) : false;
+  return { tickets, ticketing, paidSalesOpen };
 }

@@ -35,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
  * name, size and maximum size, never its members.
  */
 export default async function TeamJoinPage({ params }: Props) {
-  const { org, event, accentColor, preview, team, teamConfig, fields, registrationOpen, registration } = await loadTeamJoinView({ params });
+  const { org, event, accentColor, preview, team, teamConfig, fields, registrationOpen, registration, tickets, ticketing, paidSalesOpen } = await loadTeamJoinView({ params });
   const teamFull = team.maxSize != null && team.size >= team.maxSize;
   // Only promise "register below" when the form is actually shown.
   const showsForm = event.status !== EventStatus.CANCELLED && !registration && registrationOpen && !teamFull;
@@ -111,6 +111,9 @@ export default async function TeamJoinPage({ params }: Props) {
                 eventSlug={event.slug}
                 registrationFields={fields}
                 team={{ ...teamConfig, joinTeam: team }}
+                tickets={tickets}
+                ticketing={ticketing}
+                paidSalesOpen={paidSalesOpen}
               />
               {existingRegistrationHint}
             </>

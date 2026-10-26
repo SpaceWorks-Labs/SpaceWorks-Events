@@ -35,6 +35,8 @@ export type SubmissionEditorView = {
   confirmed: boolean;
   declined: boolean;
   canEdit: boolean;
+  /** The entry fee, formatted, and whether it is paid (docs/HACKATHON.md). */
+  entryFee: { label: string; paid: boolean } | null;
   submission: {
     title: string;
     summary: string;
@@ -110,6 +112,12 @@ export function SubmissionEditor({ submissionRef, view, variant }: { submissionR
       if (!res.ok) {
         setErrors(res.fieldErrors ?? {});
         setFeedback({ tone: "danger", message: res.fieldErrors ? "Check the highlighted fields." : res.error });
+        return;
+      }
+      // An entry fee is paid on the organiser's payment page; the project is submitted once it lands.
+      const checkoutUrl = (res.data as { checkoutUrl?: string } | undefined)?.checkoutUrl;
+      if (checkoutUrl) {
+        window.location.assign(checkoutUrl);
         return;
       }
       setFeedback({
@@ -202,6 +210,11 @@ export function SubmissionEditor({ submissionRef, view, variant }: { submissionR
       <p className="text-caption text-ink-muted">
         Judges see the title, summary, links, and {view.isTeam ? "your team name" : "your first name and last initial"}. They never see your email address.
       </p>
+      {view.entryFee && !view.entryFee.paid && !submitted ? (
+        <p className="text-caption text-ink-muted">
+          Submitting costs {view.entryFee.label} (the entry fee), paid on the organiser&apos;s secure payment page. Your project is submitted once it&apos;s paid.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {submitted ? (
           <Button type="button" variant="primary" loading={busy === "draft"} loadingLabel="Saving…" disabled={pending} onClick={() => save("draft")}>
@@ -210,7 +223,7 @@ export function SubmissionEditor({ submissionRef, view, variant }: { submissionR
         ) : (
           <>
             <Button type="submit" variant="primary" loading={busy === "submit"} loadingLabel="Submitting…" disabled={pending} startIcon={<Send />}>
-              {status === "WITHDRAWN" ? "Submit again" : "Submit project"}
+              {view.entryFee && !view.entryFee.paid ? `Pay ${view.entryFee.label} and submit` : status === "WITHDRAWN" ? "Submit again" : "Submit project"}
             </Button>
             <Button type="button" variant="secondary" loading={busy === "draft"} loadingLabel="Saving…" disabled={pending} onClick={() => save("draft")}>
               Save draft

@@ -2,6 +2,7 @@ import "server-only";
 
 import crypto from "crypto";
 import { CheckoutAttemptStatus, type Prisma } from "@prisma/client";
+import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import type { OnlineProvider } from "./http";
@@ -55,7 +56,7 @@ export type WebhookContext = { organisationId: string; provider: OnlineProvider;
  * failure rolls back the idempotency row and the provider retries. Returns
  * refunds to submit to the provider once the transaction has committed.
  */
-export type WebhookApplier = (tx: Prisma.TransactionClient, context: WebhookContext, event: VerifiedWebhookEvent) => Promise<string[] | void>;
+export type WebhookApplier = (tx: Prisma.TransactionClient, context: WebhookContext, event: VerifiedWebhookEvent) => Promise<{ refundIds: string[]; webhooks: WebhookEmission[]; } | void>;
 
 /**
  * POST /api/webhooks/{razorpay,stripe}/:webhookPathId on the API host.
@@ -80,6 +81,7 @@ export async function handleProviderWebhook(request: Request, provider: OnlinePr
 
   const context = { organisationId: account.organisationId, provider };
   let refundIds: string[] = [];
+  let webhooks: WebhookEmission[] = [];
   try {
     await prisma.$transaction(async (tx) => {
       // ON CONFLICT keeps a replay distinct from a failure inside `apply`,
@@ -91,7 +93,9 @@ export async function handleProviderWebhook(request: Request, provider: OnlinePr
         RETURNING "id"
       `;
       if (inserted.length === 0) return;
-      refundIds = (await apply?.(tx, context, event)) ?? [];
+      const applied = await apply?.(tx, context, event);
+      refundIds = applied?.refundIds ?? [];
+      webhooks = applied?.webhooks ?? [];
     });
   } catch {
     console.error(`[payments] ${provider.toLowerCase()} webhook could not be applied`);
@@ -99,13 +103,19 @@ export async function handleProviderWebhook(request: Request, provider: OnlinePr
   }
   // Provider calls happen outside the transaction; the scheduler retries any left pending.
   for (const refundId of refundIds) await submitPendingRefund(refundId).catch(() => undefined);
+  for (const webhook of webhooks) emitWebhookEvent(webhook);
   return NextResponse.json({ received: true }, { headers: HEADERS });
 }
 
 /** Settlement for verified webhooks: captured payments, closed pages, then refund updates. */
 export const settleWebhookEvent: WebhookApplier = async (tx, context, event) => {
   const refundIds: string[] = [];
-  if (event.paid) refundIds.push(...(await settlePaidNotification(tx, context, event.paid)).refundIds);
+  const webhooks: WebhookEmission[] = [];
+  if (event.paid) {
+    const settled = await settlePaidNotification(tx, context, event.paid);
+    refundIds.push(...settled.refundIds);
+    webhooks.push(...(settled.webhooks ?? []));
+  }
   if (event.closedCheckoutId) {
     // The page can no longer take money; the hold itself ends on its own schedule.
     await tx.paymentCheckoutAttempt.updateMany({
@@ -115,5 +125,5 @@ export const settleWebhookEvent: WebhookApplier = async (tx, context, event) => 
   }
   for (const refund of event.refunds) await applyRefundNotification(tx, context, refund);
   if (event.dispute) await applyDisputeNotification(tx, context, event.dispute);
-  return refundIds;
+  return { refundIds, webhooks };
 };

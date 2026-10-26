@@ -270,4 +270,21 @@ describe("production migration safety contracts", () => {
     expect(sql).toContain('"SavedView_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE');
     expect(sql).toContain('"SavedView_organisationId_fkey" FOREIGN KEY ("organisationId") REFERENCES "Organisation"("id") ON DELETE CASCADE');
   });
+
+  it("adds paid options without rewriting rows, keeping prize payouts append-only", () => {
+    const sql = readFileSync(resolve(root, "prisma/migrations/20261105000000_paid_options/migration.sql"), "utf8");
+    expect(sql).not.toMatch(/^\s*UPDATE\s/im);
+    // The only constraint dropped is the chat channel shape, re-added with "payout".
+    expect(sql.match(/DROP CONSTRAINT "([^"]+)"/g)).toEqual(['DROP CONSTRAINT "ChatChannel_shape"']);
+    expect(sql).toContain(`CREATE TYPE "TeamTicketMode" AS ENUM ('PER_MEMBER', 'PER_TEAM');`);
+    expect(sql).toContain(`"teamTicketMode" "TeamTicketMode" NOT NULL DEFAULT 'PER_MEMBER'`);
+    expect(sql).toContain('"Order_team_or_submission" CHECK (("teamId" IS NULL AND "teamName" IS NULL) OR "submissionId" IS NULL)');
+    expect(sql).toContain('"Order_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE SET NULL');
+    expect(sql).toContain('"Order_submissionId_fkey" FOREIGN KEY ("submissionId") REFERENCES "Submission"("id") ON DELETE SET NULL');
+    expect(sql).toContain('"CheckInList_addOnId_fkey" FOREIGN KEY ("addOnId") REFERENCES "AddOn"("id") ON DELETE NO ACTION');
+    expect(sql).toContain('"PrizePayout_organisationId_fkey" FOREIGN KEY ("organisationId") REFERENCES "Organisation"("id") ON DELETE CASCADE');
+    expect(sql).toContain('CREATE TRIGGER "prize_payout_guard"');
+    expect(sql).toContain('CREATE TRIGGER "prize_payout_reversal_guard"');
+    expect(sql).toContain("'event', 'payout']::TEXT[]");
+  });
 });

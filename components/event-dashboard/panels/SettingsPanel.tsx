@@ -7,10 +7,12 @@ import { JudgingSettingsCard } from "./JudgingPanelSetup";
 import { TicketTypesManager } from "@/components/event-dashboard/settings/TicketTypesManager";
 import { AddOnsManager } from "@/components/event-dashboard/settings/AddOnsManager";
 import { PromoCodesManager, RefundPolicyControl, TransfersControl } from "@/components/event-dashboard/settings/PromoCodesManager";
+import { TeamTicketModeControl } from "@/components/event-dashboard/settings/TeamTicketModeControl";
+import { EntryFeeControl } from "@/components/event-dashboard/settings/EntryFeeControl";
 import { NoPermission } from "./shared";
 
 export async function SettingsPanel({ ctx, judgingInUse = false }: { ctx: EventDashboardContext; judgingInUse?: boolean; }) {
-  const { permissions, organisation, event, collaborators, pending, tickets, judgingCard } = await loadSettingsPanel({ ctx, judgingInUse });
+  const { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee } = await loadSettingsPanel({ ctx, judgingInUse });
   return (
     <div className="flex flex-col gap-5">
       {tickets ? (
@@ -24,6 +26,10 @@ export async function SettingsPanel({ ctx, judgingInUse = false }: { ctx: EventD
           payee={tickets.payee}
         />
       ) : null}
+      {tickets && event.registrationMode === "TEAM" && tickets.tickets.length > 0 ? (
+        <TeamTicketModeControl organisationSlug={organisation.slug} eventId={event.id} mode={event.teamTicketMode} sold={tickets.sold} />
+      ) : null}
+      {entryFee ? <EntryFeeControl organisationSlug={organisation.slug} eventId={event.id} {...entryFee} /> : null}
       {tickets ? (
         <AddOnsManager organisationSlug={organisation.slug} target={{ eventId: event.id }} currency={tickets.currency} addOns={tickets.addOns} paidAllowed={tickets.paidAllowed} />
       ) : null}

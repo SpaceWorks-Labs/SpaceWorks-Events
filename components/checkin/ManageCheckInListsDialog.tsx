@@ -7,22 +7,24 @@ import { createCheckInList, reorderCheckInLists, updateCheckInList } from "@/app
 import { Button, IconButton } from "@/components/ui/button";
 import { Switch, SwitchRow } from "@/components/ui/choice";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/field";
+import { Dropdown, Field, Input } from "@/components/ui/field";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { CHECK_IN_LIST_NAME_MAX } from "@/lib/checkInLists";
 
-export type ManagedCheckInList = { id: string; name: string; archived: boolean; requiresEntryCheckIn: boolean };
+export type ManagedCheckInList = { id: string; name: string; archived: boolean; requiresEntryCheckIn: boolean; addOn?: { id: string; name: string } | null };
 
 /*
  * Create, rename, reorder, archive and restore an event's custom check-in
  * lists. Shown only to organisation admins and `EDIT_DETAILS` co-organisers;
  * every action re-checks that on the server (lib/core/checkinLists.ts).
  */
-export function ManageCheckInListsDialog({ organisationSlug, eventId, lists, triggerLabel = "Manage lists" }: {
+export function ManageCheckInListsDialog({ organisationSlug, eventId, lists, triggerLabel = "Manage lists", addOns = [] }: {
   organisationSlug: string;
   eventId: string;
   lists: ManagedCheckInList[];
   triggerLabel?: string;
+  /** Extras the event sells: a new list can be limited to their buyers. */
+  addOns?: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -30,6 +32,7 @@ export function ManageCheckInListsDialog({ organisationSlug, eventId, lists, tri
   const [pending, startTransition] = useTransition();
   const [newName, setNewName] = useState("");
   const [newRequiresEntry, setNewRequiresEntry] = useState(false);
+  const [newAddOnId, setNewAddOnId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
   const active = lists.filter((list) => !list.archived);
@@ -53,9 +56,10 @@ export function ManageCheckInListsDialog({ organisationSlug, eventId, lists, tri
   const create = () => {
     const name = newName.trim();
     if (!name) return;
-    run(() => createCheckInList({ ...target, name, requiresEntryCheckIn: newRequiresEntry }), `Added ${name}.`, () => {
+    run(() => createCheckInList({ ...target, name, requiresEntryCheckIn: newRequiresEntry, ...(newAddOnId ? { addOnId: newAddOnId } : {}) }), `Added ${name}.`, () => {
       setNewName("");
       setNewRequiresEntry(false);
+      setNewAddOnId("");
     });
   };
 
@@ -99,6 +103,14 @@ export function ManageCheckInListsDialog({ organisationSlug, eventId, lists, tri
               <Button type="submit" variant="primary" startIcon={<Plus />} disabled={pending || !newName.trim()}>Add list</Button>
             </div>
             <SwitchRow label="Only after entry check-in" description="Guests must be checked in at the door first." checked={newRequiresEntry} onCheckedChange={setNewRequiresEntry} disabled={pending} />
+            {addOns.length > 0 ? (
+              <Field label="Who can collect" helperText="A list for an extra admits its buyers only, as many times as their order bought it.">
+                <Dropdown value={newAddOnId} onChange={(event) => setNewAddOnId(event.target.value)} disabled={pending}>
+                  <option value="">Every confirmed guest</option>
+                  {addOns.map((addOn) => <option key={addOn.id} value={addOn.id}>Buyers of {addOn.name}</option>)}
+                </Dropdown>
+              </Field>
+            ) : null}
           </form>
 
           {active.length === 0 ? (

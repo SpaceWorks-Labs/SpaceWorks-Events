@@ -9,6 +9,7 @@ import { isTeamTokenShape } from "@/lib/teamToken";
 import { publicTeamRegistrationConfig } from "@/lib/publicTeamConfig";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { toFieldDefinition } from "@/lib/registrationFields";
+import { publicEventTicketing } from "@/lib/payments/ticketing";
 
 /**
  * Team join link (docs/TEAMS.md). Access is resolved exactly as on the event
@@ -41,6 +42,8 @@ export async function loadTeamJoinView({ params }: { params: Promise<{ orgSlug: 
   if (!teamConfig) notFound();
   const form = await prisma.eventRegistrationForm.findUnique({ where: { eventId: event.id }, include: { fields: { orderBy: { sortOrder: "asc" } } } });
   const registrationOpen = event.status === EventStatus.PUBLISHED && event.endDateTime > new Date() && !isRegistrationClosed(event);
+  // When everyone pays for themselves, joining means buying a ticket (docs/TEAMS.md).
+  const selling = event.teamTicketMode === "PER_MEMBER" ? await publicEventTicketing(org.id, event) : null;
   return {
     org: { slug: org.slug, name: org.name },
     event: { slug: event.slug, title: event.title, status: event.status, startDateTime: event.startDateTime, endDateTime: event.endDateTime, timezone: event.timezone, isOnline: event.isOnline, location: event.location },
@@ -51,6 +54,9 @@ export async function loadTeamJoinView({ params }: { params: Promise<{ orgSlug: 
     fields: (form?.fields ?? []).map(toFieldDefinition),
     registrationOpen,
     registration,
+    tickets: selling?.tickets ?? [],
+    ticketing: selling?.ticketing ?? null,
+    paidSalesOpen: selling?.paidSalesOpen ?? false,
   };
 }
 

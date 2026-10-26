@@ -30,15 +30,15 @@ export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
   if (!permissions.canCheckIn) {
     if (!permissions.canManageCheckInLists) return <NoPermission>You do not have permission to operate check-in.</NoPermission>;
     // EDIT_DETAILS co-organisers set up the lists; scanning stays with CHECK_IN.
-    const { lists } = await loadCheckInListsSetup({ ctx });
+    const { lists, addOns } = await loadCheckInListsSetup({ ctx });
     return (
       <div className="flex flex-col gap-5">
-        <CheckInListsCard organisationSlug={ctx.organisation.slug} eventId={ctx.event.id} lists={lists} checkInHref={null} canManage />
+        <CheckInListsCard organisationSlug={ctx.organisation.slug} eventId={ctx.event.id} lists={lists} checkInHref={null} canManage addOns={addOns} />
         <NoPermission>Checking guests in needs the check-in permission.</NoPermission>
       </div>
     );
   }
-  const { event, organisation, desk, lists, checkInHref, doors, seats, lit } = await loadCheckInPanel({ ctx });
+  const { event, organisation, desk, lists, addOns, checkInHref, doors, seats, lit } = await loadCheckInPanel({ ctx });
   return (
     <div className="flex flex-col gap-5">
       <section aria-labelledby="checkin-desk-title" className="yy-dark-band flex flex-col gap-7 rounded-xl bg-[var(--yy-inverse-surface)] p-6 text-ink sm:p-7 lg:flex-row lg:items-center">
@@ -111,9 +111,9 @@ export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
           </ul>
         </section>
 
-        <CheckInListsCard organisationSlug={organisation.slug} eventId={event.id} lists={lists} checkInHref={checkInHref} canManage={permissions.canManageCheckInLists} className="md:col-span-2 xl:col-span-3" />
+        <CheckInListsCard organisationSlug={organisation.slug} eventId={event.id} lists={lists} checkInHref={checkInHref} canManage={permissions.canManageCheckInLists} addOns={addOns} className="md:col-span-2 xl:col-span-3" />
 
-        <CheckInListsCard organisationSlug={organisation.slug} eventId={event.id} lists={lists} checkInHref={checkInHref} canManage={permissions.canManageCheckInLists} className="md:col-span-2 xl:col-span-3" />
+        <CheckInListsCard organisationSlug={organisation.slug} eventId={event.id} lists={lists} checkInHref={checkInHref} canManage={permissions.canManageCheckInLists} addOns={addOns} className="md:col-span-2 xl:col-span-3" />
 
         <section aria-labelledby="checkin-attendance-title" className={cn(cardClass, "md:col-span-2 xl:col-span-1")}>
           <h2 id="checkin-attendance-title" className="text-h4 text-ink">Attendance</h2>

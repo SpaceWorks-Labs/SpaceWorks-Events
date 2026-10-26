@@ -10,6 +10,11 @@ import { isActiveHold } from "../holds";
 import { effectiveOfflineRecord } from "../offlineRecord";
 import { hasFreeSeats, ORDER_SUBJECT_SELECT } from "../targets";
 import { attendeeEmail, lockOrder, PaymentOperationError, subjectTitle } from "./shared";
+import { heldStatusWebhooks } from "../settlement";
+import { placePaidTeamOrder } from "../teamOrders";
+import { confirmEntryFeeTx } from "../entryFees";
+import { noticeOrganisersOfRequest } from "@/lib/notices";
+import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
 
 /**
  * Settle a pending order by hand: money collected in person, or the tickets
@@ -32,12 +37,16 @@ export async function settleOrderByHand(params: {
   if (pages === "settled") return "already-paid";
   if (pages === "open") throw new PaymentOperationError("The buyer's payment page couldn't be closed yet. Try again in a minute.");
 
-  return prisma.$transaction(async (tx) => {
+  const webhooks: WebhookEmission[] = [];
+  const settledBy = () => (params.mode === "offline"
+    ? { status: PaymentStatus.PAID_OFFLINE, paidAt: now, offlineMethod: params.method ?? OfflinePaymentMethod.OTHER, offlineReference: params.reference?.trim().slice(0, 120) || null, settledByUserId: params.actorUserId }
+    : { status: PaymentStatus.WAIVED, settledByUserId: params.actorUserId });
+  const outcome = await prisma.$transaction(async (tx) => {
     await lockOrder(tx, owned.id);
     const order = await tx.order.findUniqueOrThrow({
       where: { id: owned.id },
       select: {
-        id: true, status: true, buyerEmail: true, ...ORDER_SUBJECT_SELECT,
+        id: true, status: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
         payments: { where: { status: PaymentStatus.PENDING }, select: { id: true, provider: true } },
         rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true, status: true, holdExpiresAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } },
       },
@@ -48,9 +57,7 @@ export async function settleOrderByHand(params: {
       await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${desk.id} FOR UPDATE`;
       await tx.payment.update({
         where: { id: desk.id },
-        data: params.mode === "offline"
-          ? { status: PaymentStatus.PAID_OFFLINE, paidAt: now, offlineMethod: params.method ?? OfflinePaymentMethod.OTHER, offlineReference: params.reference?.trim().slice(0, 120) || null, settledByUserId: params.actorUserId }
-          : { status: PaymentStatus.WAIVED, settledByUserId: params.actorUserId },
+        data: settledBy(),
       });
       if (params.mode === "offline") await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: desk.id, notice: "paid" });
       await recordAuditEvent({ action: params.mode === "offline" ? "PAYMENT_COLLECTED_AT_DESK" : "PAYMENT_WAIVED", actorUserId: params.actorUserId, organisationId: params.organisationId, targetType: "Payment", targetId: desk.id, client: tx });
@@ -60,19 +67,31 @@ export async function settleOrderByHand(params: {
     const payment = order.payments[0];
     if (order.status !== OrderStatus.PENDING || !payment) throw new PaymentOperationError("Only orders waiting for payment can be settled by hand.");
     await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${payment.id} FOR UPDATE`;
+    // A project entry fee (docs/HACKATHON.md) holds no places: record it and submit the project.
+    if (order.submissionId && order.rsvps.length === 0) {
+      await tx.paymentCheckoutAttempt.updateMany({ where: { paymentId: payment.id, status: CheckoutAttemptStatus.OPEN }, data: { status: CheckoutAttemptStatus.CANCELLED } });
+      await tx.payment.update({ where: { id: payment.id }, data: settledBy() });
+      await confirmEntryFeeTx(tx, { id: order.id, organisationId: params.organisationId, submissionId: order.submissionId, buyerEmail: order.buyerEmail, buyerName: order.buyerName }, payment.id, now, params.mode === "offline");
+      await recordAuditEvent({ action: params.mode === "offline" ? "PAYMENT_MARKED_PAID_OFFLINE" : "PAYMENT_WAIVED", actorUserId: params.actorUserId, organisationId: params.organisationId, targetType: "Payment", targetId: payment.id, client: tx });
+      return "confirmed" as const;
+    }
     const held = order.rsvps.filter((rsvp) => rsvp.status === RsvpStatus.PENDING_PAYMENT);
     if (held.length === 0) throw new PaymentOperationError("This order has no tickets left to confirm.");
-    if (!held.every((rsvp) => isActiveHold(rsvp, now)) && !(await hasFreeSeats(tx, held, now))) throw new PaymentOperationError("The hold ended and the places have gone.");
+    const holdActive = held.every((rsvp) => isActiveHold(rsvp, now));
+    // TEAM events place the one registration in its team or unit (docs/TEAMS.md).
+    const team = held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, now) : null;
+    if (team === "gone" || (!team && !holdActive && !(await hasFreeSeats(tx, held, now)))) throw new PaymentOperationError("The hold ended and the places have gone.");
+    const status = team?.status ?? RsvpStatus.CONFIRMED;
 
     await tx.paymentCheckoutAttempt.updateMany({ where: { paymentId: payment.id, status: CheckoutAttemptStatus.OPEN }, data: { status: CheckoutAttemptStatus.CANCELLED } });
     await tx.payment.update({
       where: { id: payment.id },
-      data: params.mode === "offline"
-        ? { status: PaymentStatus.PAID_OFFLINE, paidAt: now, offlineMethod: params.method ?? OfflinePaymentMethod.OTHER, offlineReference: params.reference?.trim().slice(0, 120) || null, settledByUserId: params.actorUserId }
-        : { status: PaymentStatus.WAIVED, settledByUserId: params.actorUserId },
+      data: settledBy(),
     });
     await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.CONFIRMED, holdExpiresAt: null, holdCapAt: null } });
-    await tx.rSVP.updateMany({ where: { id: { in: held.map((rsvp) => rsvp.id) } }, data: { status: RsvpStatus.CONFIRMED, holdExpiresAt: null } });
+    await tx.rSVP.updateMany({ where: { id: { in: held.map((rsvp) => rsvp.id) } }, data: { status, holdExpiresAt: null } });
+    webhooks.push(...heldStatusWebhooks(held.map((rsvp) => rsvp.id), status));
+    if (status === RsvpStatus.PENDING_APPROVAL && order.eventId) await noticeOrganisersOfRequest(tx, { eventId: order.eventId });
     if (params.mode === "offline") await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: payment.id, notice: "paid" });
     // One ticket email per person (a pass's ticket page lists its other dates).
     const emailed = new Set<string>();
@@ -80,12 +99,14 @@ export async function settleOrderByHand(params: {
       const to = attendeeEmail(rsvp);
       if (!to || emailed.has(to)) continue;
       emailed.add(to);
-      await enqueueRsvpConfirmation(tx, { to, eventTitle: subjectTitle(order), status: RsvpStatus.CONFIRMED, checkInToken: rsvp.checkInToken });
+      await enqueueRsvpConfirmation(tx, { to, eventTitle: subjectTitle(order), status, checkInToken: rsvp.checkInToken, ...(team?.teamName ? { teamName: team.teamName } : {}) });
     }
     if (held.some((rsvp) => !attendeeEmail(rsvp))) await enqueueOrderEmail(tx, { to: order.buyerEmail, orderId: order.id, notice: "attendee-details" });
     await recordAuditEvent({ action: params.mode === "offline" ? "PAYMENT_MARKED_PAID_OFFLINE" : "PAYMENT_WAIVED", actorUserId: params.actorUserId, organisationId: params.organisationId, targetType: "Payment", targetId: payment.id, client: tx });
     return "confirmed" as const;
   });
+  for (const webhook of webhooks) emitWebhookEvent(webhook);
+  return outcome;
 }
 
 /**

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { loadTicketSettings } from "@/lib/payments/ticketSettings";
 import { loadJudgingSettingsCard } from "@/lib/eventDashboard/judging";
+import { minorToDecimalString } from "@/lib/payments/money";
 
 /** Ticket types are an organisation owner/admin concern, like the actions that change them. */
 async function loadTickets(ctx: EventDashboardContext) {
@@ -26,7 +27,11 @@ export async function loadSettingsPanel({ ctx, judgingInUse = false }: { ctx: Ev
     ])
     : [[], []];
   const tickets = await loadTickets(ctx);
-  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard };
+  // The hackathon entry fee sits with the other prices (docs/HACKATHON.md).
+  const entryFee = tickets && event.submissionsEnabled
+    ? { currency: tickets.currency, fee: event.submissionFeeMinor ? minorToDecimalString(event.submissionFeeMinor, tickets.currency) : "", refundOnDisqualify: event.submissionFeeRefundOnDisqualify, paidBlockedReason: tickets.paidBlockedReason }
+    : null;
+  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee };
 }
 
 import { loadEventDashboard } from "@/lib/eventDashboard/context";

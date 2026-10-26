@@ -1,6 +1,6 @@
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { loadCheckInDesk } from "@/lib/eventDashboard/checkIn";
-import { loadCheckInLists } from "@/lib/eventDashboard/checkInLists";
+import { loadCheckInLists, loadListAddOns } from "@/lib/eventDashboard/checkInLists";
 import { doorsStatus, seatDots } from "@/components/event-dashboard/check-in/doors";
 
 
@@ -11,13 +11,13 @@ export async function loadCheckInPanel({ ctx }: { ctx: EventDashboardContext; })
   const { event, permissions, organisation, now } = ctx;
   if (!permissions.canCheckIn) notFound();
 
-  const [desk, lists] = await Promise.all([loadCheckInDesk(ctx), loadCheckInLists(event.id)]);
+  const [desk, lists, addOns] = await Promise.all([loadCheckInDesk(ctx), loadCheckInLists(event.id), loadListAddOns(event.id)]);
   const checkInHref = `/dashboard/${organisation.slug}/event/${event.id}/check-in`;
   const doors = doorsStatus({ start: event.startDateTime, end: event.endDateTime, timezone: event.timezone, now, cancelled: event.status === "CANCELLED" });
   const { seats, lit } = seatDots(desk.checkedIn, desk.confirmed);
 
 
-  return { event, permissions, organisation, now, desk, lists, checkInHref, doors, seats, lit };
+  return { event, permissions, organisation, now, desk, lists, addOns, checkInHref, doors, seats, lit };
 }
 
 import { notFound } from "next/navigation";
@@ -27,5 +27,6 @@ import { loadEventDashboard } from "@/lib/eventDashboard/context";
 export async function loadCheckInListsSetup({ ctx }: { ctx: EventDashboardContext; }) {
   ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
   if (!ctx.permissions.canManageCheckInLists) notFound();
-  return { lists: await loadCheckInLists(ctx.event.id) };
+  const [lists, addOns] = await Promise.all([loadCheckInLists(ctx.event.id), loadListAddOns(ctx.event.id)]);
+  return { lists, addOns };
 }
