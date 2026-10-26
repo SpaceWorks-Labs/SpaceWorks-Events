@@ -121,6 +121,7 @@ The event dashboard's long lists (Guests → People and Teams, Judging → Submi
 ## Tickets and check-in
 
 - Opaque ticket/check-in tokens with QR and manual entry flows.
+- **Ticket designer** ([Ticket designer](TICKET_DESIGNER.md)): organisations design tickets like a poster (text with merge fields such as name, ticket, date and team; images; shapes; lines; layers; snapping; undo; autosave; server-rendered preview) around the one check-in QR code. A library of templates with an organisation default, a design per event and per ticket type; the designed ticket shows on the ticket page and downloads as PNG or PDF, and the PDF is attached to the confirmation email.
 - Printable/downloadable attendee ticket. For in-person events with a valid http(s) map link, the venue on the ticket opens the map in a new tab.
 - Live ticket: when the attendee is checked in (scan, manual, offline replay, or station), an open ticket page tears off its QR stub and shows the check-in time, without a reload. Reloading a checked-in ticket shows the torn state and no QR.
 - Organiser attendee lookup, direct check-in, and check-in undo.

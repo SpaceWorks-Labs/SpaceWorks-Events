@@ -15,6 +15,7 @@ import { reportOpsAlert } from "@/lib/opsAlerts";
 import { asMemberIdEmailPayload, deliverMemberIdCardEmail, MEMBER_ID_EMAIL_KIND } from "@/lib/memberIds/email";
 import { asPaymentEmailPayload, deliverPaymentEmail, PAYMENT_EMAIL_KIND } from "@/lib/payments/email";
 import { sendAs } from "@/lib/email/transporter";
+import { designedTicketAttachment } from "@/lib/ticketDesign/resolve";
 import { asChatMessagePayload, deliverChatMessage } from "@/lib/chat/deliver";
 import { CHAT_MESSAGE_KIND } from "@/lib/chat/notify";
 import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload, asEmailVerificationPayload, asEventInvitePayload, asEventReminderPayload, asOperatorNoticePayload, asPasswordResetPayload, asRsvpConfirmationPayload, asRsvpStatusPayload, asSignInCodePayload, containsCapability, isExpired, messageId, retryDelayMs } from "./payloads";
@@ -64,7 +65,8 @@ export async function deliverOutboxBatch(limit = 20) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-        await sendRSVPConfirmation({ ...payload, recipientName: attendeeName(rsvp), calendarEvent: calendarEvent(rsvp), messageId: stableMessageId });
+        const ticketPdf = payload.status === RsvpStatus.CONFIRMED ? await designedTicketAttachment(payload.checkInToken) : undefined;
+        await sendRSVPConfirmation({ ...payload, recipientName: attendeeName(rsvp), calendarEvent: calendarEvent(rsvp), messageId: stableMessageId, ticketPdf });
       } else if (message.kind === "rsvp-status") {
         const payload = asRsvpStatusPayload(message.payload);
         if (!payload) throw new PermanentOutboxError();
@@ -83,6 +85,7 @@ export async function deliverOutboxBatch(limit = 20) {
             calendarEvent: calendarEvent(rsvp),
             teamName: payload.teamName,
             messageId: stableMessageId,
+            ticketPdf: await designedTicketAttachment(payload.checkInToken!),
           });
         } else {
           await sendApprovalNotification({ ...payload, messageId: stableMessageId });

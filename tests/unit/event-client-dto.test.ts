@@ -42,6 +42,7 @@ describe("event browser DTO", () => {
       budgetMinor: BigInt(100000),
       participantClaimsEnabled: true,
       participantClaimCapMinor: null,
+      ticketDesignId: null,
       submissionsEnabled: true,
       submissionsOpenAt: null,
       submissionsCloseAt: null,

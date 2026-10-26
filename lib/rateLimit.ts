@@ -17,6 +17,7 @@ export type Bucket =
   | "broadcast"
   | "broadcastTest"
   | "broadcastDraft"
+  | "designAutosave"
   | "checkin"
   | "checkinStationPin"
   | "search"
@@ -56,6 +57,8 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   // Draft autosave and discard in the Emails tab. Saves fire about 1.5s after
   // typing stops, so a steady writer stays well under this.
   broadcastDraft: { max: 60, windowMs: 60_000 },
+  // Ticket designer autosave (docs/TICKET_DESIGNER.md): about 1.5s after each edit stops.
+  designAutosave: { max: 90, windowMs: 60_000 },
   checkin: { max: 180, windowMs: 60_000 },
   checkinStationPin: { max: 5, windowMs: 60_000 },
   search: { max: 60, windowMs: 60_000 },

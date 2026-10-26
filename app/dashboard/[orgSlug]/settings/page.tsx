@@ -1,6 +1,6 @@
 import { loadOrgSettingsView } from "@/lib/views/app__dashboard__orgSlug__settings__page";
 import Link from "next/link";
-import { CreditCard, ExternalLink, KeyRound, Mail, MessageSquare, Webhook } from "lucide-react";
+import { CreditCard, ExternalLink, KeyRound, Mail, MessageSquare, Ticket, Webhook } from "lucide-react";
 import { EditOrgForm } from "@/components/org/EditOrgForm";
 import { CopyOrganisationUrl } from "@/components/org/CopyOrganisationUrl";
 import { DeleteOrganisationButton } from "@/components/dashboard/DeleteOrganisationButton";
@@ -133,6 +133,21 @@ export default async function OrgSettingsPage({ params }: Props) {
               <Link href={`/dashboard/${org.slug}/settings/chat`}>
                 <MessageSquare aria-hidden className="size-4" />
                 Manage chats
+              </Link>
+            </Button>
+          </div>
+        </section>
+
+        <section id="ticket-designs" aria-labelledby="ticket-designs-title" className={cn(sectionCard, "flex flex-col gap-4 md:flex-row md:items-center")}>
+          <div className="min-w-0 flex-1">
+            <h2 id="ticket-designs-title" className="text-h4 text-ink">Ticket designs</h2>
+            <p className="mt-0.5 text-body-ui text-ink-muted">Design your tickets like a poster: text, images, shapes and ticket details around the check-in QR code. Pick the default for every event.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button asChild variant="secondary">
+              <Link href={`/dashboard/${org.slug}/ticket-designs`}>
+                <Ticket aria-hidden className="size-4" />
+                Open designs
               </Link>
             </Button>
           </div>

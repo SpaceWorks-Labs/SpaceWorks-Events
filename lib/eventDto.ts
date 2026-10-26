@@ -10,6 +10,8 @@ export type EventClientDto = Omit<Event,
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
   // Finance settings have their own view (lib/finance.ts).
   | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor"
+  // The ticket design is read by the ticket designer (lib/ticketDesign/).
+  | "ticketDesignId"
 >;
 
 export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {

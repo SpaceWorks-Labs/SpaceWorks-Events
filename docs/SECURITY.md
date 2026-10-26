@@ -92,6 +92,12 @@ This page documents implemented controls and security boundaries. It is not a su
 - `ClaimPayout` and `PrizePayout` are append-only ledgers guarded by database triggers: only a reference may be cleared when its target is deleted, and a reversal must match the payout it undoes (same organisation, amount and currency, never a reversal of a reversal).
 - A refund request is claimed before its refund runs (and released if the refund is refused), so concurrent approvals never refund twice; the refund itself is the normal `refundOrder` with its locks and limits.
 
+## Ticket designs
+
+- Design documents are validated in full on every save (`lib/ticketDesign/schema.ts`: a strict schema, at most 60 elements and 256 KB) and rendered on the server; nothing in a design is executed or fetched from outside: images must be the organisation's own managed uploads (re-encoded WebP), text becomes glyph outlines, and colours are plain hex.
+- Every design keeps exactly one check-in QR code, at least 18 mm, upright, solid and on the ticket; it encodes only the ticket's own token. Editor previews use a sample QR, never a live ticket, and the ticket page stops showing the designed ticket once the guest has checked in.
+- Library templates and the organisation default belong to owners and admins; an event's designs to its `EDIT_DETAILS` editors. Database triggers keep an event's and a ticket type's design among that event's own, and the default among the organisation's templates.
+
 ## Abuse protection
 
 - Password login applies account and IP limits inside the credential verifier, in addition to proxy limits. Missing and OAuth-only identities perform dummy bcrypt work; signup returns the same response for existing and newly created accounts. Auth.js errors are logged without exception payloads.

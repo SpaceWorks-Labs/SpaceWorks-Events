@@ -300,4 +300,18 @@ describe("production migration safety contracts", () => {
     expect(sql).toContain('"RefundRequest_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE');
     expect(sql).toContain("'payout', 'claim']::TEXT[]");
   });
+
+  it("adds ticket designs without rewriting rows, keeping each design where it belongs", () => {
+    const sql = readFileSync(resolve(root, "prisma/migrations/20261107000000_ticket_designs/migration.sql"), "utf8");
+    expect(sql).not.toMatch(/\bDROP\b/i);
+    expect(sql).not.toMatch(/^\s*UPDATE\s/im);
+    expect(sql).toContain('"TicketDesign_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE');
+    expect(sql).toContain('"Event_ticketDesignId_fkey" FOREIGN KEY ("ticketDesignId") REFERENCES "TicketDesign"("id") ON DELETE SET NULL');
+    expect(sql).toContain('"TicketType_ticketDesignId_fkey" FOREIGN KEY ("ticketDesignId") REFERENCES "TicketDesign"("id") ON DELETE SET NULL');
+    expect(sql).toContain('"Organisation_defaultTicketDesignId_fkey" FOREIGN KEY ("defaultTicketDesignId") REFERENCES "TicketDesign"("id") ON DELETE SET NULL');
+    expect(sql).toContain('CREATE TRIGGER "event_ticket_design_owner"');
+    expect(sql).toContain('CREATE TRIGGER "ticket_type_design_owner"');
+    expect(sql).toContain('CREATE TRIGGER "organisation_ticket_design_owner"');
+    expect(sql).toContain("octet_length(\"document\"::text) <= 262144");
+  });
 });

@@ -345,6 +345,7 @@ model User {
   expenseClaimsSubmitted       ExpenseClaim[] @relation("ExpenseClaimSubmittedBy")
   expenseClaimsDecided         ExpenseClaim[] @relation("ExpenseClaimDecidedBy")
   claimPayoutsRecorded         ClaimPayout[]  @relation("ClaimPayoutRecordedBy")
+  ticketDesignsUpdated         TicketDesign[] @relation("TicketDesignUpdatedBy")
   refundRequestsDecided        RefundRequest[] @relation("RefundRequestDecidedBy")
 }
 
@@ -428,6 +429,10 @@ model Organisation {
   expenseClaims     ExpenseClaim[]
   claimPayouts      ClaimPayout[]
   refundRequests    RefundRequest[]
+  ticketDesigns     TicketDesign[]
+  /// The library template tickets use when neither their type nor their event has a design (docs/TICKET_DESIGNER.md).
+  defaultTicketDesignId String?      @unique
+  defaultTicketDesign   TicketDesign? @relation("OrganisationDefaultTicketDesign", fields: [defaultTicketDesignId], references: [id], onDelete: SetNull)
   payments          Payment[]
   paymentDisputes   PaymentDispute[]
   webhookEndpoints  WebhookEndpoint[]
@@ -741,6 +746,10 @@ model Event {
   participantClaimCapMinor            BigInt?
   expenseClaims       ExpenseClaim[]
   claimPayouts        ClaimPayout[]
+  /// The event's own ticket design (an event-owned TicketDesign), or null for the organisation default.
+  ticketDesignId      String?          @unique
+  ticketDesign        TicketDesign?    @relation("EventTicketDesign", fields: [ticketDesignId], references: [id], onDelete: SetNull)
+  ownTicketDesigns    TicketDesign[]   @relation("TicketDesignEvent")
   judgingCriteria     JudgingCriterion[]
   judgeAssignments    JudgeAssignment[]
   awards              EventAward[]
@@ -774,6 +783,9 @@ model TicketType {
   feeMinor     BigInt @default(0)
   /// Buyers may reserve and pay at the desk instead of online.
   payAtDesk    Boolean @default(false)
+  /// A design for this ticket only (one of its event's own designs); null uses the event's.
+  ticketDesignId String?
+  ticketDesign   TicketDesign? @relation("TicketTypeDesign", fields: [ticketDesignId], references: [id], onDelete: SetNull)
   name         String
   description  String    @default("")
   /// Tax-inclusive price in integer minor units of the event's currency.
@@ -2551,4 +2563,31 @@ model RefundRequest {
 
   @@index([orderId, status])
   @@index([organisationId, status, createdAt])
+}
+
+/// A ticket design (docs/TICKET_DESIGNER.md): a canvas of text, images,
+/// shapes, merge fields and exactly one check-in QR code, validated by
+/// lib/ticketDesign/schema.ts on every write. Without an event it is a
+/// template in the organisation's library (owners and admins edit it); with
+/// one it belongs to that event (EDIT_DETAILS edits it) and can be the event's
+/// design or a ticket type's.
+model TicketDesign {
+  id             String   @id @default(cuid())
+  organisationId String
+  eventId        String?
+  name           String
+  document       Json
+  updatedById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation  @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?        @relation("TicketDesignEvent", fields: [eventId], references: [id], onDelete: Cascade)
+  updatedBy    User?         @relation("TicketDesignUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  usedByEvent  Event?        @relation("EventTicketDesign")
+  usedByTypes  TicketType[]  @relation("TicketTypeDesign")
+  defaultFor   Organisation? @relation("OrganisationDefaultTicketDesign")
+
+  @@index([organisationId, eventId, updatedAt])
+  @@index([eventId])
 }

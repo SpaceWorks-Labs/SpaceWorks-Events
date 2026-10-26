@@ -146,6 +146,16 @@
       "id": "app__dashboard__orgSlug__settings__webhooks__page:loadWebhooksSettingsView"
     },
     {
+      "module": "lib/views/app__dashboard__orgSlug__ticket-designs__designId__page",
+      "name": "loadTicketDesignerView",
+      "id": "app__dashboard__orgSlug__ticket-designs__designId__page:loadTicketDesignerView"
+    },
+    {
+      "module": "lib/views/app__dashboard__orgSlug__ticket-designs__page",
+      "name": "loadTicketDesignLibraryView",
+      "id": "app__dashboard__orgSlug__ticket-designs__page:loadTicketDesignLibraryView"
+    },
+    {
       "module": "lib/views/app__dashboard__page",
       "name": "loadDashboardView",
       "id": "app__dashboard__page:loadDashboardView"
@@ -1786,6 +1796,31 @@
       "module": "app/actions/teams",
       "name": "loadTicketRequestsPageAction",
       "id": "teams:loadTicketRequestsPageAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "createTicketDesignAction",
+      "id": "ticket-designs:createTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "saveTicketDesignAction",
+      "id": "ticket-designs:saveTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "deleteTicketDesignAction",
+      "id": "ticket-designs:deleteTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "assignTicketDesignAction",
+      "id": "ticket-designs:assignTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "uploadTicketDesignImageAction",
+      "id": "ticket-designs:uploadTicketDesignImageAction"
     },
     {
       "module": "app/actions/ticket-types",

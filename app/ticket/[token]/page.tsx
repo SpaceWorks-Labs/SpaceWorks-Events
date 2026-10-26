@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function TicketPage({ params, searchParams }: Props) {
-  const { claims, teamSection, submissionMode, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const { designedTicket, claims, teamSection, submissionMode, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
   const teamBlock = teamSection?.kind === "member" ? (
     <TicketTeamCard ticketToken={rsvp.checkInToken} team={teamSection.team} manageHref={teamSection.manageHref} canLeave={teamSection.canLeave} eventPageHref={eventPageHref} />
   ) : teamSection?.kind === "solo" ? (
@@ -132,6 +132,14 @@ export default async function TicketPage({ params, searchParams }: Props) {
           </div>
         ) : null}
 
+        {/* Like the stub, the designed ticket (it carries the QR) is gone once checked in. */}
+        {designedTicket && !isCheckedIn ? (
+          <HideAfterLiveCheckIn>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a private, uncached render of this ticket */}
+            <img src={`/api/ticket/${rsvp.checkInToken}/design?inline=1`} alt={`Your ticket for ${title}`} className="h-auto w-full rounded-xl border border-line" />
+          </HideAfterLiveCheckIn>
+        ) : null}
+
         {confirmed ? (
           // Once checked in, the QR is never rendered again: the card shows its torn, checked-in state.
           <LiveTicketCard main={ticketMain} stub={isCheckedIn ? null : <TicketQrPanel token={rsvp.checkInToken} />} timeZone={timeZone} />
@@ -172,7 +180,7 @@ export default async function TicketPage({ params, searchParams }: Props) {
                 Add to calendar
               </a>
             </Button>
-            <TicketDownloadButton downloadUrl={`/api/ticket/${rsvp.checkInToken}/download`} />
+            <TicketDownloadButton downloadUrl={`/api/ticket/${rsvp.checkInToken}/design`} pdfUrl={`/api/ticket/${rsvp.checkInToken}/design?format=pdf`} />
           </div>
         ) : null}
 

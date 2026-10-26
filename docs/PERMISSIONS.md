@@ -85,6 +85,7 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Judging → Prizes: award prizes and payouts | `app/actions/prizes.ts`: admin | Yes | — | — | — | — | — | — | — | — |
 | Settings: tickets and pricing (ticket types, add-ons, promo codes) | `app/actions/ticket-types`: `EDIT_DETAILS` (`canEditTickets`) | Yes | — | Yes | — | — | — | — | — | Yes |
 | Guests: order refunds, offline payments, waivers, amendments | `app/actions/payment-operations.ts`: `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |
+| Settings: ticket design (event designs, which design the event and each ticket type use) | `app/actions/ticket-designs.ts`: `EDIT_DETAILS` | Yes | — | Yes | — | — | — | — | — | Yes |
 | Settings: co-organisers (invite, grants, remove, cancel invite) | `app/actions/event-collaborators.ts`: admin | Yes | — | — | — | — | — | — | — | — |
 | Settings: event address (slug) | `updateEventSlug`: admin | Yes | — | — | — | — | — | — | — | — |
 | Settings: clone | `cloneEvent`: admin | Yes | — | — | — | — | — | — | — | — |

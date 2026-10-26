@@ -3,6 +3,8 @@ import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { loadTicketSettings } from "@/lib/payments/ticketSettings";
 import { loadJudgingSettingsCard } from "@/lib/eventDashboard/judging";
 import { minorToDecimalString } from "@/lib/payments/money";
+import { loadEventTicketDesigns } from "@/lib/ticketDesign/access";
+import { STARTER_DESIGNS } from "@/lib/ticketDesign/presets";
 
 /** Ticket types are an organisation owner/admin concern, like the actions that change them. */
 async function loadTickets(ctx: EventDashboardContext) {
@@ -31,7 +33,9 @@ export async function loadSettingsPanel({ ctx, judgingInUse = false }: { ctx: Ev
   const entryFee = tickets && event.submissionsEnabled
     ? { currency: tickets.currency, fee: event.submissionFeeMinor ? minorToDecimalString(event.submissionFeeMinor, tickets.currency) : "", refundOnDisqualify: event.submissionFeeRefundOnDisqualify, paidBlockedReason: tickets.paidBlockedReason }
     : null;
-  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee };
+  // Ticket design: the same people as ticket prices (EDIT_DETAILS), on every event.
+  const ticketDesign = tickets ? { ...(await loadEventTicketDesigns(event.id, organisation.id)), starters: STARTER_DESIGNS.map((starter) => ({ key: starter.key, label: starter.label })) } : null;
+  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign };
 }
 
 import { loadEventDashboard } from "@/lib/eventDashboard/context";
