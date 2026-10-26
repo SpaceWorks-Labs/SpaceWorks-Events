@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Callout, Chip } from "@/components/ui/display";
 import { formatDayShort, formatTime } from "@/lib/format/datetime";
 import { loadOrderView, loadRouteMetadata } from "@/lib/views/app__order__token__page";
+import { RefundRequestForm } from "@/components/orders/RefundRequestForm";
 
 type Props = {
   params: Promise<{ token: string; }>;
@@ -147,6 +148,21 @@ export default async function OrderPage({ params, searchParams }: Props) {
             Cancelling gives up every ticket in this order{order.cancellation.refund ? ` and refunds ${order.cancellation.refund}` : ""}.{order.cancellation.team ? ` This is the team ticket for ${order.cancellation.team}, so everyone in the team loses their place too.` : ""}
           </p>
           <div><CancelOrderButton orderToken={order.token} refund={order.cancellation.refund} /></div>
+        </section>
+      ) : null}
+
+      {order.refundRequest || order.canRequestRefund ? (
+        <section aria-labelledby="order-refund-request" className="flex flex-col gap-2 border-t border-line pt-5">
+          <h2 id="order-refund-request" className="text-h4 text-ink">Need a refund?</h2>
+          {order.refundRequest?.status === "OPEN" ? <Callout tone="info">You asked for a refund. The organisers will reply by email.</Callout> : null}
+          {order.refundRequest?.status === "DECLINED" ? <Callout tone="warning" title="Your last request wasn&apos;t approved">{order.refundRequest.note}</Callout> : null}
+          {order.refundRequest?.status === "APPROVED" ? <Callout tone="success">Your refund request was approved{order.refundRequest.approved ? `: ${order.refundRequest.approved}` : ""}.</Callout> : null}
+          {order.canRequestRefund ? (
+            <>
+              <p className="text-body-ui text-ink-secondary">{order.cancellation ? "Want more back than the policy gives, or to keep your tickets?" : "Outside the refund policy, you can still ask the organisers."}</p>
+              <RefundRequestForm orderToken={order.token} />
+            </>
+          ) : null}
         </section>
       ) : null}
     </div>

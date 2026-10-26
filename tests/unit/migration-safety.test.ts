@@ -287,4 +287,17 @@ describe("production migration safety contracts", () => {
     expect(sql).toContain('CREATE TRIGGER "prize_payout_reversal_guard"');
     expect(sql).toContain("'event', 'payout']::TEXT[]");
   });
+
+  it("adds event finance as new tables, keeping claim payouts append-only and receipts private", () => {
+    const sql = readFileSync(resolve(root, "prisma/migrations/20261106000000_event_finance/migration.sql"), "utf8");
+    expect(sql).not.toMatch(/^\s*UPDATE\s/im);
+    expect(sql.match(/DROP CONSTRAINT "([^"]+)"/g)).toEqual(['DROP CONSTRAINT "ChatChannel_shape"']);
+    expect(sql).toContain("claim-receipts/");
+    expect(sql).toContain('CREATE UNIQUE INDEX "RefundRequest_one_open_per_order" ON "RefundRequest"("orderId") WHERE "status" = \'OPEN\';');
+    expect(sql).toContain('CREATE TRIGGER "claim_payout_guard"');
+    expect(sql).toContain('CREATE TRIGGER "claim_payout_reversal_guard"');
+    expect(sql).toContain('"ExpenseClaim_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE SET NULL');
+    expect(sql).toContain('"RefundRequest_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE');
+    expect(sql).toContain("'payout', 'claim']::TEXT[]");
+  });
 });

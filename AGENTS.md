@@ -31,8 +31,9 @@ badge generation (server-saved designs, colour and logos, PDF/PNG and bulk
 sheets in `lib/badge/`), feedback and layered certificates, designed broadcast and
 transactional email, optional paid tickets through each organisation's own
 Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), team registration
-(`docs/TEAMS.md`), hackathon submissions, judging and results
-(`docs/HACKATHON.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
+with paid team places (`docs/TEAMS.md`), hackathon submissions, judging, results,
+entry fees and prize payouts (`docs/HACKATHON.md`), event finance with expense
+claims, refund requests and a budget (`docs/FINANCE.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
 organiser lists with saved views and filtered CSV exports, a personal account area (registrations, organisations,
 data export), and a separate super-admin operations, insights, and
 instance-settings area, plus a tenant-bound machine API. Treat this as a production-oriented application:

@@ -8,6 +8,8 @@ export type EventClientDto = Omit<Event,
   | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization"
   // The entry fee is a BigInt and lives with the judging settings too.
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
+  // Finance settings have their own view (lib/finance.ts).
+  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor"
 >;
 
 export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {

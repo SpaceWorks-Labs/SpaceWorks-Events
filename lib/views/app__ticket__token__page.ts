@@ -10,6 +10,7 @@ import { PaymentStatus } from "@prisma/client";
 import { refreshOrderFromProvider } from "@/lib/payments/checkout";
 import { isActiveHold } from "@/lib/payments/holds";
 import { loadTicketTeamSection, ticketSubmissionMode, ticketViewerId } from "@/lib/teamTicketSection";
+import { loadTicketClaims } from "@/lib/claims/ticketView";
 import { formatMoney } from "@/lib/payments/money";
 type Props = {
   params: Promise<{ token: string; }>;
@@ -219,5 +220,6 @@ export async function loadTicketView({ params, searchParams }: Props) {
   const viewerId = await ticketViewerId(rsvp);
   const teamSection = await loadTicketTeamSection(rsvp, isCheckedIn, viewerId);
   const submissionMode = ticketSubmissionMode(rsvp, viewerId);
-  return { teamSection, submissionMode, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
+  const claims = await loadTicketClaims(rsvp);
+  return { claims, teamSection, submissionMode, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
 }

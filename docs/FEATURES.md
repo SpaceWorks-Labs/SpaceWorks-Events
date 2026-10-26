@@ -131,6 +131,14 @@ The event dashboard's long lists (Guests → People and Teams, Judging → Submi
 
 Only eligible confirmed attendees receive a scannable ticket by default. Organisers can explicitly handle exceptional status cases where supported by the check-in workflow.
 
+## Event finance
+
+See [Event finance](FINANCE.md). The event dashboard's **Finance** tab:
+
+- **Expense claims**: organisation members and co-organisers claim money they spent (with up to three receipt photos, kept private), for themselves or for a speaker or volunteer; participants claim from their ticket page when the event allows it, up to a cap each (travel grants). Owners and admins approve (in full or in part), reject with a reason, and record payment; payments go in an append-only ledger and are reversed rather than edited. Everyone involved is emailed, and chat channels can follow claims and payouts.
+- **Refund requests**: buyers ask from their order page for a refund outside the policy; owners and admins refund in full or in part (optionally cancelling the tickets) or decline with a reason.
+- **Money in and out**: ticket and entry-fee income less refunds, expenses and prize money paid, the net, and an optional budget; a CSV of every money movement and a Spending part in the PDF report.
+
 ## Paid tickets
 
 See [Paid tickets](PAYMENTS.md) for setup. Off until the super admin turns paid events on.

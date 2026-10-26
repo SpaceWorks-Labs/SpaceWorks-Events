@@ -85,6 +85,13 @@ This page documents implemented controls and security boundaries. It is not a su
 - Each paid order keeps a copy of the event's refund policy from when it was placed; after the first sale the policy may only become more generous. Buyers cancel online only within that copy's deadline, for the whole order, with the order access token as proof.
 - Database triggers keep settled payments' amount, currency, provider and status immutable, never replace a recorded provider payment id or checkout page, never reopen a finished checkout attempt, and keep pending plus succeeded refunds within the amount paid.
 
+## Event finance
+
+- Expense claim receipts are re-encoded WebP photos in private storage (`organisations/{id}/claim-receipts/`, enforced by a CHECK on `ExpenseReceipt`), never served by `/api/uploads`; `/api/claims/receipts/:id` serves them only to the organisation's owners and admins and the claim's own author, with an empty 404 otherwise.
+- Deciding and paying claims, the budget, refund requests and the finance CSV are owner/admin only; members and co-organisers file and withdraw only their own claims. Participant claims need a confirmed registration, the event's switch, and the account behind an account-owned ticket; the per-person cap is checked under the event row lock.
+- `ClaimPayout` and `PrizePayout` are append-only ledgers guarded by database triggers: only a reference may be cleared when its target is deleted, and a reversal must match the payout it undoes (same organisation, amount and currency, never a reversal of a reversal).
+- A refund request is claimed before its refund runs (and released if the refund is refused), so concurrent approvals never refund twice; the refund itself is the normal `refundOrder` with its locks and limits.
+
 ## Abuse protection
 
 - Password login applies account and IP limits inside the credential verifier, in addition to proxy limits. Missing and OAuth-only identities perform dummy bcrypt work; signup returns the same response for existing and newly created accounts. Auth.js errors are logged without exception payloads.

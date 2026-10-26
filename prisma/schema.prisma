@@ -342,6 +342,10 @@ model User {
   judgeReviews                 JudgeReview[]
   savedViews                   SavedView[]
   prizePayoutsRecorded         PrizePayout[] @relation("PrizePayoutRecordedBy")
+  expenseClaimsSubmitted       ExpenseClaim[] @relation("ExpenseClaimSubmittedBy")
+  expenseClaimsDecided         ExpenseClaim[] @relation("ExpenseClaimDecidedBy")
+  claimPayoutsRecorded         ClaimPayout[]  @relation("ClaimPayoutRecordedBy")
+  refundRequestsDecided        RefundRequest[] @relation("RefundRequestDecidedBy")
 }
 
 model Account {
@@ -421,6 +425,9 @@ model Organisation {
   processedWebhookEvents ProcessedWebhookEvent[]
   orders            Order[]
   prizePayouts      PrizePayout[]
+  expenseClaims     ExpenseClaim[]
+  claimPayouts      ClaimPayout[]
+  refundRequests    RefundRequest[]
   payments          Payment[]
   paymentDisputes   PaymentDispute[]
   webhookEndpoints  WebhookEndpoint[]
@@ -727,6 +734,13 @@ model Event {
   submissionFeeRefundOnDisqualify     Boolean          @default(true)
   submissions         Submission[]
   prizePayouts        PrizePayout[]
+  /// Event finance (docs/FINANCE.md): an optional spending budget, and whether
+  /// registered participants may claim expenses (travel grants), up to a cap each.
+  budgetMinor                         BigInt?
+  participantClaimsEnabled            Boolean          @default(false)
+  participantClaimCapMinor            BigInt?
+  expenseClaims       ExpenseClaim[]
+  claimPayouts        ClaimPayout[]
   judgingCriteria     JudgingCriterion[]
   judgeAssignments    JudgeAssignment[]
   awards              EventAward[]
@@ -843,6 +857,7 @@ model Order {
   lines        OrderLine[]
   payments     Payment[]
   rsvps        RSVP[]
+  refundRequests RefundRequest[]
 
   @@index([organisationId, createdAt])
   @@index([eventId, status])
@@ -1484,6 +1499,7 @@ model RSVP {
   teamJoinRequests  TeamJoinRequest[]
   submission        Submission?
   submissionLink    SubmissionLink?
+  expenseClaims     ExpenseClaim[]
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
   @@index([userId, createdAt])
@@ -2386,4 +2402,153 @@ model PrizePayout {
   @@index([organisationId, createdAt])
   @@index([awardId])
   @@index([submissionId])
+}
+
+/// Who an expense claim is from (docs/FINANCE.md).
+enum ExpenseClaimKind {
+  /// Organisation members and event co-organisers, for themselves or on behalf of a speaker or volunteer.
+  STAFF
+  /// A registered participant, from their ticket page (travel grants).
+  PARTICIPANT
+}
+
+enum ExpenseClaimStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  /// Paid out: a ClaimPayout row records how.
+  PAID
+  /// Taken back by its claimant before a decision.
+  WITHDRAWN
+}
+
+enum ExpenseCategory {
+  TRAVEL
+  ACCOMMODATION
+  FOOD
+  VENUE
+  EQUIPMENT
+  PRINTING
+  MARKETING
+  SUPPLIES
+  OTHER
+}
+
+/// A request to be paid back for money spent on an event. Owners and admins
+/// approve (up to the amount asked), reject, and pay; every step is audited.
+/// Names and the event title are copied so the record outlives the event.
+model ExpenseClaim {
+  id                String             @id @default(cuid())
+  organisationId    String
+  eventId           String?
+  eventTitle        String
+  kind              ExpenseClaimKind
+  status            ExpenseClaimStatus @default(SUBMITTED)
+  submittedByUserId String?
+  /// PARTICIPANT claims: the registration that made it.
+  rsvpId            String?
+  payeeName         String
+  payeeEmail        String
+  category          ExpenseCategory
+  description       String
+  amountMinor       BigInt
+  approvedMinor     BigInt?
+  currency          String
+  /// Why it was rejected, or a note with the approval; shown to the claimant.
+  decisionNote      String             @default("")
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  organisation Organisation     @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  submittedBy  User?            @relation("ExpenseClaimSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  decidedBy    User?            @relation("ExpenseClaimDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  rsvp         RSVP?            @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
+  receipts     ExpenseReceipt[]
+  payouts      ClaimPayout[]
+
+  @@index([eventId, status, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([submittedByUserId])
+  @@index([rsvpId])
+}
+
+/// A photo of a receipt, re-encoded as WebP and kept in private storage
+/// (Asset key `organisations/{id}/claim-receipts/{uuid}.webp`), served only to
+/// the organisation's owners and admins and the claimant.
+model ExpenseReceipt {
+  id         String   @id @default(cuid())
+  claimId    String
+  storageKey String   @unique
+  byteSize   Int
+  createdAt  DateTime @default(now())
+
+  claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+}
+
+/// Money paid back on an approved claim. Append-only like PrizePayout: only
+/// references may be cleared, and a mistake is undone with a reversal row.
+model ClaimPayout {
+  id               String               @id @default(cuid())
+  organisationId   String
+  eventId          String?
+  claimId          String?
+  payeeName        String
+  amountMinor      BigInt
+  currency         String
+  method           OfflinePaymentMethod
+  reference        String?
+  note             String               @default("")
+  paidAt           DateTime
+  reversesId       String?              @unique
+  recordedByUserId String?
+  createdAt        DateTime             @default(now())
+
+  organisation Organisation  @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  claim        ExpenseClaim? @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  reverses     ClaimPayout?  @relation("ClaimPayoutReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy   ClaimPayout?  @relation("ClaimPayoutReversal")
+  recordedBy   User?         @relation("ClaimPayoutRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([claimId])
+}
+
+enum RefundRequestStatus {
+  OPEN
+  APPROVED
+  DECLINED
+  WITHDRAWN
+}
+
+/// A buyer asking for money back outside the automatic refund policy. An
+/// owner or admin approves (running the normal refund, in full or in part,
+/// optionally cancelling the tickets) or declines with a reason. At most one
+/// open request per order (partial unique index).
+model RefundRequest {
+  id              String              @id @default(cuid())
+  organisationId  String
+  orderId         String
+  status          RefundRequestStatus @default(OPEN)
+  reason          String
+  approvedMinor   BigInt?
+  cancelTickets   Boolean             @default(false)
+  decisionNote    String              @default("")
+  decidedByUserId String?
+  decidedAt       DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  decidedBy    User?        @relation("RefundRequestDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, status])
+  @@index([organisationId, status, createdAt])
 }

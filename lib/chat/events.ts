@@ -1,5 +1,5 @@
 /** What a chat channel can be told about. Kept in step with the ChatChannel_shape check. */
-export const CHAT_EVENTS = ["registration", "request", "payment", "refund", "cancellation", "dispute", "event", "payout"] as const;
+export const CHAT_EVENTS = ["registration", "request", "payment", "refund", "cancellation", "dispute", "event", "payout", "claim"] as const;
 export type ChatEvent = (typeof CHAT_EVENTS)[number];
 
 export const CHAT_EVENT_LABELS: Record<ChatEvent, { label: string; description: string; }> = {
@@ -10,7 +10,8 @@ export const CHAT_EVENT_LABELS: Record<ChatEvent, { label: string; description: 
   cancellation: { label: "Guest cancellations", description: "A guest cancels their own place." },
   dispute: { label: "Chargebacks", description: "A buyer disputes a payment with their bank." },
   event: { label: "Cancelled events", description: "An event, series or date is cancelled." },
-  payout: { label: "Payouts", description: "Prize money is paid out, or a payout is reversed." },
+  payout: { label: "Payouts", description: "Prize money or an expense claim is paid out, or a payout is reversed." },
+  claim: { label: "Expense claims", description: "Someone claims expenses, or a claim or refund request is decided." },
 };
 
 export function isChatEvent(value: string): value is ChatEvent {

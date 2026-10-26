@@ -444,7 +444,7 @@ card and dialog rules above: panel surfaces, hairlines, 16px radius, no shadows 
 - **Organisation workspace:** banner, Needs you, Next up + mini calendar, stats, events list with search,
   series and team. Members see no management links.
 - **Event dashboard tabs:** Overview, Guests, Event page (publishing questions, accent picker, cover
-  editor, registration form), Emails, Check-in, Feedback, Analytics, Settings. A Judging tab
+  editor, registration form), Emails, Check-in, Feedback, Analytics, Finance, Settings. A Judging tab
   (between Check-in and Feedback) appears only on events that use hackathon judging
   ([Hackathon](HACKATHON.md)); until then its on switch sits in Settings.
 - **Guests lists are paged on the server**, never capped in the browser: People 50 at a time with

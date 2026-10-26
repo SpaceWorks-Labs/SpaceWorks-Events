@@ -39,6 +39,9 @@ describe("event browser DTO", () => {
       teamTicketMode: "PER_MEMBER",
       submissionFeeMinor: BigInt(500),
       submissionFeeRefundOnDisqualify: true,
+      budgetMinor: BigInt(100000),
+      participantClaimsEnabled: true,
+      participantClaimCapMinor: null,
       submissionsEnabled: true,
       submissionsOpenAt: null,
       submissionsCloseAt: null,
@@ -68,5 +71,6 @@ describe("event browser DTO", () => {
     expect(serialized).not.toContain("reviewsPerProject");
     expect(serialized).not.toContain("scoreNormalization");
     expect(serialized).not.toContain("submissionFee");
+    expect(serialized).not.toContain("budgetMinor");
   });
 });

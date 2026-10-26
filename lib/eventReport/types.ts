@@ -95,4 +95,6 @@ export type EventReportMetrics = ReportRsvpMetrics & {
   shortLinkVisits?: number | null;
   /** Takings: the tickets sold for this event (or, for a date, that date's own tickets). */
   money?: RevenueSummary | null;
+  /** Spending (docs/FINANCE.md): paid expense claims and prize money, approved claims not yet paid, and the budget. */
+  spending?: { currency: string; expensesPaidMinor: number; prizesPaidMinor: number; approvedUnpaidMinor: number; budgetMinor: number | null; } | null;
 };

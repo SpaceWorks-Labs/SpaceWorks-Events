@@ -25,11 +25,11 @@ export function isPublicDerivativeKey(key: string) {
   return ORGANISATION_DERIVATIVE_KEY.test(key) || USER_DERIVATIVE_KEY.test(key);
 }
 
-function storageConfigured() {
+export function storageConfigured() {
   return Boolean(process.env.S3_BUCKET && process.env.S3_REGION);
 }
 
-function client() {
+export function client() {
   const accessKeyId = process.env.S3_ACCESS_KEY_ID;
   const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
   return new S3Client({

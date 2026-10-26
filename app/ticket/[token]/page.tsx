@@ -10,6 +10,7 @@ import { TicketSeekerPanel, TicketTeamCard } from "@/components/team/TicketTeamS
 import { TicketJoinTeamForm } from "@/components/team/JoinTeamWithRegistration";
 import { TicketSubmissionCard } from "@/components/submission/TicketSubmissionCard";
 import { TicketDownloadButton } from "@/components/ticket/TicketDownloadButton";
+import { TicketClaims } from "@/components/ticket/TicketClaims";
 import { TicketStatusStorageSync } from "@/components/ticket/TicketStatusStorageSync";
 import { HideAfterLiveCheckIn, LiveCheckedInChip, LiveTicketCard, LiveTicketProvider } from "@/components/ticket/LiveTicket";
 import { googleCalendarEventUrl } from "@/lib/calendarInvite";
@@ -29,7 +30,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function TicketPage({ params, searchParams }: Props) {
-  const { teamSection, submissionMode, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const { claims, teamSection, submissionMode, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
   const teamBlock = teamSection?.kind === "member" ? (
     <TicketTeamCard ticketToken={rsvp.checkInToken} team={teamSection.team} manageHref={teamSection.manageHref} canLeave={teamSection.canLeave} eventPageHref={eventPageHref} />
   ) : teamSection?.kind === "solo" ? (
@@ -194,6 +195,8 @@ export default async function TicketPage({ params, searchParams }: Props) {
         {teamBlock}
 
         {submissionMode ? <TicketSubmissionCard ticketToken={rsvp.checkInToken} mode={submissionMode} /> : null}
+
+        {claims ? <TicketClaims ticketToken={rsvp.checkInToken} view={claims} /> : null}
 
         {/* Paid tickets are cancelled and refunded by the organiser; team members leave their team instead. */}
         {!isCheckedIn && rsvp.status !== "REJECTED" && !payment?.paid && !inTeam ? (

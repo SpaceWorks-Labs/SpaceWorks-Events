@@ -40,4 +40,20 @@ export function drawMoney(L: ReportLayout, metrics: EventReportMetrics) {
       facts(money.byMethod.map((row) => [row.label, `${amount(row.amountMinor)} · ${plural(row.payments, "payment")}`]));
     }
   }
+  drawSpending(L, metrics);
+}
+
+/** Expense claims and prize money paid out, against the budget (docs/FINANCE.md). */
+function drawSpending(L: ReportLayout, metrics: EventReportMetrics) {
+  const spending = metrics.spending;
+  if (!spending) return;
+  const amount = (minor: number) => `${spending.currency} ${new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)}`;
+  const spent = spending.expensesPaidMinor + spending.prizesPaidMinor;
+  if (metrics.money && hasRevenue(metrics.money)) L.subheading("Spending", "Expense claims and prize money paid out by hand.");
+  else L.section("Money", "Spending", "Expense claims and prize money paid out by hand.");
+  const rows: Array<[string, string]> = [["Expense claims paid", amount(spending.expensesPaidMinor)], ["Prize money paid", amount(spending.prizesPaidMinor)]];
+  if (spending.approvedUnpaidMinor > 0) rows.push(["Approved, not yet paid", amount(spending.approvedUnpaidMinor)]);
+  if (spending.budgetMinor != null) rows.push(["Budget", `${amount(spending.budgetMinor)}, ${amount(Math.abs(spending.budgetMinor - spent - spending.approvedUnpaidMinor))} ${spending.budgetMinor >= spent + spending.approvedUnpaidMinor ? "left" : "over"}`]);
+  if (metrics.money && hasRevenue(metrics.money) && metrics.money.currency === spending.currency) rows.push(["Net after spending", amount(metrics.money.netMinor - spent)]);
+  L.facts(rows);
 }

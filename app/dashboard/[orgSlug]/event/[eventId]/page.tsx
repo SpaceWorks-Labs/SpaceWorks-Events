@@ -15,6 +15,7 @@ import { FeedbackPanel } from "@/components/event-dashboard/panels/FeedbackPanel
 import { AnalyticsPanel } from "@/components/event-dashboard/panels/AnalyticsPanel";
 import { SettingsPanel } from "@/components/event-dashboard/panels/SettingsPanel";
 import { JudgingPanel } from "@/components/event-dashboard/panels/JudgingPanel";
+import { FinancePanel } from "@/components/event-dashboard/panels/FinancePanel";
 import { JudgeWorkspace } from "@/components/event-dashboard/judging/JudgeWorkspace";
 
 type Props = {
@@ -88,6 +89,7 @@ export default async function EventManagePage({ params }: Props) {
           judging: showJudging ? <JudgingPanel ctx={ctx} /> : null,
           feedback: <FeedbackPanel ctx={ctx} />,
           analytics: <AnalyticsPanel ctx={ctx} />,
+          finance: <FinancePanel ctx={ctx} />,
           settings: <SettingsPanel ctx={ctx} judgingInUse={showJudging} />,
         }}
       />

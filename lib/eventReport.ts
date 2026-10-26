@@ -3,6 +3,7 @@ import "server-only";
 import type { RegistrationFieldType, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { loadRevenue } from "@/lib/payments/revenue";
+import { loadSpendingTotals } from "@/lib/finance";
 import type { EventReportMetrics, ReportCheckInSources, ReportQuestion, ReportRsvp, ReportRsvpMetrics, ReportTeamMetrics } from "./eventReport/types";
 
 export { createEventReportPdf } from "@/lib/eventReportPdf";
@@ -247,6 +248,7 @@ export async function getEventReportMetrics(eventId: string): Promise<EventRepor
     waitlist: { joined: event.rsvps.filter((rsvp) => rsvp.waitlistedAt).length, promoted: event.rsvps.filter((rsvp) => rsvp.promotedAt).length },
     shortLinkVisits: event.shortCode ? event.shortLinkClickDays.reduce((sum, day) => sum + day.count, 0) : null,
     money: await loadRevenue({ eventId: event.id }, event.timezone),
+    spending: await loadSpendingTotals(event.id),
     ...calculateReportRsvpMetrics(event.rsvps),
   };
 }

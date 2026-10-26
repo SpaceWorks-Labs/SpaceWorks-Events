@@ -456,6 +456,11 @@
       "id": "components__event-dashboard__panels__FeedbackPanel:loadFeedbackPanel"
     },
     {
+      "module": "lib/views/components__event-dashboard__panels__FinancePanel",
+      "name": "loadFinancePanel",
+      "id": "components__event-dashboard__panels__FinancePanel:loadFinancePanel"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__GuestsPanel",
       "name": "loadGuestsPanel",
       "id": "components__event-dashboard__panels__GuestsPanel:loadGuestsPanel"
@@ -886,6 +891,46 @@
       "module": "app/actions/feedback-form",
       "name": "loadFeedbackResponsesPage",
       "id": "feedback-form:loadFeedbackResponsesPage"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "submitStaffClaimAction",
+      "id": "finance:submitStaffClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "withdrawStaffClaimAction",
+      "id": "finance:withdrawStaffClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "approveClaimAction",
+      "id": "finance:approveClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "rejectClaimAction",
+      "id": "finance:rejectClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "recordClaimPayoutAction",
+      "id": "finance:recordClaimPayoutAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "reverseClaimPayoutAction",
+      "id": "finance:reverseClaimPayoutAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "decideRefundRequestAction",
+      "id": "finance:decideRefundRequestAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "saveFinanceSettingsAction",
+      "id": "finance:saveFinanceSettingsAction"
     },
     {
       "module": "app/actions/guest-list",
@@ -1321,6 +1366,21 @@
       "module": "app/actions/organisation-email",
       "name": "stopOwnEmailServer",
       "id": "organisation-email:stopOwnEmailServer"
+    },
+    {
+      "module": "app/actions/participant-claims",
+      "name": "submitParticipantClaimAction",
+      "id": "participant-claims:submitParticipantClaimAction"
+    },
+    {
+      "module": "app/actions/participant-claims",
+      "name": "withdrawParticipantClaimAction",
+      "id": "participant-claims:withdrawParticipantClaimAction"
+    },
+    {
+      "module": "app/actions/participant-claims",
+      "name": "requestRefundAction",
+      "id": "participant-claims:requestRefundAction"
     },
     {
       "module": "app/actions/password-reset",

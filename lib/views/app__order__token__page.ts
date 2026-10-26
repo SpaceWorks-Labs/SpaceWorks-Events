@@ -4,6 +4,7 @@ import { OrderStatus, PaymentRefundStatus, PaymentStatus } from "@prisma/client"
 import { prisma } from "@/lib/db";
 import { refreshOrderFromProvider } from "@/lib/payments/checkout";
 import { buyerCancellation } from "@/lib/payments/operations";
+import { latestRefundRequest } from "@/lib/refundRequests";
 import { asRefundPolicy, describeRefundPolicy } from "@/lib/payments/refundPolicy";
 import { formatMoney } from "@/lib/payments/money";
 import { checkoutLineName } from "@/lib/payments/pricing";
@@ -96,7 +97,13 @@ export async function loadOrderView({ params, searchParams }: Props) {
   const refundedMinor = refunds.reduce((sum, refund) => sum + refund.amountMinor, BigInt(0));
   const cancellation = order.status === OrderStatus.CONFIRMED && order.totalMinor > BigInt(0) ? await buyerCancellation(found.id, now) : null;
   const policy = asRefundPolicy(order.refundPolicy);
+  // Outside the automatic policy a buyer can still ask (docs/FINANCE.md), once at a time.
+  const refundRequest = await latestRefundRequest(found.id);
+  const paid = order.payments.some((payment) => payment.status !== PaymentStatus.PENDING);
+  const canRequestRefund = order.status === OrderStatus.CONFIRMED && paid && refundRequest?.status !== "OPEN";
   return {
+    refundRequest,
+    canRequestRefund,
     token,
     returning,
     reference: order.reference,

@@ -21,6 +21,7 @@ export const EVENT_TABS = [
   { value: "judging", label: "Judging" },
   { value: "feedback", label: "Feedback" },
   { value: "analytics", label: "Analytics" },
+  { value: "finance", label: "Finance" },
   { value: "settings", label: "Settings" },
 ] as const;
 
