@@ -322,15 +322,23 @@ Paid places are paid **up front**, never requested first:
   ended and the unit or team place was taken, or the team was rejected or
   removed), the payment is refunded in full instead.
 - A paid team or solo place never waits on the waitlist: a full event refuses
-  it. Free tickets keep the usual waitlist and promotion of whole units.
+  it, and a member can't pay to join a waitlisted team. Free tickets keep the
+  usual waitlist and promotion of whole units.
+- On an approval-required event, team places are paid online (paying at the
+  desk is refused); declining a paid solo registration refunds it in full,
+  like rejecting a team.
+- A member's joining order is marked (`Order.teamJoin`), so if the team is
+  deleted while they pay, the payment is refunded rather than placed as a
+  solo registration. A leader's unpaid team is deleted when its payment comes
+  too late, as when the hold ends.
 - **Rejecting a team** refunds every paid order of its members in full.
   Approving or promoting changes no money.
 - Registrations from a paid order are cancelled **as an order** (the order
   page under the refund policy, or Guests → Payment): a cancelled member leaves
   their team as if they had cancelled, and cancelling a `PER_TEAM` leader's
   order cancels the whole team (members are emailed). Leaders can't remove paid
-  members or disband a team with paid members, and organisers can't delete such
-  a team; leaving from the ticket page points paid members to the order page.
+  members or disband a team with paid members (a confirmed paid order), and
+  organisers can't delete such a team; leaving from the ticket page points paid members to the order page.
 - Payments, settlement and cancellations raise the usual registration
   webhooks.
 

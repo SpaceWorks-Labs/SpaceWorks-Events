@@ -1,6 +1,6 @@
 import "server-only";
 
-import { EventPrivacyType, RegistrationMode, RsvpStatus, SoloPolicy, TeamTicketMode, type Prisma } from "@prisma/client";
+import { EventPrivacyType, OrderStatus, RegistrationMode, RsvpStatus, SoloPolicy, TeamTicketMode, type Prisma } from "@prisma/client";
 import { enqueueTeamCreated } from "@/lib/outbox";
 import { noticeEach, noticeSubject, personEmail } from "@/lib/notices";
 import { LEADER_STILL_PAYING, TeamRegistrationError } from "@/lib/rsvpCore/team";
@@ -100,12 +100,12 @@ export async function placeTeamOrderRegistration(tx: Prisma.TransactionClient, p
     if (params.status !== RsvpStatus.PENDING_PAYMENT) await enqueueTeamCreated(tx, { to: params.email, teamId: team.id, manageToken: manage.raw, reason: "created" });
     return { teamId: team.id, teamName: plan.name };
   }
-  await tx.order.update({ where: { id: params.orderId }, data: { teamId: plan.team.id } });
+  await tx.order.update({ where: { id: params.orderId }, data: { teamId: plan.team.id, teamJoin: true } });
   if (params.status !== RsvpStatus.PENDING_PAYMENT) await tx.rSVP.update({ where: { id: params.rsvpId }, data: { teamId: plan.team.id } });
   return { teamId: plan.team.id, teamName: plan.team.name };
 }
 
-type TeamOrderRow = { id: string; eventId: string | null; teamId: string | null; teamName: string | null; };
+type TeamOrderRow = { id: string; eventId: string | null; teamId: string | null; teamName: string | null; teamJoin: boolean; };
 
 /**
  * Settling a paid order on a TEAM event (the event row is locked): where its
@@ -128,8 +128,9 @@ export async function placePaidTeamOrder(tx: Prisma.TransactionClient, order: Te
     await assignTeamLeaderTx(tx, { teamId: team.id, leaderRsvpId: rsvpId, reason: "created" });
     return { status: placed, teamName: team.name };
   }
-  if (order.teamId) {
-    const team = await tx.team.findFirst({ where: { id: order.teamId, eventId }, select: { id: true, name: true, status: true } });
+  // A member paying to join; the team may have been deleted meanwhile (teamId cleared).
+  if (order.teamJoin || order.teamId) {
+    const team = order.teamId ? await tx.team.findFirst({ where: { id: order.teamId, eventId }, select: { id: true, name: true, status: true } }) : null;
     if (!team || team.status === RsvpStatus.REJECTED || team.status === RsvpStatus.PENDING_PAYMENT) return "gone";
     if (!holdActive && (event.teamMaxSize == null || await teamPlacesTaken(tx, team.id, now) >= event.teamMaxSize)) return "gone";
     await tx.rSVP.update({ where: { id: rsvpId }, data: { teamId: team.id } });
@@ -181,7 +182,7 @@ export async function releaseTeamPlacesForCancelledOrder(tx: Prisma.TransactionC
 
 /** Whether any of these registrations came from an order that cost money (team actions can't delete those: they are cancelled as an order, with a refund). */
 export async function hasPaidOrder(tx: Prisma.TransactionClient, where: Prisma.RSVPWhereInput) {
-  return (await tx.rSVP.count({ where: { ...where, order: { totalMinor: { gt: 0 } } } })) > 0;
+  return (await tx.rSVP.count({ where: { ...where, order: { totalMinor: { gt: 0 }, status: OrderStatus.CONFIRMED } } })) > 0;
 }
 
 export const PAID_MEMBER_REFUSAL = "Someone here paid for their ticket. Paid tickets are cancelled from the order page, or by the organiser under Guests → Payment, with a refund.";

@@ -79,6 +79,29 @@ describe.sequential("entry fees", () => {
   });
 });
 
+describe.sequential("entry fee edge cases", () => {
+  it("charges again after a full refund, and refunds a late capture when another order already paid", async () => {
+    const event = await hackathon(20000);
+    const entrant = await soloEntrant(event.id, "fee-c");
+    await submitSubmission(entrant, { title: "Kite cam" });
+    const submission = await prisma.submission.findFirstOrThrow({ where: { eventId: event.id } });
+    const first = await prisma.order.findFirstOrThrow({ where: { submissionId: submission.id } });
+    // The first hold ends unpaid; a second order is paid; then the first capture arrives.
+    await prisma.order.update({ where: { id: first.id }, data: { holdExpiresAt: new Date(Date.now() - 1000) } });
+    await withdrawSubmission(entrant).catch(() => undefined);
+    await prisma.order.update({ where: { id: first.id }, data: { status: OrderStatus.EXPIRED, holdExpiresAt: null, holdCapAt: null } });
+    await submitSubmission(entrant, { title: "Kite cam" });
+    const second = await prisma.order.findFirstOrThrow({ where: { submissionId: submission.id, status: OrderStatus.PENDING } });
+    expect((await payOrder(second.id)).outcome).toBe("confirmed");
+    expect((await payOrder(first.id)).outcome).toBe("duplicate");
+
+    await disqualifySubmission(await organiser(event.id), { submissionId: submission.id, reason: "Late" });
+    await prisma.submission.update({ where: { id: submission.id }, data: { status: SubmissionStatus.WITHDRAWN } });
+    // Refunded in full, so submitting again asks for the fee again.
+    expect(await submitSubmission(entrant, { title: "Kite cam" })).toMatchObject({ ok: true, data: { status: SubmissionStatus.DRAFT, checkoutUrl: expect.any(String) } });
+  });
+});
+
 describe.sequential("prize payouts", () => {
   it("records payouts up to the prize, reverses them, and refuses edits in the database", async () => {
     const event = await hackathon(null);
@@ -98,6 +121,7 @@ describe.sequential("prize payouts", () => {
     const original = await prisma.prizePayout.findFirstOrThrow({ where: { eventId: event.id } });
     expect(original).toMatchObject({ amountMinor: BigInt(60000), currency: "INR", awardName: "Best hack", projectTitle: "Solar sail" });
     await expect(prisma.prizePayout.update({ where: { id: original.id }, data: { amountMinor: BigInt(1) } })).rejects.toThrow();
+    await expect(prisma.prizePayout.delete({ where: { id: original.id } })).rejects.toThrow();
     await expect(prisma.prizePayout.create({ data: { ...original, id: undefined, reversesId: original.id, amountMinor: BigInt(1) } })).rejects.toThrow();
 
     expect(await reversePrizePayout(ctx, { payoutId: original.id, reason: "Wrong account" })).toEqual({ ok: true });

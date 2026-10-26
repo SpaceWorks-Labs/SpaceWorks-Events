@@ -103,7 +103,8 @@ export function Canvas({ document, scale, selectedId, onSelect, onDraft, onRelea
       onPointerUp={end}
       onPointerCancel={end}
     >
-      {document.elements.map((element) => (element.hidden ? null : (
+      {/* The QR is drawn last, as on the ticket, so nothing covers it. */}
+      {[...document.elements.filter((element) => element.kind !== "qr"), ...document.elements.filter((element) => element.kind === "qr")].map((element) => (element.hidden ? null : (
         <div
           key={element.id}
           style={boxStyle(element, scale)}

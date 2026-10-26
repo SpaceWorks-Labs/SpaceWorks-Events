@@ -128,4 +128,23 @@ describe.sequential("paid team registration", () => {
     expect(refunds.every((refund) => refund.amountMinor === BigInt(49900) && refund.status !== PaymentRefundStatus.FAILED)).toBe(true);
     await prisma.user.delete({ where: { id: organiser.id } });
   });
+
+  it("refunds a member who paid to join a team that was deleted meanwhile, and keeps desk payment off approval events", async () => {
+    const { event, ticket } = await createTeamEvent();
+    await register(event.slug, email("lead-i"), { mode: "create", name: "Orbits" }, ticket.id);
+    await payOrder((await orderOf(email("lead-i"))).id);
+    const team = await prisma.team.findFirstOrThrow({ where: { eventId: event.id } });
+    await register(event.slug, email("member-i"), { mode: "join", joinToken: team.joinToken }, ticket.id);
+    const joining = await orderOf(email("member-i"));
+    expect(joining.teamJoin).toBe(true);
+    await prisma.rSVP.deleteMany({ where: { teamId: team.id } });
+    await prisma.team.delete({ where: { id: team.id } });
+    expect((await payOrder(joining.id)).outcome).toBe("refunding");
+    expect(await prisma.rSVP.findUniqueOrThrow({ where: { id: joining.rsvps[0]!.id } })).toMatchObject({ teamId: null, status: RsvpStatus.PENDING_PAYMENT });
+
+    const approval = await createTeamEvent({ privacyType: EventPrivacyType.APPROVAL_REQUIRED });
+    await prisma.ticketType.update({ where: { id: approval.ticket.id }, data: { payAtDesk: true } });
+    const desk = await submitRsvpCore({ orgSlug: paid.orgSlug, eventSlug: approval.event.slug, guestEmail: email("desk-i"), name: "Desk", answers: {}, items: [{ ticketTypeId: approval.ticket.id, quantity: 1 }], payAtDesk: true }, { userId: null, team: { mode: "create", name: "Deskers" } });
+    expect(desk).toMatchObject({ ok: false, error: expect.stringContaining("pay online") });
+  });
 });

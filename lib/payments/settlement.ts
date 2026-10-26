@@ -12,7 +12,7 @@ import { formatMoney } from "./money";
 import { notifyChat } from "@/lib/chat/notify";
 import { noticeOrganisersOfRequest } from "@/lib/notices";
 import type { WebhookEmission } from "@/lib/webhooks/emit";
-import { placePaidTeamOrder } from "./teamOrders";
+import { placePaidTeamOrder, releaseUnpaidTeam } from "./teamOrders";
 import { settleEntryFeePayment } from "./entryFees";
 
 export type SettlementResult = {
@@ -88,7 +88,7 @@ export async function settlePaidNotification(
       id: true, organisationId: true, status: true, amountMinor: true, currency: true, testMode: true, description: true, externalPaymentId: true,
       order: {
         select: {
-          id: true, status: true, holdExpiresAt: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
+          id: true, status: true, holdExpiresAt: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, teamJoin: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
           rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true, status: true, holdExpiresAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } },
         },
       },
@@ -119,8 +119,8 @@ export async function settlePaidNotification(
 
   // A project entry fee (docs/HACKATHON.md) holds no places: it is always accepted.
   if (order.submissionId && order.rsvps.length === 0) {
-    await settleEntryFeePayment(tx, payment, { id: order.id, submissionId: order.submissionId, buyerEmail: order.buyerEmail, buyerName: order.buyerName }, paid, now);
-    return { outcome: "confirmed", refundIds: [] };
+    const refundId = await settleEntryFeePayment(tx, payment, { id: order.id, submissionId: order.submissionId, buyerEmail: order.buyerEmail, buyerName: order.buyerName }, paid, now);
+    return refundId ? { outcome: "duplicate", refundIds: [refundId] } : { outcome: "confirmed", refundIds: [] };
   }
 
   const held = order.rsvps.filter((rsvp) => rsvp.status === RsvpStatus.PENDING_PAYMENT);
@@ -154,6 +154,8 @@ export async function settlePaidNotification(
 
   // The seats were released and taken: keep the money's record, return it all.
   if (order.status === OrderStatus.PENDING) await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.EXPIRED, holdExpiresAt: null, holdCapAt: null } });
+  // A leader's team that was never placed goes too, freeing its name.
+  await releaseUnpaidTeam(tx, order.id);
   const refund = await createPendingRefund(tx, { paymentId: payment.id, amountMinor: payment.amountMinor, reason: "Paid after the hold ended and the places were gone", automatic: true });
   await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: payment.id, notice: "late-refund" });
   for (const owner of await organisationOwnerEmails(tx, payment.organisationId)) {

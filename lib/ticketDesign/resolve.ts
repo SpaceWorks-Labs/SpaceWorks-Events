@@ -24,7 +24,7 @@ export async function ticketDesignFor(checkInToken: string) {
   const rsvp = await prisma.rSVP.findUnique({
     where: { checkInToken },
     select: {
-      id: true, status: true, guestName: true, guestEmail: true,
+      id: true, status: true, checkedInAt: true, guestName: true, guestEmail: true,
       user: { select: { name: true } },
       team: { select: { name: true } },
       order: { select: { reference: true, currency: true } },
@@ -56,7 +56,7 @@ export async function ticketDesignFor(checkInToken: string) {
     team: rsvp.team?.name ?? "",
     organisation: organisation.name,
   };
-  return { status: rsvp.status, document: chosen ?? CLASSIC_DESIGN, custom: Boolean(chosen), values, title: owner.title };
+  return { status: rsvp.status, checkedIn: rsvp.checkedInAt != null, document: chosen ?? CLASSIC_DESIGN, custom: Boolean(chosen), values, title: owner.title };
 }
 
 /** Above this the email keeps only the ticket link. */

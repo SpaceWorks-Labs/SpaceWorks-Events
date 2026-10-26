@@ -11,10 +11,16 @@ import { FONT_LABELS, FONT_WEIGHTS, TICKET_FONTS, type DesignDocument, type Desi
 
 const WEIGHT_LABELS: Record<number, string> = { 400: "Regular", 500: "Medium", 600: "Semibold", 700: "Bold" };
 
+/** Committed on blur or Enter, so typing "-" or clearing the field never writes a 0. */
 function NumberField({ label, value, onChange, step = 0.5, min, max, suffix }: { label: string; value: number; onChange: (value: number) => void; step?: number; min?: number; max?: number; suffix?: string; }) {
+  const commit = (input: HTMLInputElement) => {
+    const next = input.valueAsNumber;
+    if (input.value.trim() === "" || !Number.isFinite(next)) input.value = String(Number(value.toFixed(2)));
+    else if (next !== value) onChange(next);
+  };
   return (
     <Field label={suffix ? `${label} (${suffix})` : label}>
-      <Input type="number" inputMode="decimal" step={step} min={min} max={max} value={Number(value.toFixed(2))} onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next)) onChange(next); }} />
+      <Input type="number" inputMode="decimal" step={step} min={min} max={max} defaultValue={Number(value.toFixed(2))} key={value} onBlur={(event) => commit(event.target)} onKeyDown={(event) => { if (event.key === "Enter") commit(event.currentTarget); }} />
     </Field>
   );
 }

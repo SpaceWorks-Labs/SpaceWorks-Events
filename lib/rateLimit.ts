@@ -18,6 +18,7 @@ export type Bucket =
   | "broadcastTest"
   | "broadcastDraft"
   | "designAutosave"
+  | "ticketRender"
   | "checkin"
   | "checkinStationPin"
   | "search"
@@ -59,6 +60,8 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   broadcastDraft: { max: 60, windowMs: 60_000 },
   // Ticket designer autosave (docs/TICKET_DESIGNER.md): about 1.5s after each edit stops.
   designAutosave: { max: 90, windowMs: 60_000 },
+  // Designed ticket images and PDFs (docs/TICKET_DESIGNER.md): each is a fresh server render.
+  ticketRender: { max: 20, windowMs: 60_000 },
   checkin: { max: 180, windowMs: 60_000 },
   checkinStationPin: { max: 5, windowMs: 60_000 },
   search: { max: 60, windowMs: 60_000 },

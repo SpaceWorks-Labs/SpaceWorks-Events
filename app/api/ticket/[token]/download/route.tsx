@@ -22,7 +22,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/ticket/
       eventInstance: { select: { startDateTime: true, series: { select: { title: true, timezone: true, organisation: { select: { name: true } } } } } },
     },
   });
-  if (!rsvp || rsvp.status !== "CONFIRMED") notFound();
+  if (!rsvp || rsvp.status !== "CONFIRMED" || rsvp.checkedInAt) notFound();
   const event = rsvp.event;
   const instance = rsvp.eventInstance;
   if (!event && !instance) notFound();

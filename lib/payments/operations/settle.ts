@@ -46,7 +46,7 @@ export async function settleOrderByHand(params: {
     const order = await tx.order.findUniqueOrThrow({
       where: { id: owned.id },
       select: {
-        id: true, status: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
+        id: true, status: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, teamJoin: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
         payments: { where: { status: PaymentStatus.PENDING }, select: { id: true, provider: true } },
         rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true, status: true, holdExpiresAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } },
       },

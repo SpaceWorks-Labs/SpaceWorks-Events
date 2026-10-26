@@ -89,7 +89,7 @@ This page documents implemented controls and security boundaries. It is not a su
 
 - Expense claim receipts are re-encoded WebP photos in private storage (`organisations/{id}/claim-receipts/`, enforced by a CHECK on `ExpenseReceipt`), never served by `/api/uploads`; `/api/claims/receipts/:id` serves them only to the organisation's owners and admins and the claim's own author, with an empty 404 otherwise.
 - Deciding and paying claims, the budget, refund requests and the finance CSV are owner/admin only; members and co-organisers file and withdraw only their own claims. Participant claims need a confirmed registration, the event's switch, and the account behind an account-owned ticket; the per-person cap is checked under the event row lock.
-- `ClaimPayout` and `PrizePayout` are append-only ledgers guarded by database triggers: only a reference may be cleared when its target is deleted, and a reversal must match the payout it undoes (same organisation, amount and currency, never a reversal of a reversal).
+- `ClaimPayout` and `PrizePayout` are append-only ledgers guarded by database triggers: rows are never deleted except with their organisation, only a reference may be cleared when its target is deleted, and a reversal must match the payout it undoes (same organisation, amount and currency, never a reversal of a reversal).
 - A refund request is claimed before its refund runs (and released if the refund is refused), so concurrent approvals never refund twice; the refund itself is the normal `refundOrder` with its locks and limits.
 
 ## Ticket designs

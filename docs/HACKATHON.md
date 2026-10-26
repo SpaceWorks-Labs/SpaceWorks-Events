@@ -355,7 +355,9 @@ interest. Rules are pure functions in `lib/judgingProgress.ts`.
   places are held. Entry fees appear in the orders CSV and the Money
   reports like other orders.
 - A project already paid for stays paid if it is withdrawn and submitted
-  again. Disqualifying refunds a paid fee in full when the setting is on;
+  again; once its fee is refunded in full, submitting asks for it again. A
+  payment that lands after the fee was paid on another order is refunded in
+  full. Disqualifying refunds a paid fee in full when the setting is on;
   reinstating charges nothing. Cancelling the event refunds fees with the
   tickets.
 
@@ -373,6 +375,7 @@ interest. Rules are pure functions in `lib/judgingProgress.ts`.
   deleted (names are copied onto the row). A mistake is undone by a
   **reversal** row for the same amount and currency (`reversesId`, at most one
   per payout, checked by a second trigger); the original stays on record.
+  Rows can't be deleted either, except with their organisation.
 
 ## Tests
 

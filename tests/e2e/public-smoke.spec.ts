@@ -157,7 +157,8 @@ test("a confirmed attendee can download a QR ticket", async ({ page }) => {
 
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Save ticket" }).click();
-  expect((await download).suggestedFilename()).toBe("downloadable-ticket-test-ticket.jpg");
+  // "Save ticket" is the designed ticket (docs/TICKET_DESIGNER.md), the built-in design here.
+  expect((await download).suggestedFilename()).toBe("downloadable-ticket-test-ticket.png");
   expect(browserErrors, browserErrors.join("\n")).toEqual([]);
 });
 

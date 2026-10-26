@@ -30,9 +30,11 @@ async function imageHref(element: ImageElement, dpi: number) {
     const file = await downloadFile(key);
     if (!file) return null;
     const { width, height } = pixelSize(element.w, element.h, Math.min(dpi, 300));
+    // One factor for both sides, so a large "cover" crop keeps its shape.
+    const shrink = Math.min(1, 3000 / Math.max(width, height));
     const data = await sharp(Buffer.from(file.body), { failOn: "error", limitInputPixels: 40_000_000 })
       .rotate()
-      .resize(Math.min(width, 3000), Math.min(height, 3000), { fit: element.fit === "cover" ? "cover" : "inside", withoutEnlargement: false })
+      .resize(Math.max(1, Math.round(width * shrink)), Math.max(1, Math.round(height * shrink)), { fit: element.fit === "cover" ? "cover" : "inside", withoutEnlargement: false })
       .png({ compressionLevel: 9 })
       .toBuffer({ resolveWithObject: true });
     return { href: `data:image/png;base64,${data.data.toString("base64")}`, widthPx: data.info.width, heightPx: data.info.height };
@@ -79,7 +81,9 @@ async function elementSvg(element: DesignElement, values: MergeValues, qrValue: 
 export async function renderDesignSvg(document: DesignDocument, values: MergeValues, qrValue: string, dpi = PNG_DPI) {
   const { width, height } = pixelSize(document.widthMm, document.heightMm, dpi);
   const parts = [`<rect width="${document.widthMm}" height="${document.heightMm}" fill="${document.background}"/>`];
-  for (const [index, element] of document.elements.entries()) {
+  // The check-in QR is always drawn last, so nothing can cover it.
+  const ordered = [...document.elements.filter((element) => element.kind !== "qr"), ...document.elements.filter((element) => element.kind === "qr")];
+  for (const [index, element] of ordered.entries()) {
     if (element.hidden) continue;
     const body = await elementSvg(element, values, qrValue, dpi, index);
     if (!body) continue;
@@ -94,7 +98,7 @@ export async function renderDesignSvg(document: DesignDocument, values: MergeVal
 /** One ticket as a PNG (300 dpi, or less for previews). */
 export async function renderDesignPng(document: DesignDocument, values: MergeValues, qrValue: string, dpi = PNG_DPI) {
   const { svg, width, height } = await renderDesignSvg(document, values, qrValue, dpi);
-  return sharp(Buffer.from(svg), { limitInputPixels: false }).resize(width, height).flatten({ background: document.background }).png({ compressionLevel: 9 }).withMetadata({ density: dpi }).toBuffer();
+  return sharp(Buffer.from(svg), { limitInputPixels: false }).resize(width, height).flatten({ background: document.background }).png({ compressionLevel: 6 }).withMetadata({ density: dpi }).toBuffer();
 }
 
 /** One ticket as a single-page PDF at its exact size. */

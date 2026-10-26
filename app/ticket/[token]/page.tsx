@@ -180,7 +180,7 @@ export default async function TicketPage({ params, searchParams }: Props) {
                 Add to calendar
               </a>
             </Button>
-            <TicketDownloadButton downloadUrl={`/api/ticket/${rsvp.checkInToken}/design`} pdfUrl={`/api/ticket/${rsvp.checkInToken}/design?format=pdf`} />
+            {isCheckedIn ? null : <TicketDownloadButton downloadUrl={`/api/ticket/${rsvp.checkInToken}/design`} pdfUrl={`/api/ticket/${rsvp.checkInToken}/design?format=pdf`} />}
           </div>
         ) : null}
 

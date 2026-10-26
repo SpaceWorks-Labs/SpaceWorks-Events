@@ -852,6 +852,9 @@ model Order {
   /// Set on a leader's order: the name of the team it creates. It tells a
   /// leader's order from a member's even after the team is gone.
   teamName       String?
+  /// A PER_MEMBER member's order paying to join `teamId`: kept when the team is
+  /// deleted mid-payment, so the payment is refunded rather than placed solo.
+  teamJoin       Boolean     @default(false)
   /// A hackathon entry fee: the project it pays for. Such an order has no
   /// registrations; once paid, the project is submitted.
   submissionId   String?

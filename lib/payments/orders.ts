@@ -214,6 +214,11 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
       // Sign up first; pay after approval, through a payment link.
       status = RsvpStatus.PENDING_APPROVAL;
       orderStatus = OrderStatus.REQUESTED;
+    } else if (teamPlan && (atDesk || settledByHand) && sellable.privacyType === EventPrivacyType.APPROVAL_REQUIRED) {
+      // Team places on approval events are paid online first, then approved.
+      throw new OrderError("This event approves places after they're paid for, so pay online.");
+    } else if (teamPlan?.kind === "join" && teamPlan.team.status === RsvpStatus.WAITLISTED) {
+      throw new OrderError("This team is on the waitlist. Members can pay to join once it has a place.");
     } else if (!fits && teamPlan) {
       // A team place is paid for up front, so it never waits on the waitlist.
       throw new OrderError(!typesFit ? "That ticket is sold out." : teamPlan.kind === "create" ? "There are no places left for new teams." : "There are no places left.");
@@ -226,8 +231,9 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
       status = RsvpStatus.WAITLISTED;
       orderStatus = OrderStatus.REQUESTED;
     } else if (settledByHand || atDesk) {
-      // Reserved to pay at the desk: confirmed now, with the payment owed.
-      status = RsvpStatus.CONFIRMED;
+      // Reserved to pay at the desk: confirmed now, with the payment owed. A
+      // member joins their team in its status (docs/TEAMS.md).
+      status = teamPlan?.kind === "join" ? teamPlan.team.status : RsvpStatus.CONFIRMED;
       orderStatus = OrderStatus.CONFIRMED;
     } else {
       status = RsvpStatus.PENDING_PAYMENT;

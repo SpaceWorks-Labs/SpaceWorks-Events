@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/field";
 import type { DesignDocument, DesignElement } from "@/lib/ticketDesign/schema";
 import { Canvas } from "./Canvas";
 import { EDITOR_FONT_FACES } from "./ElementView";
-import { alignToCanvas, duplicateElement, newElement } from "./geometry";
+import { alignToCanvas, duplicateElement, newElement, newElementId } from "./geometry";
 import { CanvasInspector, ElementInspector } from "./Inspector";
 import { LayersPanel } from "./LayersPanel";
 import { PreviewDialog } from "./PreviewDialog";
@@ -51,10 +51,14 @@ export function TicketDesigner({ designId, organisationSlug, name, initial, atte
     return () => observer.disconnect();
   }, []);
 
-  const setElements = useCallback((elements: DesignElement[]) => state.commit({ ...document, elements }), [state, document]);
-  const patch = useCallback((id: string, change: Partial<DesignElement>) => setElements(document.elements.map((element) => (element.id === id ? ({ ...element, ...change } as DesignElement) : element))), [document, setElements]);
-  const add = useCallback((element: DesignElement) => { setElements([...document.elements, element]); setSelectedId(element.id); }, [document, setElements]);
-  const remove = useCallback((id: string) => { setElements(document.elements.filter((element) => element.id !== id || element.kind === "qr")); setSelectedId(null); }, [document, setElements]);
+  // Every edit is a function of the latest document, so slow work (an upload) never overwrites newer edits.
+  const { apply } = state;
+  const patch = useCallback((id: string, change: Partial<DesignElement>) => apply((current) => ({ ...current, elements: current.elements.map((element) => (element.id === id ? ({ ...element, ...change } as DesignElement) : element)) })), [apply]);
+  const add = useCallback((element: DesignElement) => {
+    apply((current) => ({ ...current, elements: [...current.elements, current.elements.some((other) => other.id === element.id) ? { ...element, id: newElementId(current, element.kind) } : element] }));
+    setSelectedId(element.id);
+  }, [apply]);
+  const remove = useCallback((id: string) => { apply((current) => ({ ...current, elements: current.elements.filter((element) => element.id !== id || element.kind === "qr") })); setSelectedId(null); }, [apply]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -100,7 +104,7 @@ export function TicketDesigner({ designId, organisationSlug, name, initial, atte
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-label text-ink">
           Design name
-          <Input value={title} maxLength={80} onChange={(event) => { setTitle(event.target.value); titleRef.current = event.target.value; }} onBlur={() => void state.saveNow()} />
+          <Input value={title} maxLength={80} onChange={(event) => { setTitle(event.target.value); titleRef.current = event.target.value; }} onBlur={() => void state.saveNow(true)} />
         </label>
       </div>
       <Toolbar
@@ -126,21 +130,21 @@ export function TicketDesigner({ designId, organisationSlug, name, initial, atte
           {selected ? (
             <ElementInspector key={selected.id} element={selected} onChange={(change) => patch(selected.id, change)} onReplaceImage={() => { replacing.current = selected.id; fileInput.current?.click(); }} />
           ) : (
-            <CanvasInspector document={document} onChange={(change) => state.commit({ ...document, ...change })} />
+            <CanvasInspector document={document} onChange={(change) => apply((current) => ({ ...current, ...change }))} />
           )}
           <LayersPanel
             elements={document.elements}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onToggle={(id, flag) => { const element = document.elements.find((candidate) => candidate.id === id); if (element) patch(id, { [flag]: !element[flag] || undefined }); }}
-            onMove={(id, direction) => {
-              const index = document.elements.findIndex((element) => element.id === id);
+            onMove={(id, direction) => apply((current) => {
+              const index = current.elements.findIndex((element) => element.id === id);
               const target = index + direction;
-              if (index < 0 || target < 0 || target >= document.elements.length) return;
-              const elements = [...document.elements];
+              if (index < 0 || target < 0 || target >= current.elements.length) return current;
+              const elements = [...current.elements];
               [elements[index], elements[target]] = [elements[target]!, elements[index]!];
-              setElements(elements);
-            }}
+              return { ...current, elements };
+            })}
           />
         </aside>
       </div>

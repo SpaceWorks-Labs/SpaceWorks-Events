@@ -15,15 +15,16 @@ const file = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").
  * The designed ticket (docs/TICKET_DESIGNER.md) for a confirmed registration:
  * `?format=png` (default) or `pdf`, `inline=1` to show it on the ticket page.
  * The ticket token is the bearer proof, as for the plain download; the QR
- * encodes it. Rate limited per address; empty 404 otherwise.
+ * encodes it. Rate limited per address (every hit is a fresh render); empty 404 otherwise, and once checked in.
  */
 export async function GET(request: Request, context: RouteContext) {
   const { token } = await context.params;
   const safeToken = token.trim();
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(safeToken)) return notFound();
-  if (!(await checkRateLimitById("ticketStatus", `design:${getClientIpFromHeaders(request.headers)}`))) return new Response(null, { status: 429, headers: { ...HEADERS, "Retry-After": "60" } });
+  if (!(await checkRateLimitById("ticketRender", `design:${getClientIpFromHeaders(request.headers)}`))) return new Response(null, { status: 429, headers: { ...HEADERS, "Retry-After": "60" } });
   const ticket = await ticketDesignFor(safeToken);
-  if (!ticket || ticket.status !== "CONFIRMED") return notFound();
+  // Like the page's QR stub, the designed ticket (it carries the QR) is gone once checked in.
+  if (!ticket || ticket.status !== "CONFIRMED" || ticket.checkedIn) return notFound();
   const url = new URL(request.url);
   const pdf = url.searchParams.get("format") === "pdf";
   const disposition = url.searchParams.get("inline") === "1" ? "inline" : `attachment; filename="${file(ticket.title)}-ticket.${pdf ? "pdf" : "png"}"`;

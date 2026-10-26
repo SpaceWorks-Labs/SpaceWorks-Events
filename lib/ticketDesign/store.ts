@@ -16,14 +16,18 @@ const NOT_FOUND = "Design not found.";
 export const MAX_LIBRARY_DESIGNS = 50;
 export const MAX_EVENT_DESIGNS = 20;
 
-/** A document checked in full, with every image one of this organisation's own uploads. */
+/** Upload folders that hold artwork (never member ID photos or other people's pictures). */
+const ARTWORK_FOLDERS = ["ticket-design-images", "organisation-logos", "event-page-logos", "event-sponsors"];
+
+/** A document checked in full, with every image one of this organisation's own artwork uploads. */
 export function validDocument(organisationId: string, input: unknown): DesignResult<DesignDocument> {
   const parsed = designDocumentSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "This design can't be saved.");
   for (const element of parsed.data.elements) {
     if (element.kind !== "image") continue;
     const key = managedImageKey(element.url);
-    if (!key?.startsWith(`organisations/${organisationId}/`)) return fail("Use images uploaded to this organisation.");
+    const allowed = ARTWORK_FOLDERS.some((folder) => key?.startsWith(`organisations/${organisationId}/${folder}/`));
+    if (!key || !allowed) return fail("Use images uploaded to this organisation.");
     element.url = `/api/uploads/${key}`;
   }
   return { ok: true, data: parsed.data };

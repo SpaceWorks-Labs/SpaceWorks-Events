@@ -38,13 +38,13 @@ async function wrap(text: string, face: Font, fallback: Font, sizeMm: number, tr
     for (const word of words) {
       const candidate = line + word;
       if (!line.trim() || width(await shape(candidate.trimEnd(), face, fallback, sizeMm), tracking) <= maxWidth) {
-        line = candidate;
-        continue;
+        line = candidate.trimStart();
+      } else {
+        lines.push(await shape(line.trimEnd(), face, fallback, sizeMm));
+        line = word.trimStart();
       }
-      lines.push(await shape(line.trimEnd(), face, fallback, sizeMm));
-      line = word.trimStart();
-      // A single word wider than the box is split by character.
-      while (line && width(await shape(line, face, fallback, sizeMm), tracking) > maxWidth && [...line].length > 1) {
+      // A word wider than the box is split by character, wherever it starts.
+      while (line && width(await shape(line.trimEnd(), face, fallback, sizeMm), tracking) > maxWidth && [...line.trimEnd()].length > 1) {
         const chars = [...line];
         let cut = chars.length - 1;
         while (cut > 1 && width(await shape(chars.slice(0, cut).join(""), face, fallback, sizeMm), tracking) > maxWidth) cut -= 1;

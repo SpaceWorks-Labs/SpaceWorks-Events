@@ -10,7 +10,7 @@ import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { declineRequestedOrder, offerRequestedOrder } from "@/lib/payments/operations";
+import { declineRequestedOrder, offerRequestedOrder, refundWholeOrderTx, submitRefunds } from "@/lib/payments/operations";
 import { attendeeEmail, attendeeName, loadRsvpContext, paidRequest, paymentOperation, revalidateRsvpPaths } from "./rsvp-lifecycle/helpers";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { reacceptRsvpFor, type ReacceptStatus } from "./rsvp-lifecycle/reaccept";
@@ -163,12 +163,15 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
   }
 
   const to = attendeeEmail(rsvp);
+  const refundIds: string[] = [];
   const rejected = await prisma.$transaction(async (tx) => {
     const result = await tx.rSVP.updateMany({
       // `teamId: null`: an RSVP that joined a team meanwhile moves only with its team.
       where: { id: rsvp.id, teamId: null, status: { in: [RsvpStatus.PENDING_APPROVAL, RsvpStatus.WAITLISTED] } },
       data: { status: RsvpStatus.REJECTED },
     });
+    // Team events take payment before approval (docs/TEAMS.md): a declined paid place is refunded in full.
+    if (result.count === 1 && rsvp.orderId) refundIds.push(...(await refundWholeOrderTx(tx, { orderId: rsvp.orderId, reason: "Registration declined by the organiser", actorUserId: session.user.id })));
     if (result.count === 1 && to) {
       await enqueueRsvpStatusNotification(tx, {
         to,
@@ -181,6 +184,7 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
     return result;
   });
   if (rejected.count !== 1) return { ok: false, error: "This RSVP was changed by another organiser." };
+  await submitRefunds(refundIds);
   emitWebhookEvent({ type: "registration.status_changed", rsvpId: rsvp.id, status: RsvpStatus.REJECTED, previousStatus: rsvp.status });
 
   await recordAuditEvent({ action: "RSVP_REJECTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });

@@ -314,4 +314,12 @@ describe("production migration safety contracts", () => {
     expect(sql).toContain('CREATE TRIGGER "organisation_ticket_design_owner"');
     expect(sql).toContain("octet_length(\"document\"::text) <= 262144");
   });
+
+  it("marks team-joining orders and refuses deleting payout ledger rows outside an organisation cascade", () => {
+    const sql = readFileSync(resolve(root, "prisma/migrations/20261107010000_ledger_guards/migration.sql"), "utf8");
+    expect(sql).not.toMatch(/^\s*UPDATE\s/im);
+    expect(sql).toContain('ALTER TABLE "Order" ADD COLUMN "teamJoin" BOOLEAN NOT NULL DEFAULT false;');
+    expect(sql).toContain('CREATE TRIGGER "prize_payout_no_delete"');
+    expect(sql).toContain('CREATE TRIGGER "claim_payout_no_delete"');
+  });
 });

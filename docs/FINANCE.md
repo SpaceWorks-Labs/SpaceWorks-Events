@@ -72,7 +72,8 @@ matter, like prize payouts and payment settings. Every step is audited.
   `PrizePayout`: a row never changes except that a reference is cleared when
   what it points at is deleted, and a mistake is undone by a **reversal** row
   for the same amount and currency (at most one per payout). Reversing puts
-  the claim back to `APPROVED`.
+  the claim back to `APPROVED`. Rows are never deleted, except with their
+  organisation (a BEFORE DELETE trigger).
 
 ## Refund requests
 
@@ -84,7 +85,8 @@ matter, like prize payouts and payment settings. Every step is audited.
   still refundable) and whether to cancel the tickets: this runs the normal
   `refundOrder`, so refunds go back the way the buyer paid and team rules
   apply. The request is claimed before the refund runs and released if the
-  refund is refused, so two approvals never refund twice. Or they **decline**
+  refund is refused before it commits; once a refund has committed, the
+  request stays approved, so two approvals never refund twice. Or they **decline**
   with a reason the buyer sees. Audited `REFUND_REQUESTED`,
   `REFUND_REQUEST_APPROVED`, `REFUND_REQUEST_DECLINED`.
 

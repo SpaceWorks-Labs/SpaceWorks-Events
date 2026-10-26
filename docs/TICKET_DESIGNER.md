@@ -89,8 +89,9 @@ schema refuses any design where it is:
 - hidden, rotated or faded;
 - partly off the ticket.
 
-It is always drawn black on a white plate with a quiet zone, and encodes the
-ticket's own check-in token. A designed ticket is never shown on the ticket
+It is always drawn black on a white plate with a quiet zone, on top of every
+other element (in the editor too), and encodes the ticket's own check-in
+token. A designed ticket is never shown on the ticket
 page once the guest has checked in, like the QR stub.
 
 ## Rendering and delivery
@@ -99,14 +100,16 @@ page once the guest has checked in, like the QR stub.
   millimetres:
   - text becomes glyph outlines, wrapped to its box with the real font
     metrics, and lines that don't fit are dropped;
-  - images come only from managed uploads;
+  - images come only from the organisation's own artwork uploads (ticket
+    design images, logos, sponsor logos), never member ID photos;
   - the QR is drawn as vector modules.
 
   sharp rasterises it. The **PNG** is 300 dpi (200 dpi on the ticket page).
   The **PDF** holds the 300 dpi image at the ticket's exact size.
 - `GET /api/ticket/:token/design` (`?format=pdf`, `?inline=1`): the designed
-  ticket for a confirmed registration. The ticket token is the proof. Rate
-  limited per address, `private, no-store`.
+  ticket for a confirmed registration that hasn't checked in. The ticket
+  token is the proof. Its own rate limit (`ticketRender`, 20 a minute per
+  address), `private, no-store`.
 - `GET /api/ticket-designs/:designId/preview?org=…[&rsvp=…]`: the editor
   preview, for whoever may edit the design.
 - The confirmation email (and the approval email that confirms a place)

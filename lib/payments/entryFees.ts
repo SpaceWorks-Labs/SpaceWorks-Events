@@ -1,9 +1,10 @@
 import "server-only";
 
-import { OrderStatus, PaymentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
+import { OrderStatus, PaymentRefundStatus, PaymentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueSubmissionReceived } from "@/lib/outbox";
 import { enqueuePaymentEmail } from "./email";
+import { createPendingRefund } from "./refunds";
 
 /**
  * Hackathon entry fees (docs/HACKATHON.md). Submitting a project on an event
@@ -15,9 +16,13 @@ import { enqueuePaymentEmail } from "./email";
 
 export const ENTRY_FEE_LINE = "Project entry fee";
 
-/** The project's fee is paid, waived or recorded by hand: a confirmed entry-fee order. */
+/** The project's fee is paid (or waived) and not refunded in full: a confirmed entry-fee order still holding money. */
 export async function entryFeePaid(tx: Prisma.TransactionClient, submissionId: string) {
-  return (await tx.order.count({ where: { submissionId, status: OrderStatus.CONFIRMED } })) > 0;
+  const orders = await tx.order.findMany({
+    where: { submissionId, status: OrderStatus.CONFIRMED },
+    select: { payments: { where: { status: { in: [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE, PaymentStatus.WAIVED] } }, select: { status: true, amountMinor: true, refunds: { where: { status: { in: [PaymentRefundStatus.PENDING, PaymentRefundStatus.SUCCEEDED] } }, select: { amountMinor: true } } } } },
+  });
+  return orders.some((order) => order.payments.some((payment) => payment.status === PaymentStatus.WAIVED || payment.amountMinor > payment.refunds.reduce((sum, refund) => sum + refund.amountMinor, BigInt(0))));
 }
 
 /** The fee owed before this project can be submitted, or null when there is none (or it is paid). */
@@ -45,8 +50,20 @@ export async function confirmEntryFeeTx(tx: Prisma.TransactionClient, order: { i
   await recordAuditEvent({ action: "ENTRY_FEE_PAID", organisationId: order.organisationId, targetType: "Submission", targetId: order.submissionId, metadata: { orderId: order.id, submitted: submitted.count === 1 }, client: tx });
 }
 
-/** Settle a captured entry-fee payment from the provider: it is always accepted (no places are held). */
-export async function settleEntryFeePayment(tx: Prisma.TransactionClient, payment: { id: string; organisationId: string; }, order: { id: string; submissionId: string; buyerEmail: string; buyerName: string; }, paid: { paymentId: string; }, now: Date) {
+/**
+ * Settle a captured entry-fee payment from the provider. No places are held,
+ * so it is accepted even after its hold ended, unless the fee was meanwhile
+ * paid on another order: then this payment is refunded in full. Returns the
+ * refund to submit, if any.
+ */
+export async function settleEntryFeePayment(tx: Prisma.TransactionClient, payment: { id: string; organisationId: string; amountMinor: bigint; }, order: { id: string; submissionId: string; buyerEmail: string; buyerName: string; }, paid: { paymentId: string; }, now: Date) {
   await tx.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.PAID_ONLINE, externalPaymentId: paid.paymentId, paidAt: now } });
+  if (await entryFeePaid(tx, order.submissionId)) {
+    const refund = await createPendingRefund(tx, { paymentId: payment.id, amountMinor: payment.amountMinor, reason: "Entry fee already paid on another order", automatic: true });
+    await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: payment.id, notice: "late-refund" });
+    await recordAuditEvent({ action: "PAYMENT_DUPLICATE_REFUNDED", organisationId: payment.organisationId, targetType: "Payment", targetId: payment.id, client: tx });
+    return refund.id;
+  }
   await confirmEntryFeeTx(tx, { ...order, organisationId: payment.organisationId }, payment.id, now);
+  return null;
 }

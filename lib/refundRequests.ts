@@ -84,14 +84,17 @@ export async function decideRefundRequest(ctx: ClaimAdminContext, input: unknown
   // Claim the request first so two approvals never refund twice; release it if the refund is refused.
   const claimed = await prisma.refundRequest.updateMany({ where: { id: request.id, status: RefundRequestStatus.OPEN }, data: { status: RefundRequestStatus.APPROVED, approvedMinor: amountMinor, cancelTickets: parsed.data.cancelTickets, decisionNote: note, decidedByUserId: ctx.userId, decidedAt: new Date() } });
   if (claimed.count !== 1) return { ok: false, error: "This request was already decided." };
+  let refunded: { refundedMinor: bigint; };
   try {
-    const refunded = await refundOrder({ orderId: request.order.id, organisationId: ctx.organisationId, actorUserId: ctx.userId, amountMinor, reason: `Refund request: ${request.reason}`, cancelTickets: parsed.data.cancelTickets });
-    await prisma.refundRequest.update({ where: { id: request.id }, data: { approvedMinor: BigInt(refunded.refundedMinor) } });
+    refunded = await refundOrder({ orderId: request.order.id, organisationId: ctx.organisationId, actorUserId: ctx.userId, amountMinor, reason: `Refund request: ${request.reason}`, cancelTickets: parsed.data.cancelTickets });
   } catch (error) {
+    // Only a refusal happens before the refund commits; then the request is
+    // open again. Anything later leaves it approved, so it never refunds twice.
+    if (!(error instanceof PaymentOperationError)) throw error;
     await prisma.refundRequest.update({ where: { id: request.id }, data: { status: RefundRequestStatus.OPEN, approvedMinor: null, decidedByUserId: null, decidedAt: null, decisionNote: "" } });
-    if (error instanceof PaymentOperationError) return { ok: false, error: error.message };
-    throw error;
+    return { ok: false, error: error.message };
   }
+  await prisma.refundRequest.update({ where: { id: request.id }, data: { approvedMinor: refunded.refundedMinor } });
   await recordAuditEvent({ action: "REFUND_REQUEST_APPROVED", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "RefundRequest", targetId: request.id, metadata: { amountMinor: amountMinor?.toString() ?? "all", cancelTickets: parsed.data.cancelTickets } });
   return { ok: true };
 }

@@ -58,7 +58,7 @@ async function recordRefundsTx(tx: Prisma.TransactionClient, payments: Collected
 }
 
 const ORDER_FOR_REFUND = {
-  id: true, status: true, buyerEmail: true, currency: true, eventId: true, teamId: true, teamName: true,
+  id: true, status: true, buyerEmail: true, currency: true, eventId: true, teamId: true, teamName: true, teamJoin: true,
   rsvps: { select: { id: true, checkedInAt: true, eventId: true, eventInstanceId: true, userId: true, guestName: true, createdAt: true, status: true } },
   payments: { where: { status: { in: COLLECTED } }, orderBy: { paidAt: "asc" }, select: { id: true, status: true, amountMinor: true } },
 } satisfies Prisma.OrderSelect;
