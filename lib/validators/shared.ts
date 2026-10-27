@@ -21,8 +21,12 @@ export const timeZoneSchema = z
   .min(1, "Timezone is required")
   .max(64)
   .refine(isValidTimeZone, "Select a valid IANA timezone");
-/** `YYYY-MM-DDTHH:mm[:00[.000]]` with no `Z` or UTC offset: a wall-clock time. */
-const ZONELESS_DATETIME = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::00(?:\.0+)?)?$/;
+/**
+ * `YYYY-MM-DDTHH:mm[:ss[.sss]]` with no `Z` or UTC offset: a wall-clock time.
+ * Event times are kept to the minute, so seconds are dropped rather than
+ * letting the value fall through to the server's own clock.
+ */
+const ZONELESS_DATETIME = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/;
 
 /**
  * A wall-clock date-time string (a `datetime-local` value with no `Z` or

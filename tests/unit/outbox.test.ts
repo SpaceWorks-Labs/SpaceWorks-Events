@@ -151,7 +151,7 @@ describe("outbox delivery", () => {
       payload: { to: "person@example.test", eventTitle: "Event", inviteUrl: "https://events.test/join/secret", expiresAt: "2020-01-01T00:00:00.000Z" },
     })]);
 
-    await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 0, failed: 1 });
+    await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 0, failed: 0 });
     expect(mocks.collaborator).not.toHaveBeenCalled();
     expect(mocks.deleteMany).toHaveBeenCalled();
   });

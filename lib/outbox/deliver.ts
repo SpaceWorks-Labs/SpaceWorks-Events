@@ -103,7 +103,6 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendSignInCodeEmail({ ...payload, messageId: stableMessageId });
@@ -112,7 +111,6 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendPasswordResetEmail({ ...payload, messageId: stableMessageId });
@@ -121,7 +119,6 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendEmailVerificationEmail({ ...payload, messageId: stableMessageId });
@@ -130,7 +127,6 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendEventInvitation({ ...payload, messageId: stableMessageId });
@@ -139,7 +135,6 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendCollaboratorInvitation({ ...payload, messageId: stableMessageId });

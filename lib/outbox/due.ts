@@ -3,14 +3,17 @@ import "server-only";
 import { OutboxStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { RESULTS_PUBLISHED_KIND } from "./judging";
+import { EVENT_REMINDER_KIND } from "./payloads";
 
 /**
  * Kinds an organiser sends to a whole audience at once (thousands of rows in
  * one click). They wait behind every other kind, so a large send never delays
  * a password reset, sign-in code, ticket, payment receipt or team email
- * queued after it.
+ * queued after it. Event reminders (one per guest, queued by the beat) wait
+ * too. Operator notices stay urgent: sign-in alerts and password notices use
+ * that kind.
  */
-export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND];
+export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND, EVENT_REMINDER_KIND];
 
 /** Due messages, oldest first: transactional kinds before bulk ones. */
 export async function dueOutboxMessages(take: number) {

@@ -58,7 +58,7 @@ export default async function SeriesManagePage({ params }: Props) {
         />
       </section> : null}
 
-      {canManageSchedule ? <ScheduleManager organisationSlug={organisation.slug} eventSeriesId={series.id} items={series.scheduleItems.map((item) => ({ ...item, startDateTime: item.startDateTime.toISOString(), endDateTime: item.endDateTime.toISOString() }))} defaultDate={series.instances[0] ? eventDateInput(series.instances[0].startDateTime, series.timezone) : ""} /> : null}
+      {canManageSchedule ? <ScheduleManager organisationSlug={organisation.slug} eventSeriesId={series.id} items={series.scheduleItems.map((item) => ({ ...item, startDateTime: item.startDateTime.toISOString(), endDateTime: item.endDateTime.toISOString() }))} defaultDate={series.instances[0] ? eventDateInput(series.instances[0].startDateTime, series.timezone) : ""} timeZone={series.timezone} /> : null}
 
       <section aria-labelledby="series-instances-title" className="flex flex-col gap-3">
         <h2 id="series-instances-title" className="text-h4 text-ink">Upcoming dates</h2>

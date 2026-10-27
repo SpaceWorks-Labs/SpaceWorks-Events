@@ -43,6 +43,20 @@ export function zonedInputToIso(value: string, timeZone: string) {
   if (!match) return null;
   const [, year, month, day, hour, minute] = match;
   const guess = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+  // The offset at the guess differs from the offset at the real instant when
+  // a DST change falls between them, so take it again at the first answer.
+  const first = guess - zoneOffsetAt(guess, timeZone);
+  const second = guess - zoneOffsetAt(first, timeZone);
+  for (const candidate of second === first ? [first] : [second, first]) {
+    const iso = new Date(candidate).toISOString();
+    // A wall-clock time a DST change skips never round-trips, so it stays null.
+    if (zonedDatetimeLocalValue(new Date(iso), timeZone) === value) return iso;
+  }
+  return null;
+}
+
+/** Milliseconds the zone's wall clock is ahead of UTC at an instant. */
+function zoneOffsetAt(instant: number, timeZone: string) {
   const parts = cachedDateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -51,12 +65,11 @@ export function zonedInputToIso(value: string, timeZone: string) {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(new Date(guess));
+  }).formatToParts(new Date(instant));
   const get = (type: string) =>
     Number(parts.find((part) => part.type === type)?.value ?? 0);
-  const offset = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute")) - guess;
-  const iso = new Date(guess - offset).toISOString();
-  return zonedDatetimeLocalValue(new Date(iso), timeZone) === value ? iso : null;
+  const wholeMinute = Math.floor(instant / 60_000) * 60_000;
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute")) - wholeMinute;
 }
 
 /**
