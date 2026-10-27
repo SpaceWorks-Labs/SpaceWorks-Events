@@ -38,7 +38,7 @@ async function income(eventId: string) {
 }
 
 export async function loadEventFinance(eventId: string, organisationId: string) {
-  const event = await prisma.event.findFirst({ where: { id: eventId, organisationId }, select: { id: true, currency: true, organisationId: true, budgetMinor: true, participantClaimsEnabled: true, participantClaimCapMinor: true } });
+  const event = await prisma.event.findFirst({ where: { id: eventId, organisationId }, select: { id: true, currency: true, organisationId: true, budgetMinor: true, participantClaimsEnabled: true, participantClaimCapMinor: true, crewClaimsEnabled: true } });
   if (!event) return null;
   const currency = await financeCurrency(prisma, event);
   const [money, claimPayouts, prizePayouts, claims, requests] = await Promise.all([
@@ -75,6 +75,7 @@ export async function loadEventFinance(eventId: string, organisationId: string) 
       budget: event.budgetMinor ? minorToDecimalString(event.budgetMinor, currency) : "",
       participantClaimsEnabled: event.participantClaimsEnabled,
       participantCap: event.participantClaimCapMinor ? minorToDecimalString(event.participantClaimCapMinor, currency) : "",
+      crewClaimsEnabled: event.crewClaimsEnabled,
     },
     summary: {
       tickets: label(money.tickets),
