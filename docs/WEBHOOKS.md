@@ -90,9 +90,12 @@ The `registration` object (`displayName` falls back to `Participant`):
   "status": "CONFIRMED",
   "displayName": "Ada Lovelace",
   "registeredAt": "2026-10-22T10:00:00.000Z",
-  "checkedInAt": null
+  "checkedInAt": null,
+  "crew": false
 }
 ```
+
+`crew` is `true` for an [event crew](CREW.md) ticket: a free ticket for the organising team that never counts against capacity. Crew tickets are created as `CONFIRMED` (`registration.created`) and leave as `CANCELLED` when an organiser removes the person from the crew. Receivers that count attendees against capacity should skip `crew: true`. The field was added with the event crew; receivers should ignore fields they don't know.
 
 `status` is one of `CONFIRMED`, `WAITLISTED`, `PENDING_APPROVAL`, `PENDING_PAYMENT` (a paid ticket held while the buyer pays), `REJECTED` (declined), `CANCELLED` (cancelled by the attendee; the registration no longer exists) or `REMOVED` (removed by an organiser).
 
@@ -118,7 +121,7 @@ Example `registration.status_changed`:
   "organisation": { "id": "cmorg123", "slug": "acme" },
   "data": {
     "event": { "kind": "event", "id": "cmevent123", "occurrenceId": null, "title": "Community Meetup", "slug": "community-meetup", "startDateTime": "2026-11-05T17:00:00.000Z", "endDateTime": "2026-11-05T19:00:00.000Z", "timezone": "Europe/London" },
-    "registration": { "id": "cmrsvp123", "status": "CONFIRMED", "displayName": "Ada Lovelace", "registeredAt": "2026-10-22T10:00:00.000Z", "checkedInAt": null },
+    "registration": { "id": "cmrsvp123", "status": "CONFIRMED", "displayName": "Ada Lovelace", "registeredAt": "2026-10-22T10:00:00.000Z", "checkedInAt": null, "crew": false },
     "previousStatus": "PENDING_APPROVAL"
   }
 }
