@@ -732,6 +732,13 @@ model Event {
   reviewsPerProject                   Int?
   /// How result scores are combined across judges.
   scoreNormalization                  ScoreNormalization @default(RAW)
+  /// Hackathon emails the organiser opts into (off by default). When false,
+  /// publishing results queues no `results-published` email (an organiser can
+  /// send it later with sendResultsAnnouncement) and a project becoming
+  /// SUBMITTED, including when its entry fee is paid, queues no
+  /// `submission-received` receipt. Registration and payment emails are never gated.
+  emailEntrantsOnResults              Boolean          @default(false)
+  emailSubmissionReceipts             Boolean          @default(false)
   /// Fee to submit a project, in minor units of the event's currency; null
   /// is free. Paid once per entrant through the normal checkout (Order.submissionId).
   submissionFeeMinor                  BigInt?

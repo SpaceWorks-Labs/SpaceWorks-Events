@@ -2,12 +2,13 @@ import "server-only";
 
 /** Judging status, the ranking score method, and results publication. All audited. */
 
-import { JudgingStatus, OutboxStatus, Prisma, RsvpStatus, ScoreNormalization } from "@prisma/client";
+import { JudgingStatus, OutboxStatus, Prisma, ScoreNormalization } from "@prisma/client";
 import { recordAuditEvent } from "@/lib/audit";
-import { asResultsPublishedPayload, enqueueResultsPublished } from "@/lib/outbox";
+import { shouldEmailOnPublish } from "@/lib/hackathonEmails";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { judgingStatusSchema, scoreNormalizationSchema } from "@/lib/validators";
-import { CHANGED, fail, type JudgingResult, ok, okEmpty, personEmail, personName, personSelect, withOrganiserLock } from "./shared";
+import { CHANGED, fail, type JudgingResult, ok, okEmpty, withOrganiserLock } from "./shared";
+import { queueResultsAnnouncement } from "./announcement";
 
 // ---------------------------------------------------------------------------
 // Judging status and results publication
@@ -87,56 +88,39 @@ export async function setScoreNormalization(ctx: JudgingOrganiserContext, input:
 
 /**
  * Publish results (judging must be CLOSED). Idempotent: publishing again while
- * published changes nothing and queues nothing. The first publication queues
- * one `results-published` email per confirmed entrant member (every CONFIRMED
- * registration of the event; team members share their team's status),
- * deduplicated by address, and records `resultsAnnouncedAt`. A re-publication
- * after an unpublish never emails an address a second time (see
- * `unpublishResults`). Audited (JUDGING_RESULTS_PUBLISHED).
+ * published changes nothing and queues nothing.
+ *
+ * Email is opt-in (`Event.emailEntrantsOnResults`, off by default; see
+ * lib/hackathonEmails.ts), read under the Event lock at publish time:
+ * - On: the first publication queues one `results-published` email per
+ *   confirmed entrant member (every CONFIRMED registration of the event; team
+ *   members share their team's status), deduplicated by address, and sets
+ *   `resultsAnnouncedAt` to the publication time. A re-publication after an
+ *   unpublish never emails an address a second time (see `unpublishResults`).
+ * - Off: the results page goes live, nothing is queued, and
+ *   `resultsAnnouncedAt` is left as it was: null on a first publication, or
+ *   older than this publication after an earlier announcement. Either way
+ *   the publication isn't covered (announcementCoversPublication), so
+ *   `sendResultsAnnouncement` (./announcement.ts) can email the entrants not
+ *   yet told later.
+ * Audited (JUDGING_RESULTS_PUBLISHED).
  */
-export type PublishResultsOutcome = { publishedAt: Date; queued: number; alreadyPublished: boolean };
+export type PublishResultsOutcome = { publishedAt: Date; queued: number; alreadyPublished: boolean; emailed: boolean };
 
 export async function publishResults(ctx: JudgingOrganiserContext): Promise<JudgingResult<PublishResultsOutcome>> {
   return withOrganiserLock<PublishResultsOutcome>(ctx, async (tx, event) => {
-    if (event.resultsPublishedAt) return ok({ publishedAt: event.resultsPublishedAt, queued: 0, alreadyPublished: true });
+    if (event.resultsPublishedAt) return ok({ publishedAt: event.resultsPublishedAt, queued: 0, alreadyPublished: true, emailed: false });
     if (!event.submissionsEnabled) return fail("This event is not taking project submissions.");
     if (event.judgingStatus !== JudgingStatus.CLOSED) return fail("Close judging before publishing results.");
     const publishedAt = new Date();
-    const announced = await tx.event.findUnique({ where: { id: event.id }, select: { resultsAnnouncedAt: true } });
-    const firstAnnouncement = !announced?.resultsAnnouncedAt;
+    const emailed = shouldEmailOnPublish(event);
+    const firstAnnouncement = !event.resultsAnnouncedAt;
     const updated = await tx.event.updateMany({
       where: { id: event.id, resultsPublishedAt: null },
-      data: { resultsPublishedAt: publishedAt, ...(firstAnnouncement ? { resultsAnnouncedAt: publishedAt } : {}) },
+      data: { resultsPublishedAt: publishedAt, ...(emailed ? { resultsAnnouncedAt: publishedAt } : {}) },
     });
     if (updated.count !== 1) return fail(CHANGED);
-
-    // After an earlier announcement, only addresses whose copy was withdrawn
-    // undelivered by the unpublish are emailed: anyone with a delivered (or
-    // in-flight) announcement left in the outbox is skipped, and once those
-    // rows have aged out nobody is emailed again.
-    let alreadyTold: Set<string> | null = null;
-    if (!firstAnnouncement) {
-      const previous = await tx.outboxMessage.findMany({
-        where: { kind: "results-published", payload: { path: ["eventId"], equals: event.id } },
-        select: { payload: true },
-      });
-      alreadyTold = new Set(previous.map((row) => asResultsPublishedPayload(row.payload)?.to.toLowerCase()).filter((to): to is string => Boolean(to)));
-    }
-    const recipients = alreadyTold?.size === 0 ? [] : await tx.rSVP.findMany({
-      where: { eventId: event.id, status: RsvpStatus.CONFIRMED },
-      select: personSelect,
-      orderBy: { createdAt: "asc" },
-    });
-    const seen = new Set<string>(alreadyTold ?? []);
-    const payloads: Array<{ to: string; eventId: string; recipientName?: string }> = [];
-    for (const person of recipients) {
-      const email = personEmail(person)?.toLowerCase();
-      if (!email || seen.has(email)) continue;
-      seen.add(email);
-      const name = personName(person)?.slice(0, 200);
-      payloads.push({ to: email, eventId: event.id, ...(name ? { recipientName: name } : {}) });
-    }
-    await enqueueResultsPublished(tx, payloads);
+    const queued = emailed ? await queueResultsAnnouncement(tx, event.id, firstAnnouncement) : 0;
     await recordAuditEvent({
       client: tx,
       action: "JUDGING_RESULTS_PUBLISHED",
@@ -144,9 +128,9 @@ export async function publishResults(ctx: JudgingOrganiserContext): Promise<Judg
       organisationId: ctx.organisationId,
       targetType: "Event",
       targetId: event.id,
-      metadata: { recipients: payloads.length, republished: !firstAnnouncement },
+      metadata: { recipients: queued, republished: !firstAnnouncement, emailEntrantsOnResults: emailed },
     });
-    return ok({ publishedAt, queued: payloads.length, alreadyPublished: false });
+    return ok({ publishedAt, queued, alreadyPublished: false, emailed });
   });
 }
 

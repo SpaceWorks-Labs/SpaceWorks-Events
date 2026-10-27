@@ -98,17 +98,21 @@ export async function saveSubmissionDraftAction(ref: unknown, input: unknown): P
   return { ok: true, data: { status: result.data.status } };
 }
 
-/** Save and submit. The core queues the `submission-received` email on the first transition to SUBMITTED. */
-export async function submitSubmissionAction(ref: unknown, input: unknown): Promise<ActionResult<{ status: string; checkoutUrl?: string }>> {
+/**
+ * Save and submit. The core queues the `submission-received` email on the
+ * first transition to SUBMITTED when the event's receipts are on;
+ * `receiptQueued` tells the entrant whether one was.
+ */
+export async function submitSubmissionAction(ref: unknown, input: unknown): Promise<ActionResult<{ status: string; receiptQueued: boolean; checkoutUrl?: string }>> {
   const entrant = await resolveEntrant(ref);
   if (!entrant) return { ok: false, error: LINK_EXPIRED };
   if (await isActionRateLimited("action", entrantSubject(entrant.auth))) return { ok: false, error: TOO_MANY };
   const result = await submitSubmission(entrant.auth, input);
   if (!result.ok) return result;
   // An unpaid entry fee: the project waits as a draft while the entrant pays.
-  if (result.data.checkoutUrl) return { ok: true, data: { status: result.data.status, checkoutUrl: result.data.checkoutUrl } };
+  if (result.data.checkoutUrl) return { ok: true, data: { status: result.data.status, receiptQueued: false, checkoutUrl: result.data.checkoutUrl } };
   await audit(entrant, "SUBMISSION_SUBMITTED", result.data.submissionId);
-  return { ok: true, data: { status: result.data.status } };
+  return { ok: true, data: { status: result.data.status, receiptQueued: result.data.receiptQueued } };
 }
 
 /** Withdraw the project while the window is open. It can be submitted again later. */
