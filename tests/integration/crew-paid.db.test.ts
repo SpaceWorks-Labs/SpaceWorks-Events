@@ -13,6 +13,7 @@ import { approveClaim } from "@/lib/claims/decide";
 import { submitParticipantClaim } from "@/lib/claims/submit";
 import { loadTicketClaims } from "@/lib/claims/ticketView";
 import { transferTicket } from "@/lib/payments/transfers";
+import { updateOrderAttendee } from "@/app/actions/orders";
 import { countConfirmedForCapacity } from "@/lib/teamUnits";
 import { paid, payOrder, setUpPaidOrg, tearDownPaidOrg } from "./helpers/paidOrg";
 
@@ -109,6 +110,19 @@ describe.sequential("event crew with payments", () => {
     await payOrder(order!.id);
     const rsvp = await prisma.rSVP.findFirstOrThrow({ where: { orderId: order!.id } });
     await expect(transferTicket({ orderToken: order!.accessToken, rsvpId: rsvp.id, name: "Crew", email: crewEmail })).rejects.toThrow(CREW_EMAIL_REFUSED);
+  });
+
+  it("refuses a buyer naming a crew member's email on an order's extra ticket", async () => {
+    const { event, ticket } = await paidEvent({ price: 0 });
+    const crewEmail = email("crew");
+    expect((await addCrewMemberAsOrganiser(ctx(event.id), { name: "Crew", email: crewEmail })).ok).toBe(true);
+    const buyer = email("group");
+    const result = await submitRsvpCore({ orgSlug: paid.orgSlug, eventSlug: event.slug, guestEmail: buyer, name: "Buyer", answers: {}, items: [{ ticketTypeId: ticket.id, quantity: 2 }] }, { userId: null });
+    expect(result.ok).toBe(true);
+    const order = await prisma.order.findFirstOrThrow({ where: { buyerEmail: buyer } });
+    const extra = await prisma.rSVP.findFirstOrThrow({ where: { orderId: order.id, guestEmail: null } });
+    await expect(updateOrderAttendee({ orderToken: order.accessToken, rsvpId: extra.id, name: "Crew", email: crewEmail })).resolves.toEqual({ ok: false, error: CREW_EMAIL_REFUSED });
+    await expect(prisma.rSVP.findUniqueOrThrow({ where: { id: extra.id } })).resolves.toMatchObject({ guestEmail: null });
   });
 
   it("lets crew claim expenses (kind CREW, no cap) only when the event takes crew claims; owners and admins approve", async () => {

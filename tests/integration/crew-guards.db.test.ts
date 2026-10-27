@@ -14,7 +14,7 @@ import { deleteRsvp, updateRsvpRegistration } from "@/app/actions/rsvp-admin";
 import { approveRsvp, rejectRsvp } from "@/app/actions/rsvp-lifecycle";
 import { checkSlugAvailability } from "@/app/actions/org";
 import { updateEvent } from "@/app/actions/event";
-import { joinTeamWithExistingRsvp, organiserMoveMember, resolveOrganiserEvent } from "@/lib/core/teams";
+import { addTeamMemberByLeader, joinTeamWithExistingRsvp, organiserMoveMember, resolveOrganiserEvent } from "@/lib/core/teams";
 import { resolveEntrantForUser } from "@/lib/core/judging";
 import { listUnsubmittedEntrants } from "@/lib/core/judgingEntrants";
 import { ticketDesignFor } from "@/lib/ticketDesign/resolve";
@@ -73,6 +73,23 @@ describe.sequential("crew guards", () => {
     const ctx = { userId: crew.organiserId, organisationId: crew.organisationId, orgSlug: crew.orgSlug, eventId: event.id, eventSlug: event.slug };
     expect((await organiserMoveMember(ctx, { rsvpId: member.rsvp.id, targetTeamId: team.id })).ok).toBe(false);
     await expect(prisma.rSVP.findUniqueOrThrow({ where: { id: member.rsvp.id } })).resolves.toMatchObject({ teamId: null, isCrew: true });
+  });
+
+  it("refuses a team leader adding a crew member's email to their team", async () => {
+    const event = await createCrewEvent({ registrationMode: RegistrationMode.TEAM });
+    const leaderUser = await prisma.user.create({ data: { name: "Leader", email: crewEmail("leader-account") } });
+    try {
+      const registered = await submitRsvpCore({ orgSlug: crew.orgSlug, eventSlug: event.slug, name: "Leader", answers: {} }, { userId: leaderUser.id, team: { mode: "create", name: `Herons ${crew.suffix}` } });
+      expect(registered.ok).toBe(true);
+      const leaderRsvp = await prisma.rSVP.findFirstOrThrow({ where: { eventId: event.id, userId: leaderUser.id } });
+      const member = await addCrew(event);
+      const auth = { kind: "user" as const, teamId: leaderRsvp.teamId!, eventId: event.id, userId: leaderUser.id };
+      await expect(addTeamMemberByLeader(auth, { name: "Crew", email: member.email.toUpperCase() })).resolves.toEqual({ ok: false, error: CREW_EMAIL_REFUSED });
+      await expect(prisma.rSVP.count({ where: { teamId: leaderRsvp.teamId } })).resolves.toBe(1);
+    } finally {
+      await prisma.rSVP.deleteMany({ where: { userId: leaderUser.id } });
+      await prisma.user.delete({ where: { id: leaderUser.id } });
+    }
   });
 
   it("never treats crew as hackathon entrants", async () => {

@@ -16,6 +16,7 @@ import {
   cleanProfile,
   eventForCrewSelect,
   fail,
+  findRegistrationByEmail,
   isUniqueViolation,
   lockEventForCrew,
   organiserCrewSchema,
@@ -37,6 +38,7 @@ import {
 /** Returned instead of a reason when a link sign-up must not change anything; the caller answers as for a duplicate. */
 export const LINK_SIGNUP_IGNORED = "link-signup-ignored";
 const BOUGHT_A_TICKET = "This person bought a ticket. Cancel or refund their order first.";
+const ACCOUNT_CREW_EMAIL = "This crew ticket belongs to a signed-in account, so its email follows the account. Remove them from the crew and add the new address instead.";
 
 const organiserCrewSelect = {
   id: true, name: true, email: true, foodPreference: true, role: true, bio: true, photoUrl: true, linkedinUrl: true,
@@ -88,10 +90,7 @@ export async function addCrewMemberTx(
       if (!locked) return fail("Event not found.");
       if ((await tx.eventCrewMember.count({ where: { eventId: event.id } })) >= MAX_CREW_MEMBERS) return fail(`An event can have up to ${MAX_CREW_MEMBERS} crew members.`);
       if (await tx.eventCrewMember.findUnique({ where: { eventId_email: { eventId: event.id, email: data.email } }, select: { id: true } })) return fail(ALREADY_ON_CREW);
-      const existing = await tx.rSVP.findFirst({
-        where: { eventId: event.id, OR: [{ attendeeKey: `guest:${data.email}` }, { guestEmail: { equals: data.email, mode: "insensitive" } }, { user: { email: { equals: data.email, mode: "insensitive" } } }] },
-        select: { id: true, status: true, teamId: true, orderId: true, ticketTypeId: true, userId: true, submission: { select: { id: true } } },
-      });
+      const existing = await findRegistrationByEmail(tx, event.id, data.email);
       // The crew link proves nothing about who owns an email, so a link
       // sign-up never turns a registration into a crew ticket; answered like
       // a duplicate so the link reveals nothing about who is registered.
@@ -170,8 +169,17 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
   }
   try {
     return await prisma.$transaction(async (tx): Promise<CrewResult> => {
-      const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, rsvp: { select: { userId: true, checkInToken: true } } } });
+      // Under the Event row lock, like adding: a new address is checked against the event's registrations.
+      if (!(await lockEventForCrew(tx, event.id))) return fail("Event not found.");
+      const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
       if (!member) return fail("Crew member not found.");
+      if (data.email !== member.email) {
+        // An account-tied ticket belongs to that account: its link is never sent to another address.
+        const accountEmail = member.rsvp.user?.email?.trim().toLowerCase();
+        if (member.rsvp.userId && data.email !== accountEmail) return fail(ACCOUNT_CREW_EMAIL);
+        if (await tx.eventCrewMember.findUnique({ where: { eventId_email: { eventId: event.id, email: data.email } }, select: { id: true } })) return fail(ALREADY_ON_CREW);
+        if (await findRegistrationByEmail(tx, event.id, data.email, member.rsvpId)) return fail(ALREADY_REGISTERED);
+      }
       await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage } });
       // A new address gets the ticket too; the old one keeps working (same QR).
       if (data.email !== member.email) await enqueueCrewTicket(tx, { to: data.email, checkInToken: member.rsvp.checkInToken, organisationId: event.organisationId });

@@ -95,6 +95,28 @@ export function uniqueViolationModel(error: unknown): string | undefined {
 }
 
 /**
+ * The event's registration for this email, guest or account-tied, if any
+ * (optionally not counting one RSVP, such as the crew ticket being edited).
+ * Callers hold the Event row lock.
+ */
+export function findRegistrationByEmail(tx: Prisma.TransactionClient, eventId: string, email: string, exceptRsvpId?: string) {
+  return tx.rSVP.findFirst({
+    where: {
+      eventId,
+      ...(exceptRsvpId ? { id: { not: exceptRsvpId } } : {}),
+      OR: [{ attendeeKey: `guest:${email}` }, { guestEmail: { equals: email, mode: "insensitive" } }, { user: { email: { equals: email, mode: "insensitive" } } }],
+    },
+    select: { id: true, status: true, teamId: true, orderId: true, ticketTypeId: true, userId: true, submission: { select: { id: true } } },
+  });
+}
+
+/** Locks the event row (the capacity and crew lock), then asks `hasCrewEmail`. */
+export async function lockedHasCrewEmail(tx: Prisma.TransactionClient, eventId: string, emails: readonly (string | null | undefined)[]) {
+  await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+  return hasCrewEmail(tx, eventId, emails);
+}
+
+/**
  * Whether any of these emails already holds a crew place on the event. The
  * registration and checkout cores call it under the Event row lock, so a
  * crew member never gets a second, capacity-taking registration.

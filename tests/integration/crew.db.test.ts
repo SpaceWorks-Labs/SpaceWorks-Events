@@ -6,6 +6,7 @@ vi.mock("@/lib/actionRateLimit", () => ({ isActionRateLimited: async () => false
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { prisma } from "@/lib/db";
+import { submitRsvpCore } from "@/lib/rsvpCore";
 import { countConfirmedUnits } from "@/lib/teamUnits";
 import { countConfirmedForEvent } from "@/lib/rsvpCapacity";
 import { flushWebhookEmits } from "@/lib/webhooks/emit";
@@ -136,6 +137,30 @@ describe.sequential("event crew", () => {
 
     await expect(moveCrewMember(ctxFor(event), second.id, -1)).resolves.toEqual({ ok: true, data: undefined });
     expect((await listCrewForOrganiser(ctxFor(event))).members.map((member) => member.id)).toEqual([second.id, first.id]);
+  });
+
+  it("refuses an email change to an address already registered, and to another address for an account-tied ticket", async () => {
+    const event = await createCrewEvent();
+    const member = await addCrew(event);
+    const guest = await register(event, "taken");
+    await expect(updateCrewMemberAsOrganiser(ctxFor(event), member.id, { name: member.name, email: guest.email })).resolves.toEqual({ ok: false, error: "This email is already registered for this event." });
+    await expect(prisma.eventCrewMember.findUniqueOrThrow({ where: { id: member.id } })).resolves.toMatchObject({ email: member.email });
+
+    const user = await prisma.user.create({ data: { name: "Account crew", email: crewEmail("account") } });
+    try {
+      const registered = await submitRsvpCore({ orgSlug: crew.orgSlug, eventSlug: event.slug, name: "Account crew", answers: {} }, { userId: user.id });
+      expect(registered.ok).toBe(true);
+      const accountCrew = await addCrew(event, { email: user.email });
+      const before = await prisma.outboxMessage.count({ where: { kind: "crew-ticket" } });
+      const elsewhere = crewEmail("elsewhere");
+      await expect(updateCrewMemberAsOrganiser(ctxFor(event), accountCrew.id, { name: "Account crew", email: elsewhere })).resolves.toEqual({ ok: false, error: expect.stringContaining("belongs to a signed-in account") });
+      await expect(prisma.outboxMessage.count({ where: { kind: "crew-ticket" } })).resolves.toBe(before);
+      // The account's own address (any case) is fine.
+      await expect(updateCrewMemberAsOrganiser(ctxFor(event), accountCrew.id, { name: "Renamed", email: user.email!.toUpperCase() })).resolves.toEqual({ ok: true, data: undefined });
+    } finally {
+      await prisma.rSVP.deleteMany({ where: { userId: user.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
   });
 
   it("removes the member with their ticket, once", async () => {
