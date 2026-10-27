@@ -131,7 +131,11 @@ Organisers can share a sign-up link (`/crew/:token`) so crew add themselves.
   confirmation says so for everyone.
 - Sign-ups use the `rsvp` rate-limit bucket per IP and per email. Photo
   uploads through the link use their own `crewPhotoUpload` bucket (60 an hour)
-  per IP and per link (hashed), never the shared `upload` budget. Link
+  per IP and per link (hashed), never the shared `upload` budget, and at most
+  200 a day per event (`crewPhotoUploadEvent`). Photos are uploaded before the
+  form is saved, so the hourly retention pass deletes any `event-crew` upload
+  no crew member points at after a day (`purgeUnusedCrewPhotos`, safe to run
+  twice). Link
   sign-ups are audited as `EVENT_CREW_JOINED_WITH_LINK` (event id only).
 
 ## Public Crew section

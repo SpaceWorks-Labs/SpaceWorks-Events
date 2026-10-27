@@ -2,6 +2,7 @@ import "server-only";
 
 import { OutboxStatus, WebhookDeliveryStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { purgeUnusedCrewPhotos } from "@/lib/core/crew/photos";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEBHOOK_EVENT_RETENTION_DAYS = 90;
@@ -36,6 +37,8 @@ export async function purgeExpiredOperationalData(now = new Date()) {
       where: { createdAt: { lt: webhookBefore }, status: { not: WebhookDeliveryStatus.PROCESSING } },
     }),
   ]);
+  // Crew photos nobody saved within a day (docs/CREW.md); objects too, so outside the transaction.
+  const unusedCrewPhotos = await purgeUnusedCrewPhotos(now);
   return {
     verificationTokens: tokens.count,
     expiredSessions: sessions.count,
@@ -46,5 +49,6 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     failedOutboxMessages: failedMessages.count,
     processedWebhookEvents: webhookEvents.count,
     webhookDeliveries: webhookDeliveries.count,
+    unusedCrewPhotos,
   };
 }

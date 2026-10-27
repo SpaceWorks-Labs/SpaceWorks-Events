@@ -8,6 +8,8 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { prisma } from "@/lib/db";
 import { flushWebhookEmits } from "@/lib/webhooks/emit";
 import { joinCrew } from "@/app/actions/crew";
+import { purgeUnusedCrewPhotos } from "@/lib/core/crew/photos";
+import { randomUUID } from "node:crypto";
 import {
   addCrewMemberAsOrganiser,
   getCrewJoinLink,
@@ -139,6 +141,23 @@ describe.sequential("crew join link", () => {
     const created = await prisma.rSVP.findMany({ where: { eventId: event.id, isCrew: true }, select: { id: true, guestEmail: true } });
     await prisma.eventCrewMember.createMany({ data: created.map((row, index) => ({ eventId: event.id, rsvpId: row.id, name: `Cap ${index}`, email: row.guestEmail! })) });
     await expect(joinCrewWithLink(token, { name: "One more", email: crewEmail("over") })).resolves.toEqual({ ok: false, error: `An event can have up to ${MAX_CREW_MEMBERS} crew members.` });
+  });
+
+  it("deletes crew photos nobody saved after a day, and keeps used and fresh ones (twice is safe)", async () => {
+    const event = await createCrewEvent();
+    const key = () => `organisations/${crew.organisationId}/event-crew/${randomUUID()}.webp`;
+    const [abandoned, used, fresh] = [key(), key(), key()];
+    const old = new Date(Date.now() - 25 * 60 * 60_000);
+    await prisma.asset.createMany({ data: [
+      { key: abandoned, contentType: "image/webp", provider: "database", fileData: new Uint8Array([1]), organisationId: crew.organisationId, createdAt: old },
+      { key: used, contentType: "image/webp", provider: "database", fileData: new Uint8Array([1]), organisationId: crew.organisationId, createdAt: old },
+      { key: fresh, contentType: "image/webp", provider: "database", fileData: new Uint8Array([1]), organisationId: crew.organisationId },
+    ] });
+    await addCrew(event, { photoUrl: `/api/uploads/${used}` });
+    await purgeUnusedCrewPhotos();
+    await purgeUnusedCrewPhotos();
+    const left = (await prisma.asset.findMany({ where: { key: { in: [abandoned, used, fresh] } }, select: { key: true } })).map((asset) => asset.key).sort();
+    expect(left).toEqual([used, fresh].sort());
   });
 
   it("keeps another organisation out", async () => {

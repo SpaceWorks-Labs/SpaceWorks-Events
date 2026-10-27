@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
+import { checkRateLimitById } from "@/lib/rateLimit";
 import { isUserEmailVerified } from "@/lib/permissions";
 import { resolveOrganiserEvent } from "@/lib/core/teams";
 import {
@@ -116,6 +117,8 @@ export async function uploadCrewPhotoWithLink(formData: FormData): Promise<Actio
   if (await isActionRateLimited("crewPhotoUpload", token)) return { ok: false, error: "Too many uploads. Please try again later." };
   const page = await loadCrewJoinPage(token);
   if (!page?.open) return { ok: false, error: "This crew link is no longer valid. Ask the organisers for a new one." };
+  // A daily cap per event, so a shared link can't fill storage; unused uploads expire after a day.
+  if (!(await checkRateLimitById("crewPhotoUploadEvent", `event:${page.eventId}`))) return { ok: false, error: "This event has taken too many photo uploads today. Join without a photo, or try again tomorrow." };
   return storeCrewPhoto(file, page.organisationId);
 }
 
