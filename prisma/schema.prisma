@@ -2793,11 +2793,11 @@ model HelpRequest {
   updatedAt       DateTime          @updatedAt
 
   event      Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  category   HelpCategory          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category   HelpCategory          @relation(fields: [categoryId], references: [id], onDelete: NoAction)
   team       Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
   rsvp       RSVP?                 @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
   raisedBy   User?                 @relation("HelpRequestRaisedBy", fields: [raisedByUserId], references: [id], onDelete: SetNull)
-  claimedBy  User?                 @relation("HelpRequestClaimedBy", fields: [claimedByUserId], references: [id], onDelete: Restrict)
+  claimedBy  User?                 @relation("HelpRequestClaimedBy", fields: [claimedByUserId], references: [id], onDelete: NoAction)
   round      MentoringRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
   activities HelpRequestActivity[]
   comments   HelpRequestComment[]

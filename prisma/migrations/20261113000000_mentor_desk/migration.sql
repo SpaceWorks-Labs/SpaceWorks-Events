@@ -398,7 +398,7 @@ ALTER TABLE "HelpCategory" ADD CONSTRAINT "HelpCategory_eventId_fkey" FOREIGN KE
 ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "HelpCategory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "HelpCategory"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -410,7 +410,7 @@ ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_rsvpId_fkey" FOREIGN KEY (
 ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_raisedByUserId_fkey" FOREIGN KEY ("raisedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_claimedByUserId_fkey" FOREIGN KEY ("claimedByUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_claimedByUserId_fkey" FOREIGN KEY ("claimedByUserId") REFERENCES "User"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "HelpRequest" ADD CONSTRAINT "HelpRequest_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "MentoringRound"("id") ON DELETE SET NULL ON UPDATE CASCADE;
