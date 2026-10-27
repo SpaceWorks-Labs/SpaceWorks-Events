@@ -1,0 +1,97 @@
+{
+  "ok": true,
+  "data": {
+    "upcoming": [
+      {
+        "rsvpId": "clrsvp000000000000000001",
+        "status": "CONFIRMED",
+        "checkedInAt": null,
+        "registeredAt": "2030-04-02T18:21:00.000Z",
+        "canCancel": true,
+        "ticketToken": "tkEXAMPLEownerTicketToken01",
+        "instanceId": null,
+        "team": {
+          "id": "clteam0000000000000000001",
+          "name": "Byte Club",
+          "role": "LEADER",
+          "size": 3,
+          "maxSize": 4,
+          "members": [
+            {
+              "displayName": "Ada L.",
+              "isLeader": true
+            },
+            {
+              "displayName": "Grace H.",
+              "isLeader": false
+            },
+            {
+              "displayName": "Linus",
+              "isLeader": false
+            }
+          ]
+        },
+        "orderId": "clorder00000000000000001",
+        "event": {
+          "id": "clevent000000000000000001",
+          "slug": "spring-hack-night",
+          "title": "Spring Hack Night",
+          "coverImageUrl": "https://events.example/api/uploads/organisations/clorg00000000000000000001/event-covers/cover.webp",
+          "startDateTime": "2030-05-10T17:00:00.000Z",
+          "endDateTime": "2030-05-10T21:00:00.000Z",
+          "timezone": "Europe/London",
+          "location": "Community Hall, 1 High Street",
+          "mapLinkUrl": "https://maps.example/hall",
+          "isOnline": false,
+          "accentColor": "#2F6FEB",
+          "status": "PUBLISHED",
+          "registrationMode": "TEAM",
+          "organisation": {
+            "slug": "civic-tech",
+            "name": "Civic Tech Meetup",
+            "logoUrl": null
+          }
+        }
+      },
+      {
+        "rsvpId": "clrsvp000000000000000002",
+        "status": "WAITLISTED",
+        "checkedInAt": null,
+        "registeredAt": "2030-04-03T08:00:00.000Z",
+        "canCancel": true,
+        "ticketToken": null,
+        "instanceId": "clinstance000000000000001",
+        "orderId": null,
+        "event": {
+          "id": "clseries00000000000000001",
+          "slug": "weekly-coffee",
+          "title": "Weekly Coffee",
+          "coverImageUrl": null,
+          "startDateTime": "2030-05-12T08:00:00.000Z",
+          "endDateTime": "2030-05-12T09:00:00.000Z",
+          "timezone": "Europe/London",
+          "location": "",
+          "mapLinkUrl": null,
+          "isOnline": false,
+          "accentColor": null,
+          "status": "PUBLISHED",
+          "registrationMode": "INDIVIDUAL",
+          "organisation": {
+            "slug": "civic-tech",
+            "name": "Civic Tech Meetup",
+            "logoUrl": null
+          }
+        }
+      }
+    ],
+    "past": [],
+    "certificates": [
+      {
+        "eventTitle": "Winter Workshop",
+        "organisationName": "Civic Tech Meetup",
+        "issuedAt": "2030-01-20T20:00:00.000Z",
+        "certificateUrl": "https://events.example/api/feedback/certificate/certEXAMPLEtoken01"
+      }
+    ]
+  }
+}

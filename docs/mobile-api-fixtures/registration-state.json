@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "data": {
+    "registrationOpen": false,
+    "registrationClosesAt": "2030-05-10T17:00:00.000Z",
+    "registrationClosedReason": "Registration has closed.",
+    "registrationManuallyClosed": true
+  }
+}

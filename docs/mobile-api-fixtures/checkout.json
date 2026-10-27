@@ -1,0 +1,6 @@
+{
+  "ok": true,
+  "data": {
+    "checkoutUrl": "https://checkout.stripe.com/c/pay/cs_test_example"
+  }
+}

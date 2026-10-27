@@ -115,6 +115,15 @@ the exact frontend origin; they expose only the existing rate-limited state
 projection. No cross-origin session cookie is required. Ticket polling falls
 back through the frontend API proxy. Preserve streaming flushes in Caddy/CDNs.
 
+The Space Works mobile apps call the **API hostname** directly
+(`https://api.events.example.com/api/mobile/v1`) with bearer tokens; the
+frontend's `/api` proxy is deliberately not opened to cookie-less mobile
+traffic. App-link files (`/.well-known/assetlinks.json` and
+`/.well-known/apple-app-site-association`) are served by the **website** host,
+read `ANDROID_APP_PACKAGE_NAME`, `ANDROID_APP_SHA256_FINGERPRINTS` and
+`APPLE_APP_IDS` at runtime, so set them on the frontend service too (Netlify
+environment, the Compose frontend, Helm values). See [Mobile API](MOBILE_API.md).
+
 ## 4. Verification and operations
 
 Before accepting registrations, verify public HTTPS on both hosts and run the

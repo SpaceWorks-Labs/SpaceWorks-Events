@@ -168,6 +168,24 @@ from another organisation is "not found" (a 404 page, or the action error
 "Webhook endpoint not found."). See [Organisation webhooks](WEBHOOKS.md). Collaborators who are not members see only the list of events they
 co-organise on `/dashboard/:orgSlug`.
 
+## Mobile API
+
+`lib/mobile/permissions.ts` derives the mobile `EventPermissions` from
+`eventCapabilities()`, the same source as the dashboard, so the app shows what
+the website shows: `checkIn` and `checkInToLists` (`CHECK_IN`),
+`manageRegistrations` and `manageOrders` (`MANAGE_REGISTRATIONS`), `schedule`
+(`PUBLISH_AND_SCHEDULE`), `judge` (the `JUDGE` grant once submissions are on),
+`sendEmails`, `manageFeedback`, `manageRegistrationWindow` and `manageFinance`
+(organisation OWNER/ADMIN), and `fileClaims` (anyone on the dashboard). Unlike
+Yuyu, `manageRegistrations` follows the grant, as the web guest list does.
+Every organiser route first applies the staff authenticator rule to the app
+session (`STAFF_MFA_REQUIRED`, `STAFF_MFA_ENROLMENT_REQUIRED`); the mutation
+then runs the matching Server Action's body as the request actor, which
+re-checks everything. Events outside the caller's dashboard access, including
+other organisations', are `NOT_FOUND`; a JUDGE-only grant reaches only the
+judging routes. Claim and refund-request decisions are held to the event in
+the path.
+
 ## Known gaps
 
 - `EDIT_DETAILS` does not cover the Details form. `updateEvent` writes
@@ -176,7 +194,6 @@ co-organise on `/dashboard/:orgSlug`.
   co-organiser edits page content but not the title or dates. Splitting the
   form would let the grant cover the descriptive fields.
 - The registration form questions are owner/admin only; no grant covers them.
-- Custom check-in lists are web-only for now: offline check-in, the venue
-  station and series occurrences do not reach them. The cores in
-  `lib/core/checkinLists.ts` already take a `source` (`mobile-scan`,
-  `mobile-manual`) for a future mobile check-in client.
+- Custom check-in lists: offline check-in, the venue station and series
+  occurrences do not reach them. The mobile API does (`mobile-scan`,
+  `mobile-manual` sources).
