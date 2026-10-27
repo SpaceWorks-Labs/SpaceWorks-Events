@@ -13,6 +13,7 @@ import { cancelRsvp } from "@/app/actions/rsvp-cancel";
 import { deleteRsvp, updateRsvpRegistration } from "@/app/actions/rsvp-admin";
 import { approveRsvp, rejectRsvp } from "@/app/actions/rsvp-lifecycle";
 import { checkSlugAvailability } from "@/app/actions/org";
+import { updateEvent } from "@/app/actions/event";
 import { joinTeamWithExistingRsvp, organiserMoveMember, resolveOrganiserEvent } from "@/lib/core/teams";
 import { resolveEntrantForUser } from "@/lib/core/judging";
 import { listUnsubmittedEntrants } from "@/lib/core/judgingEntrants";
@@ -127,6 +128,23 @@ describe.sequential("crew guards", () => {
     } finally {
       await prisma.user.deleteMany({ where: { id: { in: [member, checkIn, registrations, crewUser].map((user) => user!.id) } } });
     }
+  });
+
+  it("lets an event with only crew switch registration mode, but not once someone registered", async () => {
+    const event = await createCrewEvent();
+    await addCrew(event);
+    identity.id = crew.organiserId;
+    const input = (mode: RegistrationMode) => ({
+      organisationSlug: crew.orgSlug, eventId: event.id, title: event.title, tags: "", coverImageUrl: "",
+      startDateTime: event.startDateTime.toISOString(), endDateTime: event.endDateTime.toISOString(), timezone: "UTC",
+      location: "Main hall", mapLinkUrl: "", isOnline: false, capacity: "", registrationClosesAt: "", registrationLeadMinutes: "",
+      status: event.status, privacyType: event.privacyType, listedPublicly: false,
+      registrationMode: mode, ...(mode === RegistrationMode.TEAM ? { teamMinSize: 2, teamMaxSize: 4, soloPolicy: "SOLO_ALLOWED" } : {}),
+    });
+    await expect(updateEvent(input(RegistrationMode.TEAM))).resolves.toEqual({ ok: true });
+    await expect(prisma.event.findUniqueOrThrow({ where: { id: event.id } })).resolves.toMatchObject({ registrationMode: RegistrationMode.TEAM });
+    await register(event, "solo");
+    await expect(updateEvent(input(RegistrationMode.INDIVIDUAL))).resolves.toMatchObject({ ok: false });
   });
 
   it("reserves the crew organisation slug for the sign-up route", async () => {
