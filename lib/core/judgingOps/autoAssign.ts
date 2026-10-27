@@ -75,7 +75,8 @@ export type AutoAssignPreviewDto = {
   inputFingerprint: string;
 };
 
-export type AutoAssignAppliedDto = { added: number; removed: number; adopted: number; covered: number; shortfallTotal: number; projects: number; runId: string; seed: string | null };
+/** `runId` and `seed` come back for RANDOM runs (a BALANCED run is recorded too, and returns exactly what it always did). */
+export type AutoAssignAppliedDto = { added: number; removed: number; adopted: number; covered: number; shortfallTotal: number; projects: number; runId?: string; seed?: string };
 
 type ParsedAutoAssign = { perProject: number; mode: AutoAssignMode; judgeUserIds: string[]; fingerprint?: string; strategy: AutoAssignStrategy; seed?: string };
 
@@ -288,7 +289,7 @@ export async function applyAutoAssignment(ctx: JudgingOrganiserContext, input: u
           ...(parsed.data.strategy === "random" ? { strategy: "random", seed: built.seed, run: runId } : {}),
         },
       });
-      return ok({ added: plan.add.length, removed: removeIds.length, adopted: plan.adopt.length, covered: plan.covered, shortfallTotal: plan.shortfalls.length, projects: built.projects, runId, seed: built.seed });
+      return ok({ added: plan.add.length, removed: removeIds.length, adopted: plan.adopt.length, covered: plan.covered, shortfallTotal: plan.shortfalls.length, projects: built.projects, ...(built.seed ? { runId, seed: built.seed } : {}) });
     },
     { timeout: 30_000, maxWait: 10_000 },
   );
