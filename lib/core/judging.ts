@@ -48,6 +48,7 @@ export {
   unassignJudge,
 } from "./judging/judges";
 export { setJudgingStatus, setScoreNormalization, type PublishResultsOutcome, publishResults, unpublishResults } from "./judging/status";
+export { type SendResultsAnnouncementOutcome, sendResultsAnnouncement, countResultsAnnouncementRecipients } from "./judging/announcement";
 export { listSubmissionsForJudge, listJudgeSubmissionsPage, loadSubmissionForJudge, type JudgeNextDto, nextSubmissionForJudge } from "./judging/judgeWorkspace";
 export { saveJudgeScores, submitJudgeReview } from "./judging/judgeScoring";
 export {

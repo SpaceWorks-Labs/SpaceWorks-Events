@@ -1214,6 +1214,11 @@
     },
     {
       "module": "app/actions/judging-admin",
+      "name": "sendResultsAnnouncement",
+      "id": "judging-admin:sendResultsAnnouncement"
+    },
+    {
+      "module": "app/actions/judging-admin",
       "name": "unpublishJudgingResults",
       "id": "judging-admin:unpublishJudgingResults"
     },
