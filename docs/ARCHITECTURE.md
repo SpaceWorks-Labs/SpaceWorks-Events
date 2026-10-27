@@ -112,7 +112,7 @@ Asset metadata lives in PostgreSQL. Production file bytes live in a private S3-c
 
 The proxy generates a fresh Content Security Policy nonce for application-page requests. The root layout waits for a real request so Next.js can attach the nonce to framework scripts. Other response headers include HSTS in production, frame denial, content-type protection, a restricted permissions policy, and a strict referrer policy.
 
-This per-request nonce makes application pages dynamically rendered. There is deliberately no root `app/loading.tsx`: a root Suspense boundary would stream a 200 before `notFound()` or `redirect()` run, breaking real 404s and the short-link 307. Loading screens live at `app/dashboard/loading.tsx` and the dashboard organisation and event segments. Static metadata endpoints such as `robots.txt` and `sitemap.xml` remain static.
+This per-request nonce makes application pages dynamically rendered. There is deliberately no root `app/loading.tsx`: a root Suspense boundary would stream a 200 before `notFound()` or `redirect()` run, breaking real 404s and the short-link 307. Dashboard loading screens are scoped with route groups (`(home)`, `(overview)`, `(general)`, `(list)`) and each sits below a layout that awaits the wrapped page's access check first (`lib/dashboardGuards.ts`, a React `cache` over the view readers in `lib/views/dashboardGuards.ts`), so refusals stay real 404/307 responses; `tests/unit/dashboard-loading-boundaries.test.ts` pins where they may live. Static metadata endpoints such as `robots.txt` and `sitemap.xml` remain static.
 
 ## Deployment shape
 

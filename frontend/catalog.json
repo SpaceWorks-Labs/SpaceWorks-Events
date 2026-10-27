@@ -496,6 +496,66 @@
       "id": "components__event-dashboard__panels__SettingsPanel:loadSettingsPanel"
     },
     {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardDashboardHome",
+      "id": "dashboardGuards:guardDashboardHome"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgDashboard",
+      "id": "dashboardGuards:guardOrgDashboard"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgMember",
+      "id": "dashboardGuards:guardOrgMember"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgAdmin",
+      "id": "dashboardGuards:guardOrgAdmin"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgOwner",
+      "id": "dashboardGuards:guardOrgOwner"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardEventDashboard",
+      "id": "dashboardGuards:guardEventDashboard"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardEventCheckIn",
+      "id": "dashboardGuards:guardEventCheckIn"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardEventSchedule",
+      "id": "dashboardGuards:guardEventSchedule"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardSeriesDashboard",
+      "id": "dashboardGuards:guardSeriesDashboard"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardWebhookEndpoint",
+      "id": "dashboardGuards:guardWebhookEndpoint"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardIdProgramme",
+      "id": "dashboardGuards:guardIdProgramme"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardTicketDesign",
+      "id": "dashboardGuards:guardTicketDesign"
+    },
+    {
       "module": "lib/views/frontend-gates",
       "name": "loadSuperAdminGate",
       "id": "frontend-gates:loadSuperAdminGate"
