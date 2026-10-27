@@ -41,7 +41,7 @@ export async function uploadEventCoverImage(
       ok: false,
       error: "Verify your email before uploading event images.",
     };
-  if (await isActionRateLimited("upload", session.user.id)) {
+  if (await isActionRateLimited("eventPageUpload", session.user.id)) {
     return { ok: false, error: "Too many uploads. Please try again later." };
   }
 

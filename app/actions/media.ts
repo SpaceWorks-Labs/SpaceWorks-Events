@@ -74,7 +74,7 @@ export async function uploadEventPageLogo(
 ): Promise<ActionResult<{ url: string }>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "You must be signed in." };
-  if (await isActionRateLimited("upload", session.user.id))
+  if (await isActionRateLimited("eventPageUpload", session.user.id))
     return { ok: false, error: "Too many uploads. Please try again later." };
   const organisationSlug = String(
     formData.get("organisationSlug") ?? "",

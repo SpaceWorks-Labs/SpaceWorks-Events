@@ -20,7 +20,7 @@ export async function uploadEventSpeakerPhoto(
       ok: false,
       error: "Verify your email before uploading speaker photos.",
     };
-  if (await isActionRateLimited("upload", session.user.id))
+  if (await isActionRateLimited("eventPageUpload", session.user.id))
     return { ok: false, error: "Too many uploads. Please try again later." };
   const parsed = target.safeParse({
     organisationSlug: formData.get("organisationSlug"),
@@ -75,7 +75,7 @@ export async function uploadEventSponsorLogo(
       ok: false,
       error: "Verify your email before uploading sponsor logos.",
     };
-  if (await isActionRateLimited("upload", session.user.id))
+  if (await isActionRateLimited("eventPageUpload", session.user.id))
     return { ok: false, error: "Too many uploads. Please try again later." };
   const parsed = target.safeParse({
     organisationSlug: formData.get("organisationSlug"),

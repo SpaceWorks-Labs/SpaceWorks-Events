@@ -287,7 +287,11 @@ export function EventWebsiteManager(props: Props) {
               openAddRequest={addRequests[collection.kind]}
               onSave={(action, input) => save(action, input)}
               onDelete={remove(collection.kind)}
-              onError={setError}
+              onError={(message) => {
+                // The callout sits at the top of the page, out of view of the open form.
+                setError(message);
+                showToast(message, "error");
+              }}
               onDraftChange={onDraftChange}
             />
           ))}

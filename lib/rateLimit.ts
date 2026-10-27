@@ -14,6 +14,7 @@ export type Bucket =
   | "rsvp"
   | "feedback"
   | "upload"
+  | "eventPageUpload"
   | "invite"
   | "broadcast"
   | "broadcastTest"
@@ -51,7 +52,11 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   passwordReset: { max: 5, windowMs: 60 * 60_000 },
   rsvp: { max: 10, windowMs: 60_000 },
   feedback: { max: 8, windowMs: 60_000 },
+  // Certificates, member IDs, ticket designs, organisation and profile images.
   upload: { max: 12, windowMs: 60 * 60_000 },
+  // Event page images (cover, page logo, speaker photos, sponsor logos):
+  // building one event page can take dozens, so they have their own budget.
+  eventPageUpload: { max: 60, windowMs: 60 * 60_000 },
   invite: { max: 30, windowMs: 60 * 60_000 },
   broadcast: { max: 10, windowMs: 60 * 60_000 },
   // Tests only reach the organiser's own inbox; kept apart so testing never blocks the real send.

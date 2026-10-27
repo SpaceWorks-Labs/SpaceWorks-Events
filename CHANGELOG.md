@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Speaker and sponsor photos.** A failed upload no longer freezes the form: files over 5 MB are refused in the browser before the upload, the form unlocks whatever happens, and the error shows as a toast next to the form. Event page images (cover, page logo, speaker photos, sponsor logos) have their own rate-limit bucket, `eventPageUpload` (60 an hour), so the shared `upload` bucket for certificates, member IDs, ticket designs, organisation logos and profile photos stays at 12 an hour.
 - `db:restore` accepts `--via-local-tunnel` for a loopback tunnel to the production server and prints a clear reason when it refuses a target.
 - **Raw SQL timestamps** are written and compared as UTC wall-clock `timestamp(3)` values (`lib/sqlTimestamp.ts`): judge scores and reviews, the webhook delivery claim, series-date payment locks, processed payment webhooks, and every keyset cursor, so a database whose `TimeZone` is not UTC no longer shifts them.
 - Ops alerts no longer report ordinary sign-in outcomes (wrong password, the authenticator or new-device code step, unverified email, too many attempts, missing CSRF token, declined or expired sign-in) as "Sign-in failed" (`lib/authLogger.ts`).
