@@ -47,9 +47,9 @@ async function judgeGate(input: unknown, bucket: "action" | "search" = "action")
   return { ok: true, ctx, rest };
 }
 
-/** The judging round a read is about (docs/HACKATHON.md "Rounds"); the current round, the one judges score, when absent. */
-function roundOption(fields: Record<string, unknown>): { roundId?: string } {
-  return typeof fields.roundId === "string" && fields.roundId ? { roundId: fields.roundId } : {};
+/** The optional judging round a call is about (docs/HACKATHON.md "Rounds"), as trailing arguments: none for the current round, so single-round calls are unchanged. */
+function roundArgs(fields: Record<string, unknown>): [] | [{ roundId: string }] {
+  return typeof fields.roundId === "string" && fields.roundId ? [{ roundId: fields.roundId }] : [];
 }
 
 function revalidateJudgeWorkspace(ctx: JudgeContext) {
@@ -69,7 +69,7 @@ export async function loadJudgeSubmissionsPage(input: unknown): Promise<ActionRe
   void _roundId;
   const query = judgeSubmissionsQuerySchema.safeParse(rest);
   if (!query.success) return { ok: false, error: "Invalid request." };
-  const page = await listJudgeSubmissionsPage(gate.ctx, query.data, roundOption(gate.rest));
+  const page = await listJudgeSubmissionsPage(gate.ctx, query.data, ...roundArgs(gate.rest));
   if (!page) return { ok: false, error: NO_ACCESS };
   return { ok: true, data: page };
 }
@@ -79,7 +79,7 @@ export async function loadJudgeSubmission(input: unknown): Promise<ActionResult<
   const gate = await judgeGate(input);
   if (!gate.ok) return gate;
   const submissionId = typeof gate.rest.submissionId === "string" ? gate.rest.submissionId : "";
-  const detail = await loadSubmissionForJudge(gate.ctx, submissionId, roundOption(gate.rest));
+  const detail = await loadSubmissionForJudge(gate.ctx, submissionId, ...roundArgs(gate.rest));
   if (!detail) return { ok: false, error: "This submission is not available to you." };
   return { ok: true, data: detail };
 }
@@ -93,7 +93,7 @@ export async function loadJudgeSubmission(input: unknown): Promise<ActionResult<
 export async function loadNextJudgeSubmission(input: unknown): Promise<ActionResult<JudgeNextDto>> {
   const gate = await judgeGate(input);
   if (!gate.ok) return gate;
-  const result = await nextSubmissionForJudge(gate.ctx, roundOption(gate.rest));
+  const result = await nextSubmissionForJudge(gate.ctx, ...roundArgs(gate.rest));
   if (!result) return { ok: false, error: NO_ACCESS };
   return { ok: true, data: result };
 }
@@ -136,7 +136,7 @@ export async function saveJudgeReviewAction(input: unknown): Promise<ActionResul
 export async function loadJudgeWorkspaceRound(input: unknown): Promise<ActionResult<JudgeWorkspaceDto>> {
   const gate = await judgeGate(input, "search");
   if (!gate.ok) return gate;
-  const workspace = await listSubmissionsForJudge(gate.ctx, {}, roundOption(gate.rest));
+  const workspace = await listSubmissionsForJudge(gate.ctx, {}, ...roundArgs(gate.rest));
   if (!workspace) return { ok: false, error: NO_ACCESS };
   return { ok: true, data: workspace };
 }
