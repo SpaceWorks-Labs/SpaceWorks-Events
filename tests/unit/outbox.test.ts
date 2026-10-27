@@ -272,3 +272,35 @@ describe("event broadcast delivery", () => {
     }));
   });
 });
+
+describe("outbox claim order", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.deleteMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("claims transactional email before a bulk backlog queued earlier", async () => {
+    const bulk = Array.from({ length: 3 }, (_, index) => message({ id: `bulk_${index}`, kind: "event-broadcast", createdAt: new Date("2030-01-01T00:00:00Z") }));
+    const urgent = message({ id: "reset_1", kind: "password-reset", createdAt: new Date("2030-01-02T00:00:00Z") });
+    mocks.findMany.mockImplementation(async ({ where, take }: { where: { kind: { in?: string[]; notIn?: string[] } }; take: number }) =>
+      (where.kind.notIn ? [urgent] : bulk).slice(0, take),
+    );
+    mocks.updateMany.mockResolvedValue({ count: 0 });
+    await deliverOutboxBatch(2);
+    const [first, second] = mocks.findMany.mock.calls.map(([args]) => args);
+    expect(first.where.kind.notIn).toEqual(expect.arrayContaining(["event-broadcast", "event-invite", "results-published"]));
+    for (const kind of ["password-reset", "sign-in-code", "rsvp-confirmation", "payment-notice", "member-id-card", "team-created"]) {
+      expect(first.where.kind.notIn).not.toContain(kind);
+    }
+    expect(second.take).toBe(1);
+    const claimed = mocks.updateMany.mock.calls.slice(1).map(([args]) => args.where.id);
+    expect(claimed).toEqual(["reset_1", "bulk_0"]);
+  });
+
+  it("does not query the bulk lane when transactional mail fills the batch", async () => {
+    mocks.findMany.mockResolvedValueOnce([message({ id: "a", kind: "rsvp-confirmation" }), message({ id: "b", kind: "email-verification" })]);
+    mocks.updateMany.mockResolvedValue({ count: 0 });
+    await deliverOutboxBatch(2);
+    expect(mocks.findMany).toHaveBeenCalledTimes(1);
+  });
+});

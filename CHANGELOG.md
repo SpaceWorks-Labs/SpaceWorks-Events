@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Outbox draining.** A delivery pass no longer stops early when a batch contained messages dropped on purpose (a recipient who no longer matches, a link that no longer works); it drains until nothing is due or 40 seconds have passed, and backs off only when a batch failed without a single send. Transactional email is claimed before broadcasts, invitations and results emails.
 - The event dashboard no longer renders a streamed panel twice. next-auth's `<SessionProvider>` fetched the session after the first client render and changed its context value while the page's `loading.tsx` Suspense boundary was still waiting for React's batched reveal; React then gave up hydrating that boundary and rendered the panel again on the client, leaving the server copy in the hidden `div#S:1` streaming container (duplicate ids such as `#guest-search`, and in a background tab until it was shown). Client components now read the session from a small store (`components/auth/useAuthSession.ts`) whose updates re-render only its readers, and the provider is gone; `tests/e2e/filtered-exports.spec.ts` asserts a single `#guest-search` from the first byte.
 
 ### Added
