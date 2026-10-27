@@ -96,6 +96,7 @@ This page documents implemented controls and security boundaries. It is not a su
 
 - The guide's audience sections (`org-admin` for organisation owners and admins, `super-admin` for the instance super admin) only decide what the guide lists; every feature the articles describe keeps its own server checks. Restricted articles are a 404 for other readers, the search index omits them and is `private, no-store`, and signed-in guide pages are `no-store` through the session-cookie rule in `lib/pageSecurity.ts`.
 - Article bodies load only through the generated map of static imports (`content/help/bodies.generated.ts`) for manifest slugs the viewer may read; no path is built from the URL.
+- Guide screenshots in `public/help/` are public files: they come only from the seeded fictional demo data.
 - The screenshot seed (`tests/help-screenshots/`) refuses to run without `HELP_SCREENS_SEED=1`, outside development, or against a non-local database, because it replaces its demo users and data.
 
 ## Ticket designs

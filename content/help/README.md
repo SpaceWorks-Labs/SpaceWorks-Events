@@ -103,6 +103,10 @@ then reference it.
 
 ## Capturing screenshots
 
+Everything under `public/help/` is served publicly to anyone, signed in or
+not, so screenshots must show only the fictional demo data the seed creates:
+never a real organisation, person, address, ticket or secret.
+
 The capture seeds fictional demo data (the "Riverside Tech Collective"), so
 run it only against a **disposable**, migrated local database: the seed
 deletes and recreates its own organisations and users on every run, and
@@ -119,4 +123,6 @@ reuses a server already running there with the same settings, with
 `STAFF_MFA_REQUIRED=false` so the demo staff skip the authenticator check. It
 writes `public/help/<name>.png`, updates `screenshots.json`, and clears queued
 email so nothing is ever sent. Payment data is seeded directly as fictional
-orders, refunds and payouts; no payment provider is ever called.
+orders, refunds and payouts; no payment provider is ever called. Demo staff
+get an authenticator just before the super admin Security screen, as real
+staff must, so its MFA figures match a correctly run instance.
