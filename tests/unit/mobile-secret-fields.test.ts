@@ -33,7 +33,7 @@ function keysOf(schema: z.ZodType) {
   return keys;
 }
 
-const schemas = Object.entries(dto).filter((entry): entry is [string, z.ZodType] => entry[1] instanceof z.ZodType);
+const schemas = Object.entries(dto as Record<string, unknown>).filter((entry): entry is [string, z.ZodType] => entry[1] instanceof z.ZodType);
 
 describe("mobile DTO secrets", () => {
   it("covers the response schemas", () => {

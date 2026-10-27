@@ -3,6 +3,7 @@ import "server-only";
 import { EventStatus, Prisma, RegistrationMode, SoloPolicy } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { ActionResult } from "@/app/actions/org";
+import type { ActionErrorCode } from "@/lib/actionErrorCode";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { emitTeamWebhooks } from "@/lib/teamUnits";
 import type { WebhookEmission } from "@/lib/webhooks/emit";
@@ -46,8 +47,8 @@ export const TEAM_DECLINED = "The organisers declined this team, so it can't be 
 export const INVITE_ONLY_ADD_REFUSED =
   "This event is invite-only. Share your team's join link instead; each person signs in with their invited account to join.";
 
-export function fail(error: string): { ok: false; error: string } {
-  return { ok: false, error };
+export function fail(error: string, code?: ActionErrorCode): { ok: false; error: string; code?: ActionErrorCode } {
+  return code ? { ok: false, error, code } : { ok: false, error };
 }
 
 export function isUniqueViolation(error: unknown) {

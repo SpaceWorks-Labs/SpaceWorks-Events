@@ -10,4 +10,12 @@ export type ActionErrorCode =
   /** Money was taken: the order's refund rules apply instead. */
   | "PAID_ORDER"
   | "CAPACITY_FULL"
-  | "REGISTRATION_CLOSED";
+  | "REGISTRATION_CLOSED"
+  /** Approving a team below the event's minimum team size. */
+  | "TEAM_INCOMPLETE"
+  /** Judging is not OPEN, so scores and reviews are frozen. */
+  | "JUDGING_CLOSED"
+  /** Submitting a review before every criterion is scored (or with no rubric). */
+  | "INCOMPLETE_SCORES"
+  /** A submission this judge may not score (not submitted, unassigned, conflict of interest, another event's). */
+  | "NOT_VISIBLE";
