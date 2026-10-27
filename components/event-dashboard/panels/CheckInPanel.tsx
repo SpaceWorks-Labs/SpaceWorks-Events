@@ -113,8 +113,6 @@ export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
 
         <CheckInListsCard organisationSlug={organisation.slug} eventId={event.id} lists={lists} checkInHref={checkInHref} canManage={permissions.canManageCheckInLists} addOns={addOns} className="md:col-span-2 xl:col-span-3" />
 
-        <CheckInListsCard organisationSlug={organisation.slug} eventId={event.id} lists={lists} checkInHref={checkInHref} canManage={permissions.canManageCheckInLists} addOns={addOns} className="md:col-span-2 xl:col-span-3" />
-
         <section aria-labelledby="checkin-attendance-title" className={cn(cardClass, "md:col-span-2 xl:col-span-1")}>
           <h2 id="checkin-attendance-title" className="text-h4 text-ink">Attendance</h2>
           <p className="text-sm text-ink-secondary">
