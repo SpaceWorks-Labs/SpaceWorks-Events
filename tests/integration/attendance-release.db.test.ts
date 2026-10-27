@@ -24,7 +24,7 @@ import { cancelRegistrationByToken } from "@/lib/rsvpCancel";
 import { deliverOutboxBatch } from "@/lib/outbox";
 import { generateAttendanceToken } from "@/lib/attendanceToken";
 import { submitRsvpCore } from "@/lib/rsvpCore";
-import { att, clearAttendanceQueue, guest, makeEvent, queuedFor, ref, setUpAttendance, tearDownAttendance, tokenFor } from "./helpers/attendance";
+import { att, clearAttendanceQueue, deliverEventAttendance, guest, makeEvent, queuedFor, ref, setUpAttendance, tearDownAttendance, tokenFor } from "./helpers/attendance";
 
 beforeAll(() => setUpAttendance());
 beforeEach(() => {
@@ -119,7 +119,7 @@ describe("outbox delivery", () => {
     const rsvp = await guest(event.id);
     await sendAttendanceChecksForUser(att.ownerId, ref(event));
     const token = await tokenFor(rsvp.id);
-    await deliverOutboxBatch(50);
+    await deliverEventAttendance(event.id, deliverOutboxBatch);
     expect(mocks.send).toHaveBeenCalledTimes(1);
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ to: rsvp.guestEmail, eventTitle: event.title, timezone: "Europe/London", location: "Main hall", attendPath: `/attend/${token}`, reminder: false, releaseKind: null }));
     expect(await queuedFor(event.id)).toHaveLength(0);
@@ -130,7 +130,7 @@ describe("outbox delivery", () => {
     await guest(event.id);
     await sendAttendanceChecksForUser(att.ownerId, ref(event));
     await prisma.event.update({ where: { id: event.id }, data: { attendanceCheckReleaseOnDecline: true } });
-    await deliverOutboxBatch(50);
+    await deliverEventAttendance(event.id, deliverOutboxBatch);
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ releaseKind: "free" }));
   });
 
@@ -141,7 +141,7 @@ describe("outbox delivery", () => {
     await sendAttendanceChecksForUser(att.ownerId, ref(event));
     await respondToAttendanceCheck({ token: await tokenFor(answered.id), response: "ATTENDING" });
     await prisma.attendanceCheck.update({ where: { rsvpId: rotated.id }, data: { tokenHash: generateAttendanceToken().hash } });
-    await deliverOutboxBatch(50);
+    await deliverEventAttendance(event.id, deliverOutboxBatch);
     expect(mocks.send).not.toHaveBeenCalled();
     expect(await queuedFor(event.id)).toHaveLength(0);
 
@@ -149,7 +149,7 @@ describe("outbox delivery", () => {
     await guest(cancelled.id);
     await sendAttendanceChecksForUser(att.ownerId, ref(cancelled));
     await prisma.event.update({ where: { id: cancelled.id }, data: { status: EventStatus.CANCELLED } });
-    await deliverOutboxBatch(50);
+    await deliverEventAttendance(cancelled.id, deliverOutboxBatch);
     expect(mocks.send).not.toHaveBeenCalled();
     expect(await queuedFor(cancelled.id)).toHaveLength(0);
   });
@@ -159,7 +159,7 @@ describe("outbox delivery", () => {
     await guest(event.id);
     await sendAttendanceChecksForUser(att.ownerId, ref(event));
     await prisma.event.update({ where: { id: event.id }, data: { startDateTime: new Date(Date.now() - 60_000) } });
-    expect((await deliverOutboxBatch(50)).failed).toBeGreaterThanOrEqual(1);
+    expect(await deliverEventAttendance(event.id, deliverOutboxBatch)).toBeGreaterThanOrEqual(1);
     expect(mocks.send).not.toHaveBeenCalled();
     expect(await queuedFor(event.id)).toHaveLength(0);
   });

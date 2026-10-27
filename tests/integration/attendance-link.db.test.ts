@@ -22,7 +22,7 @@ import { prisma } from "@/lib/db";
 import { ATTENDANCE_AUDIT, issueAttendanceLinkForUser, loadAttendanceCheckStatus, resolveAttendanceCheckByToken, respondToAttendanceCheck, sendAttendanceChecksForUser } from "@/lib/core/attendanceCheck";
 import { issueAttendanceLink } from "@/app/actions/attendance-check";
 import { deliverOutboxBatch } from "@/lib/outbox";
-import { att, clearAttendanceQueue, guest, makeEvent, makeUser, queuedFor, ref, setUpAttendance, tearDownAttendance, tokenFor } from "./helpers/attendance";
+import { att, clearAttendanceQueue, deliverEventAttendance, guest, makeEvent, makeUser, queuedFor, ref, setUpAttendance, tearDownAttendance, tokenFor } from "./helpers/attendance";
 
 const tokenOf = (path: string) => path.replace(/^\/attend\//, "");
 
@@ -63,7 +63,7 @@ describe("sharing one guest's link by hand", () => {
     const fresh = tokenOf(result.ok ? result.data!.path : "");
     expect(await resolveAttendanceCheckByToken(emailed)).toBeNull();
     expect(await resolveAttendanceCheckByToken(fresh)).not.toBeNull();
-    await deliverOutboxBatch(50);
+    await deliverEventAttendance(event.id, deliverOutboxBatch);
     expect(mocks.send).not.toHaveBeenCalled();
 
     // A guest who already answered can get a fresh link to change it.

@@ -25,6 +25,7 @@ import { deliverOutboxBatch } from "@/lib/outbox";
 import { listAttendeesPage } from "@/lib/eventDashboard/attendees";
 import { hashAttendanceToken } from "@/lib/attendanceToken";
 import { createTeamEvent, paid, setUpPaidOrg, tearDownPaidOrg } from "./helpers/paidOrg";
+import { deliverAttendanceQueue } from "./helpers/attendance";
 
 const HOUR = 3_600_000;
 let ownerId = "";
@@ -87,7 +88,7 @@ describe("a paid single ticket replied to by its buyer", () => {
     const rsvp = order.rsvps[0]!;
     const token = await askAndToken(event, rsvp.id);
     expect((await resolveAttendanceCheckByToken(token))?.releaseKind).toBe("paid");
-    await deliverOutboxBatch(50);
+    await deliverAttendanceQueue([rsvp.id], deliverOutboxBatch);
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ to: email("single"), releaseKind: "paid" }));
 
     expect(await respondToAttendanceCheck({ token, response: "NOT_ATTENDING", note: "Clash" })).toEqual({ ok: true, data: { response: "NOT_ATTENDING", released: true } });
@@ -107,7 +108,7 @@ describe("once the refund policy has closed", () => {
     const rsvp = order.rsvps[0]!;
     const token = await askAndToken(event, rsvp.id);
     expect((await resolveAttendanceCheckByToken(token))?.releaseKind).toBeNull();
-    await deliverOutboxBatch(50);
+    await deliverAttendanceQueue([rsvp.id], deliverOutboxBatch);
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ releaseKind: null }));
 
     const reply = await respondToAttendanceCheck({ token, response: "NOT_ATTENDING", note: "Ill" });

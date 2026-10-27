@@ -99,3 +99,21 @@ export async function ageCheck(rsvpId: string, ms = ATTENDANCE_REMINDER_INTERVAL
 }
 
 export const clearAttendanceQueue = () => prisma.$executeRaw`DELETE FROM "OutboxMessage" WHERE "kind" = 'attendance-check' AND "payload"->>'to' LIKE ${`%${att.suffix}@example.test`}`;
+
+/**
+ * Run the outbox until no attendance question for these registrations is
+ * left. Attendance email is a bulk kind, so in a full run other suites'
+ * transactional messages can fill a single batch first.
+ */
+export async function deliverAttendanceQueue(rsvpIds: string[], deliver: (limit: number) => Promise<unknown>) {
+  const left = () => prisma.outboxMessage.count({ where: { kind: "attendance-check", status: "PENDING", OR: rsvpIds.map((id) => ({ payload: { path: ["rsvpId"], equals: id } })) } });
+  for (let pass = 0; pass < 30 && (await left()) > 0; pass += 1) await deliver(100);
+}
+
+/** As deliverAttendanceQueue for every registration of an event; returns the messages counted as failed. */
+export async function deliverEventAttendance(eventId: string, deliver: (limit: number) => Promise<{ failed: number }>) {
+  const rsvpIds = (await prisma.rSVP.findMany({ where: { eventId }, select: { id: true } })).map((row) => row.id);
+  let failed = 0;
+  await deliverAttendanceQueue(rsvpIds, async (limit) => { failed += (await deliver(limit)).failed; });
+  return failed;
+}
