@@ -155,6 +155,10 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
           listedPublicly: data.privacyType === EventPrivacyType.APPROVAL_REQUIRED && data.listedPublicly,
           registrationClosesAt: data.registrationClosesAt ?? null,
           registrationLeadMinutes: data.registrationLeadMinutes ?? null,
+          // The form's explicit cutoff wins over closing sign-ups from the app.
+          registrationManuallyClosedAt: null,
+          registrationCutoffBeforeManualClose: null,
+          registrationLeadBeforeManualClose: null,
           // Omitted team settings (older forms) leave the stored ones untouched.
           ...(teamSettings ?? {}),
         },

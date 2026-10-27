@@ -21,7 +21,7 @@ import { emitTeamWebhooks, type RegistrationStatusWebhook } from "@/lib/teamUnit
 
 export async function addManualRsvp(
   input: unknown,
-): Promise<ActionResult<{ count: number; status: RsvpStatus; }>> {
+): Promise<ActionResult<{ count: number; status: RsvpStatus; rsvpId: string; }>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "You must be signed in." };
   if (await isActionRateLimited("rsvp", session.user.id)) {
@@ -51,7 +51,7 @@ export async function addManualRsvp(
   });
   revalidateRsvpPaths(org.slug, { eventId: parsed.data.eventId, eventInstanceId: null });
   revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}/check-in`);
-  return { ok: true, data: { count: result.data.count, status: result.data.status } };
+  return { ok: true, data: { count: result.data.count, status: result.data.status, rsvpId: result.data.rsvpId } };
 }
 
 export async function updateRsvpRegistration(input: unknown): Promise<ActionResult> {

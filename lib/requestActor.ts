@@ -18,6 +18,8 @@ export type MobileRequestActor = {
   mfaVerifiedAt: Date | null;
   /** When this app session last proved the password or Google credential. */
   authenticatedAt: Date;
+  /** How the app reached a check-in made on this request (scanned QR or a manual pick). */
+  checkInSource?: "mobile-scan" | "mobile-manual";
 };
 
 export type RequestActor = MobileRequestActor;
