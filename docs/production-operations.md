@@ -97,7 +97,7 @@ The backup fields do not run, retain, or restore backups. Keep those controls wi
   ```
 
   Add `--s3-force-path-style` only for providers that require it. The bucket must be private, use provider-side encryption at rest, and grant this credential only the object operations needed for the selected prefix. Prefer short-lived bucket-scoped credentials; command-line secrets can be exposed through shell history or process inspection.
-- Restore is deliberately destructive. It refuses development/test/localhost targets and requires both the parsed database name and an explicit production acknowledgement. It creates a local safety backup before replacing data, then runs the migration status and production schema verification checks:
+- Restore is deliberately destructive. It refuses development/test databases and loopback hosts (`localhost`, `127.x`, `::1`) and requires both the parsed database name and an explicit production acknowledgement. When the loopback address is a tunnel to the production server (cloud-sql-proxy, an SSH port-forward to managed PostgreSQL), add `--via-local-tunnel`; the database-name check still applies. A refusal prints what to change; any other failure prints only "Restore failed." It creates a local safety backup before replacing data, then runs the migration status and production schema verification checks:
 
   ```bash
   npm run db:restore -- \

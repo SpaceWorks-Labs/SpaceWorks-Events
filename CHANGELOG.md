@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `db:restore` accepts `--via-local-tunnel` for a loopback tunnel to the production server and prints a clear reason when it refuses a target.
 - **Raw SQL timestamps** are written and compared as UTC wall-clock `timestamp(3)` values (`lib/sqlTimestamp.ts`): judge scores and reviews, the webhook delivery claim, series-date payment locks, processed payment webhooks, and every keyset cursor, so a database whose `TimeZone` is not UTC no longer shifts them.
 - Ops alerts no longer report ordinary sign-in outcomes (wrong password, the authenticator or new-device code step, unverified email, too many attempts, missing CSRF token, declined or expired sign-in) as "Sign-in failed" (`lib/authLogger.ts`).
 - Publishing an event locks its row, so concurrent publishes emit `event.published` and audit `EVENT_PUBLISHED` once.
