@@ -248,5 +248,18 @@ export const organiserOrderDtoSchema = z.object({
 
 export const paymentInfoSchema = z.object({ due: money.nullable(), orderId: z.string().nullable(), payAtDesk: z.boolean() }).strict();
 
-export const checkInListSchema = z.object({ id: z.string(), name: z.string(), checkedIn: z.number().int() }).strict();
+export const checkInListSchema = z.object({ id: z.string(), name: z.string(), requiresEntryCheckIn: z.boolean(), checkedIn: z.number().int() }).strict();
 export const checkInListsDtoSchema = z.object({ lists: z.array(checkInListSchema) }).strict();
+
+export const listCheckInResultSchema = z.object({
+  listId: z.string(),
+  listName: z.string(),
+  rsvpId: z.string(),
+  displayName: z.string(),
+  email: z.string().nullable(),
+  status: rsvpStatusSchema,
+  alreadyCheckedIn: z.boolean(),
+  checkedInAt: iso,
+  entryCheckedInAt: iso.nullable(),
+  message: z.string(),
+}).strict();
