@@ -9,6 +9,9 @@ import type { DashboardTeam, DashboardTeamsPage } from "@/lib/eventDashboard/tea
 import type { TeamStatusFilter } from "@/components/event-dashboard/guests/teamList";
 import { SEARCH_DELAY_MS, type Member } from "./constants";
 
+// A request that throws (such as a dropped connection) shows an error instead of loading forever.
+const LOAD_FAILED = { ok: false as const, error: "Couldn't load the list. Try again." };
+
 /**
  * The Teams view: filters synced with the address bar, the dialog targets,
  * and the server-paged team list.
@@ -56,7 +59,7 @@ export function useTeamsView({ organisationSlug, eventId, initialPage }: { organ
       const seq = ++requestSeq.current;
       setLoadingList(cursor ? "more" : "replace");
       setListError(null);
-      const res = await loadTeamsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.status, cursor });
+      const res = await loadTeamsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.status, cursor }).catch(() => LOAD_FAILED);
       if (seq !== requestSeq.current) return;
       setLoadingList(null);
       if (!res.ok || !res.data) {
@@ -80,7 +83,7 @@ export function useTeamsView({ organisationSlug, eventId, initialPage }: { organ
       let cursor: string | null = null;
       let loaded = 0;
       do {
-        const res = await loadTeamsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.status, cursor });
+        const res: Awaited<ReturnType<typeof loadTeamsPage>> = await loadTeamsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.status, cursor }).catch(() => LOAD_FAILED);
         if (seq !== requestSeq.current) return;
         if (!res.ok || !res.data) {
           setListError(res.ok ? "Could not load teams." : res.error);

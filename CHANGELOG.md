@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Event dashboard tabs fail on their own.** A tab that fails to load (for example a dropped connection while it streams in) shows an error with **Try again** inside that tab instead of taking down the dashboard, and is reported as "Dashboard section crashed in the browser". **Try again** on the page and app error screens now re-fetches instead of re-rendering the failed payload, and the Teams and Invites lists show an error instead of loading forever when a request throws.
 - **Speaker and sponsor photos.** A failed upload no longer freezes the form: files over 5 MB are refused in the browser before the upload, the form unlocks whatever happens, and the error shows as a toast next to the form. Event page images (cover, page logo, speaker photos, sponsor logos) have their own rate-limit bucket, `eventPageUpload` (60 an hour), so the shared `upload` bucket for certificates, member IDs, ticket designs, organisation logos and profile photos stays at 12 an hour.
 - `db:restore` accepts `--via-local-tunnel` for a loopback tunnel to the production server and prints a clear reason when it refuses a target.
 - **Raw SQL timestamps** are written and compared as UTC wall-clock `timestamp(3)` values (`lib/sqlTimestamp.ts`): judge scores and reviews, the webhook delivery claim, series-date payment locks, processed payment webhooks, and every keyset cursor, so a database whose `TimeZone` is not UTC no longer shifts them.
