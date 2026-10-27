@@ -15,6 +15,7 @@ export type Bucket =
   | "feedback"
   | "upload"
   | "eventPageUpload"
+  | "crewPhotoUpload"
   | "invite"
   | "broadcast"
   | "broadcastTest"
@@ -57,6 +58,9 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   // Event page images (cover, page logo, speaker photos, sponsor logos):
   // building one event page can take dozens, so they have their own budget.
   eventPageUpload: { max: 60, windowMs: 60 * 60_000 },
+  // Crew photos uploaded through the public crew sign-up link (docs/CREW.md),
+  // counted per IP and per link (hashed), apart from the shared upload budget.
+  crewPhotoUpload: { max: 60, windowMs: 60 * 60_000 },
   invite: { max: 30, windowMs: 60 * 60_000 },
   broadcast: { max: 10, windowMs: 60 * 60_000 },
   // Tests only reach the organiser's own inbox; kept apart so testing never blocks the real send.
