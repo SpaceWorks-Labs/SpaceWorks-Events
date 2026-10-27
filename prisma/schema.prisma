@@ -1885,6 +1885,10 @@ model InstanceSetting {
   smtpAllowUnauthenticated Boolean @default(false)
   googleClientId        String?
   googleClientSecretEncrypted String?
+  /// Comma-separated Google OAuth client ids of the Android and iOS apps, accepted
+  /// as ID-token audiences by the mobile API. Overrides GOOGLE_MOBILE_CLIENT_IDS.
+  /// Client ids are public identifiers, not secrets.
+  googleMobileClientIds String?
   backupProvider        String?
   backupLastSuccessAt   DateTime?
   backupRetentionDays   Int?

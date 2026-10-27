@@ -99,7 +99,7 @@ describe("super-admin instance mutations", () => {
     expect(call.create.smtpPasswordEncrypted).toBe("encrypted:smtp-plaintext");
     expect(call.create.googleClientSecretEncrypted).toBe("encrypted:google-plaintext");
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: { smtpConfigured: true, smtpPasswordChanged: true, googleSsoConfigured: true, googleSecretChanged: true, backupConfigured: false },
+      metadata: { smtpConfigured: true, smtpPasswordChanged: true, googleSsoConfigured: true, googleSecretChanged: true, googleMobileClients: false, backupConfigured: false },
     }));
   });
 
