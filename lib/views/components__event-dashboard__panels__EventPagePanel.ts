@@ -8,7 +8,11 @@ export async function loadEventPagePanel({ ctx }: { ctx: EventDashboardContext; 
   ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
 
   const { event, permissions, organisation, now } = ctx;
-  const fields = await loadRegistrationFields(event.id);
+  const [fields, crewShown] = await Promise.all([
+    loadRegistrationFields(event.id),
+    // For the Crew section note only (docs/CREW.md): how many profiles the page would show.
+    permissions.canEditPageContent ? prisma.eventCrewMember.count({ where: { eventId: event.id, showOnPage: true } }) : Promise.resolve(0),
+  ]);
   const website = {
     page: event.page,
     highlights: event.highlights.map((x) => ({ id: x.id, title: x.title, description: x.description, visibility: x.visibility, values: { icon: x.icon, sortOrder: x.sortOrder } })),
@@ -35,8 +39,10 @@ export async function loadEventPagePanel({ ctx }: { ctx: EventDashboardContext; 
     sessionCount: counts.sessionCount,
     sessionLines,
     scheduleHref,
+    crewShown,
   };
 
   return { event, permissions, organisation, now, fields, website, dto, scheduleHref, counts, publishedSessions, sessionLines, preview };
 }
 import { loadEventDashboard } from "@/lib/eventDashboard/context";
+import { prisma } from "@/lib/db";

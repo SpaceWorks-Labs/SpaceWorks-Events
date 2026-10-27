@@ -82,6 +82,11 @@ const nextConfig: NextConfig = {
         source: "/submit/:token",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      // Crew sign-up links (docs/CREW.md) are bearer capabilities.
+      {
+        source: "/crew/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
       // Order links (docs/PAYMENTS.md), member ID verification, invitations,
       // password-reset and email-verification links carry a token in the URL too.
       {

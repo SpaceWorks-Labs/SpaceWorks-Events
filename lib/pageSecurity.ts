@@ -2,12 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Pages that must never be stored: those whose URL is itself the credential
- * (`/ticket/{token}`, `/team/{token}`, `/submit/{token}`, `/order/{token}`,
+ * (`/ticket/{token}`, `/team/{token}`, `/submit/{token}`, `/order/{token}`, `/crew/{token}`,
  * `/verify/{token}`, `/{org}/{event}/team/{joinToken}`, invitations, password
  * reset and email verification) and the signed-in areas.
  */
 export function isNoStorePage(pathname: string): boolean {
-  return /^\/(?:ticket|team|submit|order|verify)\/[^/]+\/?$/.test(pathname)
+  return /^\/(?:ticket|team|submit|order|verify|crew)\/[^/]+\/?$/.test(pathname)
     || /^\/[^/]+\/[^/]+\/team\/[^/]+\/?$/.test(pathname)
     || /^\/(?:dashboard|account|super-admin|join|login|reset-password|verify-email|verify-mfa)(?:\/|$)/.test(pathname);
 }
