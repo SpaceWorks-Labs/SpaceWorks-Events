@@ -10,10 +10,11 @@ import { EVENT_REMINDER_KIND } from "./payloads";
  * one click). They wait behind every other kind, so a large send never delays
  * a password reset, sign-in code, ticket, payment receipt or team email
  * queued after it. Event reminders (one per guest, queued by the beat) wait
- * too. Operator notices stay urgent: sign-in alerts and password notices use
+ * too, and so do attendance confirmation questions (one per guest, sent by
+ * an organiser to the whole event). Operator notices stay urgent: sign-in alerts and password notices use
  * that kind.
  */
-export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND, EVENT_REMINDER_KIND];
+export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND, EVENT_REMINDER_KIND, "attendance-check"];
 
 /** Due messages, oldest first: transactional kinds before bulk ones. */
 export async function dueOutboxMessages(take: number) {

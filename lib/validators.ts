@@ -98,3 +98,4 @@ export {
   judgeReviewSchema,
 } from "@/lib/validators/judging";
 export type { SubmissionContentInput, JudgingSettingsInput, JudgingCriterionInput, EventAwardInput, JudgeScoresInput, JudgeReviewInput } from "@/lib/validators/judging";
+export { attendanceCheckRefSchema, attendanceCheckSettingsSchema, attendanceLinkSchema, attendanceReplySchema } from "@/lib/validators/attendance";

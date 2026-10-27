@@ -139,6 +139,25 @@ try {
     ...["Asset_key_key", "RSVP_event_attendee_unique", "RSVP_instance_attendee_unique", "ApiClient_organisationId_status_idx", "ApiCredential_apiClientId_revokedAt_idx", "OrganisationPaymentSettings_webhookPathId_key", "ProcessedWebhookEvent_organisationId_provider_eventId_key", "Payment_one_pending_per_order", "PaymentCheckoutAttempt_provider_externalId_key", "PromoCode_eventId_codeDigest_key", "PromoCode_eventSeriesId_codeDigest_key", "CheckInList_eventId_active_name_key", "CheckInListRecord_listId_rsvpId_key", "Team_eventId_nameKey_key", "Team_joinToken_key", "Team_manageTokenHash_key", "TeamJoinRequest_one_pending_per_team_rsvp", "Submission_teamId_key", "Submission_rsvpId_key", "SubmissionLink_tokenHash_key", "JudgeScore_submissionId_judgeUserId_criterionId_key", "JudgeReview_submissionId_judgeUserId_key", "JudgeAssignment_judgeUserId_submissionId_key", "EventAwardWinner_awardId_place_key", "EventAwardWinner_awardId_submissionId_key", "SavedView_eventId_surface_idx", "RefundRequest_one_open_per_order", "ExpenseReceipt_storageKey_key", "RSVP_eventId_createdAt_id_idx", "RSVP_eventId_checkedInAt_id_idx", "Team_eventId_createdAt_id_idx", "Submission_eventId_createdAt_id_idx", "Submission_eventId_status_submittedAt_id_idx", "EventInvite_eventId_createdAt_id_idx"].filter((name) => !indexNames.has(name)),
     ...["audit_fallback_organisation", "audit_fallback_membership", "audit_fallback_event", "audit_fallback_eventseries", "audit_fallback_organisationinvite", "audit_fallback_eventinvite", "audit_fallback_seriesinvite", "audit_fallback_rsvp", "audit_fallback_eventcollaborator", "audit_fallback_eventcollaboratorinvite", "audit_fallback_apiclient", "audit_fallback_apiclientscope", "audit_fallback_apicredential", "payment_ledger_guard", "payment_refund_guard", "checkout_attempt_guard", "event_currency_lock", "payment_amendment_append_only", "rsvp_waitlist_dates", "ticket_type_target_fixed", "rsvp_ticket_type_target", "promo_code_ticket_type_target", "series_currency_lock"].filter((name) => !triggerNames.has(name)),
   ];
+  // Attendance confirmation (docs/ATTENDANCE.md, 20261111000000_attendance_confirmation).
+  const [attendanceTables, attendanceColumns, attendanceConstraints, attendanceIndexes] = await Promise.all([
+    prisma.$queryRaw`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AttendanceCheck'`,
+    prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Event' AND column_name = 'attendanceCheckReleaseOnDecline'`,
+    prisma.$queryRaw`
+      SELECT conname, confdeltype FROM pg_constraint
+      WHERE conname IN ('AttendanceCheck_token_hash_shape', 'AttendanceCheck_note_length', 'AttendanceCheck_response_pair', 'AttendanceCheck_release_outcome', 'AttendanceCheck_rsvpId_fkey', 'AttendanceCheck_eventId_fkey')
+    `,
+    prisma.$queryRaw`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname IN ('AttendanceCheck_rsvpId_key', 'AttendanceCheck_tokenHash_key', 'AttendanceCheck_eventId_response_idx')`,
+  ]);
+  const attendanceConstraintNames = new Set(attendanceConstraints.map((row) => row.conname));
+  const attendanceIndexNames = new Set(attendanceIndexes.map((row) => row.indexname));
+  missing.push(
+    ...(attendanceTables.length ? [] : ["AttendanceCheck"]),
+    ...(attendanceColumns.length ? [] : ["Event.attendanceCheckReleaseOnDecline"]),
+    ...["AttendanceCheck_token_hash_shape", "AttendanceCheck_note_length", "AttendanceCheck_response_pair", "AttendanceCheck_release_outcome", "AttendanceCheck_rsvpId_fkey", "AttendanceCheck_eventId_fkey"].filter((name) => !attendanceConstraintNames.has(name)),
+    ...["AttendanceCheck_rsvpId_fkey", "AttendanceCheck_eventId_fkey"].filter((name) => !attendanceConstraints.some((row) => row.conname === name && row.confdeltype === "c")).map((name) => `${name}:ON DELETE CASCADE`),
+    ...["AttendanceCheck_rsvpId_key", "AttendanceCheck_tokenHash_key", "AttendanceCheck_eventId_response_idx"].filter((name) => !attendanceIndexNames.has(name)),
+  );
   if (missing.length > 0) {
     throw new Error(`Database schema contract failed; missing: ${missing.join(", ")}`);
   }

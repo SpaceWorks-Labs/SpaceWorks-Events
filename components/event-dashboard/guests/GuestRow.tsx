@@ -1,12 +1,14 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ArrowRightLeft, Check, ChevronDown, Copy, CreditCard, MoreHorizontal, Pencil, RotateCcw, Trash2, Users, UserX } from "lucide-react";
+import { ArrowRightLeft, CalendarCheck, Check, ChevronDown, Copy, CreditCard, MoreHorizontal, Pencil, RotateCcw, Trash2, Users, UserX } from "lucide-react";
 import { Button, IconButton } from "@/components/ui/button";
 import { Avatar, Chip, type ChipTone } from "@/components/ui/display";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import type { AttendeeRow } from "@/components/attendees/types";
 import { orderPaymentChip } from "@/components/attendees/PaymentDialog";
+import { AttendanceChip } from "@/components/attendance/AttendanceChip";
+import { ATTENDANCE_RELEASE_OUTCOME_LABELS } from "@/lib/attendanceCheck";
 import { cn } from "@/lib/cn";
 import { formatTime } from "@/lib/format/datetime";
 import { GUEST_STATUS_LABELS, describeCheckIn, describeGuestWhen, guestDisplayName, guestEmail, isManagedByTeam } from "./guestList";
@@ -34,6 +36,8 @@ export type GuestRowActions = {
   /** Reverses a decline: confirmed, waitlisted, or (paid) sent a payment link. */
   reaccept: (guest: AttendeeRow) => void;
   copyTicket: (guest: AttendeeRow) => void;
+  /** One-off events, for people who may email guests, before the start: share this guest's attendance link by hand. */
+  shareAttendanceLink?: (guest: AttendeeRow) => void;
   edit: (guest: AttendeeRow) => void;
   /** Omitted where no undo-check-in action exists for the target (series dates). */
   undoCheckIn?: (guest: AttendeeRow) => void;
@@ -57,6 +61,7 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
   // Team members are approved, declined and promoted only with their whole team.
   const teamManaged = isManagedByTeam(guest);
   const payment = orderPaymentChip(guest.order);
+  const attendance = guest.attendance;
 
   return (
     <li className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-xl border border-line bg-panel px-4 py-3">
@@ -70,6 +75,7 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
         <Chip size="sm" tone={CHIP_TONES[guest.status]}>{GUEST_STATUS_LABELS[guest.status]}</Chip>
+        <AttendanceChip state={attendance?.state} outcome={attendance?.outcome} />
         {guest.team ? (
           <Chip size="sm" tone="neutral" icon={<Users />} className="max-w-[200px]">
             <span className="sr-only">Team: </span>
@@ -134,6 +140,11 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             <MenuItem icon={<Copy />} onSelect={() => actions.copyTicket(guest)}>
               Copy ticket link
             </MenuItem>
+            {actions.shareAttendanceLink && guest.status === "CONFIRMED" ? (
+              <MenuItem icon={<CalendarCheck />} onSelect={() => actions.shareAttendanceLink?.(guest)}>
+                Share attendance link
+              </MenuItem>
+            ) : null}
             {payment && actions.payment ? (
               <MenuItem icon={<CreditCard />} onSelect={() => actions.payment?.(guest)}>
                 Payment
@@ -174,6 +185,14 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             </li>
           ))}
         </ul>
+      ) : null}
+      {attendance?.note || (attendance?.state === "notComing" && attendance.outcome) ? (
+        <div className="basis-full text-caption text-ink-secondary">
+          {attendance.note ? (
+            <p className="whitespace-pre-wrap break-words"><span className="font-semibold text-ink">Attendance note: </span>{attendance.note}</p>
+          ) : null}
+          {attendance.state === "notComing" && attendance.outcome ? <p>{ATTENDANCE_RELEASE_OUTCOME_LABELS[attendance.outcome]}</p> : null}
+        </div>
       ) : null}
       {answers.length > 0 ? (
         <div id={answersId} hidden={!answersOpen} className="basis-full">

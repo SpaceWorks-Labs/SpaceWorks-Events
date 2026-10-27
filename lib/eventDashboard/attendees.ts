@@ -16,6 +16,8 @@ import {
   type AttendeeStatusFilter,
 } from "@/lib/attendeeListQuery";
 import { encodeTimeCursor } from "@/lib/keysetCursor";
+import { ATTENDEE_ATTENDANCE_FILTERS, attendanceBadgeState, attendeeAttendanceWhere, type AttendeeAttendanceFilter } from "@/lib/attendeeAttendance";
+import { asReleaseOutcome } from "@/lib/attendanceCheck";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { attendeeOrder, attendeeOrderSelect } from "@/lib/eventDashboard/data";
 
@@ -35,12 +37,14 @@ const attendeeInclude = {
   ticketType: { select: { name: true } },
   order: { select: attendeeOrderSelect },
   checkInListRecords: { select: { checkedInAt: true, list: { select: { name: true, archived: true } } }, orderBy: { list: { sortOrder: "asc" } } },
+  // Attendance confirmation reply only; the check's token hash is never read.
+  attendanceCheck: { select: { response: true, respondedAt: true, note: true, releaseOutcome: true } },
 } satisfies Prisma.RSVPInclude;
 
 type AttendeeRecord = Prisma.RSVPGetPayload<{ include: typeof attendeeInclude }>;
 
 /** One registration as GuestRow and EditRsvpDialog receive it. */
-export function toAttendeeRow(rsvp: AttendeeRecord, origin: string) {
+export function toAttendeeRow(rsvp: AttendeeRecord, origin: string, options: { attendanceAsked?: boolean } = {}) {
   return {
     id: rsvp.id,
     status: rsvp.status,
@@ -57,6 +61,14 @@ export function toAttendeeRow(rsvp: AttendeeRecord, origin: string) {
     ticketUrl: `${origin}/ticket/${rsvp.checkInToken}`,
     // TEAM events: the team this registration belongs to (null when solo).
     team: rsvp.team ? { id: rsvp.team.id, name: rsvp.team.name, isLeader: rsvp.team.leaderRsvpId === rsvp.id } : null,
+    // Attendance confirmation badge (null: nothing to show), the guest's note,
+    // and what happened to a "No" that kept a paid place.
+    attendance: {
+      state: attendanceBadgeState(rsvp, { showNotAsked: options.attendanceAsked ?? false }),
+      note: rsvp.attendanceCheck?.note || null,
+      respondedAt: rsvp.attendanceCheck?.respondedAt?.toISOString() ?? null,
+      outcome: asReleaseOutcome(rsvp.attendanceCheck?.releaseOutcome),
+    },
     ticketName: rsvp.ticketType?.name ?? null,
     order: rsvp.order && rsvp.order.totalMinor > BigInt(0) ? attendeeOrder(rsvp.order) : null,
     rawAnswers: rsvp.answers.map((answer) => ({
@@ -85,6 +97,7 @@ export function toAttendeeRow(rsvp: AttendeeRecord, origin: string) {
 
 export type AttendeeRowDto = ReturnType<typeof toAttendeeRow>;
 export type AttendeeFilterCounts = Record<AttendeeStatusFilter, number>;
+export type AttendeeAttendanceCounts = Record<AttendeeAttendanceFilter, number>;
 
 export type AttendeesPage = {
   rows: AttendeeRowDto[];
@@ -95,9 +108,16 @@ export type AttendeesPage = {
   total: number | null;
   /** Registrations matching the current search, dropdowns and status chip (first page only). */
   matching: number | null;
+  /**
+   * Attendance reply counts under the current search, dropdowns and status
+   * chip, but not the attendance dropdown itself (first page of a one-off
+   * event only; null otherwise). Null too until someone at the event has
+   * been asked, so the filter stays hidden.
+   */
+  attendanceCounts: AttendeeAttendanceCounts | null;
 };
 
-const EMPTY_PAGE: AttendeesPage = { rows: [], nextCursor: null, counts: null, total: null, matching: null };
+const EMPTY_PAGE: AttendeesPage = { rows: [], nextCursor: null, counts: null, total: null, matching: null, attendanceCounts: null };
 
 /** The chip counts: one grouped count by status plus the checked-in counts, under the given condition. */
 export async function countAttendeeFilters(base: Prisma.RSVPWhereInput): Promise<AttendeeFilterCounts> {
@@ -118,6 +138,21 @@ export async function countAttendeeFilters(base: Prisma.RSVPWhereInput): Promise
   return counts;
 }
 
+/** Attendance reply counts: one count per filter under the same condition. */
+export async function countAttendanceFilters(base: Prisma.RSVPWhereInput): Promise<AttendeeAttendanceCounts> {
+  const entries = await Promise.all(
+    ATTENDEE_ATTENDANCE_FILTERS.map(async (filter) => [filter, await prisma.rSVP.count({ where: { AND: [base, attendeeAttendanceWhere(filter)] } })] as const),
+  );
+  return Object.fromEntries(entries) as AttendeeAttendanceCounts;
+}
+
+/** Whether anyone registered for this one-off event has been asked to confirm attendance. */
+async function attendanceAskedFor(scope: AttendeeScope): Promise<boolean> {
+  if (scope.kind !== "event") return false;
+  const any = await prisma.attendanceCheck.findFirst({ where: { eventId: scope.eventId, event: { organisationId: scope.organisationId } }, select: { id: true } });
+  return any != null;
+}
+
 /**
  * One page of the People list for a validated view. The first page (no
  * cursor) also carries the chip counts (always the whole event or date, so
@@ -134,7 +169,10 @@ export async function listAttendeesPage(scope: AttendeeScope, input: unknown, op
   const base = attendeeBaseWhere(scope, view, { teamMode: options.teamMode });
   const firstPage = !view.cursor;
   const viewWhere = { AND: [base, attendeeStatusWhere(view.status)] };
-  const [records, counts, matching] = await Promise.all([
+  const attendanceAsked = await attendanceAskedFor(scope);
+  // The attendance counts describe every other filter (status chip included) but not their own dropdown.
+  const attendanceBase = { AND: [attendeeBaseWhere(scope, { ...view, attendance: "all" }, { teamMode: options.teamMode }), attendeeStatusWhere(view.status)] };
+  const [records, counts, matching, attendanceCounts] = await Promise.all([
     prisma.rSVP.findMany({
       where: { AND: [viewWhere, after] },
       include: attendeeInclude,
@@ -143,15 +181,17 @@ export async function listAttendeesPage(scope: AttendeeScope, input: unknown, op
     }),
     firstPage ? countAttendeeFilters(attendeeScopeWhere(scope)) : Promise.resolve(null),
     firstPage ? prisma.rSVP.count({ where: viewWhere }) : Promise.resolve(null),
+    firstPage && attendanceAsked ? countAttendanceFilters(attendanceBase) : Promise.resolve(null),
   ]);
   const page = records.slice(0, ATTENDEES_PAGE_SIZE);
   const last = page[page.length - 1];
   return {
-    rows: page.map((record) => toAttendeeRow(record, options.origin)),
+    rows: page.map((record) => toAttendeeRow(record, options.origin, { attendanceAsked })),
     nextCursor: records.length > ATTENDEES_PAGE_SIZE && last ? encodeTimeCursor({ at: last.createdAt, id: last.id }) : null,
     counts,
     total: counts?.all ?? null,
     matching,
+    attendanceCounts,
   };
 }
 

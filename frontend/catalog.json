@@ -46,6 +46,11 @@
       "id": "app__account__teams__teamId__page:loadAccountTeamView"
     },
     {
+      "module": "lib/views/app__attend__token__page",
+      "name": "loadAttendView",
+      "id": "app__attend__token__page:loadAttendView"
+    },
+    {
       "module": "lib/views/app__auth__login__page",
       "name": "loadLoginView",
       "id": "app__auth__login__page:loadLoginView"
@@ -601,6 +606,36 @@
       "module": "app/actions/api-clients",
       "name": "setApiClientStatus",
       "id": "api-clients:setApiClientStatus"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "previewAttendanceCheckSend",
+      "id": "attendance-check:previewAttendanceCheckSend"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "sendAttendanceChecks",
+      "id": "attendance-check:sendAttendanceChecks"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "remindAttendanceChecks",
+      "id": "attendance-check:remindAttendanceChecks"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "setAttendanceReleaseOnDecline",
+      "id": "attendance-check:setAttendanceReleaseOnDecline"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "issueAttendanceLink",
+      "id": "attendance-check:issueAttendanceLink"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "submitAttendanceReply",
+      "id": "attendance-check:submitAttendanceReply"
     },
     {
       "module": "app/actions/auth",

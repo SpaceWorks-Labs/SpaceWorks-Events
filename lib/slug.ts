@@ -19,6 +19,7 @@ export const RESERVED_ORGANISATION_SLUGS: ReadonlySet<string> = new Set([
   "account",
   "api",
   "assets",
+  "attend",
   "dashboard",
   "discover",
   "embed",

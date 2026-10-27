@@ -8,6 +8,7 @@ import { Chip } from "@/components/ui/display";
 import { Input } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
 import { CheckInDetailsList, CheckInTimestamp, StatusChip } from "./parts";
+import { AttendanceChip } from "@/components/attendance/AttendanceChip";
 import type { LastResult } from "./types";
 
 /** The big confirmation card for the last guest checked in at this desk. */
@@ -121,6 +122,7 @@ export function AttendeeSearch({
               {row.teamName ? <p className="truncate text-sm text-ink-secondary"><span className="sr-only">Team: </span>{row.teamName}</p> : null}
               <div className="mt-1 flex flex-wrap gap-1">
                 <StatusChip status={row.status} />
+                <AttendanceChip state={row.attendance} />
                 {row.checkedInAt ? <Chip size="sm" tone="success" icon={<Check />}>Checked in</Chip> : null}
               </div>
             </div>

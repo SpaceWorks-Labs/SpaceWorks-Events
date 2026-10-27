@@ -13,6 +13,8 @@ export type EventClientDto = Omit<Event,
   | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
+  // Attendance confirmation has its own status DTO (lib/eventDashboard/attendanceCheckCard.ts).
+  | "attendanceCheckReleaseOnDecline"
 >;
 
 export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {

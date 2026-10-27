@@ -177,6 +177,12 @@ enum ScoreNormalization {
   ZSCORE
 }
 
+/// A guest's reply to the organiser's "Are you still coming?" email (docs/ATTENDANCE.md).
+enum AttendanceResponse {
+  ATTENDING
+  NOT_ATTENDING
+}
+
 /// Which paged event-dashboard list a saved view filters (Saved views in
 /// docs/FEATURES.md). Each surface has its own allow-list in lib/savedViews.ts.
 enum SavedViewSurface {
@@ -697,6 +703,7 @@ model Event {
   promoCodes       PromoCode[]
   checkInLists     CheckInList[]
   savedViews       SavedView[]
+  attendanceChecks AttendanceCheck[]
 
   /// TEAM turns on team registration (one-off events only; series stay
   /// individual). Cannot change while the event has registrations.
@@ -739,6 +746,10 @@ model Event {
   /// `submission-received` receipt. Registration and payment emails are never gated.
   emailEntrantsOnResults              Boolean          @default(false)
   emailSubmissionReceipts             Boolean          @default(false)
+  /// Attendance confirmation (docs/ATTENDANCE.md): when a confirmed guest
+  /// answers "No", release their place (free: cancelled; paid: under the
+  /// buyer refund policy, or a refund request). Sending is always manual.
+  attendanceCheckReleaseOnDecline     Boolean          @default(false)
   /// Fee to submit a project, in minor units of the event's currency; null
   /// is free. Paid once per entrant through the normal checkout (Order.submissionId).
   submissionFeeMinor                  BigInt?
@@ -1524,6 +1535,7 @@ model RSVP {
   submission        Submission?
   submissionLink    SubmissionLink?
   expenseClaims     ExpenseClaim[]
+  attendanceCheck   AttendanceCheck?
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
   @@index([userId, createdAt])
@@ -2281,6 +2293,37 @@ model SubmissionLink {
   createdAt DateTime @default(now())
 
   rsvp RSVP @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+}
+
+/// "Are you still coming?" for one CONFIRMED registration of a one-off event
+/// (docs/ATTENDANCE.md). Created only by an organiser's send, reminder or
+/// shared link; nothing is sent automatically. The raw `/attend/{token}`
+/// token is emailed or shown once; only its SHA-256 digest is stored, and a
+/// reminder or a new shared link rotates it. CHECK constraints keep the digest
+/// shape, the note length, the response/respondedAt pair and releaseOutcome.
+model AttendanceCheck {
+  id             String              @id @default(cuid())
+  rsvpId         String              @unique
+  eventId        String
+  /// Hex SHA-256 of the raw token (64 characters).
+  tokenHash      String              @unique
+  /// When the question (or the latest reminder or shared link) was issued.
+  sentAt         DateTime
+  response       AttendanceResponse?
+  respondedAt    DateTime?
+  /// Optional note from the guest, at most 500 characters.
+  note           String?
+  /// A "No" whose place was not released automatically: "multiTicket" or
+  /// "notBuyer" (a paid order; organisers were told), "refundRequested"
+  /// (refund window closed; a refund request was opened) or "failed".
+  releaseOutcome String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  rsvp  RSVP  @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, response])
 }
 
 /// One rubric line. Frozen once judging leaves NOT_STARTED. CHECK

@@ -17,6 +17,7 @@ import { undoCheckIn } from "@/app/actions/checkin";
 import { GuestRow, type GuestRowActions } from "@/components/event-dashboard/guests/GuestRow";
 import { useEventTabs } from "@/components/event-dashboard/EventDashboardTabs";
 import { MoveToTeamDialog } from "@/components/event-dashboard/guests/MoveToTeamDialog";
+import { AttendanceLinkDialog } from "@/components/event-dashboard/guests/AttendanceLinkDialog";
 import {
   guestDisplayName,
   type GuestKindFilter,
@@ -25,7 +26,7 @@ import {
 } from "@/components/event-dashboard/guests/guestList";
 import { useDebouncedValue, useServerPages, type ServerPageResult } from "@/components/event-dashboard/guests/useServerPages";
 import { loadAttendeesPage } from "@/app/actions/guest-list";
-import { attendeeViewSearchParams } from "@/lib/attendeeListQuery";
+import { attendeeViewSearchParams, type AttendeeAttendanceFilter } from "@/lib/attendeeListQuery";
 import { showingLabel } from "@/lib/keysetCursor";
 import type { AttendeesPage } from "@/lib/eventDashboard/attendees";
 import { viewParam, type SavedViewDto, type ViewParams } from "@/lib/savedViews";
@@ -46,6 +47,7 @@ export function GuestsPeople({
   teamMode = false,
   ticketTypes = [],
   canUndoCheckIn = true,
+  canShareAttendanceLink = false,
   savedViews,
 }: {
   organisationSlug: string;
@@ -63,6 +65,8 @@ export function GuestsPeople({
   ticketTypes?: Array<{ id: string; name: string; priceMinor: number; currency: string; }>;
   /** Undo check-in is a CHECK_IN operation, separate from managing registrations. */
   canUndoCheckIn?: boolean;
+  /** Owners and admins of a one-off event that has not started: "Share attendance link" (re-checked on the server). */
+  canShareAttendanceLink?: boolean;
   /** Saved views for this list (event dashboard only); omitted on a series date. */
   savedViews?: SavedViewDto[];
 }) {
@@ -74,6 +78,7 @@ export function GuestsPeople({
   const [status, setStatus] = useState<GuestStatusFilter>(viewParam(fromUrl, "status") as GuestStatusFilter);
   const [kind, setKind] = useState<GuestKindFilter>(viewParam(fromUrl, "kind") as GuestKindFilter);
   const [team, setTeam] = useState<GuestTeamFilter>(viewParam(fromUrl, "team") as GuestTeamFilter);
+  const [attendance, setAttendance] = useState<AttendeeAttendanceFilter>(viewParam(fromUrl, "attendance") as AttendeeAttendanceFilter);
   const { openTab } = useEventTabs();
   const [query, setQuery] = useState(viewParam(fromUrl, "q"));
   const [pending, startTransition] = useTransition();
@@ -83,6 +88,7 @@ export function GuestsPeople({
   const [removeGuest, setRemoveGuest] = useState<AttendeeRow | null>(null);
   const [undoGuest, setUndoGuest] = useState<AttendeeRow | null>(null);
   const [moveGuest, setMoveGuest] = useState<AttendeeRow | null>(null);
+  const [linkGuest, setLinkGuest] = useState<AttendeeRow | null>(null);
 
   const eventId = target.kind === "event" ? target.eventId : undefined;
   const scope = target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId };
@@ -93,21 +99,25 @@ export function GuestsPeople({
     if (status !== "all") params.status = status;
     if (kind !== "all") params.kind = kind;
     if (teamMode && team !== "all") params.team = team;
+    if (target.kind === "event" && attendance !== "all") params.attendance = attendance;
     if (searchedQuery) params.q = searchedQuery;
     return params;
-  }, [status, kind, team, teamMode, searchedQuery]);
+  }, [status, kind, team, teamMode, attendance, target.kind, searchedQuery]);
   useSyncViewToUrl("GUESTS_PEOPLE", viewParams);
   const applyView = useCallback((params: ViewParams) => {
     setStatus(viewParam(params, "status") as GuestStatusFilter);
     setKind(viewParam(params, "kind") as GuestKindFilter);
     setTeam(viewParam(params, "team") as GuestTeamFilter);
+    setAttendance(viewParam(params, "attendance") as AttendeeAttendanceFilter);
     setQuery(viewParam(params, "q"));
   }, []);
-  const view: View = useMemo(() => ({ status, kind, team: teamMode ? team : "all", query: searchedQuery }), [status, kind, team, teamMode, searchedQuery]);
+  // Series dates are never asked to confirm attendance, so the filter applies to one-off events only.
+  const attendanceFilter: AttendeeAttendanceFilter = target.kind === "event" ? attendance : "all";
+  const view: View = useMemo(() => ({ status, kind, team: teamMode ? team : "all", attendance: attendanceFilter, query: searchedQuery }), [status, kind, team, teamMode, attendanceFilter, searchedQuery]);
   const viewKey = JSON.stringify(view);
-  const isDefaultView = view.status === "all" && view.kind === "all" && view.team === "all" && !view.query;
+  const isDefaultView = view.status === "all" && view.kind === "all" && view.team === "all" && view.attendance === "all" && !view.query;
   const initial = useMemo(
-    () => ({ rows: initialPage.rows as AttendeeRow[], nextCursor: initialPage.nextCursor, meta: { counts: initialPage.counts ?? NO_COUNTS, total: initialPage.total ?? 0, matching: initialPage.matching ?? 0 } as Meta }),
+    () => ({ rows: initialPage.rows as AttendeeRow[], nextCursor: initialPage.nextCursor, meta: { counts: initialPage.counts ?? NO_COUNTS, total: initialPage.total ?? 0, matching: initialPage.matching ?? 0, attendanceCounts: initialPage.attendanceCounts ?? null } as Meta }),
     [initialPage],
   );
   const scopeIds = useMemo(() => (target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId }), [target]);
@@ -115,14 +125,16 @@ export function GuestsPeople({
     async (current: View, cursor: string | null): Promise<ServerPageResult<AttendeeRow, Meta>> => {
       const res = await loadAttendeesPage({ organisationSlug, ...scopeIds, ...current, cursor });
       if (!res.ok || !res.data) return { ok: false, error: res.ok ? "Could not load guests." : res.error };
-      const { rows, nextCursor, counts, total, matching } = res.data;
-      return { ok: true, page: { rows, nextCursor, meta: counts && total != null && matching != null ? { counts, total, matching } : null } };
+      const { rows, nextCursor, counts, total, matching, attendanceCounts } = res.data;
+      return { ok: true, page: { rows, nextCursor, meta: counts && total != null && matching != null ? { counts, total, matching, attendanceCounts } : null } };
     },
     [organisationSlug, scopeIds],
   );
   const list = useServerPages<AttendeeRow, View, Meta>({ initial, view, viewKey, isDefaultView, delayMs: 0, fetchPage, keyOf: (row) => row.id });
   // The chips count the whole event; the list, its label and the exports follow the search and dropdowns.
-  const { counts, total, matching } = list.meta;
+  const { counts, total, matching, attendanceCounts } = list.meta;
+  // Shown once someone has been asked (the server sends counts only then), or while a linked view selects it.
+  const showAttendanceFilter = target.kind === "event" && (attendanceCounts != null || attendance !== "all");
   const shownTotal = matching;
   // Both exports carry the list's current filters and search, so they hold
   // every matching registration, not only the rows loaded here.
@@ -161,6 +173,7 @@ export function GuestsPeople({
         showToast("Could not copy", "error");
       }
     },
+    shareAttendanceLink: eventId && canShareAttendanceLink ? (guest) => setLinkGuest(guest) : undefined,
     edit: (guest) => setEditGuest(guest),
     undoCheckIn: eventId && canUndoCheckIn ? (guest) => setUndoGuest(guest) : undefined,
     remove: (guest) => setRemoveGuest(guest),
@@ -208,6 +221,9 @@ export function GuestsPeople({
             setTeam={setTeam}
             query={query}
             setQuery={setQuery}
+            attendance={showAttendanceFilter ? attendance : null}
+            setAttendance={setAttendance}
+            attendanceCounts={attendanceCounts}
           />
 
           {list.error ? <Callout tone="danger" role="alert">{list.error}</Callout> : null}
@@ -260,6 +276,16 @@ export function GuestsPeople({
           person={{ rsvpId: moveGuest.id, name: guestDisplayName(moveGuest), teamId: moveGuest.team?.id ?? null }}
           onClose={() => setMoveGuest(null)}
           onMoved={() => router.refresh()}
+        />
+      ) : null}
+
+      {linkGuest && eventId ? (
+        <AttendanceLinkDialog
+          organisationSlug={organisationSlug}
+          eventId={eventId}
+          guest={{ rsvpId: linkGuest.id, name: guestDisplayName(linkGuest), state: linkGuest.attendance?.state ?? null }}
+          // A created link turns the badge into "No reply" (or keeps their answer).
+          onClose={(created) => { setLinkGuest(null); if (created) router.refresh(); }}
         />
       ) : null}
 
