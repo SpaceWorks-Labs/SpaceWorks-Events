@@ -65,16 +65,21 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
     where: { id: data.eventId, organisationId: org.id },
   });
   if (!event) return { ok: false, error: "Event not found." };
-  const startMinute = (date: Date) => Math.floor(date.getTime() / 60_000);
-  if (
-    startMinute(data.startDateTime) !== startMinute(event.startDateTime) &&
-    data.startDateTime < new Date()
-  ) {
+  // The form submits whole minutes. An unchanged time keeps the stored value
+  // (seconds included), so it never counts as a change; a moved start must
+  // not be in the past.
+  const minute = (date: Date) => Math.floor(date.getTime() / 60_000);
+  const startDateTime = minute(data.startDateTime) === minute(event.startDateTime) ? event.startDateTime : data.startDateTime;
+  const endDateTime = minute(data.endDateTime) === minute(event.endDateTime) ? event.endDateTime : data.endDateTime;
+  if (startDateTime !== event.startDateTime && startDateTime < new Date()) {
     return {
       ok: false,
       error: "Start time must be now or in the future.",
       fieldErrors: { startDateTime: ["Start time must be now or in the future"] },
     };
+  }
+  if (endDateTime <= startDateTime) {
+    return { ok: false, error: "End must be after start.", fieldErrors: { endDateTime: ["End must be after start"] } };
   }
   const aboutHtml =
     data.pageAboutHtml !== undefined
@@ -138,8 +143,8 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
           tags: data.tags ?? [],
           showRegistrationCount: data.showRegistrationCount ?? true,
           coverImageUrl: data.coverImageUrl || null,
-          startDateTime: data.startDateTime,
-          endDateTime: data.endDateTime,
+          startDateTime,
+          endDateTime,
           timezone: data.timezone,
           location: data.location ?? "",
           mapLinkUrl: data.mapLinkUrl || null,
@@ -158,7 +163,7 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
         await notifyEventCancelled(tx, { organisationId: org.id, eventId: event.id, title: data.title });
       } else if (data.status === EventStatus.PUBLISHED && event.status === EventStatus.PUBLISHED && event.endDateTime > new Date()) {
         // Guests hear when the time or place changes, not about wording edits.
-        const moved = data.startDateTime.getTime() !== event.startDateTime.getTime() || data.endDateTime.getTime() !== event.endDateTime.getTime() || data.timezone !== event.timezone;
+        const moved = startDateTime.getTime() !== event.startDateTime.getTime() || endDateTime.getTime() !== event.endDateTime.getTime() || data.timezone !== event.timezone;
         const relocated = (data.location ?? "") !== event.location || (data.isOnline ?? false) !== event.isOnline;
         if (moved || relocated) {
           await noticeEach(tx, await peopleWithPlaces(tx, { eventId: event.id }), {
@@ -166,7 +171,7 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
             subject: noticeSubject("Updated", data.title),
             lines: [
               `The organiser changed ${moved && relocated ? "the time and place" : moved ? "the time" : "the place"} of ${data.title}.`,
-              `When: ${whenLabel(data.startDateTime, data.timezone)}`,
+              `When: ${whenLabel(startDateTime, data.timezone)}`,
               `Where: ${data.isOnline ? "Online" : (data.location?.trim() || "to be announced")}`,
               `Your registration still stands. Event page: ${getBroadcastBaseUrl()}/${org.slug}/${event.slug}`,
             ],
