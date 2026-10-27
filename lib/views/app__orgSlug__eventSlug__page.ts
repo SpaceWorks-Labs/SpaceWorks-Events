@@ -1,3 +1,4 @@
+import { loadPublicMentors } from "@/lib/core/mentorDesk/readsParticipant";
 import { eventForView } from "@/lib/frontend/eventView";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -156,5 +157,7 @@ export async function loadEventView({ params }: Props) {
     resultsHref: event.submissionsEnabled && event.resultsPublishedAt ? resultsPath(org.slug, event.slug) : null,
     projectsHref: isProjectGalleryVisible(event) ? projectGalleryPath(org.slug, event.slug) : null,
   };
-  return { judging, org, preview, event: eventForView(event), page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing };
+  // Mentors who chose to appear on the event page (docs/MENTOR_DESK.md): name, bio and skills only.
+  const mentors = event.mentorDeskEnabled ? await loadPublicMentors(event.id) : [];
+  return { judging, mentors, org, preview, event: eventForView(event), page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing };
 }

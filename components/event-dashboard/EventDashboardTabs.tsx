@@ -20,6 +20,7 @@ export const EVENT_TABS = [
   { value: "emails", label: "Emails" },
   { value: "check-in", label: "Check-in" },
   { value: "judging", label: "Judging" },
+  { value: "mentors", label: "Mentors" },
   { value: "feedback", label: "Feedback" },
   { value: "analytics", label: "Analytics" },
   { value: "finance", label: "Finance" },

@@ -16,11 +16,16 @@ vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/permissions", () => ({ getMembership: mocks.membership, isOrgAdmin: (role: string) => role === "OWNER" || role === "ADMIN" }));
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
 vi.mock("@/lib/actionRateLimit", () => ({ isActionRateLimited: mocks.rateLimited }));
-vi.mock("@/lib/db", () => ({ prisma: {
-  organisation: { findUnique: mocks.orgFind },
-  eventCollaborator: { deleteMany: mocks.deleteMany, updateMany: mocks.updateMany },
-  eventCollaboratorInvite: { deleteMany: mocks.inviteDeleteMany },
-} }));
+vi.mock("@/lib/db", () => {
+  const prisma = {
+    organisation: { findUnique: mocks.orgFind },
+    // The grant before the change (docs/MENTOR_DESK.md: a removed MENTOR grant ends its assignments).
+    eventCollaborator: { deleteMany: mocks.deleteMany, updateMany: mocks.updateMany, findFirst: async () => null },
+    eventCollaboratorInvite: { deleteMany: mocks.inviteDeleteMany },
+    $transaction: async (run: (tx: unknown) => unknown) => run(prisma),
+  };
+  return { prisma };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { cancelEventCollaboratorInvite, revokeEventCollaborator, updateEventCollaboratorPermissions } from "@/app/actions/event-collaborators";

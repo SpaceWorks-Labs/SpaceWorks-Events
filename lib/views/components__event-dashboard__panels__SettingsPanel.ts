@@ -35,7 +35,9 @@ export async function loadSettingsPanel({ ctx, judgingInUse = false }: { ctx: Ev
     : null;
   // Ticket design: the same people as ticket prices (EDIT_DETAILS), on every event.
   const ticketDesign = tickets ? { ...(await loadEventTicketDesigns(event.id, organisation.id)), starters: STARTER_DESIGNS.map((starter) => ({ key: starter.key, label: starter.label })) } : null;
-  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign };
+  // Mentor Desk switch (docs/MENTOR_DESK.md): owners and admins, on one-off events.
+  const mentorDesk = permissions.canManageMentorDesk ? { enabled: event.mentorDeskEnabled, helpClaimedEmail: event.mentorHelpClaimedEmail } : null;
+  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign, mentorDesk };
 }
 
 import { loadEventDashboard } from "@/lib/eventDashboard/context";
