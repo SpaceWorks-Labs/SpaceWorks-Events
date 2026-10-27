@@ -55,7 +55,8 @@ export const eventSelect = {
 
 export type EventForRow = Prisma.EventGetPayload<{ select: typeof eventSelect }>;
 
-export type RsvpCounts = { event: Map<string, CountTriple>; instance: Map<string, CountTriple>; units: Map<string, number> };
+/** `units` is what fills capacity (attendees, or team units); `crew` counts crew tickets (docs/CREW.md), which never fill it. */
+export type RsvpCounts = { event: Map<string, CountTriple>; instance: Map<string, CountTriple>; units: Map<string, number>; crew: Map<string, number> };
 type CountTriple = { confirmed: number; waitlisted: number; pending: number };
 const EMPTY_COUNTS: CountTriple = { confirmed: 0, waitlisted: 0, pending: 0 };
 
@@ -79,7 +80,7 @@ export async function loadRsvpCounts(eventIds: string[], instanceIds: string[]):
   const teams = new Map(teamGroups.map((group) => [group.eventId, group._count._all]));
   const crew = new Map(crewGroups.map((group) => [group.eventId as string, group._count._all]));
   const units = new Map(uniqueEvents.map((id) => [id, (event.get(id)?.confirmed ?? 0) - (crew.get(id) ?? 0) - (teamed.get(id) ?? 0) + (teams.get(id) ?? 0)]));
-  return { event, instance: tally(instanceGroups, "eventInstanceId"), units };
+  return { event, instance: tally(instanceGroups, "eventInstanceId"), units, crew };
 }
 
 /** What fills `capacity`: units on a TEAM event, attendees (never crew) otherwise. */

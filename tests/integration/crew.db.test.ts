@@ -11,7 +11,8 @@ import { countConfirmedForEvent } from "@/lib/rsvpCapacity";
 import { flushWebhookEmits } from "@/lib/webhooks/emit";
 import { addCrewMemberAsOrganiser, listCrewForOrganiser, listPublicCrew, moveCrewMember, removeCrewMember, updateCrewMemberAsOrganiser } from "@/lib/core/crew";
 import { loadRsvpStatusCounts } from "@/lib/eventDashboard/data";
-import { loadRsvpCounts } from "@/lib/dashboardHome/rows";
+import { eventSelect, loadRsvpCounts } from "@/lib/dashboardHome/rows";
+import { loadNextUp } from "@/lib/dashboardHome/eventCards";
 import { addCrew, capacityCount, createCrewEvent, crew, crewEmail, ctxFor, register, setUpCrewOrgs, tearDownCrewOrgs } from "./helpers/crew";
 
 /* Event crew (docs/CREW.md): crew tickets, capacity, conversion and the crew row itself. */
@@ -59,6 +60,10 @@ describe.sequential("event crew", () => {
     const home = await loadRsvpCounts([event.id], []);
     expect(home.units.get(event.id)).toBe(1);
     expect(home.event.get(event.id)?.confirmed).toBe(2);
+    expect(home.crew.get(event.id)).toBe(1);
+    // The dashboard home "Next up" card fills its meter with attendees only.
+    const row = await prisma.event.findUniqueOrThrow({ where: { id: event.id }, select: eventSelect });
+    await expect(loadNextUp(row, home, true, new Date())).resolves.toMatchObject({ confirmed: 2, placesUsed: 1, crew: 1, capacity: 5, capacityUnits: null });
   });
 
   it("does not count crew as units on a TEAM event", async () => {
