@@ -98,7 +98,10 @@ export function PublishCard({
           run(
             "publish",
             () => publishJudgingResults(scope),
-            emailEntrantsOnResults && announcementRecipients > 0 ? "Results published. Entrants are being emailed." : "Results published.",
+            (data) => {
+              const outcome = data as { emailed?: boolean; queued?: number } | undefined;
+              return outcome?.emailed && (outcome.queued ?? 0) > 0 ? "Results published. Entrants are being emailed." : "Results published.";
+            },
             () => setConfirming(null),
           )
         }
