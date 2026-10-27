@@ -36,5 +36,6 @@ frontend/lib
 frontend/public
 frontend/content
 frontend/mdx-components.tsx
+frontend/scripts
 frontend/.next
 frontend/node_modules

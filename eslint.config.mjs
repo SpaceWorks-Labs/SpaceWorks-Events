@@ -29,6 +29,7 @@ const eslintConfig = defineConfig([
     "frontend/public/**",
     "frontend/content/**",
     "frontend/mdx-components.tsx",
+    "frontend/scripts/**",
     "frontend/.next/**",
     // Local Claude Code state, including agent worktrees (full repo copies).
     ".claude/**",

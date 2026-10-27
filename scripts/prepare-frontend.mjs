@@ -22,6 +22,9 @@ cpSync(path.join(root, "postcss.config.mjs"), path.join(target, "postcss.config.
 rmSync(path.join(target, "content"), { recursive: true, force: true });
 cpSync(path.join(root, "content", "help"), path.join(target, "content", "help"), { recursive: true });
 cpSync(path.join(root, "mdx-components.tsx"), path.join(target, "mdx-components.tsx"));
+// lib/slug.ts reads the reserved organisation slugs from here.
+mkdirSync(path.join(target, "scripts"), { recursive: true });
+cpSync(path.join(root, "scripts", "reserved-slugs.mjs"), path.join(target, "scripts", "reserved-slugs.mjs"));
 // Backend handlers and the registry are never part of the frontend project.
 for (const file of ["frontend/handler.ts", "frontend/registry.ts"]) rmSync(path.join(target, "lib", file), { force: true });
 

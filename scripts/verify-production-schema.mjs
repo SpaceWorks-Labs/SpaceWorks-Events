@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { reservedOrganisationSlugs, reservedSlugProblem } from "./reserved-slugs.mjs";
 
 const prisma = new PrismaClient();
 
@@ -142,6 +143,11 @@ try {
   if (missing.length > 0) {
     throw new Error(`Database schema contract failed; missing: ${missing.join(", ")}`);
   }
+  // A release that reserves a new top-level route must not hide an existing
+  // organisation's public page behind it.
+  const shadowed = await prisma.$queryRaw`SELECT slug FROM "Organisation" WHERE lower(slug) = ANY(${[...reservedOrganisationSlugs]}::text[]) ORDER BY slug`;
+  const slugProblem = reservedSlugProblem(shadowed.map((row) => row.slug));
+  if (slugProblem) throw new Error(slugProblem);
   console.log("Database schema contract passed.");
 } finally {
   await prisma.$disconnect();

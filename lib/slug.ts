@@ -1,3 +1,5 @@
+import { reservedOrganisationSlugs } from "../scripts/reserved-slugs.mjs";
+
 const slugRegex = /[^a-z0-9]+/g;
 
 export function slugifyTitle(title: string): string {
@@ -13,39 +15,8 @@ export function withSlugSuffix(base: string, suffix: number): string {
   return suffix === 0 ? base : `${base}-${suffix}`;
 }
 
-/** Top-level routes an organisation slug would shadow (`/<orgSlug>`). */
-export const RESERVED_ORGANISATION_SLUGS: ReadonlySet<string> = new Set([
-  "about",
-  "account",
-  "api",
-  "assets",
-  "dashboard",
-  "discover",
-  "embed",
-  "event",
-  "features",
-  "help",
-  "join",
-  "login",
-  "members",
-  "new",
-  "org",
-  "privacy",
-  "public",
-  "reset-password",
-  "search",
-  "series",
-  "settings",
-  "static",
-  "submit",
-  "super-admin",
-  "super-admin-mfa",
-  "team",
-  "terms",
-  "ticket",
-  "verify",
-  "verify-email",
-]);
+/** Top-level routes an organisation slug would shadow (`/<orgSlug>`); the list lives in scripts/reserved-slugs.mjs so deploy checks share it. */
+export const RESERVED_ORGANISATION_SLUGS: ReadonlySet<string> = new Set(reservedOrganisationSlugs);
 
 /** Routes under `/<orgSlug>/` an event slug would shadow (member IDs, series instances). */
 export const RESERVED_EVENT_SLUGS: ReadonlySet<string> = new Set(["i", "ids"]);
