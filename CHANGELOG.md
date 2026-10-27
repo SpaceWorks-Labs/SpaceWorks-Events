@@ -54,6 +54,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Private pages.** Signed-in areas, `/login`, invitations, `/reset-password`, `/verify-email`, `/verify-mfa`, order links and member ID verification, and any request with the session cookie are sent `private, no-store`; order, verification, invitation, reset and email-verification links send no referrer.
+- **Redis outages** no longer stall requests: request-path Redis commands have a 500 ms deadline, and the rate limiter answers at once while the client reconnects (still failing closed in production).
+- **Event times on the event's clock.** Creating or editing an event, creating a series, and adding a series schedule item read wall-clock times in the event's or series' timezone on the server, never the server's clock, and refuse a time that a daylight-saving change skips.
+- Handled unique-constraint errors (a duplicate registration) are no longer written to the server log; other Prisma errors are logged on one line.
+- The venue station's "sign in again" message has a **Sign in again** button.
+- Schema drift: migration `20261107020000_drop_orphan_event_session_type` drops the unused `EventSessionType` enum; `schema.prisma` now matches the descending RSVP attendance index and no longer declares a duplicate feedback-form index. CI fails when the migrated database differs from the schema.
 - **Outbox draining.** A delivery pass no longer stops early when a batch contained messages dropped on purpose (a recipient who no longer matches, a link that no longer works); it drains until nothing is due or 40 seconds have passed, and backs off only when a batch failed without a single send. Transactional email is claimed before broadcasts, invitations and results emails.
 - The event dashboard no longer renders a streamed panel twice. next-auth's `<SessionProvider>` fetched the session after the first client render and changed its context value while the page's `loading.tsx` Suspense boundary was still waiting for React's batched reveal; React then gave up hydrating that boundary and rendered the panel again on the client, leaving the server copy in the hidden `div#S:1` streaming container (duplicate ids such as `#guest-search`, and in a background tab until it was shown). Client components now read the session from a small store (`components/auth/useAuthSession.ts`) whose updates re-render only its readers, and the provider is gone; `tests/e2e/filtered-exports.spec.ts` asserts a single `#guest-search` from the first byte.
 
