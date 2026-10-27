@@ -73,4 +73,14 @@ describe.sequential("updating an event that has already started", { timeout: 30_
     expect(await updateEvent(input({ startDateTime: earlier }))).toMatchObject({ ok: false, fieldErrors: { startDateTime: ["Start time must be now or in the future"] } });
     expect((await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).startDateTime.toISOString()).toBe(start.toISOString());
   });
+
+  it("keeps a stored time with seconds when the form sends the same minute", async () => {
+    const withSeconds = { start: new Date(start.getTime() + 17_000), end: new Date(end.getTime() + 42_000) };
+    await prisma.event.update({ where: { id: eventId }, data: { startDateTime: withSeconds.start, endDateTime: withSeconds.end } });
+    expect(await updateEvent(input({ status: EventStatus.PUBLISHED, title: "Doors are open again" }))).toEqual({ ok: true });
+    const saved = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
+    expect(saved.startDateTime.toISOString()).toBe(withSeconds.start.toISOString());
+    expect(saved.endDateTime.toISOString()).toBe(withSeconds.end.toISOString());
+    expect(saved.title).toBe("Doors are open again");
+  });
 });

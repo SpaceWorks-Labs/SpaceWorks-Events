@@ -11,7 +11,10 @@ import {
   slugRegex,
   timeZoneSchema,
   validateEventScheduleAndLocation,
+  withZonedDateTimes,
 } from "@/lib/validators/shared";
+
+const EVENT_WALL_CLOCK_FIELDS = ["startDateTime", "endDateTime", "registrationClosesAt"] as const;
 
 export const createOrganisationSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -36,7 +39,7 @@ export const updateOrganisationSchema = z.object({
     .or(z.literal("")),
 });
 
-export const createEventSchema = z
+export const createEventSchema = withZonedDateTimes(EVENT_WALL_CLOCK_FIELDS, z
   .object({
     organisationSlug: z.string().trim().min(1),
     title: z.string().trim().min(1, "Title is required").max(200),
@@ -112,9 +115,9 @@ export const createEventSchema = z
         path: ["registrationLeadMinutes"],
         message: "Registration cutoff cannot be before now.",
       });
-  });
+  }));
 
-export const updateEventSchema = z
+export const updateEventSchema = withZonedDateTimes(EVENT_WALL_CLOCK_FIELDS, z
   .object({
     organisationSlug: z.string().trim().min(1),
     eventId: z.string().trim().min(1),
@@ -186,7 +189,7 @@ export const updateEventSchema = z
         path: ["registrationClosesAt"],
         message: "Registration must close on or before the event starts.",
       });
-  });
+  }));
 
 export const deleteEventSchema = z.object({
   organisationSlug: z.string().trim().min(1),

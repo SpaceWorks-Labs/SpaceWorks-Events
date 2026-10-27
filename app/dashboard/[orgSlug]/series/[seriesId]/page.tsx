@@ -13,6 +13,7 @@ import { EventReportDownloadButton } from "@/components/reports/EventReportDownl
 import { Card, PageHeader } from "@/components/ui/display";
 import { formatDayTime } from "@/lib/format/datetime";
 import type { Metadata } from "next";
+import { cachedDateTimeFormat } from "@/lib/format/intlCache";
 
 export const metadata: Metadata = { title: "Manage event series", robots: { index: false, follow: false } };
 
@@ -20,7 +21,7 @@ type Props = { params: Promise<{ orgSlug: string; seriesId: string; }>; };
 
 
 function eventDateInput(date: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const parts = cachedDateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const value = (type: string) => parts.find((part) => part.type === type)?.value;
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
@@ -57,7 +58,7 @@ export default async function SeriesManagePage({ params }: Props) {
         />
       </section> : null}
 
-      {canManageSchedule ? <ScheduleManager organisationSlug={organisation.slug} eventSeriesId={series.id} items={series.scheduleItems.map((item) => ({ ...item, startDateTime: item.startDateTime.toISOString(), endDateTime: item.endDateTime.toISOString() }))} defaultDate={series.instances[0] ? eventDateInput(series.instances[0].startDateTime, series.timezone) : ""} /> : null}
+      {canManageSchedule ? <ScheduleManager organisationSlug={organisation.slug} eventSeriesId={series.id} items={series.scheduleItems.map((item) => ({ ...item, startDateTime: item.startDateTime.toISOString(), endDateTime: item.endDateTime.toISOString() }))} defaultDate={series.instances[0] ? eventDateInput(series.instances[0].startDateTime, series.timezone) : ""} timeZone={series.timezone} /> : null}
 
       <section aria-labelledby="series-instances-title" className="flex flex-col gap-3">
         <h2 id="series-instances-title" className="text-h4 text-ink">Upcoming dates</h2>

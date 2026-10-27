@@ -5,6 +5,7 @@ import { CheckoutAttemptStatus, type Prisma } from "@prisma/client";
 import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { SQL_UTC_NOW } from "@/lib/sqlTimestamp";
 import type { OnlineProvider } from "./http";
 import { verifyRazorpayWebhook } from "./providers/razorpay";
 import { verifyStripeWebhook } from "./providers/stripe";
@@ -87,8 +88,8 @@ export async function handleProviderWebhook(request: Request, provider: OnlinePr
       // ON CONFLICT keeps a replay distinct from a failure inside `apply`,
       // which must roll back and be retried by the provider.
       const inserted = await tx.$queryRaw<Array<{ id: string; }>>`
-        INSERT INTO "ProcessedWebhookEvent" ("id", "organisationId", "provider", "eventId", "eventType")
-        VALUES (${crypto.randomUUID()}, ${account.organisationId}, ${provider}::"PaymentProvider", ${event.eventId.slice(0, 255)}, ${event.eventType || "unknown"})
+        INSERT INTO "ProcessedWebhookEvent" ("id", "organisationId", "provider", "eventId", "eventType", "processedAt")
+        VALUES (${crypto.randomUUID()}, ${account.organisationId}, ${provider}::"PaymentProvider", ${event.eventId.slice(0, 255)}, ${event.eventType || "unknown"}, ${SQL_UTC_NOW})
         ON CONFLICT ("organisationId", "provider", "eventId") DO NOTHING
         RETURNING "id"
       `;

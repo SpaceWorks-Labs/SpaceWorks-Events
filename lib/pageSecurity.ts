@@ -1,10 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-/** Pages whose URL is itself the credential: `/ticket/{token}`, `/team/{token}`, `/submit/{token}`, `/account/submissions/{eventId}`, `/{org}/{event}/team/{joinToken}`. */
-function isCapabilityPage(pathname: string): boolean {
-  return /^\/(?:ticket|team|submit)\/[^/]+\/?$/.test(pathname)
-    || /^\/account\/submissions\/[^/]+\/?$/.test(pathname)
-    || /^\/[^/]+\/[^/]+\/team\/[^/]+\/?$/.test(pathname);
+/**
+ * Pages that must never be stored: those whose URL is itself the credential
+ * (`/ticket/{token}`, `/team/{token}`, `/submit/{token}`, `/order/{token}`,
+ * `/verify/{token}`, `/{org}/{event}/team/{joinToken}`, invitations, password
+ * reset and email verification) and the signed-in areas.
+ */
+export function isNoStorePage(pathname: string): boolean {
+  return /^\/(?:ticket|team|submit|order|verify)\/[^/]+\/?$/.test(pathname)
+    || /^\/[^/]+\/[^/]+\/team\/[^/]+\/?$/.test(pathname)
+    || /^\/(?:dashboard|account|super-admin|join|login|reset-password|verify-email|verify-mfa)(?:\/|$)/.test(pathname);
+}
+
+/**
+ * The Auth.js session cookie (`swe.session-token.v1` in lib/auth.ts),
+ * including its `__Secure-` and chunked forms. A signed-in request can render
+ * personalised HTML on any page, so it is never stored either.
+ */
+export function hasSessionCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some(({ name }) => /^(?:__Secure-)?swe\.session-token\.v1(?:\.\d+)?$/.test(name));
 }
 
 export function pageSecurity(request: NextRequest) {
@@ -29,10 +43,11 @@ export function pageSecurity(request: NextRequest) {
   incoming.set("x-nonce", nonce);
   const response = NextResponse.next({ request: { headers: incoming } });
   response.headers.set("Content-Security-Policy", csp);
-  // Bearer-capability pages (ticket, team management and team join links;
-  // docs/TEAMS.md) must never be stored by a browser or shared cache. This
-  // header replaces Next's own `private, no-store` in production, so say it here.
-  response.headers.set("Cache-Control", isCapabilityPage(request.nextUrl.pathname) ? "private, no-cache, no-store, max-age=0, must-revalidate, no-transform" : "no-transform");
+  // Bearer-capability pages (docs/TEAMS.md, docs/HACKATHON.md, docs/PAYMENTS.md),
+  // signed-in areas and any signed-in request must never be stored by a
+  // browser or shared cache. This header replaces Next's own
+  // `private, no-store` in production, so say it here.
+  response.headers.set("Cache-Control", isNoStorePage(request.nextUrl.pathname) || hasSessionCookie(request) ?"private, no-cache, no-store, max-age=0, must-revalidate, no-transform" : "no-transform");
   if (!isEmbed) response.headers.set("X-Frame-Options", "DENY");
   return response;
 }

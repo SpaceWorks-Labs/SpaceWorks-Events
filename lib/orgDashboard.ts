@@ -19,6 +19,7 @@ import { getAccentTokens } from "@/lib/theme/accent";
 import { loadOrganisationRevenue } from "@/lib/payments/revenue";
 import { DAY_MS, INSIGHT_DAYS, LISTED, PAGE_SIZE, PRIVACY_LABELS, SAMPLE_LIMIT, initialsOf, localDay } from "./orgDashboard/helpers";
 import type { OrgCalendar, OrgDashboard, OrgEventRow, OrgEventView, OrgInsights, OrgRevenue, OrgSeriesCard } from "./orgDashboard/types";
+import { cachedDateTimeFormat } from "@/lib/format/intlCache";
 
 /*
  * Data for one organisation's workspace (app/dashboard/[orgSlug]/page.tsx).
@@ -212,7 +213,7 @@ export async function getOrgDashboard(input: {
   for (const instance of monthInstances) if (addDot(instance.startDateTime, instance.series.timezone, "var(--yy-text-muted)")) monthSeriesCount += 1;
   const todayKey = localDay(now, calendarZone);
   const calendar: OrgCalendar = {
-    label: new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(month.year, month.month - 1, 15))),
+    label: cachedDateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(month.year, month.month - 1, 15))),
     prevKey: monthKey(shiftMonth(month, -1)),
     nextKey: monthKey(shiftMonth(month, 1)),
     cells: monthGrid(month).map((day) => ({ day, dots: day ? dotsByDay.get(day) ?? [] : [], today: day != null && `${prefix}${String(day).padStart(2, "0")}` === todayKey })),

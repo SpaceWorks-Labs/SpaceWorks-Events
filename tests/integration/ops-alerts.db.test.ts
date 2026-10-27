@@ -182,6 +182,14 @@ describe("POST /api/client-errors (public)", () => {
     expect(text).not.toContain("ref=mail");
   });
 
+  it("names a dashboard tab that crashed on its own", async () => {
+    posts.length = 0;
+    const response = await reportClientError(clientErrorRequest({ boundary: "panel", name: "TypeError", message: `panel ${suffix}`, path: "/dashboard/acme/event/evt_1" }, { "x-forwarded-for": "198.51.100.13" }));
+    expect(response.status).toBe(204);
+    expect(await waitFor(() => posts.length > 0)).toBe(true);
+    expect(posts.join("\n")).toMatch(/Dashboard section crashed in the browser/);
+  });
+
   it("caps browser reports (10 per client IP, 5 alerts a minute per process)", async () => {
     for (let i = 0; i < 14; i++) {
       expect((await reportClientError(clientErrorRequest({ boundary: "global", message: `burst ${i} ${suffix}` }, { "x-forwarded-for": "198.51.100.12" }))).status).toBe(204);

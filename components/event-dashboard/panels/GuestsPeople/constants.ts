@@ -6,7 +6,7 @@ export const SEARCH_DELAY_MS = 300;
 export const NO_COUNTS: AttendeeFilterCounts = { all: 0, going: 0, waitlist: 0, approve: 0, declined: 0, checkedIn: 0, notCheckedIn: 0 };
 
 export type View = { status: GuestStatusFilter; kind: GuestKindFilter; team: GuestTeamFilter; query: string };
-export type Meta = { counts: AttendeeFilterCounts; total: number };
+export type Meta = { counts: AttendeeFilterCounts; total: number; matching: number };
 
 export const FILTER_DOTS: Record<GuestStatusFilter, string> = {
   all: "bg-ink",

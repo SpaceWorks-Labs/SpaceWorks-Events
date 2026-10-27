@@ -89,15 +89,17 @@ export type AttendeeFilterCounts = Record<AttendeeStatusFilter, number>;
 export type AttendeesPage = {
   rows: AttendeeRowDto[];
   nextCursor: string | null;
-  /** Per-chip counts for the current search and dropdown filters (first page only). */
+  /** Per-chip counts for the whole scope, ignoring search and filters (first page only). */
   counts: AttendeeFilterCounts | null;
   /** Every registration in the scope, ignoring filters (first page only). */
   total: number | null;
+  /** Registrations matching the current search, dropdowns and status chip (first page only). */
+  matching: number | null;
 };
 
-const EMPTY_PAGE: AttendeesPage = { rows: [], nextCursor: null, counts: null, total: null };
+const EMPTY_PAGE: AttendeesPage = { rows: [], nextCursor: null, counts: null, total: null, matching: null };
 
-/** The chip counts: one grouped count by status plus the checked-in counts, under the same search. */
+/** The chip counts: one grouped count by status plus the checked-in counts, under the given condition. */
 export async function countAttendeeFilters(base: Prisma.RSVPWhereInput): Promise<AttendeeFilterCounts> {
   const [groups, checkedIn, notCheckedIn] = await Promise.all([
     prisma.rSVP.groupBy({ by: ["status"], where: base, _count: { _all: true } }),
@@ -118,8 +120,10 @@ export async function countAttendeeFilters(base: Prisma.RSVPWhereInput): Promise
 
 /**
  * One page of the People list for a validated view. The first page (no
- * cursor) also carries the chip counts and the unfiltered total; "Load more"
- * pages skip those queries. A malformed view or cursor returns an empty page.
+ * cursor) also carries the chip counts (always the whole event or date, so
+ * they never shrink with the search or dropdowns), the unfiltered total and
+ * how many registrations match the view; "Load more" pages skip those
+ * queries. A malformed view or cursor returns an empty page.
  */
 export async function listAttendeesPage(scope: AttendeeScope, input: unknown, options: { origin: string; teamMode: boolean }): Promise<AttendeesPage> {
   const parsed = attendeeListViewSchema.safeParse(input ?? {});
@@ -129,15 +133,16 @@ export async function listAttendeesPage(scope: AttendeeScope, input: unknown, op
   if (!after) return EMPTY_PAGE;
   const base = attendeeBaseWhere(scope, view, { teamMode: options.teamMode });
   const firstPage = !view.cursor;
-  const [records, counts, total] = await Promise.all([
+  const viewWhere = { AND: [base, attendeeStatusWhere(view.status)] };
+  const [records, counts, matching] = await Promise.all([
     prisma.rSVP.findMany({
-      where: { AND: [base, attendeeStatusWhere(view.status), after] },
+      where: { AND: [viewWhere, after] },
       include: attendeeInclude,
       orderBy: ATTENDEE_ORDER,
       take: ATTENDEES_PAGE_SIZE + 1,
     }),
-    firstPage ? countAttendeeFilters(base) : Promise.resolve(null),
-    firstPage ? prisma.rSVP.count({ where: attendeeScopeWhere(scope) }) : Promise.resolve(null),
+    firstPage ? countAttendeeFilters(attendeeScopeWhere(scope)) : Promise.resolve(null),
+    firstPage ? prisma.rSVP.count({ where: viewWhere }) : Promise.resolve(null),
   ]);
   const page = records.slice(0, ATTENDEES_PAGE_SIZE);
   const last = page[page.length - 1];
@@ -145,7 +150,8 @@ export async function listAttendeesPage(scope: AttendeeScope, input: unknown, op
     rows: page.map((record) => toAttendeeRow(record, options.origin)),
     nextCursor: records.length > ATTENDEES_PAGE_SIZE && last ? encodeTimeCursor({ at: last.createdAt, id: last.id }) : null,
     counts,
-    total,
+    total: counts?.all ?? null,
+    matching,
   };
 }
 

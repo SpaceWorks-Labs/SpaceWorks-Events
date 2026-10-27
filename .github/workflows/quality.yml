@@ -55,6 +55,8 @@ jobs:
         run: node scripts/npm-audit.mjs --omit=dev
       - run: npm run db:deploy
       - run: npm run db:verify
+      # The migrated database must match schema.prisma exactly (no drift).
+      - run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
       - run: npm run lint
       # Route types (RouteContext, typed routes) are generated, not committed.
       - run: npx next typegen

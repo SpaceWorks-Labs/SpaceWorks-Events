@@ -5,6 +5,8 @@
  * are on their way; complimentary and free tickets bring in nothing.
  */
 
+import { cachedDateTimeFormat } from "@/lib/format/intlCache";
+
 export type RevenueOrder = {
   id: string;
   status: "REQUESTED" | "PENDING" | "CONFIRMED" | "EXPIRED" | "CANCELLED";
@@ -59,7 +61,7 @@ const OFFLINE_LABELS: Record<string, string> = { CASH: "Cash", UPI: "UPI (in per
 
 function dayKey(date: Date, timeZone: string) {
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+    return cachedDateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
   } catch {
     return date.toISOString().slice(0, 10);
   }

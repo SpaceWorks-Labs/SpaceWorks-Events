@@ -1,10 +1,13 @@
 import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
-/** Rounded (16px), bordered table with 48px rows that scrolls inside its own box on small screens (docs/DESIGN.md §4.8). */
+/**
+ * Rounded (16px), bordered table with 48px rows that scrolls inside its own box on small screens (docs/DESIGN.md §4.8).
+ * The box is positioned, so absolutely positioned sr-only text inside a cell cannot widen the page.
+ */
 export function Table({ className, children, label, ...props }: HTMLAttributes<HTMLTableElement> & { label?: string }) {
   return (
-    <div className="w-full overflow-x-auto rounded-xl border border-line bg-panel" role="region" aria-label={label} tabIndex={label ? 0 : undefined}>
+    <div className="relative w-full overflow-x-auto rounded-xl border border-line bg-panel" role="region" aria-label={label} tabIndex={label ? 0 : undefined}>
       <table className={cn("w-full border-collapse text-left text-body-ui", className)} {...props}>
         {children}
       </table>

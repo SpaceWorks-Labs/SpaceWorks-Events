@@ -214,8 +214,9 @@ same `canManageRegistrationsFor` check as individual registrations).
   The People list is paged on the server (`ATTENDEES_PAGE_SIZE`, 50, newest
   first on a `createdAt, id` keyset, **Load more**) through
   `loadAttendeesPage` (`canManageRegistrationsFor`, `search` bucket); status,
-  kind, team and search filters run in the query and the chip counts are
-  separate counts under the same search. **Export emails** downloads every
+  kind, team and search filters run in the query; the chip counts always
+  cover the whole event, and a separate count of the matching registrations
+  drives "Showing x of y" and the exports. **Export emails** downloads every
   match of the current filters from
   `/api/exports/events/:eventId/attendee-emails`, and **Export CSV** the full
   attendee CSV for the same matches (`/api/exports/events/:eventId/attendees`

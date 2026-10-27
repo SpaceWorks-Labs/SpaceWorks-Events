@@ -51,7 +51,7 @@ export function RecentCheckIns({
                   {r.email ? <p className="truncate text-sm text-ink-muted">{r.email}</p> : null}
                   <p className="text-caption text-ink-muted"><CheckInTimestamp value={r.checkedInAt} /></p>
                 </div>
-                <Button size="sm" variant="quiet" onClick={() => onUndo(r.rsvpId)} disabled={pending || !isOnline}>Undo check-in</Button>
+                <Button size="sm" variant="quiet" onClick={() => onUndo(r.rsvpId)} disabled={pending || !isOnline} aria-label={`Undo check-in for ${r.displayName}`}>Undo check-in</Button>
               </li>
             ))}
           </ul>
@@ -72,7 +72,7 @@ export function RecentCheckIns({
                     <TD className="text-ink-secondary">{r.email ?? "—"}</TD>
                     <TD className="text-ink-secondary"><CheckInTimestamp value={r.checkedInAt} /></TD>
                     <TD className="text-right">
-                      <Button size="sm" variant="quiet" onClick={() => onUndo(r.rsvpId)} disabled={pending || !isOnline}>Undo</Button>
+                      <Button size="sm" variant="quiet" onClick={() => onUndo(r.rsvpId)} disabled={pending || !isOnline} aria-label={`Undo check-in for ${r.displayName}`}>Undo</Button>
                     </TD>
                   </TR>
                 ))}

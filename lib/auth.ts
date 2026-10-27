@@ -17,7 +17,7 @@ import {
   newDeviceCheckEnabled, noteFailedSignIn, rememberSignIn, sendSignInCode,
 } from "@/lib/loginSecurity";
 import { getGoogleSsoSettings } from "@/lib/instanceSettings";
-import { logOpsError } from "@/lib/opsAlerts";
+import { logAuthError } from "@/lib/authLogger";
 
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
@@ -67,13 +67,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   },
   trustHost: true,
   logger: {
-    // Auth.js error causes can contain provider responses and credentials, so
-    // the log line stays fixed; only the redacted alert carries the detail.
-    error(error) {
-      const { type } = error as Error & { type?: unknown };
-      const label = typeof type === "string" ? type : error.name;
-      logOpsError("[auth] Authentication failed", { level: "error", source: "auth", title: `Sign-in failed (${label})`, error });
-    },
+    // Expected sign-in outcomes are skipped; see lib/authLogger.ts.
+    error: logAuthError,
   },
   pages: {
     signIn: "/login",

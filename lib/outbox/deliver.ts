@@ -23,9 +23,21 @@ import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
+import { dueOutboxMessages } from "./due";
 
 /** Deliver a small batch. Run this from a protected scheduler, never a request path. */
 export async function deliverOutboxBatch(limit = 20) {
+  const { sent, failed } = await deliverOutboxBatchWithCount(limit);
+  return { sent, failed };
+}
+
+/**
+ * As deliverOutboxBatch, plus how many due messages the batch picked up.
+ * Messages dropped on purpose (a recipient who no longer matches, a link that
+ * no longer works) count as neither sent nor failed, so only `due` tells the
+ * drain loop whether the queue is empty.
+ */
+export async function deliverOutboxBatchWithCount(limit = 20) {
   // A worker may be interrupted after claiming a message. Return a stale claim
   // to the retry queue before processing new work so messages cannot be lost.
   await prisma.outboxMessage.updateMany({
@@ -36,11 +48,7 @@ export async function deliverOutboxBatch(limit = 20) {
     data: { status: OutboxStatus.PENDING, lockedAt: null },
   });
 
-  const messages = await prisma.outboxMessage.findMany({
-    where: { status: OutboxStatus.PENDING, availableAt: { lte: new Date() } },
-    orderBy: { createdAt: "asc" },
-    take: Math.min(Math.max(limit, 1), 100),
-  });
+  const messages = await dueOutboxMessages(Math.min(Math.max(limit, 1), 100));
 
   let sent = 0;
   let failed = 0;
@@ -95,7 +103,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendSignInCodeEmail({ ...payload, messageId: stableMessageId });
@@ -104,7 +111,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendPasswordResetEmail({ ...payload, messageId: stableMessageId });
@@ -113,7 +119,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendEmailVerificationEmail({ ...payload, messageId: stableMessageId });
@@ -122,7 +127,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendEventInvitation({ ...payload, messageId: stableMessageId });
@@ -131,7 +135,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendCollaboratorInvitation({ ...payload, messageId: stableMessageId });
@@ -251,5 +254,5 @@ export async function deliverOutboxBatch(limit = 20) {
     }
   }
   sendAs(null);
-  return { sent, failed };
+  return { sent, failed, due: messages.length };
 }

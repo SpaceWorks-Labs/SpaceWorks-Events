@@ -5,7 +5,8 @@ import { X } from "lucide-react";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { Field, Input, Dropdown } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
-import { fromDatetimeLocalValue, timezones, toDatetimeLocalValue } from "./helpers";
+import { zonedDatetimeLocalValue } from "@/lib/timeZone";
+import { addWallClockHours, timezones } from "./helpers";
 
 export function BasicsStep({ activeStep, tagInput, setTagInput, addTag, tagsPreview, setTagsPreview }: {
   activeStep: number;
@@ -16,7 +17,7 @@ export function BasicsStep({ activeStep, tagInput, setTagInput, addTag, tagsPrev
   setTagsPreview: (value: string[]) => void;
 }) {
   return (
-    <div className={cn("flex-col gap-4", activeStep === 0 ? "flex" : "hidden")}>
+    <div data-step="0" className={cn("flex-col gap-4", activeStep === 0 ? "flex" : "hidden")}>
       <Field label="Title" required>
         <Input name="title" autoFocus />
       </Field>
@@ -65,37 +66,40 @@ export function BasicsStep({ activeStep, tagInput, setTagInput, addTag, tagsPrev
   );
 }
 
-export function ScheduleStep({ activeStep, start, setStart, end, setEnd }: {
+/** Start and end are `datetime-local` values on the event's own clock (`timezone`). */
+export function ScheduleStep({ activeStep, start, setStart, end, setEnd, timezone, setTimezone }: {
   activeStep: number;
-  start: Date | null;
-  setStart: Dispatch<SetStateAction<Date | null>>;
-  end: Date | null;
-  setEnd: Dispatch<SetStateAction<Date | null>>;
+  start: string;
+  setStart: Dispatch<SetStateAction<string>>;
+  end: string;
+  setEnd: Dispatch<SetStateAction<string>>;
+  timezone: string;
+  setTimezone: Dispatch<SetStateAction<string>>;
 }) {
   return (
-    <div className={cn("flex-col gap-4", activeStep === 1 ? "flex" : "hidden")}>
+    <div data-step="1" className={cn("flex-col gap-4", activeStep === 1 ? "flex" : "hidden")}>
       <Field label="Start" required helperText="Pick date and time">
         <Input
           type="datetime-local"
-          value={start ? toDatetimeLocalValue(start) : ""}
-          min={toDatetimeLocalValue(new Date())}
+          value={start}
+          min={zonedDatetimeLocalValue(new Date(), timezone)}
           onChange={(e) => {
-            const v = fromDatetimeLocalValue(e.target.value);
+            const v = e.target.value;
             setStart(v);
-            if (v) setEnd(new Date(v.getTime() + 60 * 60 * 1000));
+            if (v) setEnd(addWallClockHours(v, 1));
           }}
         />
       </Field>
       <Field label="End" required helperText="Must be after start">
         <Input
           type="datetime-local"
-          value={end ? toDatetimeLocalValue(end) : ""}
-          min={start ? toDatetimeLocalValue(start) : undefined}
-          onChange={(e) => setEnd(fromDatetimeLocalValue(e.target.value))}
+          value={end}
+          min={start || undefined}
+          onChange={(e) => setEnd(e.target.value)}
         />
       </Field>
-      <Field label="Timezone" required>
-        <Dropdown name="timezone" defaultValue="Asia/Kolkata">
+      <Field label="Timezone" required helperText="Start and end are times on this clock.">
+        <Dropdown name="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
           {timezones.map((tz) => (
             <option key={tz} value={tz}>
               {tz}

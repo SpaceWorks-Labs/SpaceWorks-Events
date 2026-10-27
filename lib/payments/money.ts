@@ -5,6 +5,8 @@
  * currencies charge and refund the right amount. Client-safe.
  */
 
+import { cachedNumberFormat } from "@/lib/format/intlCache";
+
 /** ISO 4217 currencies with no minor unit, matching Stripe's zero-decimal list. */
 const ZERO_DECIMAL = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
 /** ISO 4217 currencies with three minor digits. */
@@ -63,7 +65,7 @@ export function formatMoney(amountMinor: bigint | number, currency: string, loca
   const digits = currencyExponent(currency);
   const decimal = minorToDecimalString(amountMinor, currency);
   try {
-    return new Intl.NumberFormat(locale, {
+    return cachedNumberFormat(locale, {
       style: "currency",
       currency,
       minimumFractionDigits: digits,

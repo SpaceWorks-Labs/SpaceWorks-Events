@@ -1,7 +1,7 @@
 import "server-only";
 
 import { alertOnBackupProblems } from "@/lib/backupAlerts";
-import { deliverOutboxBatch } from "@/lib/outbox";
+import { deliverOutboxBatchWithCount } from "@/lib/outbox";
 import {
   BEAT_HEARTBEAT_KEY,
   OUTBOX_SCHEDULER_HEARTBEAT_KEY,
@@ -36,8 +36,15 @@ export function processRole(value = process.env.SWE_PROCESS_ROLE): ProcessRole {
 const DEFAULT_POLL_MS = 3_000;
 const BEAT_TICK_MS = 15_000;
 const HEARTBEAT_EVERY_MS = 60_000;
-const DELIVERY_BATCH = 50;
-const MAX_BATCHES_PER_TICK = 20;
+/** Messages claimed per batch inside one delivery pass. */
+export const OUTBOX_DRAIN_BATCH = 50;
+/**
+ * How long one pass keeps draining. Well under the one-minute cadence and a
+ * typical proxy timeout for `POST /api/internal/outbox`; overlapping passes
+ * (the worker and the external scheduler, or several replicas) are safe
+ * because each message is claimed individually.
+ */
+export const OUTBOX_DRAIN_BUDGET_MS = 40_000;
 
 type Job = { name: string; everyMs: number; run: (now: Date) => Promise<unknown>; };
 
@@ -60,15 +67,26 @@ function pollMs() {
   return Number.isFinite(value) && value >= 500 ? Math.min(value, 60_000) : DEFAULT_POLL_MS;
 }
 
-/** Send what's queued, batch after batch, until the queue is empty or the tick's budget is used. */
-export async function drainOutbox() {
+/**
+ * Deliver batches until nothing is due, the time budget is spent, or a batch
+ * failed without a single send (the mail server is likely down: wait for the
+ * next pass rather than burn through the retry schedule of the entire queue).
+ * Messages dropped on purpose count as neither sent nor failed, so the loop
+ * goes by how many due messages each batch picked up.
+ */
+export async function drainOutbox(options: { batch?: number; budgetMs?: number; now?: () => number } = {}) {
+  const batch = options.batch ?? OUTBOX_DRAIN_BATCH;
+  const now = options.now ?? Date.now;
+  const deadline = now() + (options.budgetMs ?? OUTBOX_DRAIN_BUDGET_MS);
   let sent = 0;
   let failed = 0;
-  for (let batch = 0; batch < MAX_BATCHES_PER_TICK; batch += 1) {
-    const result = await deliverOutboxBatch(DELIVERY_BATCH);
+  for (;;) {
+    const result = await deliverOutboxBatchWithCount(batch);
     sent += result.sent;
     failed += result.failed;
-    if (result.sent + result.failed < DELIVERY_BATCH) break;
+    if (result.due < batch) break;
+    if (result.sent === 0 && result.failed > 0) break;
+    if (now() >= deadline) break;
   }
   return { sent, failed };
 }

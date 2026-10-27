@@ -107,7 +107,7 @@ export function GuestsPeople({
   const viewKey = JSON.stringify(view);
   const isDefaultView = view.status === "all" && view.kind === "all" && view.team === "all" && !view.query;
   const initial = useMemo(
-    () => ({ rows: initialPage.rows as AttendeeRow[], nextCursor: initialPage.nextCursor, meta: { counts: initialPage.counts ?? NO_COUNTS, total: initialPage.total ?? 0 } as Meta }),
+    () => ({ rows: initialPage.rows as AttendeeRow[], nextCursor: initialPage.nextCursor, meta: { counts: initialPage.counts ?? NO_COUNTS, total: initialPage.total ?? 0, matching: initialPage.matching ?? 0 } as Meta }),
     [initialPage],
   );
   const scopeIds = useMemo(() => (target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId }), [target]);
@@ -115,14 +115,15 @@ export function GuestsPeople({
     async (current: View, cursor: string | null): Promise<ServerPageResult<AttendeeRow, Meta>> => {
       const res = await loadAttendeesPage({ organisationSlug, ...scopeIds, ...current, cursor });
       if (!res.ok || !res.data) return { ok: false, error: res.ok ? "Could not load guests." : res.error };
-      const { rows, nextCursor, counts, total } = res.data;
-      return { ok: true, page: { rows, nextCursor, meta: counts && total != null ? { counts, total } : null } };
+      const { rows, nextCursor, counts, total, matching } = res.data;
+      return { ok: true, page: { rows, nextCursor, meta: counts && total != null && matching != null ? { counts, total, matching } : null } };
     },
     [organisationSlug, scopeIds],
   );
   const list = useServerPages<AttendeeRow, View, Meta>({ initial, view, viewKey, isDefaultView, delayMs: 0, fetchPage, keyOf: (row) => row.id });
-  const { counts, total } = list.meta;
-  const shownTotal = counts[view.status];
+  // The chips count the whole event; the list, its label and the exports follow the search and dropdowns.
+  const { counts, total, matching } = list.meta;
+  const shownTotal = matching;
   // Both exports carry the list's current filters and search, so they hold
   // every matching registration, not only the rows loaded here.
   const viewQuery = attendeeViewSearchParams(view);

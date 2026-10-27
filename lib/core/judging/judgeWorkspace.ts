@@ -4,6 +4,7 @@ import "server-only";
 
 import { JudgingStatus, Prisma, SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
 import {
   decodeSubmissionCursor,
   encodeSubmissionCursor,
@@ -64,9 +65,7 @@ async function judgeSubmissionsPage(
   if (query.cursor) {
     const after = decodeSubmissionCursor(query.cursor);
     if (!after) return empty;
-    // `submittedAt` is a UTC wall-clock timestamp(3) column.
-    const at = after.submittedAt.toISOString().replace("Z", "");
-    conditions.push(Prisma.sql`(s."submittedAt", s."id") > (${at}::timestamp(3), ${after.id})`);
+    conditions.push(Prisma.sql`(s."submittedAt", s."id") > (${sqlUtcTimestamp(after.submittedAt)}, ${after.id})`);
   }
   const ids = await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT s."id" FROM "Submission" s

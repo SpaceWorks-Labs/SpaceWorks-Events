@@ -19,4 +19,21 @@ describe("zoned datetime conversion", () => {
   it("rejects a nonexistent time during the daylight-saving transition", () => {
     expect(zonedInputToIso("2030-03-10T02:30", "America/New_York")).toBeNull();
   });
+
+  it("accepts valid times in the hours around a DST change", () => {
+    // Before the fix the offset was read at the guessed instant only, so these were refused.
+    expect(zonedInputToIso("2026-10-03T19:00", "Australia/Sydney")).toBe("2026-10-03T09:00:00.000Z");
+    expect(zonedInputToIso("2026-04-04T19:00", "Australia/Sydney")).toBe("2026-04-04T08:00:00.000Z");
+    expect(zonedInputToIso("2026-09-26T19:00", "Pacific/Auckland")).toBe("2026-09-26T07:00:00.000Z");
+    expect(zonedInputToIso("2026-03-08T03:30", "America/New_York")).toBe("2026-03-08T07:30:00.000Z");
+    expect(zonedInputToIso("2026-03-08T06:59", "America/New_York")).toBe("2026-03-08T10:59:00.000Z");
+    expect(zonedInputToIso("2026-03-29T01:30", "Europe/Berlin")).toBe("2026-03-29T00:30:00.000Z");
+    expect(zonedInputToIso("2026-10-25T01:30", "Europe/Berlin")).toBe("2026-10-24T23:30:00.000Z");
+  });
+
+  it("still refuses the skipped hour and reads a repeated hour as one real instant", () => {
+    expect(zonedInputToIso("2026-03-29T02:30", "Europe/Berlin")).toBeNull();
+    const repeated = zonedInputToIso("2026-10-25T02:30", "Europe/Berlin");
+    expect(["2026-10-25T00:30:00.000Z", "2026-10-25T01:30:00.000Z"]).toContain(repeated);
+  });
 });

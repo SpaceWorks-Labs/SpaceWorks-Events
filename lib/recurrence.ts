@@ -1,4 +1,5 @@
 import { RRule, rrulestr } from "rrule";
+import { cachedDateTimeFormat } from "@/lib/format/intlCache";
 
 const DEFAULT_MAX_INSTANCES = 48;
 const ABSOLUTE_MAX_INSTANCES = 500;
@@ -66,7 +67,7 @@ export function materializeInstances(
 /** The zone's offset from UTC at `date`, in milliseconds (wall clock minus real time). */
 function zoneOffsetMs(date: Date, timeZone: string): number {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
+    cachedDateTimeFormat("en-US", {
       timeZone,
       hourCycle: "h23",
       year: "numeric",

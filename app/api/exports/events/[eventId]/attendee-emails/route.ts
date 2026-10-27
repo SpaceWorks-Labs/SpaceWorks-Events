@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { recordAuditEvent } from "@/lib/audit";
-import { buildCsv } from "@/lib/csv";
+import { csvByteStream } from "@/lib/csvExport";
 import { prisma } from "@/lib/db";
 import { canManageRegistrationsFor } from "@/lib/eventAccess";
 import { attendeeEmailExportFilename } from "@/lib/attendeeEmailExport";
@@ -56,36 +56,32 @@ export async function GET(request: Request, context: RouteContext) {
     metadata: { format: "emails", status: view.status, kind: view.kind, team: view.team, searched: Boolean(view.query) },
   });
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        controller.enqueue(encoder.encode(`﻿${buildCsv([["Name", "Email"]])}\n`));
-        const seen = new Set<string>();
-        let cursor: string | undefined;
-        while (true) {
-          const rsvps = await prisma.rSVP.findMany({
-            where,
-            orderBy: { id: "asc" },
-            take: EXPORT_BATCH_SIZE,
-            ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-            select: { id: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } } },
-          });
-          if (!rsvps.length) break;
-          const rows: Array<[string, string]> = [];
-          for (const rsvp of rsvps) {
-            const email = (rsvp.user?.email ?? rsvp.guestEmail ?? "").trim();
-            const key = email.toLowerCase();
-            if (!email || seen.has(key)) continue;
-            seen.add(key);
-            rows.push([(rsvp.user?.name ?? rsvp.guestName ?? "").trim(), email]);
-          }
-          if (rows.length) controller.enqueue(encoder.encode(`${buildCsv(rows)}\n`));
-          cursor = rsvps.at(-1)?.id;
+  // Pull-based: the next batch is read only once the download has taken the last one.
+  const stream = csvByteStream({
+    header: ["Name", "Email"],
+    errorMessage: "Unable to export attendee emails.",
+    async *batches() {
+      const seen = new Set<string>();
+      let cursor: string | undefined;
+      while (true) {
+        const rsvps = await prisma.rSVP.findMany({
+          where,
+          orderBy: { id: "asc" },
+          take: EXPORT_BATCH_SIZE,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+          select: { id: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } } },
+        });
+        if (!rsvps.length) return;
+        const rows: Array<[string, string]> = [];
+        for (const rsvp of rsvps) {
+          const email = (rsvp.user?.email ?? rsvp.guestEmail ?? "").trim();
+          const key = email.toLowerCase();
+          if (!email || seen.has(key)) continue;
+          seen.add(key);
+          rows.push([(rsvp.user?.name ?? rsvp.guestName ?? "").trim(), email]);
         }
-        controller.close();
-      } catch {
-        controller.error(new Error("Unable to export attendee emails."));
+        yield rows;
+        cursor = rsvps.at(-1)?.id;
       }
     },
   });

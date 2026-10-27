@@ -82,6 +82,28 @@ const nextConfig: NextConfig = {
         source: "/submit/:token",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      // Order links (docs/PAYMENTS.md), member ID verification, invitations,
+      // password-reset and email-verification links carry a token in the URL too.
+      {
+        source: "/order/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/verify/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/join/:kind/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/reset-password",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/verify-email",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
     ];
   },
 };

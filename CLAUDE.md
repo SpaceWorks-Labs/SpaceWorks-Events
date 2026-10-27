@@ -263,6 +263,9 @@ come from `components/brand/SpaceWorksLogo.tsx` (masters in
 - Use Prisma transactions for multi-record state changes, especially RSVP
   capacity/waitlist flows. Rely on database constraints as the final integrity
   layer, not a prior UI check.
+- Raw SQL never passes a JS `Date` or uses `now()` for a `timestamp(3)`
+  column: use `sqlUtcTimestamp` and `SQL_UTC_NOW` (`lib/sqlTimestamp.ts`),
+  so a database whose `TimeZone` is not UTC cannot shift the value.
 - For schema changes, create and review a Prisma migration. Inspect generated
   SQL for indexes, nullability, backfills, constraints, and cascades. Do not
   use `db:push` for deployable changes.

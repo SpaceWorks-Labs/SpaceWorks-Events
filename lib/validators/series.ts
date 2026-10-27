@@ -1,9 +1,9 @@
 import { EventPrivacyType, EventStatus } from "@prisma/client";
 import { z } from "zod";
-import { orgScoped, timeZoneSchema } from "@/lib/validators/shared";
+import { orgScoped, timeZoneSchema, withZonedDateTimes } from "@/lib/validators/shared";
 import { seriesTeamSettingsRefusal } from "@/lib/validators/teams";
 
-export const createSeriesSchema = z
+export const createSeriesSchema = withZonedDateTimes(["anchorStartDateTime", "anchorEndDateTime"], z
   .object({
     organisationSlug: z.string().trim().min(1),
     title: z.string().trim().min(1, "Title is required").max(200),
@@ -41,7 +41,7 @@ export const createSeriesSchema = z
       message: "A recurring occurrence must be shorter than 24 days",
       path: ["anchorEndDateTime"],
     },
-  );
+  ));
 
 export const updateSeriesMetaSchema = orgScoped.extend({
   eventSeriesId: z.string().trim().min(1),

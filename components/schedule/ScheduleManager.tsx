@@ -7,15 +7,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/display";
 import { Field, Input } from "@/components/ui/field";
+import { zonedDatetimeLocalValue, zonedInputToIso } from "@/lib/timeZone";
 
 type ScheduleItem = { id: string; title: string; description: string; startDateTime: string; endDateTime: string; delayMinutes: number };
 
-function datetimeLocalValue(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function nextSessionTimes(items: ScheduleItem[], defaultDate: string) {
+function nextSessionTimes(items: ScheduleItem[], defaultDate: string, timeZone: string) {
   if (items.length === 0) return { start: defaultDate ? `${defaultDate}T09:00` : "", end: defaultDate ? `${defaultDate}T10:00` : "" };
   let cumulativeDelay = 0;
   let latestEnd = new Date(items[0]!.endDateTime);
@@ -25,11 +21,11 @@ function nextSessionTimes(items: ScheduleItem[], defaultDate: string) {
   }
   const start = new Date(latestEnd.getTime() + (cumulativeDelay + 5) * 60_000);
   const end = new Date(start.getTime() + 60 * 60_000);
-  return { start: datetimeLocalValue(start), end: datetimeLocalValue(end) };
+  return { start: zonedDatetimeLocalValue(start, timeZone), end: zonedDatetimeLocalValue(end, timeZone) };
 }
 
-export function ScheduleManager({ organisationSlug, eventId, eventSeriesId, items, defaultDate = "" }: { organisationSlug: string; eventId?: string; eventSeriesId?: string; items: Array<{ id: string; title: string; description: string; startDateTime: string; endDateTime: string; delayMinutes: number }>; defaultDate?: string }) {
-  const defaults = nextSessionTimes(items, defaultDate);
+export function ScheduleManager({ organisationSlug, eventId, eventSeriesId, items, defaultDate = "", timeZone }: { organisationSlug: string; eventId?: string; eventSeriesId?: string; items: Array<{ id: string; title: string; description: string; startDateTime: string; endDateTime: string; delayMinutes: number }>; defaultDate?: string; timeZone: string }) {
+  const defaults = nextSessionTimes(items, defaultDate, timeZone);
   const router = useRouter(); const { showToast } = useToast(); const [pending, startTransition] = useTransition(); const [title, setTitle] = useState(""); const [start, setStart] = useState(defaults.start); const [end, setEnd] = useState(defaults.end);
   const target = { organisationSlug, eventId, eventSeriesId };
   return (
@@ -42,11 +38,14 @@ export function ScheduleManager({ organisationSlug, eventId, eventSeriesId, item
             startTransition(async () => {
               const res = await saveScheduleItem({ ...target, title, startDateTime: start, endDateTime: end });
               if (!res.ok) return showToast(res.error, "error");
-              const nextStart = new Date(end);
-              nextStart.setMinutes(nextStart.getMinutes() + 5);
+              // The fields hold wall-clock times on the series' clock, not the browser's.
+              const endIso = zonedInputToIso(end, timeZone);
               setTitle("");
-              setStart(datetimeLocalValue(nextStart));
-              setEnd(datetimeLocalValue(new Date(nextStart.getTime() + 60 * 60_000)));
+              if (endIso) {
+                const nextStart = new Date(new Date(endIso).getTime() + 5 * 60_000);
+                setStart(zonedDatetimeLocalValue(nextStart, timeZone));
+                setEnd(zonedDatetimeLocalValue(new Date(nextStart.getTime() + 60 * 60_000), timeZone));
+              }
               showToast("Schedule item added", "success");
               router.refresh();
             });

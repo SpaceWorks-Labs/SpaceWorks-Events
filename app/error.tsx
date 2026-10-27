@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { reportClientError } from "@/lib/reportClientError.client";
 import { Button } from "@/components/ui/button";
 
-export default function ErrorBoundary({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+// `retry` re-fetches the segment; `reset` would re-render the same failed
+// payload (for example a stream cut mid-way) and fail again.
+export default function ErrorBoundary({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     if (process.env.NODE_ENV === "development") console.error("[ui] route error", error);
     else console.error("[ui] route error");
@@ -18,7 +20,7 @@ export default function ErrorBoundary({ error, reset }: { error: Error & { diges
       </span>
       <h1 className="text-h1 text-ink">We couldn’t load this page.</h1>
       <p className="text-body-ui text-ink-secondary">Try again. If it keeps happening, let the team that runs this Space Works Events site know.</p>
-      <Button variant="primary" onClick={reset}>Try again</Button>
+      <Button variant="primary" onClick={() => retry()}>Try again</Button>
     </div>
   );
 }

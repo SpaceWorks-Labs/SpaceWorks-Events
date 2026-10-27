@@ -24,6 +24,7 @@ New here? Start with [Features](FEATURES.md) for what it does, then [Local devel
 | [Permissions](PERMISSIONS.md) | Event and series dashboard matrix: every control, its server check, and what owners, admins, members and each co-organiser grant see |
 | [Machine API v1](API.md) | Server-to-server authentication, scopes, contracts, and credential lifecycle |
 | [Organisation webhooks](WEBHOOKS.md) | Outgoing signed webhooks: event types, payloads, signature verification, retries, auto-disable, and SSRF rules |
+| [Large-event performance](PERFORMANCE.md) | Indexes, set-based reads and streamed exports that keep large hackathons fast, and the judging equivalence test |
 | [Testing](TESTING.md) | Test suites, CI checks, coverage, and release verification |
 
 ## Deployment and operations

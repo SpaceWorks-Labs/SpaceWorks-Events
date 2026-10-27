@@ -2,6 +2,7 @@ import "server-only";
 
 import { EventPrivacyType, type EventStatus, Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
 import { safeTimeZone } from "@/lib/timeZone";
 import {
   ACCOUNT_CERTIFICATES_LIMIT,
@@ -142,11 +143,11 @@ const REGISTRATION_FROM = Prisma.sql`"RSVP" r
  * Keyed on `RSVP.userId` only, with a separate count for the page numbers.
  */
 async function registrationSectionPage(userId: string, now: Date, section: "upcoming" | "past", requestedPage: number) {
-  const at = now.toISOString().replace("Z", "");
+  const at = sqlUtcTimestamp(now);
   const where =
     section === "upcoming"
-      ? Prisma.sql`r."userId" = ${userId} AND COALESCE(e."endDateTime", i."endDateTime") >= ${at}::timestamp(3)`
-      : Prisma.sql`r."userId" = ${userId} AND COALESCE(e."endDateTime", i."endDateTime") < ${at}::timestamp(3)`;
+      ? Prisma.sql`r."userId" = ${userId} AND COALESCE(e."endDateTime", i."endDateTime") >= ${at}`
+      : Prisma.sql`r."userId" = ${userId} AND COALESCE(e."endDateTime", i."endDateTime") < ${at}`;
   const order =
     section === "upcoming"
       ? Prisma.sql`COALESCE(e."startDateTime", i."startDateTime") ASC, r."id" ASC`

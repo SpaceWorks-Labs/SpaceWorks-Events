@@ -4,7 +4,8 @@ import "server-only";
 
 import { SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { conflictKeysFor, hasConflictOfInterest, listEligibleJudges, type ConflictKeys, type EligibleJudgeDto } from "@/lib/core/judging";
+import { conflictKeysFor, listEligibleJudges, type ConflictKeys, type EligibleJudgeDto } from "@/lib/core/judging";
+import { conflictedPairs, judgeWorkOnSubmitted } from "@/lib/core/judging/judgeWork";
 import { entrantDisplayName } from "@/lib/judgingDto";
 import { judgeWeightedPercent } from "@/lib/judgingScore";
 import { pairKey } from "@/lib/judgingAssignment";
@@ -51,7 +52,7 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
   const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: opsEventSelect });
   if (!event) return null;
   const submittedOnly = { eventId: event.id, status: SubmissionStatus.SUBMITTED };
-  const [projects, criteria, eligible, reviews, scores, assignments] = await Promise.all([
+  const [projects, criteria, eligible, pairs, assignments] = await Promise.all([
     prisma.submission.findMany({
       where: submittedOnly,
       select: { id: true, title: true, teamId: true, rsvpId: true, team: { select: { name: true } }, rsvp: { select: { guestName: true, user: { select: { name: true } } } } },
@@ -59,33 +60,34 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
     }),
     prisma.judgingCriterion.findMany({ where: { eventId: event.id }, select: { id: true, weight: true, maxScore: true }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
     listEligibleJudges(ctx),
-    prisma.judgeReview.findMany({ where: { submission: submittedOnly }, select: { submissionId: true, judgeUserId: true, submittedAt: true } }),
-    prisma.judgeScore.findMany({ where: { submission: submittedOnly }, select: { submissionId: true, judgeUserId: true, criterionId: true, score: true, updatedAt: true } }),
+    // One row per (judge, project) with work, scores aggregated in SQL.
+    judgeWorkOnSubmitted(prisma, event.id, { withScores: true }),
     prisma.judgeAssignment.findMany({ where: { eventId: event.id, submission: submittedOnly }, select: { submissionId: true, judgeUserId: true } }),
   ]);
   const judgeById = new Map<string, EligibleJudgeDto>(eligible.map((judge) => [judge.userId, judge]));
   const conflicts: Map<string, ConflictKeys> = await conflictKeysFor(prisma, event.id, [...judgeById.keys()]);
+  const conflicted = conflictedPairs(projects, conflicts);
   const projectById = new Map(projects.map((row) => [row.id, row]));
   // A pair counts only when the judge can still judge the event and has no conflict with that entrant.
-  const valid = (judgeUserId: string, submissionId: string) => {
-    const project = projectById.get(submissionId);
-    return Boolean(project && judgeById.has(judgeUserId) && !hasConflictOfInterest(project, conflicts.get(judgeUserId)));
-  };
+  const valid = (judgeUserId: string, submissionId: string) =>
+    projectById.has(submissionId) && judgeById.has(judgeUserId) && !conflicted.has(pairKey(judgeUserId, submissionId));
 
   const submittedPairs = new Set<string>();
-  for (const review of reviews) if (review.submittedAt && valid(review.judgeUserId, review.submissionId)) submittedPairs.add(pairKey(review.judgeUserId, review.submissionId));
+  const scoresByPair = new Map<string, ReadonlyMap<string, number>>();
+  for (const pair of pairs) {
+    if (!pair.submittedAt || !valid(pair.judgeUserId, pair.submissionId)) continue;
+    const key = pairKey(pair.judgeUserId, pair.submissionId);
+    submittedPairs.add(key);
+    scoresByPair.set(key, pair.scores);
+  }
 
+  // Saved scores without a submitted review: in progress (and stale once old).
   type Started = { judgeUserId: string; submissionId: string; scored: number; lastSavedAt: Date };
-  const scoreIndex = new Map<string, number>();
   const startedPairs = new Map<string, Started>();
-  for (const row of scores) {
-    const key = pairKey(row.judgeUserId, row.submissionId);
-    scoreIndex.set(`${key}\u0000${row.criterionId}`, row.score);
-    if (submittedPairs.has(key) || !valid(row.judgeUserId, row.submissionId)) continue;
-    const entry = startedPairs.get(key) ?? { judgeUserId: row.judgeUserId, submissionId: row.submissionId, scored: 0, lastSavedAt: row.updatedAt };
-    entry.scored += 1;
-    if (row.updatedAt > entry.lastSavedAt) entry.lastSavedAt = row.updatedAt;
-    startedPairs.set(key, entry);
+  for (const pair of pairs) {
+    const key = pairKey(pair.judgeUserId, pair.submissionId);
+    if (pair.scored === 0 || !pair.lastSavedAt || submittedPairs.has(key) || !valid(pair.judgeUserId, pair.submissionId)) continue;
+    startedPairs.set(key, { judgeUserId: pair.judgeUserId, submissionId: pair.submissionId, scored: pair.scored, lastSavedAt: pair.lastSavedAt });
   }
 
   const validAssignments = assignments.filter((row) => valid(row.judgeUserId, row.submissionId));
@@ -95,7 +97,9 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
   const reviewsByProject = new Map<string, string[]>();
   for (const key of submittedPairs) {
     const [judgeUserId, submissionId] = key.split("\u0000") as [string, string];
-    reviewsByProject.set(submissionId, [...(reviewsByProject.get(submissionId) ?? []), judgeUserId]);
+    const judges = reviewsByProject.get(submissionId);
+    if (judges) judges.push(judgeUserId);
+    else reviewsByProject.set(submissionId, [judgeUserId]);
   }
   const startedByProject = new Map<string, number>();
   for (const entry of startedPairs.values()) startedByProject.set(entry.submissionId, (startedByProject.get(entry.submissionId) ?? 0) + 1);
@@ -120,7 +124,7 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
       });
     }
     const percents = judges
-      .map((judgeUserId) => ({ judgeUserId, percent: judgeWeightedPercent(criteria, (criterionId) => scoreIndex.get(`${pairKey(judgeUserId, project.id)}\u0000${criterionId}`)) }))
+      .map((judgeUserId) => ({ judgeUserId, percent: judgeWeightedPercent(criteria, (criterionId) => scoresByPair.get(pairKey(judgeUserId, project.id))?.get(criterionId)) }))
       .filter((entry): entry is { judgeUserId: string; percent: number } => entry.percent != null)
       .sort((a, b) => (a.judgeUserId < b.judgeUserId ? -1 : 1));
     for (const flag of findOutliers(percents)) {
@@ -150,13 +154,19 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
     const [judgeUserId, submissionId] = key.split("\u0000") as [string, string];
     submittedByJudge.set(judgeUserId, (submittedByJudge.get(judgeUserId) ?? new Set()).add(submissionId));
   }
+  // Projects each judge may not see (conflicts of interest), from the conflicted pairs.
+  const conflictedByJudge = new Map<string, number>();
+  for (const key of conflicted) {
+    const judgeUserId = key.split("\u0000")[0]!;
+    conflictedByJudge.set(judgeUserId, (conflictedByJudge.get(judgeUserId) ?? 0) + 1);
+  }
   const judgeRows: ProgressJudgeRow[] = [];
   for (const judge of eligible) {
     const assignedSet = assignedByJudge.get(judge.userId) ?? new Set<string>();
     const submittedSet = submittedByJudge.get(judge.userId) ?? new Set<string>();
     const started = startedByJudge.get(judge.userId) ?? 0;
     if (judge.kind === "admin" && assignedSet.size === 0 && submittedSet.size === 0 && started === 0) continue;
-    const expected = event.judgesSeeAll ? projects.filter((project) => !hasConflictOfInterest(project, conflicts.get(judge.userId))).length : assignedSet.size;
+    const expected = event.judgesSeeAll ? projects.length - (conflictedByJudge.get(judge.userId) ?? 0) : assignedSet.size;
     const done = event.judgesSeeAll ? submittedSet.size : [...submittedSet].filter((id) => assignedSet.has(id)).length;
     judgeRows.push({
       userId: judge.userId,

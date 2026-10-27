@@ -125,6 +125,7 @@ export function MatchingCard({ team, seekers, m }: { team: TeamManagerProps["tea
                   onClick={() => invite(seeker)}
                 >
                   {invited.has(seeker.id) ? "Invited" : "Invite"}
+                  <span className="sr-only"> {seeker.displayName}</span>
                 </Button>
               </li>
             ))}

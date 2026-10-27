@@ -6,7 +6,8 @@ import { EventPermission, JudgingStatus, Prisma, SubmissionStatus } from "@prism
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { isOrgAdmin } from "@/lib/permissions";
-import { conflictKeysFor, hasConflictOfInterest, listEligibleJudges, type JudgingResult } from "@/lib/core/judging";
+import { conflictKeysFor, listEligibleJudges, type JudgingResult } from "@/lib/core/judging";
+import { conflictedPairs, judgeWorkOnSubmitted } from "@/lib/core/judging/judgeWork";
 import { entrantDisplayName } from "@/lib/judgingDto";
 import { pairKey, planAutoAssignment, type AssignmentPair, type AutoAssignMode } from "@/lib/judgingAssignment";
 import { autoAssignInputSchema } from "@/lib/judgingProgress";
@@ -82,23 +83,18 @@ async function buildAutoAssignPlan(client: Prisma.TransactionClient, ctx: Judgin
   if (pool.some((id) => !eligible.all.has(id))) return { ok: false, error: POOL_CHANGED } as const;
 
   const submittedOnly = { eventId: event.id, status: SubmissionStatus.SUBMITTED };
-  const [projects, existing, scored, reviewed] = await Promise.all([
+  const [projects, existing, worked] = await Promise.all([
     client.submission.findMany({ where: submittedOnly, select: { id: true, teamId: true, rsvpId: true }, orderBy: { id: "asc" } }),
     client.judgeAssignment.findMany({ where: { eventId: event.id, submission: submittedOnly }, select: { id: true, judgeUserId: true, submissionId: true } }),
-    client.judgeScore.groupBy({ by: ["submissionId", "judgeUserId"], where: { submission: submittedOnly }, orderBy: [{ submissionId: "asc" }, { judgeUserId: "asc" }] }),
-    client.judgeReview.findMany({ where: { submission: submittedOnly }, select: { submissionId: true, judgeUserId: true, submittedAt: true } }),
+    // Pairs with saved scores or a review row (draft or submitted).
+    judgeWorkOnSubmitted(client, event.id, { withScores: false }),
   ]);
   // Conflicts for everyone whose pairs the plan looks at: the pool, assigned judges, and judges with work on a project.
-  const judgeIds = [...new Set([...pool, ...existing.map((row) => row.judgeUserId), ...scored.map((row) => row.judgeUserId), ...reviewed.map((row) => row.judgeUserId)])];
+  const judgeIds = [...new Set([...pool, ...existing.map((row) => row.judgeUserId), ...worked.map((row) => row.judgeUserId)])];
   const conflicts = await conflictKeysFor(client, event.id, judgeIds);
-  const blocked = new Set<string>();
-  for (const project of projects) {
-    for (const judgeId of judgeIds) {
-      if (hasConflictOfInterest(project, conflicts.get(judgeId))) blocked.add(pairKey(judgeId, project.id));
-    }
-  }
-  const started = new Set([...scored, ...reviewed].map((row) => pairKey(row.judgeUserId, row.submissionId)));
-  const submitted = new Set(reviewed.filter((row) => row.submittedAt).map((row) => pairKey(row.judgeUserId, row.submissionId)));
+  const blocked = conflictedPairs(projects, conflicts);
+  const started = new Set(worked.map((row) => pairKey(row.judgeUserId, row.submissionId)));
+  const submitted = new Set(worked.filter((row) => row.submittedAt).map((row) => pairKey(row.judgeUserId, row.submissionId)));
   const plan = planAutoAssignment({
     projectIds: projects.map((row) => row.id),
     poolJudgeIds: pool,

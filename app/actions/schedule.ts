@@ -9,12 +9,16 @@ import { prisma } from "@/lib/db";
 import { canAccessEvent } from "@/lib/eventAccess";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
+import { zonedDateTimeInput } from "@/lib/validators/shared";
 import type { ActionResult } from "./org";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
 const target = z.object({ organisationSlug: z.string().min(1), eventSeriesId: z.string().min(1) });
-const itemSchema = target.extend({ itemId: z.string().min(1).optional(), title: z.string().trim().min(1).max(200), description: z.string().trim().max(4000).optional().default(""), startDateTime: z.coerce.date(), endDateTime: z.coerce.date() }).refine((v) => v.endDateTime > v.startDateTime, { path: ["endDateTime"], message: "End must be after start." });
+const dateInput = z.union([z.string().trim().min(1).max(40), z.date()]);
+const itemSchema = target.extend({ itemId: z.string().min(1).optional(), title: z.string().trim().min(1).max(200), description: z.string().trim().max(4000).optional().default(""), startDateTime: dateInput, endDateTime: dateInput });
+// The schedule form posts datetime-local values: read them on the series' own clock, never the server's.
+const itemTimes = z.object({ startDateTime: z.coerce.date(), endDateTime: z.coerce.date() }).refine((v) => v.endDateTime > v.startDateTime, { path: ["endDateTime"], message: "End must be after start." });
 
 async function context(data: z.infer<typeof target>, userId: string) {
   const org = await prisma.organisation.findUnique({ where: { slug: data.organisationSlug } });
@@ -29,7 +33,11 @@ export async function saveScheduleItem(input: unknown): Promise<ActionResult> {
   if (!session?.user?.id || !parsed.success) return { ok: false, error: "Invalid schedule item." };
   if (await isActionRateLimited("action", session.user.id)) return { ok: false, error: "Too many schedule updates. Try again shortly." };
   const org = await context(parsed.data, session.user.id); if (!org) return { ok: false, error: "You do not have permission to manage the schedule." };
-  const data = parsed.data;
+  const series = await prisma.eventSeries.findFirst({ where: { id: parsed.data.eventSeriesId, organisationId: org.id }, select: { timezone: true } });
+  if (!series) return { ok: false, error: "You do not have permission to manage the schedule." };
+  const times = itemTimes.safeParse({ startDateTime: zonedDateTimeInput(parsed.data.startDateTime, series.timezone), endDateTime: zonedDateTimeInput(parsed.data.endDateTime, series.timezone) });
+  if (!times.success) return { ok: false, error: "Choose a valid start and end. The end must be after the start, and the time must exist in the series time zone." };
+  const data = { ...parsed.data, ...times.data };
   if (data.itemId) {
     const updated = await prisma.eventScheduleItem.updateMany({ where: { id: data.itemId, eventSeriesId: data.eventSeriesId }, data: { title: data.title, description: data.description, startDateTime: data.startDateTime, endDateTime: data.endDateTime } });
     if (!updated.count) return { ok: false, error: "Schedule item not found." };

@@ -14,6 +14,9 @@ import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { collectionId, contentInput, type ContentKind, type ContentRow, type SaveAction } from "./content";
 import { VisibilitySelect, visibilityLabels, visibilityTones } from "./VisibilitySelect";
 
+/** Matches the 6 MB Server Action body limit, with room for the form fields. */
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
 export function ContentCollection({
   title,
   kind,
@@ -83,17 +86,28 @@ export function ContentCollection({
     event.preventDefault();
     let values = row?.values ?? { sortOrder: rows.length };
     if ((kind === "speaker" || kind === "sponsor") && photoFile) {
+      const assetLabel = kind === "speaker" ? "speaker photo" : "sponsor logo";
+      // Larger files exceed the Server Action body limit and throw instead of returning an error.
+      if (photoFile.size > MAX_PHOTO_BYTES) {
+        onError(`The ${assetLabel} must be 5 MB or smaller.`);
+        return;
+      }
       setUploadingPhoto(true);
       const photo = new FormData();
       photo.set("organisationSlug", target.organisationSlug);
       photo.set("eventId", target.eventId);
       photo.set("file", photoFile);
-      const upload =
-        kind === "speaker"
-          ? await uploadEventSpeakerPhoto(photo)
-          : await uploadEventSponsorLogo(photo);
-      setUploadingPhoto(false);
-      const assetLabel = kind === "speaker" ? "speaker photo" : "sponsor logo";
+      let upload: Awaited<ReturnType<typeof uploadEventSpeakerPhoto>>;
+      try {
+        upload =
+          kind === "speaker"
+            ? await uploadEventSpeakerPhoto(photo)
+            : await uploadEventSponsorLogo(photo);
+      } catch {
+        upload = { ok: false, error: `Could not upload the ${assetLabel}.` };
+      } finally {
+        setUploadingPhoto(false);
+      }
       if (!upload.ok) {
         onError(upload.error);
         return;

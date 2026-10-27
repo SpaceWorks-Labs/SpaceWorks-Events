@@ -33,9 +33,39 @@ describe("capability page caching", () => {
       expect(response.headers.get("cache-control"), path).toContain("private");
       expect(response.headers.get("cache-control"), path).toContain("no-transform");
     }
-    for (const path of ["/acme/launch", "/acme/launch/team", "/acme/launch/schedule", "/acme/launch/results", "/acme/launch/projects", "/account"]) {
+    for (const path of ["/acme/launch", "/acme/launch/team", "/acme/launch/schedule", "/acme/launch/results", "/acme/launch/projects", "/accounting", "/joined", "/orders", "/discover"]) {
       const response = await proxy(new NextRequest(`https://events.example.test${path}`));
       expect(response.headers.get("cache-control"), path).toBe("no-transform");
     }
+  });
+
+  it("marks signed-in areas, invitations, orders, and reset/verify links no-store", async () => {
+    for (const path of [
+      "/dashboard/acme",
+      "/dashboard",
+      "/account",
+      "/super-admin/users",
+      "/verify-mfa",
+      "/join/org/" + "o".repeat(43),
+      "/join/event-collaborator/" + "c".repeat(43),
+      "/order/" + "r".repeat(43),
+      "/verify/" + "v".repeat(32),
+      "/reset-password?token=x",
+      "/verify-email?token=x",
+      "/login",
+    ]) {
+      const response = await proxy(new NextRequest(`https://events.example.test${path}`));
+      expect(response.headers.get("cache-control"), path).toContain("private");
+      expect(response.headers.get("cache-control"), path).toContain("no-store");
+    }
+  });
+
+  it("marks any page no-store for a signed-in request", async () => {
+    for (const cookie of ["swe.session-token.v1=abc", "__Secure-swe.session-token.v1.0=abc"]) {
+      const response = await proxy(new NextRequest("https://events.example.test/acme/launch", { headers: { cookie } }));
+      expect(response.headers.get("cache-control"), cookie).toContain("no-store");
+    }
+    const other = await proxy(new NextRequest("https://events.example.test/acme/launch", { headers: { cookie: "theme=dark" } }));
+    expect(other.headers.get("cache-control")).toBe("no-transform");
   });
 });

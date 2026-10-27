@@ -125,7 +125,7 @@ export function AttendeeSearch({
               </div>
             </div>
             {row.checkedInAt ? (
-              <Button size="sm" variant="quiet" onClick={() => onUndo(row.rsvpId)} disabled={pending || !isOnline}>Undo</Button>
+              <Button size="sm" variant="quiet" onClick={() => onUndo(row.rsvpId)} disabled={pending || !isOnline} aria-label={`Undo check-in for ${row.displayName}`}>Undo</Button>
             ) : (
               <Button size="sm" variant="primary" onClick={() => checkInRow(row, override)} disabled={pending}>Check in</Button>
             )}

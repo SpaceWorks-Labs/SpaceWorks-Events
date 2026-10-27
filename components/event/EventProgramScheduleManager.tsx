@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { deleteScheduleTrack, deleteWebsiteContent, reorderScheduleTracks, saveScheduleTrack, saveSession, setEventSessionDelay } from "@/app/actions/event-website";
 import { ConfirmationDialog } from "@/components/feedback/ConfirmationDialog";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { zonedDatetimeLocalValue, zonedInputToIso } from "@/lib/timeZone";
 
 export type ProgramScheduleTrack = { id: string; name: string; sortOrder: number };
 export type ProgramScheduleRow = {
@@ -23,22 +24,7 @@ export type ProgramScheduleRow = {
 const types = ["Keynote", "Talk", "Panel", "Workshop", "Fireside chat", "Networking", "Break", "Other"];
 const displayType = (type: string) => type.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 
-function localValue(iso: string, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(iso));
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
-}
-function zonedInputToIso(value: string, timeZone: string) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-  if (!match) return null;
-  const [, year, month, day, hour, minute] = match;
-  const guess = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(guess));
-  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
-  const offset = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute")) - guess;
-  const iso = new Date(guess - offset).toISOString();
-  return localValue(iso, timeZone) === value ? iso : null;
-}
+const localValue = (iso: string, timeZone: string) => zonedDatetimeLocalValue(new Date(iso), timeZone);
 function display(iso: string, timeZone: string) { return new Date(iso).toLocaleString(undefined, { timeZone, dateStyle: "medium", timeStyle: "short" }); }
 
 export function EventProgramScheduleManager({ organisationSlug, eventId, eventStart, timeZone, tracks, sessions, speakers }: {
