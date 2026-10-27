@@ -77,14 +77,23 @@ export const submissionSnapshotSchema = z.object({
     score: z.number().int().min(0).max(10),
     createdAt: isoDate,
   })).max(10_000),
+  // `roundId` is missing from snapshots taken before judging rounds: those rows go to the current round.
   reviews: z.array(z.object({
+    roundId: z.string().min(1).max(128).nullish(),
     judgeUserId: z.string().min(1).max(128),
     comment: z.string().max(2000),
     submittedAt: isoDate.nullable(),
     createdAt: isoDate,
   })).max(1_000),
-  assignments: z.array(z.object({ judgeUserId: z.string().min(1).max(128), createdAt: isoDate })).max(1_000),
+  assignments: z.array(z.object({ roundId: z.string().min(1).max(128).nullish(), judgeUserId: z.string().min(1).max(128), createdAt: isoDate })).max(1_000),
   awardWins: z.array(z.object({ awardId: z.string().min(1).max(128), place: z.number().int().min(1).max(1000) })).max(200),
+  /** Rounds the project had advanced into (absent from older snapshots). */
+  roundEntries: z.array(z.object({
+    roundId: z.string().min(1).max(128),
+    advancedByUserId: z.string().min(1).max(128).nullable(),
+    advancedAt: isoDate,
+    sourceRank: z.number().int().min(1).nullable(),
+  })).max(100).optional(),
 });
 
 export type SubmissionSnapshot = z.infer<typeof submissionSnapshotSchema>;
@@ -113,9 +122,10 @@ export async function captureSubmissionSnapshotTx(
       disqualifiedReason: true,
       createdAt: true,
       scores: { select: { judgeUserId: true, criterionId: true, score: true, createdAt: true } },
-      reviews: { select: { judgeUserId: true, comment: true, submittedAt: true, createdAt: true } },
-      assignments: { select: { judgeUserId: true, createdAt: true } },
+      reviews: { select: { roundId: true, judgeUserId: true, comment: true, submittedAt: true, createdAt: true } },
+      assignments: { select: { roundId: true, judgeUserId: true, createdAt: true } },
       awardWins: { select: { awardId: true, place: true } },
+      roundEntries: { select: { roundId: true, advancedByUserId: true, advancedAt: true, sourceRank: true } },
     },
   });
   if (!row) return null;
@@ -135,6 +145,7 @@ export async function captureSubmissionSnapshotTx(
     reviews: row.reviews.map((review) => ({ ...review, submittedAt: review.submittedAt?.toISOString() ?? null, createdAt: review.createdAt.toISOString() })),
     assignments: row.assignments.map((assignment) => ({ ...assignment, createdAt: assignment.createdAt.toISOString() })),
     awardWins: row.awardWins,
+    roundEntries: row.roundEntries.map((entry) => ({ ...entry, advancedAt: entry.advancedAt.toISOString() })),
   };
 }
 
@@ -168,12 +179,16 @@ export async function restoreSubmissionSnapshotTx(
   });
 
   const judgeIds = [...new Set([...snapshot.scores, ...snapshot.reviews, ...snapshot.assignments].map((row) => row.judgeUserId))];
-  const [users, criteria, awards] = await Promise.all([
+  const [users, criteria, awards, rounds] = await Promise.all([
     judgeIds.length > 0 ? tx.user.findMany({ where: { id: { in: judgeIds } }, select: { id: true } }) : Promise.resolve([]),
     tx.judgingCriterion.findMany({ where: { eventId: owner.eventId }, select: { id: true, maxScore: true } }),
     tx.eventAward.findMany({ where: { eventId: owner.eventId }, select: { id: true } }),
+    tx.judgingRound.findMany({ where: { eventId: owner.eventId }, select: { id: true } }),
   ]);
   const liveUsers = new Set(users.map((user) => user.id));
+  // A row from a round deleted since is skipped; an older snapshot's row (no round) goes to the current round.
+  const liveRounds = new Set(rounds.map((round) => round.id));
+  const roundLive = (roundId: string | null | undefined) => roundId == null || liveRounds.has(roundId);
   const maxScore = new Map(criteria.map((criterion) => [criterion.id, criterion.maxScore]));
   const liveAwards = new Set(awards.map((award) => award.id));
 
@@ -184,10 +199,11 @@ export async function restoreSubmissionSnapshotTx(
       skipDuplicates: true,
     });
   }
-  const reviews = snapshot.reviews.filter((review) => liveUsers.has(review.judgeUserId));
+  const reviews = snapshot.reviews.filter((review) => liveUsers.has(review.judgeUserId) && roundLive(review.roundId));
   if (reviews.length > 0) {
     await tx.judgeReview.createMany({
       data: reviews.map((review) => ({
+        roundId: review.roundId ?? null,
         submissionId: snapshot.id,
         judgeUserId: review.judgeUserId,
         comment: review.comment,
@@ -197,10 +213,25 @@ export async function restoreSubmissionSnapshotTx(
       skipDuplicates: true,
     });
   }
-  const assignments = snapshot.assignments.filter((assignment) => liveUsers.has(assignment.judgeUserId));
+  const assignments = snapshot.assignments.filter((assignment) => liveUsers.has(assignment.judgeUserId) && roundLive(assignment.roundId));
   if (assignments.length > 0) {
     await tx.judgeAssignment.createMany({
-      data: assignments.map((assignment) => ({ eventId: owner.eventId, judgeUserId: assignment.judgeUserId, submissionId: snapshot.id, createdAt: new Date(assignment.createdAt) })),
+      data: assignments.map((assignment) => ({ eventId: owner.eventId, roundId: assignment.roundId ?? null, judgeUserId: assignment.judgeUserId, submissionId: snapshot.id, createdAt: new Date(assignment.createdAt) })),
+      skipDuplicates: true,
+    });
+  }
+  // Restoring puts the project back where it was, finalist places included (even in a round that has opened since).
+  const entries = (snapshot.roundEntries ?? []).filter((entry) => liveRounds.has(entry.roundId));
+  if (entries.length > 0) {
+    const advancers = new Set((await tx.user.findMany({ where: { id: { in: entries.flatMap((entry) => (entry.advancedByUserId ? [entry.advancedByUserId] : [])) } }, select: { id: true } })).map((user) => user.id));
+    await tx.judgingRoundEntry.createMany({
+      data: entries.map((entry) => ({
+        roundId: entry.roundId,
+        submissionId: snapshot.id,
+        advancedByUserId: entry.advancedByUserId && advancers.has(entry.advancedByUserId) ? entry.advancedByUserId : null,
+        advancedAt: new Date(entry.advancedAt),
+        sourceRank: entry.sourceRank,
+      })),
       skipDuplicates: true,
     });
   }

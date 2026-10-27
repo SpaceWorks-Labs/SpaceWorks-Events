@@ -2,12 +2,15 @@ import "server-only";
 
 /** Judges' work on SUBMITTED projects, aggregated in SQL for the large-event read paths (docs/HACKATHON.md). */
 
-import { Prisma, SubmissionStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { CountedReview } from "@/lib/judgingScore";
 import { pairKey } from "@/lib/judgingAssignment";
 import type { ConflictKeys } from "./judges";
+import { type JudgingRoundScope, roundProjectsSql, roundScoreSql } from "./rounds/scope";
 
-/** One judge's work on one SUBMITTED project: a review row, saved scores, or both. */
+type WorkRound = Pick<JudgingRoundScope, "id" | "eventId" | "entrySource">;
+
+/** One judge's work on one of a round's projects: a review row, saved scores, or both. */
 export type JudgePairWork = {
   submissionId: string;
   judgeUserId: string;
@@ -24,19 +27,19 @@ export type JudgePairWork = {
 };
 
 /**
- * Every (judge, SUBMITTED project) pair of the event with a review row or
- * saved scores, aggregated in SQL: one row per pair rather than one per
- * score. Scores are grouped per project through the
+ * Every (judge, project) pair of a round (its SUBMITTED projects; see
+ * roundProjectsSql) with a review row or saved scores in that round,
+ * aggregated in SQL: one row per pair rather than one per score. Scores are grouped per project through the
  * `JudgeScore (submissionId, judgeUserId, criterionId)` unique index, so the
  * read is proportional to this event's projects and never sorts or scans
  * every score of the instance. Sorted by project then judge. Eligibility
  * and conflicts of interest are the caller's to apply.
  */
-export async function judgeWorkOnSubmitted(client: Prisma.TransactionClient, eventId: string, options: { withScores: boolean }): Promise<JudgePairWork[]> {
+export async function judgeWorkOnSubmitted(client: Prisma.TransactionClient, round: WorkRound, options: { withScores: boolean }): Promise<JudgePairWork[]> {
   const arrays = options.withScores
     ? Prisma.sql`array_agg(js."criterionId") AS "criterionIds", array_agg(js."score") AS "scores"`
     : Prisma.sql`'{}'::text[] AS "criterionIds", '{}'::int[] AS "scores"`;
-  const submitted = Prisma.sql`s."eventId" = ${eventId} AND s."status" = ${SubmissionStatus.SUBMITTED}::"SubmissionStatus"`;
+  const submitted = Prisma.join(roundProjectsSql(round), " AND ");
   const [scoreRows, reviewRows] = await Promise.all([
     client.$queryRaw<Array<{ submissionId: string; judgeUserId: string; scored: number; lastSavedAt: Date; criterionIds: string[]; scores: number[] }>>`
       SELECT s."id" AS "submissionId", x."judgeUserId", x."scored", x."lastSavedAt", x."criterionIds", x."scores"
@@ -45,14 +48,14 @@ export async function judgeWorkOnSubmitted(client: Prisma.TransactionClient, eve
         -- Both arrays come from one aggregate pass, so their elements pair up.
         SELECT js."judgeUserId", count(*)::int AS "scored", max(js."updatedAt") AS "lastSavedAt", ${arrays}
         FROM "JudgeScore" js
-        WHERE js."submissionId" = s."id"
+        WHERE js."submissionId" = s."id" AND ${roundScoreSql(round)}
         GROUP BY js."judgeUserId"
       ) x
       WHERE ${submitted}`,
     client.$queryRaw<Array<{ submissionId: string; judgeUserId: string; submittedAt: Date | null }>>`
       SELECT jr."submissionId", jr."judgeUserId", jr."submittedAt"
       FROM "JudgeReview" jr JOIN "Submission" s ON s."id" = jr."submissionId"
-      WHERE ${submitted}`,
+      WHERE ${submitted} AND jr."roundId" = ${round.id}`,
   ]);
   const pairs = new Map<string, JudgePairWork>();
   for (const row of scoreRows) {
@@ -80,9 +83,9 @@ export async function judgeWorkOnSubmitted(client: Prisma.TransactionClient, eve
   return [...pairs.values()].sort((a, b) => byId(a.submissionId, b.submissionId) || byId(a.judgeUserId, b.judgeUserId));
 }
 
-/** Submitted reviews of SUBMITTED projects with their scores (eligibility and conflicts still to apply). */
-export async function submittedReviewScores(client: Prisma.TransactionClient, eventId: string): Promise<CountedReview[]> {
-  const pairs = await judgeWorkOnSubmitted(client, eventId, { withScores: true });
+/** Submitted reviews of a round's projects with their scores (eligibility and conflicts still to apply). */
+export async function submittedReviewScores(client: Prisma.TransactionClient, round: WorkRound): Promise<CountedReview[]> {
+  const pairs = await judgeWorkOnSubmitted(client, round, { withScores: true });
   return pairs.filter((pair) => pair.submittedAt != null).map((pair) => ({ submissionId: pair.submissionId, judgeUserId: pair.judgeUserId, scores: pair.scores }));
 }
 

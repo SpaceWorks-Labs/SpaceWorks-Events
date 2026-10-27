@@ -8,50 +8,31 @@ import { asResultsPublishedPayload, enqueueResultsPublished } from "@/lib/outbox
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { judgingStatusSchema, scoreNormalizationSchema } from "@/lib/validators";
 import { CHANGED, fail, type JudgingResult, ok, okEmpty, personEmail, personName, personSelect, withOrganiserLock } from "./shared";
+import { judgingStatusFor, resolveJudgingRound, roundStatusFor } from "./rounds/scope";
+import { ensureJudgingRound, syncCurrentRound } from "./rounds/sync";
+import { changeRoundStatus } from "./rounds/status";
 
 // ---------------------------------------------------------------------------
 // Judging status and results publication
 // ---------------------------------------------------------------------------
 
 /**
+ * The current round's judging status (the event-level status mirrors it):
  * NOT_STARTED -> OPEN (needs a rubric), OPEN -> CLOSED (freezes scores),
  * CLOSED -> OPEN (only while results are unpublished), and back to
- * NOT_STARTED only before anyone has scored. Audited (JUDGING_STATUS_CHANGED).
+ * NOT_STARTED only before anyone has scored. The rules per round are in
+ * `changeRoundStatus`. Audited (JUDGING_STATUS_CHANGED).
  */
 export async function setJudgingStatus(ctx: JudgingOrganiserContext, status: unknown): Promise<JudgingResult<{ judgingStatus: JudgingStatus }>> {
   const parsed = judgingStatusSchema.safeParse(status);
   if (!parsed.success) return fail("Invalid judging status.");
   const next = parsed.data as JudgingStatus;
   return withOrganiserLock(ctx, async (tx, event) => {
-    const from = event.judgingStatus;
+    const round = await ensureJudgingRound(tx, event);
+    const from = judgingStatusFor(round.status);
     if (from === next) return ok({ judgingStatus: from });
-    if (next === JudgingStatus.OPEN) {
-      if (!event.submissionsEnabled) return fail("Turn on submissions first.");
-      if (event.resultsPublishedAt) return fail("Unpublish the results before reopening judging.");
-      const criteria = await tx.judgingCriterion.count({ where: { eventId: event.id } });
-      if (criteria === 0) return fail("Add at least one rubric criterion before opening judging.");
-    } else if (next === JudgingStatus.CLOSED) {
-      if (from !== JudgingStatus.OPEN) return fail("Only open judging can be closed.");
-    } else {
-      const [scores, reviews] = await Promise.all([
-        tx.judgeScore.count({ where: { submission: { eventId: event.id } } }),
-        tx.judgeReview.count({ where: { submission: { eventId: event.id } } }),
-      ]);
-      if (scores > 0 || reviews > 0) return fail("Judges have already scored, so judging can't be reset.");
-      if (event.resultsPublishedAt) return fail("Unpublish the results first.");
-    }
-    const updated = await tx.event.updateMany({ where: { id: event.id, judgingStatus: from }, data: { judgingStatus: next } });
-    if (updated.count !== 1) return fail(CHANGED);
-    await recordAuditEvent({
-      client: tx,
-      action: "JUDGING_STATUS_CHANGED",
-      actorUserId: ctx.userId,
-      organisationId: ctx.organisationId,
-      targetType: "Event",
-      targetId: event.id,
-      metadata: { from, to: next },
-    });
-    return ok({ judgingStatus: next });
+    const changed = await changeRoundStatus(tx, ctx, event, { ...round, id: round.id! }, roundStatusFor(next));
+    return changed.ok ? ok({ judgingStatus: next }) : changed;
   });
 }
 
@@ -68,10 +49,12 @@ export async function setScoreNormalization(ctx: JudgingOrganiserContext, input:
   if (!parsed.success) return fail("Invalid score method.");
   const next = parsed.data as ScoreNormalization;
   return withOrganiserLock(ctx, async (tx, event) => {
-    const current = await tx.event.findUnique({ where: { id: event.id }, select: { scoreNormalization: true } });
-    const from = current?.scoreNormalization ?? ScoreNormalization.RAW;
+    // The current round's method; the event-level field mirrors it.
+    const round = await ensureJudgingRound(tx, event);
+    const from = round.scoreNormalization;
     if (from === next) return ok({ scoreNormalization: next });
-    await tx.event.update({ where: { id: event.id }, data: { scoreNormalization: next } });
+    await tx.judgingRound.update({ where: { id: round.id! }, data: { scoreNormalization: next } });
+    await syncCurrentRound(tx, event.id);
     await recordAuditEvent({
       client: tx,
       action: "JUDGING_SCORE_NORMALIZATION_CHANGED",
@@ -101,6 +84,9 @@ export async function publishResults(ctx: JudgingOrganiserContext): Promise<Judg
     if (event.resultsPublishedAt) return ok({ publishedAt: event.resultsPublishedAt, queued: 0, alreadyPublished: true });
     if (!event.submissionsEnabled) return fail("This event is not taking project submissions.");
     if (event.judgingStatus !== JudgingStatus.CLOSED) return fail("Close judging before publishing results.");
+    // Results come from the final round: a round still to judge after the current one blocks publication.
+    const round = await resolveJudgingRound(tx, event);
+    if (round && !round.isFinal) return fail("A later judging round hasn't been judged yet. Open and close it, or delete it, before publishing results.");
     const publishedAt = new Date();
     const announced = await tx.event.findUnique({ where: { id: event.id }, select: { resultsAnnouncedAt: true } });
     const firstAnnouncement = !announced?.resultsAnnouncedAt;

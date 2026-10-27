@@ -84,3 +84,29 @@ export async function sendResultsPublishedEmail(params: {
   }
   await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
 }
+
+/** A round's finalists are announced: the entrant's project advanced. Links to the public results page; never scores. */
+export async function sendFinalistsAnnouncedEmail(params: {
+  to: string;
+  eventTitle: string;
+  roundName: string;
+  projectTitle: string;
+  resultsPath: string;
+  recipientName?: string;
+  messageId?: string;
+}): Promise<void> {
+  const { transporter, from } = await getEmailTransport();
+  const resultsUrl = `${getBaseUrl()}${params.resultsPath}`;
+  const salutation = greeting(params.recipientName);
+  const subject = `You're through to ${headerText(params.roundName)} · ${headerText(params.eventTitle)}`;
+  const html = emailLayout(escapeHtml(subject), `
+          <h2 style="${HEADING_STYLE}">You're a finalist</h2>
+          <p style="${BODY_STYLE}">${salutation.html}<br><br>Your project <strong>${escapeHtml(params.projectTitle)}</strong> has advanced to <strong>${escapeHtml(params.roundName)}</strong> of <strong>${escapeHtml(params.eventTitle)}</strong>. The organisers will share what happens next.</p>
+          ${emailButton(resultsUrl, "See the finalists")}`);
+  const text = `${subject}\n\n${salutation.text}\n\nYour project "${params.projectTitle}" has advanced to ${params.roundName} of "${params.eventTitle}". The organisers will share what happens next.\n\n${resultsUrl}\n\nBest regards,\nSpace Works Events`;
+  if (!transporter) {
+    console.log("[EMAIL MOCK] finalists announcement queued");
+    return;
+  }
+  await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
+}

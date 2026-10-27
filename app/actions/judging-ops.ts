@@ -43,6 +43,11 @@ async function organiserGate(input: unknown, bucket: "action" | "search"): Promi
   return { ok: true, ctx, input: fields };
 }
 
+/** The optional judging round a read is about (docs/HACKATHON.md "Rounds"); the current round when absent. */
+function roundOption(fields: Record<string, unknown>): { roundId?: string } {
+  return typeof fields.roundId === "string" && fields.roundId ? { roundId: fields.roundId } : {};
+}
+
 function revalidateJudging(ctx: JudgingOrganiserContext) {
   revalidatePath(`/dashboard/${ctx.orgSlug}/event/${ctx.eventId}`);
 }
@@ -53,6 +58,8 @@ function autoAssignInput(fields: Record<string, unknown>, withFingerprint: boole
     perProject: options.perProject,
     mode: options.mode,
     judgeUserIds: options.judgeUserIds,
+    ...(options.strategy !== undefined ? { strategy: options.strategy } : {}),
+    ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(withFingerprint ? { fingerprint: options.fingerprint } : {}),
   };
 }
@@ -86,7 +93,16 @@ export async function saveReviewsPerProject(input: unknown): Promise<ActionResul
 export async function loadJudgingProgressPage(input: unknown): Promise<ActionResult<ops.JudgingProgressSectionDto>> {
   const gate = await organiserGate(input, "search");
   if (!gate.ok) return gate;
-  const page = await ops.loadJudgingProgressPage(gate.ctx, { section: gate.input.section, page: gate.input.page ?? 1 });
+  const page = await ops.loadJudgingProgressPage(gate.ctx, { section: gate.input.section, page: gate.input.page ?? 1 }, new Date(), roundOption(gate.input));
   if (!page) return { ok: false, error: "Invalid input." };
   return { ok: true, data: page };
+}
+
+/** The whole Progress model (summary and first pages) for one judging round, for the round switcher. */
+export async function loadJudgingProgressRound(input: unknown): Promise<ActionResult<ops.JudgingProgressDto>> {
+  const gate = await organiserGate(input, "search");
+  if (!gate.ok) return gate;
+  const progress = await ops.loadJudgingProgress(gate.ctx, new Date(), roundOption(gate.input));
+  if (!progress) return { ok: false, error: "Judging round not found." };
+  return { ok: true, data: progress };
 }

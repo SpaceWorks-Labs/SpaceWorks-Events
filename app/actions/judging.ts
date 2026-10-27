@@ -5,8 +5,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { resolveJudgeContext, type JudgeContext } from "@/lib/judgingAccess";
-import { listJudgeSubmissionsPage, loadSubmissionForJudge, nextSubmissionForJudge, saveJudgeScores, submitJudgeReview, type JudgeNextDto } from "@/lib/core/judging";
-import type { JudgeSubmissionDetailDto, JudgeSubmissionsPageDto } from "@/lib/judgingDto";
+import { listJudgeSubmissionsPage, listSubmissionsForJudge, loadSubmissionForJudge, nextSubmissionForJudge, saveJudgeScores, submitJudgeReview, type JudgeNextDto } from "@/lib/core/judging";
+import type { JudgeSubmissionDetailDto, JudgeSubmissionsPageDto, JudgeWorkspaceDto } from "@/lib/judgingDto";
 import { judgeSubmissionsQuerySchema } from "@/lib/judgingPaging";
 import { judgeReviewSchema } from "@/lib/validators";
 import type { ActionResult } from "./org";
@@ -47,6 +47,11 @@ async function judgeGate(input: unknown, bucket: "action" | "search" = "action")
   return { ok: true, ctx, rest };
 }
 
+/** The judging round a read is about (docs/HACKATHON.md "Rounds"); the current round, the one judges score, when absent. */
+function roundOption(fields: Record<string, unknown>): { roundId?: string } {
+  return typeof fields.roundId === "string" && fields.roundId ? { roundId: fields.roundId } : {};
+}
+
 function revalidateJudgeWorkspace(ctx: JudgeContext) {
   revalidatePath(`/dashboard/${ctx.orgSlug}/event/${ctx.eventId}`);
 }
@@ -60,9 +65,11 @@ function revalidateJudgeWorkspace(ctx: JudgeContext) {
 export async function loadJudgeSubmissionsPage(input: unknown): Promise<ActionResult<JudgeSubmissionsPageDto>> {
   const gate = await judgeGate(input, "search");
   if (!gate.ok) return gate;
-  const query = judgeSubmissionsQuerySchema.safeParse(gate.rest);
+  const { roundId: _roundId, ...rest } = gate.rest;
+  void _roundId;
+  const query = judgeSubmissionsQuerySchema.safeParse(rest);
   if (!query.success) return { ok: false, error: "Invalid request." };
-  const page = await listJudgeSubmissionsPage(gate.ctx, query.data);
+  const page = await listJudgeSubmissionsPage(gate.ctx, query.data, roundOption(gate.rest));
   if (!page) return { ok: false, error: NO_ACCESS };
   return { ok: true, data: page };
 }
@@ -72,7 +79,7 @@ export async function loadJudgeSubmission(input: unknown): Promise<ActionResult<
   const gate = await judgeGate(input);
   if (!gate.ok) return gate;
   const submissionId = typeof gate.rest.submissionId === "string" ? gate.rest.submissionId : "";
-  const detail = await loadSubmissionForJudge(gate.ctx, submissionId);
+  const detail = await loadSubmissionForJudge(gate.ctx, submissionId, roundOption(gate.rest));
   if (!detail) return { ok: false, error: "This submission is not available to you." };
   return { ok: true, data: detail };
 }
@@ -86,7 +93,7 @@ export async function loadJudgeSubmission(input: unknown): Promise<ActionResult<
 export async function loadNextJudgeSubmission(input: unknown): Promise<ActionResult<JudgeNextDto>> {
   const gate = await judgeGate(input);
   if (!gate.ok) return gate;
-  const result = await nextSubmissionForJudge(gate.ctx);
+  const result = await nextSubmissionForJudge(gate.ctx, roundOption(gate.rest));
   if (!result) return { ok: false, error: NO_ACCESS };
   return { ok: true, data: result };
 }
@@ -119,4 +126,17 @@ export async function saveJudgeReviewAction(input: unknown): Promise<ActionResul
   revalidateJudgeWorkspace(gate.ctx);
   if (!reviewed.ok) return reviewed;
   return { ok: true, data: { ...saved.data, submitted: reviewed.data.submitted } };
+}
+
+/**
+ * The judge workspace for one judging round (the round switcher): its rubric,
+ * totals and first page, under that round's visibility rules. Read-only, on
+ * the search bucket; scoring always targets the current round.
+ */
+export async function loadJudgeWorkspaceRound(input: unknown): Promise<ActionResult<JudgeWorkspaceDto>> {
+  const gate = await judgeGate(input, "search");
+  if (!gate.ok) return gate;
+  const workspace = await listSubmissionsForJudge(gate.ctx, {}, roundOption(gate.rest));
+  if (!workspace) return { ok: false, error: NO_ACCESS };
+  return { ok: true, data: workspace };
 }

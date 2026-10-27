@@ -75,6 +75,11 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/** The optional judging round a call is about (docs/HACKATHON.md "Rounds"); the current round when absent. */
+function roundOption(fields: Record<string, unknown>): { roundId?: string } {
+  return typeof fields.roundId === "string" && fields.roundId ? { roundId: fields.roundId } : {};
+}
+
 // ---------------------------------------------------------------------------
 // Settings and judging status
 // ---------------------------------------------------------------------------
@@ -113,19 +118,19 @@ function criterionInput(value: unknown) {
 }
 
 export async function addJudgingCriterion(input: unknown): Promise<ActionResult<{ id: string }>> {
-  return run(input, (ctx, fields) => judging.createJudgingCriterion(ctx, criterionInput(fields.criterion)));
+  return run(input, (ctx, fields) => judging.createJudgingCriterion(ctx, criterionInput(fields.criterion), roundOption(fields)));
 }
 
 export async function editJudgingCriterion(input: unknown): Promise<ActionResult> {
-  return run(input, async (ctx, fields) => judging.updateJudgingCriterion(ctx, asString(fields.criterionId), criterionInput(fields.criterion)));
+  return run(input, async (ctx, fields) => judging.updateJudgingCriterion(ctx, asString(fields.criterionId), criterionInput(fields.criterion), roundOption(fields)));
 }
 
 export async function removeJudgingCriterion(input: unknown): Promise<ActionResult> {
-  return run(input, (ctx, fields) => judging.deleteJudgingCriterion(ctx, asString(fields.criterionId)));
+  return run(input, (ctx, fields) => judging.deleteJudgingCriterion(ctx, asString(fields.criterionId), roundOption(fields)));
 }
 
 export async function reorderJudgingCriteria(input: unknown): Promise<ActionResult> {
-  return run(input, (ctx, fields) => judging.reorderJudgingCriteria(ctx, fields.ids));
+  return run(input, (ctx, fields) => judging.reorderJudgingCriteria(ctx, fields.ids, roundOption(fields)));
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +247,7 @@ export async function loadUnsubmittedEntrantsPage(input: unknown): Promise<Actio
 export async function loadResultsPage(input: unknown): Promise<ActionResult<JudgingDashboardResultsPage>> {
   const gate = await organiserGate(input, "search");
   if (!gate.ok) return gate;
-  const page = await judging.loadJudgingResultsPage(gate.ctx, { query: gate.input.query ?? "", page: gate.input.page ?? 1, scored: gate.input.scored ?? "all" });
+  const page = await judging.loadJudgingResultsPage(gate.ctx, { query: gate.input.query ?? "", page: gate.input.page ?? 1, scored: gate.input.scored ?? "all" }, roundOption(gate.input));
   if (!page) return { ok: false, error: "Invalid input." };
   return { ok: true, data: toDashboardResultsPage(page) };
 }

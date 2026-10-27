@@ -5,6 +5,7 @@ import { listEligibleJudges } from "@/lib/core/judging";
 import { loadJudgingProgress } from "@/lib/core/judgingOps";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { loadSavedViewsForDashboard } from "@/lib/eventDashboard/savedViews";
+import { loadDashboardRounds } from "@/lib/eventDashboard/judgingRounds";
 
 /** Judging → Progress: the summary and first pages, plus who can be picked for automatic assignment. */
 async function loadProgressTab(organiser: JudgingOrganiserContext, now: Date) {
@@ -12,15 +13,16 @@ async function loadProgressTab(organiser: JudgingOrganiserContext, now: Date) {
   return data ? { data, judges } : null;
 }
 
-/** Judging settings, rubric, submissions, progress, awards and results: owners and admins only. */
+/** Judging settings, rubric, rounds, submissions, progress, awards and results: owners and admins only. */
 export async function loadJudgingPanel({ ctx }: { ctx: EventDashboardContext; }) {
   ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
   if (!ctx.permissions.canManageJudging) return null;
   const organiser = judgingOrganiserContext(ctx);
-  const [data, progress, savedViews] = await Promise.all([
+  const [data, progress, savedViews, rounds] = await Promise.all([
     loadJudgingDashboard(ctx),
     organiser ? loadProgressTab(organiser, ctx.now) : null,
     loadSavedViewsForDashboard(ctx),
+    organiser ? loadDashboardRounds(organiser) : [],
   ]);
-  return data ? { ...data, progress, savedViews } : null;
+  return data ? { ...data, progress, savedViews, rounds } : null;
 }
