@@ -39,7 +39,10 @@ export type Bucket =
   | "ticketCheckout"
   | "clientError"
   | "webhookManage"
-  | "webhookTest";
+  | "webhookTest"
+  | "mobileAuth"
+  | "mobileRefresh"
+  | "mobileApi";
 
 const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   global: { max: 300, windowMs: 60_000 },
@@ -103,6 +106,12 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   webhookManage: { max: 30, windowMs: 60_000 },
   // Webhook test sends and manual redeliveries each make an outbound request.
   webhookTest: { max: 20, windowMs: 60 * 60_000 },
+  // Mobile app sign-in (password, Google) and authenticator checks, per IP.
+  mobileAuth: { max: 10, windowMs: 60_000 },
+  // Mobile token refreshes, per IP. Phones at one venue often share a NAT.
+  mobileRefresh: { max: 60, windowMs: 60_000 },
+  // Signed-in mobile requests, per app session (not per IP: venue NAT).
+  mobileApi: { max: 300, windowMs: 60_000 },
 };
 
 // Local fallback store

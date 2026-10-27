@@ -12,6 +12,7 @@ import { flattenZodErrors } from "./utils";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { enqueuePasswordReset } from "@/lib/outbox";
 import { noticeEach } from "@/lib/notices";
+import { revokeUserMobileSessions } from "@/lib/mobileAuth";
 
 const TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
@@ -136,6 +137,7 @@ export async function confirmPasswordReset(
       select: { id: true },
     });
     await tx.session.deleteMany({ where: { userId: user.id } });
+    await revokeUserMobileSessions(tx, user.id);
     await tx.verificationToken.deleteMany({ where: { identifier: { in: [`mfa:${user.id}`, `email-verification:${user.id}`] } } });
     await tx.auditEvent.create({ data: { action: "ACCOUNT_PASSWORD_RESET", actorUserId: user.id, targetType: "User", targetId: user.id } });
     await noticeEach(tx, [email], { subject: "Your password was changed", lines: ["The password for your Space Works Events account was just changed, and every other session was signed out.", "If this wasn't you, reset your password from the sign-in page straight away and contact your administrator."] });

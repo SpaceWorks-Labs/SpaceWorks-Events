@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { publishTicketCheckedIn } from "@/lib/ticketCheckInEvents";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 
-type CheckInSource = "online" | "offline-sync" | "venue-station";
+export type CheckInSource = "online" | "offline-sync" | "venue-station" | "mobile-scan" | "mobile-manual";
 
 export type CheckInCommitResult =
   | { state: "checked-in"; checkedInAt: Date }
@@ -65,7 +65,7 @@ export async function commitCheckInProjection(params: {
 export async function commitUndoCheckInProjection(params: {
   rsvpId: string;
   actorUserId: string | null;
-  source: "online" | "venue-station";
+  source: "online" | "venue-station" | "mobile-scan" | "mobile-manual";
 }) {
   const undone = await prisma.$transaction(async (tx) => {
     const changed = await tx.rSVP.updateMany({

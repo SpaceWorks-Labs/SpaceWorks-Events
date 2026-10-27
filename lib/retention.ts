@@ -14,7 +14,7 @@ export async function purgeExpiredOperationalData(now = new Date()) {
   );
   const sentBefore = new Date(now.getTime() - outboxRetentionDays * DAY_MS);
   const webhookBefore = new Date(now.getTime() - 30 * DAY_MS);
-  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents, webhookDeliveries] = await prisma.$transaction([
+  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents, webhookDeliveries, mobileSessions] = await prisma.$transaction([
     prisma.verificationToken.deleteMany({ where: { expires: { lt: now } } }),
     prisma.session.deleteMany({ where: { expires: { lt: now } } }),
     prisma.organisationInvite.deleteMany({ where: { usedAt: null, expiresAt: { lt: now } } }),
@@ -35,6 +35,10 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     prisma.webhookDelivery.deleteMany({
       where: { createdAt: { lt: webhookBefore }, status: { not: WebhookDeliveryStatus.PROCESSING } },
     }),
+    // Mobile app sessions past their refresh lifetime, or revoked a week ago.
+    prisma.mobileSession.deleteMany({
+      where: { OR: [{ refreshExpiresAt: { lt: now } }, { revokedAt: { lt: new Date(now.getTime() - 7 * DAY_MS) } }] },
+    }),
   ]);
   return {
     verificationTokens: tokens.count,
@@ -46,5 +50,6 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     failedOutboxMessages: failedMessages.count,
     processedWebhookEvents: webhookEvents.count,
     webhookDeliveries: webhookDeliveries.count,
+    mobileSessions: mobileSessions.count,
   };
 }

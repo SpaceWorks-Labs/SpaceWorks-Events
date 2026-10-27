@@ -315,6 +315,7 @@ model User {
 
   accounts          Account[]
   sessions          Session[]
+  mobileSessions    MobileSession[]
   devices           UserDevice[]
   memberships       Membership[]
   rsvps             RSVP[]
@@ -374,6 +375,44 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// A Space Works mobile app session (Android or iOS). Only SHA-256 digests of
+/// the bearer tokens are stored. Bumping the user's `sessionVersion` (password
+/// change or reset, signing out everywhere, authenticator changes) revokes it.
+model MobileSession {
+  id                       String    @id @default(cuid())
+  userId                   String
+  /// Hex SHA-256 of the current access token.
+  accessTokenHash          String    @unique
+  /// Hex SHA-256 of the current refresh token.
+  refreshTokenHash         String    @unique
+  /// Hex SHA-256 of the refresh token this one replaced. Presenting it again
+  /// after the retry grace window is treated as theft and revokes the session.
+  previousRefreshTokenHash String?   @unique
+  rotatedAt                DateTime?
+  sessionVersion           Int
+  /// SHA-256 (lib/loginSecurity.ts deviceHash) of the app's install id. A
+  /// refresh must come from the same install.
+  deviceHash               String
+  deviceName               String?
+  /// "android" or "ios"; informational only.
+  platform                 String?
+  /// When the credential (password or Google) was last proved on this session.
+  authenticatedAt          DateTime  @default(now())
+  /// When this session last passed an authenticator check; staff access needs
+  /// it within the last 12 hours.
+  mfaVerifiedAt            DateTime?
+  createdAt                DateTime  @default(now())
+  lastUsedAt               DateTime  @default(now())
+  accessExpiresAt          DateTime
+  refreshExpiresAt         DateTime
+  revokedAt                DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([refreshExpiresAt])
 }
 
 /// A browser this account signed in from with a password. A sign-in from a
@@ -648,6 +687,11 @@ model Event {
   listedPublicly        Boolean          @default(false)
   registrationClosesAt  DateTime?
   registrationLeadMinutes Int?
+  /// Set when sign-ups were closed from the mobile app; the cutoff before that
+  /// close is kept so reopening restores it. The dashboard event form clears it.
+  registrationManuallyClosedAt DateTime?
+  registrationCutoffBeforeManualClose DateTime?
+  registrationLeadBeforeManualClose Int?
   /// bcrypt hash for the public venue check-in station PIN. Incrementing the
   /// version invalidates all existing station proofs.
   checkInStationPinHash String?
