@@ -2,6 +2,12 @@
 
 [Documentation index](README.md)
 
+## In-app guide
+
+- A searchable guide at `/help` for guests, organisers, organisation owners and admins, and the person running the server, linked from the site header and footer, the account menu, and **Help** links beside dashboard screens (which open the matching article in a new tab).
+- Articles cover every area of the app, with numbered steps, notes on who can do what, and screenshots from a seeded demo instance. Search runs in the browser over the articles the reader may see; sections for owners and admins (the machine API and webhooks) and for the super admin (instance administration and installation) are listed only for them.
+- The technical handbook stays in `docs/`.
+
 ## Accounts and authentication
 
 - Email/password signup and sign-in with bcrypt password hashing and one-time inbox verification before account activation.

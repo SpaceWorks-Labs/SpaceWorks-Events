@@ -1,0 +1,81 @@
+The machine API lets your own systems read your organisation's events, confirmed participants and order totals, without anyone signing in. Use it to feed a CRM, a spreadsheet job, a badge printer or a reporting dashboard. Every credential belongs to exactly one organisation, can only read, and sees only what its scopes allow.
+
+<Callout kind="permission">
+
+Organisation owners only. Admins and members don't see **API access**.
+
+</Callout>
+
+## Creating an API client
+
+An API client is one system that talks to the API, such as "Finance sync". It has a set of scopes and one or more credentials.
+
+<Steps>
+
+1. Open your organisation's **Settings** and, under **API access**, choose **Manage API access**.
+2. Under **Create API client**, enter an **Application name** and a **Credential label** (for example "production").
+3. Set an **Optional expiry** if the credential should stop working on a date.
+4. Tick only the **Scopes** the system needs.
+5. Choose **Create client**.
+6. In **Copy this credential now**, choose **Copy**, store the value in your system's secret manager, then choose **I have stored it**.
+
+</Steps>
+
+<Callout kind="warning">
+
+The credential is shown once. Space Works Events keeps only a fingerprint of it, so nobody, including the server's operator, can show it to you again. If you lose it, create a new credential and revoke the old one.
+
+</Callout>
+
+## Scopes
+
+| Scope | What it allows |
+| --- | --- |
+| `events:read` | List your organisation's events and read one event, including drafts and hidden events. |
+| `participants:read` | Read the confirmed participants of one of your events: an ID, a display name and when they registered. |
+| `participants:attendance:read` | Together with `participants:read`, also return when each participant was checked in. On its own it gives no access. |
+| `orders:read` | Read an event's orders as totals: reference, status, currency, total, amount paid and refunded, ticket count, whether it was a test, and when it was placed. |
+
+The API returns deliberately little. It never includes email addresses, user IDs, registration answers, invitations, feedback, buyer names, receipts, card details, payment provider IDs, or ticket, check-in or certificate links. It has no write operations. Recurring series dates aren't part of it yet: it covers standalone events.
+
+You can change a client's scopes later: tick or untick them on the client and choose **Save scopes**.
+
+## Making requests
+
+The **Developer reference** at the bottom of the **API access** page shows your server's **API base URL** and an example request and response for each endpoint. In short:
+
+- Send the credential in the header `Authorization: Bearer <credential>`. Never put it in a URL.
+- `GET /api/v1/events` lists events, and `GET /api/v1/events/:eventId` reads one.
+- `GET /api/v1/events/:eventId/participants` lists confirmed participants. Add `attendance=checked_in` or `attendance=not_checked_in` to filter, and `include=attendance` for check-in times.
+- `GET /api/v1/events/:eventId/orders` lists orders, newest first. Amounts are decimal strings in the order's currency.
+
+Lists return up to 50 items by default and at most 100 with `limit`. Pass the returned `nextCursor` back unchanged to get the next page; a `null` cursor means you have everything.
+
+### Tenant-bound by design
+
+The organisation always comes from the credential. You can't pass an organisation in a request, and asking for another organisation's event gives the same "not found" answer as an event that doesn't exist. Invalid, expired, revoked and disabled credentials all get the same generic "unauthorised" answer, so a stolen or guessed value reveals nothing.
+
+### Errors and limits
+
+Errors share one shape with a `code` and a `message`. The codes are `INVALID_REQUEST`, `INVALID_CREDENTIAL`, `INSUFFICIENT_SCOPE`, `RESOURCE_NOT_FOUND`, `RATE_LIMITED` and `INTERNAL_ERROR`. Each client can make up to 600 requests a minute; past that you get `RATE_LIMITED` with a `Retry-After` header. Responses are never cached.
+
+## Rotating and revoking credentials
+
+Rotate without downtime:
+
+<Steps>
+
+1. On the client, under **Create rotation credential**, enter a **Credential label** and choose **Create credential**.
+2. Copy the new value and deploy it to your system.
+3. Check that requests work with the new credential. Each credential shows when it was last used.
+4. Choose **Revoke** on the old credential and confirm.
+
+</Steps>
+
+To stop a whole system at once, choose **Disable client**. Every credential for that client stops working until you choose **Enable client** again.
+
+## Good to know
+
+- Creating clients, changing scopes, creating and revoking credentials, and disabling clients are recorded in the organisation's audit log, never with the credential itself. Ordinary reads aren't logged one by one.
+- Keep credentials in a secret manager. Never place them in browser code, source control, analytics or logs. If one leaks, revoke it straight away.
+- To be told when something happens instead of asking repeatedly, use [Webhooks](/help/developers/webhooks).

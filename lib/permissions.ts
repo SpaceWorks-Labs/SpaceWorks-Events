@@ -39,6 +39,22 @@ function normalizeEmail(email: string): string {
 
 
 /**
+ * The user's email when they are the configured, verified super admin, else
+ * null. Pages and actions use `requireSuperAdminMfa`; this is for readers that
+ * only need to know (the guide's section list, lib/views/app__help__layout.ts).
+ */
+export async function superAdminEmailFor(userId: string): Promise<string | null> {
+  const configured = process.env.SUPER_ADMIN_EMAIL;
+  if (!configured) return null;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, emailVerified: true },
+  });
+  if (!user?.email || !user.emailVerified) return null;
+  return normalizeEmail(user.email) === normalizeEmail(configured) ? user.email : null;
+}
+
+/**
  * Instance-wide super-admin gate.
  *
  * Access is granted only when `process.env.SUPER_ADMIN_EMAIL` is set and matches
@@ -52,16 +68,8 @@ export async function requireSuperAdmin(): Promise<
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const configured = process.env.SUPER_ADMIN_EMAIL;
-  if (!configured) notFound();
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { email: true, emailVerified: true },
-  });
-  const userEmail = user?.email;
-  if (!userEmail || !user.emailVerified) notFound();
-
-  if (normalizeEmail(userEmail) !== normalizeEmail(configured)) notFound();
+  const userEmail = await superAdminEmailFor(session.user.id);
+  if (!userEmail) notFound();
 
   return {
     ...session,

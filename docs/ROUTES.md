@@ -11,6 +11,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/` | Landing page |
 | `/about`, `/features` | Product story and feature overview |
 | `/privacy`, `/terms` | Privacy policy and terms of use |
+| `/help`, `/help/:section/:article` | The in-app guide (`content/help`, MDX): search, section navigation and articles. Sections for organisation owners and admins (`developers/*`) and for the super admin (`instance/*`, `installation/*`) are listed only for those readers and are a real 404 for everyone else; this is a reading convenience, not authorization. Unknown articles are a 404. Signed-in requests are `no-store` like every signed-in page |
 | `/discover` | Paginated public event discovery |
 | `/search` | Public event search UI |
 | `/:orgSlug` | Public organisation page |
@@ -86,6 +87,7 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/exports/account/ids/:memberId` | Session; the card's own holder | The signed-in user's own approved card as PDF or PNG |
 | `POST /api/check-in/station` | PIN-scoped station session, rate-limited | Open and operate a venue check-in station |
 | `GET /api/search?q=...` | Public, rate-limited | Return matching public events |
+| `GET /api/help/search-index` | Optional session, global API rate limit | Plain text of every guide article the viewer may read, searched in the browser; restricted sections only for owners/admins or the super admin; `private, no-store` |
 | `POST /api/client-errors` | Public, same-origin, rate-limited per IP (`clientError`, 10/min), 4 KB body cap | Browser crash report from the app error boundaries; forwarded (redacted) to the alert webhook when configured. Always an empty `204` |
 | `GET /api/ticket/:token/download` | Opaque token | Download the attendee ticket |
 | `POST /api/ticket/:token/checkout` | Opaque token, rate-limited per IP (`ticketCheckout`, 20/min) | "Pay now" for a held ticket: opens (or reuses) the hosted checkout for its whole order and returns only that address (`no-store`) |

@@ -1,0 +1,86 @@
+The ticket designer lets you lay out a ticket like a poster: text, images, shapes, lines and ticket details around the guest's check-in QR code. A designed ticket shows on the guest's ticket page, is what they download with **Save ticket** (an image) or **PDF**, and is attached as a PDF to their confirmation email.
+
+<Callout kind="permission">
+
+The organisation's design library (templates and the default): owners and admins.
+
+An event's own designs: owners and admins, and co-organisers with the **Edit details** permission (the same people who manage ticket prices).
+
+</Callout>
+
+## Designing your organisation's default ticket
+
+Templates live in your organisation's library. The one marked **Default** is used by every event that hasn't picked its own design.
+
+<Steps>
+
+1. Open your organisation's **Settings** and find the **Ticket designs** card, then choose **Open designs**.
+2. Type a **Name**, pick a starter under **Start from** (**Classic stub**, **Night pass** or **Portrait card**), and choose **New design**.
+3. Edit the design (see below). Changes save by themselves.
+4. Go back to the list and choose **Make default** next to the design.
+
+</Steps>
+
+To stop using a default, choose **Go back to the built-in design as the default**. Until you make a design, tickets use the built-in Classic design.
+
+<Screenshot name="ticket-designer" alt="The ticket designer with the toolbar, a ticket on the canvas, the properties panel and the layers list" />
+
+## Giving an event its own design
+
+<Steps>
+
+1. Open the event and choose the **Settings** tab.
+2. In the **Ticket design** card, under **New design, starting from**, pick one of your library templates (a copy is made for this event) or a starter.
+3. Choose **Design a ticket**. The event's first design becomes its design straight away.
+4. Use **This event's tickets** to switch between the event's designs.
+
+</Steps>
+
+Once the event has a design and sells more than one ticket type, **A different design for a ticket** lets you give each ticket type its own design, or leave it **Same as the event**.
+
+A ticket uses the first of these that exists: its ticket type's design, the event's design, your organisation's default, then the built-in design.
+
+## Using the editor
+
+The toolbar along the top adds things to the ticket:
+
+- **Text**, for headings or anything else you type.
+- **Add a field…** drops in a ticket detail that changes for each guest: **Attendee name**, **Event title**, **Date**, **Time**, **Venue**, **Ticket type**, **Price**, **Order number**, **Registration number**, **Team** or **Organisation**. Inside a text box, use **Insert a field** instead. A field with no value (for example **Team** on a solo ticket) prints nothing.
+- Images (JPEG, PNG or WebP, up to 5 MB each), rectangles, ellipses and lines. Tick **Dashed (a tear line)** on a line for a perforation look.
+
+Click anything on the canvas to select it. Drag it to move it (it snaps to the ticket's edges and to other items; hold <Kbd>Alt</Kbd> to turn snapping off), drag the handles to resize it, and use the top handle to rotate it. The panel on the right sets exact position, size, rotation, opacity, font, colour and so on. With nothing selected, the panel sets the ticket's **Size** (presets such as **Ticket stub**, **A6 landscape**, **Phone screen** and **Badge · 4 × 6 in**, or **Custom** from 40 to 300 mm) and **Background** colour.
+
+The **Layers** list shows every item, top first. Use it to move an item up or down the stack, hide it, or lock it so it can't be moved by accident.
+
+Keyboard shortcuts:
+
+- Arrow keys nudge the selected item by 0.5 mm; hold <Kbd>Shift</Kbd> for 5 mm.
+- <Kbd>Ctrl</Kbd> + <Kbd>Z</Kbd> undoes, <Kbd>Ctrl</Kbd> + <Kbd>Y</Kbd> redoes.
+- <Kbd>Ctrl</Kbd> + <Kbd>C</Kbd>, <Kbd>V</Kbd> and <Kbd>D</Kbd> copy, paste and duplicate.
+- <Kbd>Delete</Kbd> removes the selected item.
+
+On a Mac, use <Kbd>Cmd</Kbd> instead of <Kbd>Ctrl</Kbd>.
+
+The status next to **Preview** shows **Saved**, **Saving…** or **Unsaved changes**. If something would stop the ticket working, a message explains it instead and the design isn't saved until you fix it.
+
+## The QR code
+
+Every ticket keeps exactly one check-in QR code. You can move and resize it, but it always prints black on a white plate, upright and solid, on top of everything else, so the door can scan it. It must be at least 18 mm wide and sit fully on the ticket.
+
+<Callout kind="note">
+
+Once a guest has checked in, their ticket page no longer shows the designed ticket or lets them save it, because it carries a live check-in code.
+
+</Callout>
+
+## Previewing the ticket
+
+Choose **Preview** to see the saved design drawn exactly as tickets will be. On an event's design, **Show as** lets you preview it with one of the event's recent registrations instead of the sample attendee. The QR code in a preview is always a sample.
+
+## Good to know
+
+- An organisation's library holds up to 50 designs, and an event up to 20.
+- Deleting a library template doesn't touch events that copied it. If it was the default, tickets go back to the built-in design.
+- The confirmation email only attaches a PDF when the ticket uses one of your designs, not the built-in one.
+- Guests see their side of this in [Your ticket](/help/attending/your-ticket).
+- Ticket types and prices are covered in [Ticket types, group tickets and add-ons](/help/payments/ticket-types).

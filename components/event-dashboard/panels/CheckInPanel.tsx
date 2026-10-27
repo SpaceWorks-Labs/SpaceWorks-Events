@@ -9,6 +9,7 @@ import { type DoorsTone } from "@/components/event-dashboard/check-in/doors";
 import { DoorStationControls } from "@/components/event-dashboard/check-in/DoorStationControls";
 import { CheckInListsCard } from "@/components/event-dashboard/check-in/CheckInListsCard";
 import { NoPermission } from "./shared";
+import { HelpLink } from "@/components/help/HelpLink";
 
 const DOORS_CHIP: Record<DoorsTone, string> = {
   upcoming: "bg-warning-bg text-warning-fg",
@@ -84,7 +85,10 @@ export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         <section aria-labelledby="checkin-station-title" className={cardClass}>
           <div className="flex items-center justify-between gap-3">
-            <h2 id="checkin-station-title" className="text-h4 text-ink">Door station</h2>
+            <div className="flex items-center gap-1">
+              <h2 id="checkin-station-title" className="text-h4 text-ink">Door station</h2>
+              <HelpLink article="check-in/door-station" />
+            </div>
             <Chip size="sm" tone={desk.stationEnabled ? "success" : "neutral"}>{desk.stationEnabled ? "On" : "Off"}</Chip>
           </div>
           <p className="text-sm text-ink-secondary">

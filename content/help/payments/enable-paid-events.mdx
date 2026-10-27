@@ -1,0 +1,63 @@
+Events on Space Works Events are free unless the server's super admin turns paid events on. Once they're on, each organisation sells tickets through its own Razorpay or Stripe account. Buyers pay on the provider's own checkout page and the money goes straight to the organisation: the server never receives, holds or passes on ticket money, and adds no fee of its own.
+
+This page explains the two switches involved, the server's and your organisation's, and what you see at each stage.
+
+<Callout kind="permission">
+
+Only the super admin of the server can turn paid events on or off. Within an organisation, only the **owner** can connect a payment account. Admins, members and co-organisers can't open the payment settings.
+
+</Callout>
+
+## Getting ready to sell
+
+<Steps>
+
+1. Ask whoever runs your Space Works Events server to turn paid events on. The super admin does this in the super admin area under **Settings**, with the **Paid events** switch.
+2. As the organisation owner, open your organisation's **Settings** and, under **Payments**, choose **Manage payments**.
+3. Connect your Razorpay or Stripe account, as described in [Connecting Razorpay or Stripe](/help/payments/connect-a-provider).
+4. Open an event's **Settings** tab and add a ticket with a price. See [Ticket types, group tickets and add-ons](/help/payments/ticket-types).
+
+</Steps>
+
+You don't have to wait for the first step. An owner can connect an account while paid events are still off, so everything is ready when the switch is turned on.
+
+## What you see before and after
+
+What the app shows depends on both switches.
+
+| Situation | Organisation **Settings** → **Payments** | An event's **Tickets** card |
+| --- | --- | --- |
+| Paid events off on the server | A note: **Paid events are off on this installation**. You can still save your keys. | "Paid tickets are turned off on this installation, so tickets are free." Prices and booking fees can't be entered. |
+| Paid events on, no account connected | The provider choice shows **Not connected**. | "To sell paid tickets, the organisation owner connects a Razorpay or Stripe account in Settings → Payments." |
+| Paid events on and an account connected | A **Ready** chip with the provider's name, plus **Test mode** while you use test keys. | A line saying payments go to your organisation through its Razorpay or Stripe account. Paid tickets, extras, promo codes and the refund policy are available. |
+
+On the organisation's main **Settings** page, the owner also sees a **Payments** section with a chip saying which provider is connected, or **Not connected**.
+
+<Callout kind="note">
+
+Free tickets and free extras work whether or not paid events are on. An event with no tickets at all keeps the usual free registration.
+
+</Callout>
+
+## Who can do what
+
+| Task | Who |
+| --- | --- |
+| Turn paid events on or off for the server | The super admin |
+| Connect, change or remove the payment account, and edit receipt details | The organisation owner |
+| Add and change tickets, prices, extras, promo codes, the refund policy and transfers | Owners, admins, and co-organisers with the **Edit details** permission on that event or series |
+| Refund, cancel, mark as paid, make complimentary, send payment links | Owners, admins, and co-organisers with the **Registrations** permission |
+| See an event's **Money** card and download its orders | Owners, admins, and co-organisers with the **Registrations** permission |
+| See the organisation's **Money** overview, cancel an event, and decide refund requests | Owners and admins |
+
+Co-organisers can manage an event's tickets, but never where the money goes: every payment always goes to the event's own organisation. See [Roles and permissions](/help/organisations/roles) and [Event co-organisers](/help/organisations/co-organisers).
+
+## If paid events are turned off again
+
+When the super admin switches paid events off, new sales stop straight away. Payments already started still settle, and orders already paid can still be refunded. New paid tickets, paid extras and prices can't be added until the switch is back on.
+
+## Good to know
+
+- Your organisation is the seller. You set the prices, refunds and any taxes, and prices are shown to buyers as entered, including any tax.
+- Card, UPI and bank details never reach Space Works Events. The app keeps only the provider's payment reference and a short description of how someone paid, such as a card brand and its last four digits.
+- An organisation, event or series can't be deleted while people have paid for something still to come. Cancel it instead, which refunds them: see [Refunds and cancellations](/help/payments/refunds).

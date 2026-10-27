@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import type { CheckInListView } from "@/lib/eventDashboard/checkInLists";
 import { ManageCheckInListsDialog } from "@/components/checkin/ManageCheckInListsDialog";
+import { HelpLink } from "@/components/help/HelpLink";
 
 const cardClass = "flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-panel p-5";
 
@@ -22,7 +23,10 @@ export function CheckInListsCard({ organisationSlug, eventId, lists, checkInHref
   return (
     <section aria-labelledby="checkin-lists-title" className={cn(cardClass, className)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="checkin-lists-title" className="text-h4 text-ink">Check-in lists</h2>
+        <div className="flex items-center gap-1">
+          <h2 id="checkin-lists-title" className="text-h4 text-ink">Check-in lists</h2>
+          <HelpLink article="check-in/check-in-lists" />
+        </div>
         {canManage ? <ManageCheckInListsDialog organisationSlug={organisationSlug} eventId={eventId} lists={lists} addOns={addOns} /> : null}
       </div>
       <p className="text-sm text-ink-secondary">

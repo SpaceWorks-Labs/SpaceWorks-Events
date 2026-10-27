@@ -1,0 +1,82 @@
+The super admin area at `/super-admin` is where the person who runs this Space Works Events server looks after the whole instance: email delivery, sign-in settings, paid events, backups, security and support views across every organisation. It is separate from the organisation dashboard, and it opens for one account only.
+
+<Callout kind="permission">
+
+Only the account whose verified email matches the `SUPER_ADMIN_EMAIL` setting on the server. Organisation owners and admins have no access.
+
+</Callout>
+
+## Who can open it
+
+The app lets you in only when all of these are true:
+
+- `SUPER_ADMIN_EMAIL` is set on the server, and you're signed in with the account whose email matches it (capital letters don't matter).
+- That account's email address is **verified**.
+
+Anyone else who visits `/super-admin` sees an ordinary "not found" page, so the area's existence isn't revealed. Every super admin page checks this again on its own, including when you move between sections.
+
+There's no separate authenticator step-up: once you're signed in with the right account, the area opens. To change who the super admin is, change `SUPER_ADMIN_EMAIL` on the server and restart, then set that account's password as described below.
+
+<Callout kind="note">
+
+There's no link to the super admin area in the app's menus. Bookmark `/super-admin` on your server's address. Once you're signed in as the super admin, the **Instance administration** and **Installing and maintaining** sections of this guide also appear.
+
+</Callout>
+
+## Setting the password
+
+The super admin's password is set **only from the server**. The app refuses to create this account through sign-up, never sends it a forgotten-password link, and won't change its password from **Account** → **Security**. That way, nobody who gets into the inbox or a browser session can take over the instance.
+
+<Steps>
+
+1. On the server, as root, run the installer again and choose **Recover super-admin access**, or run `sudo bash scripts/vps-recover.sh` from the installation.
+2. Confirm the super admin email it shows. The first time, it creates the account with that address already verified.
+3. Open the link it prints within an hour and choose a password.
+4. Sign in with the email and password, then go to `/super-admin`.
+
+</Steps>
+
+On other kinds of deployment, someone with database access runs `node docker/vps/recover-super-admin.mjs` with the server's `DATABASE_URL` and `NEXT_PUBLIC_BASE_URL`. Each run is recorded in the audit log. See [Recovery and support bundles](/help/installation/recovery-and-support).
+
+<Callout kind="warning">
+
+Running the recovery tool on an existing account also removes its authenticator and recovery codes and signs it out on every device. Set up the authenticator again afterwards if you use one.
+
+</Callout>
+
+## How sign-in is protected
+
+The super admin signs in like everyone else with a password, so the same protections apply:
+
+- **Failure limits.** After several wrong passwords, the account must also enter a code emailed to it, and after many more it stops accepting codes for a while. An address with many failed sign-ins in an hour is blocked from signing in.
+- **New-device codes.** Signing in from a browser the account hasn't used before needs a six-digit code emailed to the super admin address, valid for 10 minutes, unless you give an authenticator code instead.
+- **New sign-in alerts.** A sign-in from a new device sends an email saying which browser and system it came from.
+
+We recommend turning on an authenticator app from **Account** → **Security**. It's optional for the super admin, but once it's on, every password sign-in asks for a code. See [Two-step verification](/help/account/two-step-verification).
+
+<Callout kind="tip">
+
+Because the new-device code goes to the super admin's inbox, keep that mailbox secure and make sure the server can send email before you sign in from a new computer.
+
+</Callout>
+
+## Finding your way around
+
+The area has its own top bar instead of the dashboard sidebar. Choose the logo for **Overview**, or **Back to dashboard** to return to your organisations.
+
+| Section | What it's for |
+| --- | --- |
+| **Overview**, **Activity** | Instance totals, things that need attention, and growth. See [Overview and insights](/help/instance/insights). |
+| **Monitoring** | Database and configuration checks, plus request counts for one server process. |
+| **Operations**, **Email** | Backups, email queue health, failed messages and maintenance. See [Email delivery](/help/instance/email-delivery). |
+| **Audit log**, **Security** | The record of important actions, MFA adoption and API clients. See [Security and the audit log](/help/instance/security-and-audit). |
+| **Organisations**, **Events**, **Users**, **Invites**, **Storage** | Support views across every organisation. |
+| **Auth** | New account creation, sign-in accounts and sessions. |
+| **Settings** | Email, Google sign-in, paid events, backup posture and alerts. See [Instance settings](/help/instance/settings). |
+
+Most pages only show information. They never show passwords, tokens, ticket links, registration answers or message bodies.
+
+## Good to know
+
+- Organisation staff must pass an authenticator check each session, but the super admin account is exempt from that rule, even if it also belongs to an organisation.
+- If you lose your password or authenticator, run the recovery tool again. Nobody can reset it from inside the app.

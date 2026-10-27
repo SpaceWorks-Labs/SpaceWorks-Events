@@ -5,6 +5,7 @@ import { OrgPageHeader } from "@/components/dashboard/org/OrgPageHeader";
 import { CreateIdProgrammeForm } from "@/components/member-ids/CreateIdProgrammeForm";
 import { ProgrammeStatusPill } from "@/components/member-ids/ProgrammeStatusPill";
 import { Card, EmptyState } from "@/components/ui/display";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export const metadata: Metadata = { title: "Member IDs", description: "ID card programmes for your organisation." };
 
@@ -18,6 +19,7 @@ export default async function MemberIdsPage({ params }: Props) {
         organisation={{ name: organisation.name, slug: organisation.slug, logoUrl: profile.logoUrl }}
         title="Member IDs"
         description="Digital ID cards for your members: a join form, approvals, printable cards and a public check page."
+        actions={<HelpLink article="organisations/member-ids" />}
       />
 
       <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">

@@ -92,6 +92,12 @@ This page documents implemented controls and security boundaries. It is not a su
 - `ClaimPayout` and `PrizePayout` are append-only ledgers guarded by database triggers: rows are never deleted except with their organisation, only a reference may be cleared when its target is deleted, and a reversal must match the payout it undoes (same organisation, amount and currency, never a reversal of a reversal).
 - A refund request is claimed before its refund runs (and released if the refund is refused), so concurrent approvals never refund twice; the refund itself is the normal `refundOrder` with its locks and limits.
 
+## In-app guide
+
+- The guide's audience sections (`org-admin` for organisation owners and admins, `super-admin` for the instance super admin) only decide what the guide lists; every feature the articles describe keeps its own server checks. Restricted articles are a 404 for other readers, the search index omits them and is `private, no-store`, and signed-in guide pages are `no-store` through the session-cookie rule in `lib/pageSecurity.ts`.
+- Article bodies load only through the generated map of static imports (`content/help/bodies.generated.ts`) for manifest slugs the viewer may read; no path is built from the URL.
+- The screenshot seed (`tests/help-screenshots/`) refuses to run without `HELP_SCREENS_SEED=1`, outside development, or against a non-local database, because it replaces its demo users and data.
+
 ## Ticket designs
 
 - Design documents are validated in full on every save (`lib/ticketDesign/schema.ts`: a strict schema, at most 60 elements and 256 KB) and rendered on the server; nothing in a design is executed or fetched from outside: images must be the organisation's own managed uploads (re-encoded WebP), text becomes glyph outlines, and colours are plain hex.

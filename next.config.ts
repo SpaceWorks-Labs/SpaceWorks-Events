@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
 
 const allowedActionOrigins = process.env.ALLOWED_ACTION_ORIGINS
   ?.split(",")
@@ -108,4 +109,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// The in-app guide (content/help) is the only MDX. Plugin names are strings so
+// Turbopack can load them. frontend/next.config.ts keeps these rules when it
+// overrides the Turbopack root.
+const withMDX = createMDX({
+  options: { remarkPlugins: ["remark-gfm"] },
+});
+
+export default withMDX(nextConfig);

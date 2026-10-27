@@ -171,6 +171,11 @@
       "id": "app__features__page:loadView"
     },
     {
+      "module": "lib/views/app__help__layout",
+      "name": "loadHelpAccess",
+      "id": "app__help__layout:loadHelpAccess"
+    },
+    {
       "module": "lib/views/app__join__event-collaborator__token__page",
       "name": "loadJoinEventCollaboratorView",
       "id": "app__join__event-collaborator__token__page:loadJoinEventCollaboratorView"

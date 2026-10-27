@@ -109,5 +109,7 @@ scripts/seed-t4gcc-summit-2026.cjs
 /frontend/public/
 /frontend/.next/
 /frontend/postcss.config.mjs
+/frontend/content/
+/frontend/mdx-components.tsx
 /frontend/node_modules/
 /frontend/next-env.d.ts

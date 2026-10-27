@@ -24,6 +24,7 @@ export const RESERVED_ORGANISATION_SLUGS: ReadonlySet<string> = new Set([
   "embed",
   "event",
   "features",
+  "help",
   "join",
   "login",
   "members",

@@ -1,0 +1,96 @@
+Webhooks tell your other systems when something happens in your organisation. Space Works Events sends a signed `POST` request to an address you choose when someone registers, pays, is checked in or gives feedback, or when an event is published or cancelled. Use them to update a CRM or start your own automation.
+
+<Callout kind="permission">
+
+Organisation owners and admins. Members and co-organisers can't see or change webhooks, whatever permissions they hold.
+
+</Callout>
+
+## Adding an endpoint
+
+<Steps>
+
+1. Open your organisation's **Settings** and, under **Webhooks**, choose **Manage webhooks**.
+2. Choose **Add endpoint**.
+3. Enter the **Endpoint URL**: a public `https://` address on port 443 or 8443.
+4. Add a **Description** if you like, and tick the **Events to send**.
+5. Choose **Add endpoint**.
+6. In **Copy your signing secret**, choose **Copy secret**, store it with your receiver, then choose **I have stored it**.
+
+</Steps>
+
+An organisation can have up to 10 endpoints. Open one to **Send test**, **Edit**, **Rotate secret**, **Disable** or **Delete** it, and to see its **Recent deliveries**.
+
+<Callout kind="warning">
+
+The signing secret is shown only when you create the endpoint and each time you rotate it. It's stored encrypted and never shown again, so keep it somewhere safe.
+
+</Callout>
+
+## Event types
+
+| Event | Sent when |
+| --- | --- |
+| **Registration created** (`registration.created`) | Someone registers, whatever their status, or an organiser adds a guest. |
+| **Registration status changed** (`registration.status_changed`) | A registration is approved, declined, re-accepted, promoted from the waitlist, cancelled, removed, or restored with **Undo**. |
+| **Checked in** (`checkin.created`) | An attendee is checked in at the entrance: at the desk, the door station, or offline and synced later. |
+| **Check-in undone** (`checkin.undone`) | An entrance check-in is reversed. |
+| **Event published** (`event.published`) | An event goes live. |
+| **Event cancelled** (`event.cancelled`) | An event is marked as cancelled. |
+| **Feedback submitted** (`feedback.submitted`) | Someone submits the feedback form. No answers are sent. |
+
+**Send test** delivers a `ping` event to that endpoint only; you can't subscribe to it.
+
+### Payments
+
+There are no separate payment events. Paid tickets use the registration events: `registration.created` with the status `PENDING_PAYMENT` when an order is placed, `registration.status_changed` away from `PENDING_PAYMENT` when it's paid (online, by hand or waived), and a change to `CANCELLED` when an order's tickets are cancelled, including by an event cancellation. For order totals, read them with the [machine API](/help/developers/api).
+
+Registration and check-in events cover recurring series dates too; publish and cancel events cover standalone events only.
+
+## What each request contains
+
+Every request carries the headers `x-spaceworks-event-id`, `x-spaceworks-event-type` and `x-spaceworks-signature`, and a JSON body with the `id`, `type`, `createdAt`, your `organisation` (ID and slug) and the `data`.
+
+The data is deliberately minimal: IDs, statuses, timestamps, the event's title, slug and times, and the attendee's display name. It never contains email addresses or other contact details, user IDs, registration or feedback answers, or ticket, check-in, certificate or invitation links. Look those up in the app, for example with a guest export, when you need them.
+
+- The `id` stays the same across retries and redeliveries. De-duplicate on it.
+- Deliveries can arrive out of order and, rarely, more than once. Order them with `createdAt`.
+- Reply with any `2xx` status within 10 seconds, and do slow work afterwards.
+
+## Checking the signature
+
+The `x-spaceworks-signature` header looks like `t=<unix seconds>,v1=<hex>`. The `v1` value is an HMAC-SHA256 of the text `<t>.<raw body>`, keyed with your full signing secret (including its `whsec_` start). To check it:
+
+<Steps>
+
+1. Read the raw request body before parsing the JSON.
+2. Compute the HMAC-SHA256 of the timestamp, a full stop and the raw body, using your secret.
+3. Compare it with `v1` in constant time.
+4. Reject requests whose timestamp is more than a few minutes old, to stop replays.
+
+</Steps>
+
+`docs/WEBHOOKS.md` in the repository has a ready-made Node.js verifier.
+
+## Retries and automatic switch-off
+
+- A request that doesn't get a `2xx` in time is retried, up to 8 attempts over about a day. Redirects aren't followed and count as failures.
+- After the last attempt the delivery is marked **Failed**. Choose **Redeliver** next to it in **Recent deliveries** to try again with the same event ID.
+- After 20 failed attempts in a row, the endpoint is switched off and shows **Auto-disabled**. Nothing is emailed. Fix your receiver, choose **Send test**, then **Enable**.
+- Disabling an endpoint stops new events and marks waiting retries as failed; you can redeliver them later.
+- **Recent deliveries** shows the last 50 events. History is kept for 30 days.
+
+## Which addresses are allowed
+
+Webhooks only go to the public internet, so an admin can't use them to reach machines inside the server's own network:
+
+- The URL must use `https://` on port 443 or 8443, with no user name or password in it.
+- Names such as `localhost` or anything ending in `.local` or `.internal` are refused, as are raw IP addresses.
+- Every address the name points to must be a public one. Private, loopback, link-local, cloud metadata and other reserved addresses are refused.
+- The check runs when you save the URL and again before every delivery, and the request goes only to the address that was just checked. Changing the DNS answer afterwards can't redirect it inside the network.
+
+## Good to know
+
+- Creating, editing, rotating, enabling, disabling and deleting endpoints are recorded in the organisation's audit log, with the host only, never the secret.
+- **Rotate secret** takes effect immediately. Update your receiver straight away.
+- If deliveries fail as blocked or timed out, check your receiver's address, firewall and certificate.
