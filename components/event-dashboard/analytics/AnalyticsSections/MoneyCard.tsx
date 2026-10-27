@@ -1,6 +1,7 @@
 import { formatMoney } from "@/lib/payments/money";
 import type { RevenueSummary } from "@/lib/payments/revenueMetrics";
 import { Bar, card, ColumnChart, Stats } from "./primitives";
+import { cachedNumberFormat } from "@/lib/format/intlCache";
 
 /* ---------- Money ---------- */
 
@@ -8,7 +9,7 @@ import { Bar, card, ColumnChart, Stats } from "./primitives";
 function compactMoney(minor: number, currency: string) {
   const major = minor / 100;
   try {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 }).format(major);
+    return cachedNumberFormat("en-IN", { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 }).format(major);
   } catch {
     return String(Math.round(major));
   }

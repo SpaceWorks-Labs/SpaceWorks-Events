@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Dashboard memory.** Date, time-zone and money formatting reuse cached `Intl` formatters (`lib/format/intlCache.ts`) instead of building one per registration or order, so a large event no longer allocates native memory per row on every dashboard, analytics, revenue or report render.
 - **New event dialog on the event's clock.** The suggested start (a whole hour at least 30 minutes away), the earliest allowed start, the end that follows the start, the Next check and Create all use the selected event timezone, never the browser's; the timezone picker is controlled, focus moves into each step and returns to the button on close.
 - `/discover` no longer scrolls sideways on a phone when an event has a long unbroken title, tag or place.
 - Saving an event without touching its times keeps the stored start and end (the form sends whole minutes), so guests no longer get a spurious "the organiser changed the time" email.
