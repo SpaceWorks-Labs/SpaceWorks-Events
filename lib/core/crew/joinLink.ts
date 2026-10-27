@@ -100,8 +100,10 @@ const INVALID_LINK = "This crew link is no longer valid. Ask the organisers for 
  * public page until an organiser reviews them, and gets their ticket by email.
  * An email already on the crew or already registered gets the same answer as
  * a new sign-up and changes nothing. Callers rate limit before calling.
+ * `changed` (never shown to the person) says whether a member was added, so
+ * the caller audits and revalidates only then.
  */
-export async function joinCrewWithLink(token: unknown, input: unknown): Promise<CrewResult<{ eventTitle: string }>> {
+export async function joinCrewWithLink(token: unknown, input: unknown): Promise<CrewResult<{ eventTitle: string; changed: boolean }>> {
   const page = await loadCrewJoinPage(token);
   if (!page) return fail(INVALID_LINK);
   if (!page.open) return fail("This event is no longer taking crew sign-ups.");
@@ -113,5 +115,5 @@ export async function joinCrewWithLink(token: unknown, input: unknown): Promise<
   await afterCrewAdded(event.id, result);
   // Generic wording: the link must not reveal whether an email is on the crew or registered.
   if (!result.ok && ![ALREADY_ON_CREW, ALREADY_REGISTERED, LINK_SIGNUP_IGNORED].includes(result.error)) return result;
-  return { ok: true, data: { eventTitle: event.title } };
+  return { ok: true, data: { eventTitle: event.title, changed: result.ok } };
 }

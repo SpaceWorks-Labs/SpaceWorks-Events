@@ -128,10 +128,11 @@ export async function joinCrew(input: unknown): Promise<ActionResult<{ eventTitl
   if (await isActionRateLimited("rsvp", email)) return { ok: false, error: "Too many sign-up attempts. Please try again shortly." };
   const result = await joinCrewWithLink(parsed.data.token, member);
   if (!result.ok) return result;
-  const page = await loadCrewJoinPage(parsed.data.token);
+  // Audited and revalidated only when someone joined; the answer is the same either way.
+  const page = result.data.changed ? await loadCrewJoinPage(parsed.data.token) : null;
   if (page) {
     await recordAuditEvent({ action: "EVENT_CREW_JOINED_WITH_LINK", organisationId: page.organisationId, targetType: "Event", targetId: page.eventId });
     revalidateCrew(page.organisationSlug, { id: page.eventId, slug: page.eventSlug });
   }
-  return result;
+  return { ok: true, data: { eventTitle: result.data.eventTitle } };
 }

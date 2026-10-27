@@ -7,6 +7,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { prisma } from "@/lib/db";
 import { flushWebhookEmits } from "@/lib/webhooks/emit";
+import { joinCrew } from "@/app/actions/crew";
 import {
   addCrewMemberAsOrganiser,
   getCrewJoinLink,
@@ -67,7 +68,7 @@ describe.sequential("crew join link", () => {
     // Only the queued notice matters here; delivery is the worker's job.
     const channel = await prisma.chatChannel.create({ data: { organisationId: crew.organisationId, kind: "SLACK", name: "Crew", events: ["registration"], secretEncrypted: "pending" } });
     const memberEmail = crewEmail("volunteer");
-    await expect(joinCrewWithLink(token, { name: " Volunteer ", email: memberEmail.toUpperCase(), foodPreference: "Jain", role: "Stage" })).resolves.toEqual({ ok: true, data: { eventTitle: event.title } });
+    await expect(joinCrewWithLink(token, { name: " Volunteer ", email: memberEmail.toUpperCase(), foodPreference: "Jain", role: "Stage" })).resolves.toEqual({ ok: true, data: { eventTitle: event.title, changed: true } });
     const member = await prisma.eventCrewMember.findFirstOrThrow({ where: { eventId: event.id }, include: { rsvp: true } });
     expect(member).toMatchObject({ name: "Volunteer", email: memberEmail, showOnPage: false, joinedViaLink: true, foodPreference: "Jain", role: "Stage" });
     expect(member.rsvp).toMatchObject({ status: RsvpStatus.CONFIRMED, isCrew: true });
@@ -85,22 +86,32 @@ describe.sequential("crew join link", () => {
   it("answers an email already on the crew exactly like a new sign-up, and adds nothing", async () => {
     const { event, token } = await linkFor();
     const member = await addCrew(event);
-    await expect(joinCrewWithLink(token, { name: "Again", email: member.email })).resolves.toEqual({ ok: true, data: { eventTitle: event.title } });
+    await expect(joinCrewWithLink(token, { name: "Again", email: member.email })).resolves.toEqual({ ok: true, data: { eventTitle: event.title, changed: false } });
     await expect(prisma.eventCrewMember.count({ where: { eventId: event.id } })).resolves.toBe(1);
     await expect(prisma.rSVP.count({ where: { eventId: event.id } })).resolves.toBe(1);
+  });
+
+  it("audits a link sign-up only when someone joined, with the same answer either way", async () => {
+    const { event, token } = await linkFor();
+    const audits = () => prisma.auditEvent.count({ where: { action: "EVENT_CREW_JOINED_WITH_LINK", targetId: event.id } });
+    const memberEmail = crewEmail("audited");
+    await expect(joinCrew({ token, member: { name: "Audited", email: memberEmail } })).resolves.toEqual({ ok: true, data: { eventTitle: event.title } });
+    await expect(audits()).resolves.toBe(1);
+    await expect(joinCrew({ token, member: { name: "Audited", email: memberEmail } })).resolves.toEqual({ ok: true, data: { eventTitle: event.title } });
+    await expect(audits()).resolves.toBe(1);
   });
 
   it("never converts a registration through the link, and answers the same way", async () => {
     const { event, token } = await linkFor({ capacity: 1 });
     await register(event, "first");
     const waiting = await register(event, "waiting");
-    await expect(joinCrewWithLink(token, { name: "Sneaky", email: waiting.email })).resolves.toEqual({ ok: true, data: { eventTitle: event.title } });
+    await expect(joinCrewWithLink(token, { name: "Sneaky", email: waiting.email })).resolves.toEqual({ ok: true, data: { eventTitle: event.title, changed: false } });
     await expect(prisma.rSVP.findUniqueOrThrow({ where: { id: waiting.rsvp.id } })).resolves.toMatchObject({ status: RsvpStatus.WAITLISTED, isCrew: false });
     await expect(prisma.eventCrewMember.count({ where: { eventId: event.id } })).resolves.toBe(0);
 
     const team = await linkFor({ registrationMode: RegistrationMode.TEAM });
     const leader = await register(team.event, "leader", { mode: "create", name: `Kites ${crew.suffix}` });
-    await expect(joinCrewWithLink(team.token, { name: "Leader", email: leader.email })).resolves.toEqual({ ok: true, data: { eventTitle: team.event.title } });
+    await expect(joinCrewWithLink(team.token, { name: "Leader", email: leader.email })).resolves.toEqual({ ok: true, data: { eventTitle: team.event.title, changed: false } });
     await expect(prisma.eventCrewMember.count({ where: { eventId: team.event.id } })).resolves.toBe(0);
   });
 
