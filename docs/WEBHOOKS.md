@@ -95,7 +95,7 @@ The `registration` object (`displayName` falls back to `Participant`):
 }
 ```
 
-`crew` is `true` for an [event crew](CREW.md) ticket: a free ticket for the organising team that never counts against capacity. Crew tickets are created as `CONFIRMED` (`registration.created`) and leave as `CANCELLED` when an organiser removes the person from the crew. Receivers that count attendees against capacity should skip `crew: true`. The field was added with the event crew; receivers should ignore fields they don't know.
+`crew` is `true` for an [event crew](CREW.md) ticket: a free ticket for the organising team that never counts against capacity. Crew tickets are created as `CONFIRMED` (`registration.created`); converting an existing registration into a crew ticket sends `registration.status_changed` with `crew: true` (`previousStatus` can be `CONFIRMED` too); crew tickets leave as `CANCELLED` when an organiser removes the person from the crew. Receivers that count attendees against capacity should skip `crew: true`. The field was added with the event crew; receivers should ignore fields they don't know.
 
 `status` is one of `CONFIRMED`, `WAITLISTED`, `PENDING_APPROVAL`, `PENDING_PAYMENT` (a paid ticket held while the buyer pays), `REJECTED` (declined), `CANCELLED` (cancelled by the attendee; the registration no longer exists) or `REMOVED` (removed by an organiser).
 

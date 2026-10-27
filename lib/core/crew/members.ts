@@ -4,6 +4,7 @@ import { Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { notifyChatAbout } from "@/lib/chat/notify";
 import { enqueueCrewTicket } from "@/lib/outbox/crew";
+import { enqueueOperatorNotice } from "@/lib/outbox/enqueue";
 import { fillFromWaitlist } from "@/lib/payments/operations";
 import { isOrganisationUploadUrl } from "@/lib/uploadUrl";
 import { rsvpWebhookSnapshot, rsvpWebhookSnapshotSelect } from "@/lib/teamUnits";
@@ -110,7 +111,8 @@ export async function addCrewMemberTx(
         // A seeker listing or join request would let teams invite a crew member.
         await tx.teamSeekerProfile.deleteMany({ where: { rsvpId: existing.id } });
         await tx.teamJoinRequest.deleteMany({ where: { rsvpId: existing.id } });
-        if (existing.status !== RsvpStatus.CONFIRMED) webhook = { type: "registration.status_changed", rsvpId: existing.id, status: RsvpStatus.CONFIRMED, previousStatus: existing.status };
+        // Webhook receivers learn that the registration is now a crew ticket (`crew: true`), even when it was already confirmed.
+        webhook = { type: "registration.status_changed", rsvpId: existing.id, status: RsvpStatus.CONFIRMED, previousStatus: existing.status };
       } else {
         rsvp = await tx.rSVP.create({
           data: { eventId: event.id, guestEmail: data.email, guestName: data.name, attendeeKey: `guest:${data.email}`, status: RsvpStatus.CONFIRMED, isCrew: true },
@@ -201,17 +203,32 @@ export async function setCrewMemberVisibility(ctx: OrganiserCrewContext, memberI
   return updated.count === 1 ? { ok: true, data: undefined } : fail("Crew member not found.");
 }
 
-/** Removing a crew member deletes their free crew ticket (and its check-in) with them. */
+/**
+ * Removing a crew member deletes their free crew ticket (and its check-in)
+ * with them. An account-tied ticket was that person's own registration before
+ * it became crew, so they are told it is gone.
+ */
 export async function removeCrewMember(ctx: OrganiserCrewContext, memberId: string): Promise<CrewResult<{ name: string }>> {
   const member = await prisma.eventCrewMember.findFirst({
     where: { id: memberId, eventId: ctx.eventId, event: { organisationId: ctx.organisationId } },
-    select: { name: true, rsvp: { select: rsvpWebhookSnapshotSelect } },
+    select: { name: true, email: true, event: { select: { title: true } }, rsvp: { select: rsvpWebhookSnapshotSelect } },
   });
   if (!member) return fail("Crew member not found.");
-  // The crew row cascades from the RSVP. Crew tickets never have an order, so nothing is refunded.
-  const removed = await prisma.rSVP.deleteMany({ where: { id: member.rsvp.id, eventId: ctx.eventId, isCrew: true, orderId: null } });
+  const removed = await prisma.$transaction(async (tx) => {
+    // The crew row cascades from the RSVP. Crew tickets never have an order, so nothing is refunded.
+    const deleted = await tx.rSVP.deleteMany({ where: { id: member.rsvp.id, eventId: ctx.eventId, isCrew: true, orderId: null } });
+    if (deleted.count === 1 && member.rsvp.userId) {
+      await enqueueOperatorNotice(tx, {
+        to: member.email,
+        organisationId: ctx.organisationId,
+        subject: `You're no longer on the crew for ${member.event.title.slice(0, 150)}`,
+        lines: [`The organisers removed you from the crew for ${member.event.title}, so your crew ticket no longer works.`, "If you still want to attend, register again on the event page, or contact the organisers."],
+      });
+    }
+    return deleted.count;
+  });
   // Lost a race with another removal: nothing was deleted here.
-  if (removed.count !== 1) return fail("Crew member not found.");
+  if (removed !== 1) return fail("Crew member not found.");
   emitWebhookEvent({ type: "registration.status_changed", rsvpId: member.rsvp.id, status: "CANCELLED", previousStatus: RsvpStatus.CONFIRMED, snapshot: rsvpWebhookSnapshot(member.rsvp) });
   return { ok: true, data: { name: member.name } };
 }

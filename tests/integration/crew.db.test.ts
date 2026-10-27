@@ -4,12 +4,17 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth", () => ({ auth: async () => null }));
 vi.mock("@/lib/actionRateLimit", () => ({ isActionRateLimited: async () => false }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Pass-through spy: emissions still run, and the test can see which were raised.
+vi.mock("@/lib/webhooks/emit", async (original) => {
+  const actual = await original<typeof import("@/lib/webhooks/emit")>();
+  return { ...actual, emitWebhookEvent: vi.fn(actual.emitWebhookEvent) };
+});
 
 import { prisma } from "@/lib/db";
 import { submitRsvpCore } from "@/lib/rsvpCore";
 import { countConfirmedUnits } from "@/lib/teamUnits";
 import { countConfirmedForEvent } from "@/lib/rsvpCapacity";
-import { flushWebhookEmits } from "@/lib/webhooks/emit";
+import { emitWebhookEvent, flushWebhookEmits } from "@/lib/webhooks/emit";
 import { addCrewMemberAsOrganiser, listCrewForOrganiser, listPublicCrew, moveCrewMember, removeCrewMember, updateCrewMemberAsOrganiser } from "@/lib/core/crew";
 import { loadRsvpStatusCounts } from "@/lib/eventDashboard/data";
 import { eventSelect, loadRsvpCounts } from "@/lib/dashboardHome/rows";
@@ -82,7 +87,10 @@ describe.sequential("event crew", () => {
     const waiting = await register(event, "waiting");
     expect([attendee.rsvp.status, waiting.rsvp.status]).toEqual([RsvpStatus.CONFIRMED, RsvpStatus.WAITLISTED]);
 
+    vi.mocked(emitWebhookEvent).mockClear();
     const member = await addCrew(event, { email: attendee.email.toUpperCase(), name: "Renamed Crew" });
+    // Receivers learn the confirmed registration is now a crew ticket.
+    expect(emitWebhookEvent).toHaveBeenCalledWith({ type: "registration.status_changed", rsvpId: attendee.rsvp.id, status: RsvpStatus.CONFIRMED, previousStatus: RsvpStatus.CONFIRMED });
     expect(member.email).toBe(attendee.email);
     expect(member.rsvp).toMatchObject({ id: attendee.rsvp.id, checkInToken: attendee.rsvp.checkInToken, isCrew: true, status: RsvpStatus.CONFIRMED, guestName: "Renamed Crew" });
     await expect(prisma.rSVP.count({ where: { eventId: event.id } })).resolves.toBe(2);
@@ -157,6 +165,14 @@ describe.sequential("event crew", () => {
       await expect(prisma.outboxMessage.count({ where: { kind: "crew-ticket" } })).resolves.toBe(before);
       // The account's own address (any case) is fine.
       await expect(updateCrewMemberAsOrganiser(ctxFor(event), accountCrew.id, { name: "Renamed", email: user.email!.toUpperCase() })).resolves.toEqual({ ok: true, data: undefined });
+      // Removing an account-tied crew member (their own registration, converted) tells them, with the cancellation webhook.
+      const notices = (to: string) => prisma.outboxMessage.count({ where: { kind: "operator-notice", payload: { path: ["to"], equals: to } } });
+      vi.mocked(emitWebhookEvent).mockClear();
+      await expect(removeCrewMember(ctxFor(event), accountCrew.id)).resolves.toMatchObject({ ok: true });
+      await expect(notices(user.email!)).resolves.toBe(1);
+      expect(emitWebhookEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "registration.status_changed", rsvpId: accountCrew.rsvpId, status: "CANCELLED" }));
+      await expect(removeCrewMember(ctxFor(event), member.id)).resolves.toMatchObject({ ok: true });
+      await expect(notices(member.email)).resolves.toBe(0);
     } finally {
       await prisma.rSVP.deleteMany({ where: { userId: user.id } });
       await prisma.user.delete({ where: { id: user.id } });

@@ -96,9 +96,12 @@ counts are shown) but never in *spots left* or *sold out*.
 
 The registration DTO in every registration and check-in webhook carries
 `crew: boolean` ([Webhooks](WEBHOOKS.md)). Adding a crew member emits
-`registration.created` (or `registration.status_changed` to `CONFIRMED` when
-a waitlisted or pending registration was converted) after the commit;
-removing one emits `registration.status_changed` to `CANCELLED`. Sign-ups
+`registration.created` after the commit, or `registration.status_changed` to
+`CONFIRMED` with `crew: true` when an existing registration was converted
+(even one that was already confirmed, so `previousStatus` may also be
+`CONFIRMED`); removing one emits `registration.status_changed` to
+`CANCELLED`. Removing an account-tied crew member (their own registration,
+converted) also emails them that their crew ticket no longer works. Sign-ups
 through the crew link post a *Registrations* chat notice
 (*Asha joined the crew for …*).
 
