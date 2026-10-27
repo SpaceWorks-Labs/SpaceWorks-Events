@@ -5,6 +5,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { JudgingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { sqlUtcTimestamp, SQL_UTC_NOW } from "@/lib/sqlTimestamp";
 import type { JudgeContext } from "@/lib/judgingAccess";
 import { judgeReviewSchema, judgeScoresSchema } from "@/lib/validators";
 import { criteriaFor, EVENT_NOT_FOUND, fail, invalid, JUDGING_NOT_OPEN, type JudgingEvent, type JudgingResult, lockEventShared, NOT_FOUND, ok } from "./shared";
@@ -44,9 +45,9 @@ export async function saveJudgeScores(ctx: JudgeContext, input: unknown): Promis
     for (const entry of scores) {
       await tx.$executeRaw`
         INSERT INTO "JudgeScore" ("id", "submissionId", "judgeUserId", "criterionId", "score", "createdAt", "updatedAt")
-        VALUES (${crypto.randomUUID()}, ${submissionId}, ${ctx.userId}, ${entry.criterionId}, ${entry.score}, NOW(), NOW())
+        VALUES (${crypto.randomUUID()}, ${submissionId}, ${ctx.userId}, ${entry.criterionId}, ${entry.score}, ${SQL_UTC_NOW}, ${SQL_UTC_NOW})
         ON CONFLICT ("submissionId", "judgeUserId", "criterionId")
-        DO UPDATE SET "score" = EXCLUDED."score", "updatedAt" = NOW()`;
+        DO UPDATE SET "score" = EXCLUDED."score", "updatedAt" = ${SQL_UTC_NOW}`;
     }
     const scored = await tx.judgeScore.count({ where: { submissionId, judgeUserId: ctx.userId, criterionId: { in: criteria.map((c) => c.id) } } });
     return ok({ scored, total: criteria.length });
@@ -74,11 +75,11 @@ export async function submitJudgeReview(ctx: JudgeContext, input: unknown): Prom
     const submittedAt = submit ? new Date() : null;
     await tx.$executeRaw`
       INSERT INTO "JudgeReview" ("id", "submissionId", "judgeUserId", "comment", "submittedAt", "createdAt", "updatedAt")
-      VALUES (${crypto.randomUUID()}, ${submissionId}, ${ctx.userId}, ${comment}, ${submittedAt}, NOW(), NOW())
+      VALUES (${crypto.randomUUID()}, ${submissionId}, ${ctx.userId}, ${comment}, ${sqlUtcTimestamp(submittedAt)}, ${SQL_UTC_NOW}, ${SQL_UTC_NOW})
       ON CONFLICT ("submissionId", "judgeUserId")
       DO UPDATE SET "comment" = EXCLUDED."comment",
                     "submittedAt" = COALESCE(EXCLUDED."submittedAt", "JudgeReview"."submittedAt"),
-                    "updatedAt" = NOW()`;
+                    "updatedAt" = ${SQL_UTC_NOW}`;
     const review = await tx.judgeReview.findUnique({ where: { submissionId_judgeUserId: { submissionId, judgeUserId: ctx.userId } }, select: { submittedAt: true } });
     return ok({ submitted: Boolean(review?.submittedAt) });
   });

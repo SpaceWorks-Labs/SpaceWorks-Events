@@ -5,6 +5,7 @@ import { titleWith } from "@/lib/noticeText";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { seatTakingWhere } from "./holds";
 import type { RefundPolicySnapshot } from "./refundPolicy";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
 
 /**
  * What an order is for: an event, one date of a series, or a pass that holds
@@ -123,7 +124,7 @@ export async function lockSeriesDates(tx: Prisma.TransactionClient, seriesId: st
   if (ids) {
     if (ids.length > 0) await tx.$queryRaw`SELECT "id" FROM "EventInstance" WHERE "id" = ANY(${ids}) AND "eventSeriesId" = ${seriesId} ORDER BY "id" FOR UPDATE`;
   } else {
-    await tx.$queryRaw`SELECT "id" FROM "EventInstance" WHERE "eventSeriesId" = ${seriesId} AND "endDateTime" > ${now} ORDER BY "id" FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "EventInstance" WHERE "eventSeriesId" = ${seriesId} AND "endDateTime" > ${sqlUtcTimestamp(now)} ORDER BY "id" FOR UPDATE`;
   }
 }
 

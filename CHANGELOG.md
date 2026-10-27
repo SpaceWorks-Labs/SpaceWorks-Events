@@ -54,6 +54,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Raw SQL timestamps** are written and compared as UTC wall-clock `timestamp(3)` values (`lib/sqlTimestamp.ts`): judge scores and reviews, the webhook delivery claim, series-date payment locks, processed payment webhooks, and every keyset cursor, so a database whose `TimeZone` is not UTC no longer shifts them.
+- Ops alerts no longer report ordinary sign-in outcomes (wrong password, the authenticator or new-device code step, unverified email, too many attempts, missing CSRF token, declined or expired sign-in) as "Sign-in failed" (`lib/authLogger.ts`).
+- Publishing an event locks its row, so concurrent publishes emit `event.published` and audit `EVENT_PUBLISHED` once.
+- An auto-disabled webhook endpoint keeps each queued delivery's own last error (`Endpoint disabled after: HTTP 503`).
+- Tables position their scroll box, so screen-reader-only text cannot widen the page; Undo check-in and Invite buttons name the person; the registration dialog says "Join the waitlist" when the event is full; the feedback form explains an email without a confirmed registration; the venue station has a page gutter.
+- Helm: `updateStrategy` makes the web Deployment's upgrade strategy configurable (Recreate for a release that must not overlap the previous one).
 - **Dashboard memory.** Date, time-zone and money formatting reuse cached `Intl` formatters (`lib/format/intlCache.ts`) instead of building one per registration or order, so a large event no longer allocates native memory per row on every dashboard, analytics, revenue or report render.
 - **New event dialog on the event's clock.** The suggested start (a whole hour at least 30 minutes away), the earliest allowed start, the end that follows the start, the Next check and Create all use the selected event timezone, never the browser's; the timezone picker is controlled, focus moves into each step and returns to the button on close.
 - `/discover` no longer scrolls sideways on a phone when an event has a long unbroken title, tag or place.

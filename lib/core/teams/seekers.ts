@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma, RegistrationMode, RsvpStatus, TeamJoinRequestDirection, TeamJoinRequestStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
 import { isTeamTokenShape } from "@/lib/teamToken";
 import { hasFreeSpace, isMatchingEvent, leaderAuthMatches, type TeamLeaderAuth, type TicketHolder } from "./shared";
 import {
@@ -10,7 +11,6 @@ import {
   encodeKeysetCursor,
   escapeLikePattern,
   matchingListQuerySchema,
-  sqlTimestamp,
   TEAM_MATCHING_PAGE_SIZE,
   type CursorPage,
 } from "./paging";
@@ -120,8 +120,8 @@ async function pageVisibleSeekers(scope: SeekerScope, input: unknown): Promise<C
   if (cursor) {
     const after = decodeKeysetCursor(cursor);
     if (!after) return emptyPage();
-    const at = sqlTimestamp(after.at);
-    conditions.push(Prisma.sql`(s."updatedAt" < ${at}::timestamp(3) OR (s."updatedAt" = ${at}::timestamp(3) AND s."id" > ${after.id}))`);
+    const at = sqlUtcTimestamp(after.at);
+    conditions.push(Prisma.sql`(s."updatedAt" < ${at} OR (s."updatedAt" = ${at} AND s."id" > ${after.id}))`);
   }
   const [ids, counted] = await Promise.all([
     prisma.$queryRaw<Array<{ id: string; updatedAt: Date }>>`
@@ -213,7 +213,7 @@ export async function listTeamsLookingForMembers(holder: TicketHolder, input: un
   if (cursor) {
     const after = decodeKeysetCursor(cursor);
     if (!after) return emptyPage();
-    conditions.push(Prisma.sql`(t."createdAt", t."id") > (${sqlTimestamp(after.at)}::timestamp(3), ${after.id})`);
+    conditions.push(Prisma.sql`(t."createdAt", t."id") > (${sqlUtcTimestamp(after.at)}, ${after.id})`);
   }
   const [ids, counted] = await Promise.all([
     prisma.$queryRaw<Array<{ id: string; createdAt: Date }>>`

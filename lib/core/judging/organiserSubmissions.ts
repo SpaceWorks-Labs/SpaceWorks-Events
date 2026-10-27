@@ -4,6 +4,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
 import { escapeLikePattern } from "@/lib/core/teams";
 import { decodeTimeCursor, encodeTimeCursor } from "@/lib/keysetCursor";
 import { ORGANISER_SUBMISSIONS_PAGE_SIZE, organiserSubmissionsQuerySchema } from "@/lib/judgingOrganiserPaging";
@@ -52,9 +53,7 @@ export async function listSubmissionsForOrganiser(
   if (cursor) {
     const after = decodeTimeCursor(cursor);
     if (!after) return empty;
-    // `createdAt` is a UTC wall-clock timestamp(3) column.
-    const at = after.at.toISOString().replace("Z", "");
-    conditions.push(Prisma.sql`(s."createdAt", s."id") > (${at}::timestamp(3), ${after.id})`);
+    conditions.push(Prisma.sql`(s."createdAt", s."id") > (${sqlUtcTimestamp(after.at)}, ${after.id})`);
   }
   const ids = await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT s."id" FROM "Submission" s

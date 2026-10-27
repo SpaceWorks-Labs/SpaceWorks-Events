@@ -203,7 +203,7 @@ export function RegistrationCard(props: {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent size="md" style={accentStyle(accentColor)} className="yy-accent-scope">
-          <DialogHeader title={`Register for ${eventTitle}`} description={registerNote} />
+          <DialogHeader title={state.full ? `Join the waitlist for ${eventTitle}` : `Register for ${eventTitle}`} description={registerNote} />
           <DialogBody className="pb-6">
             <RsvpForm
               orgSlug={orgSlug}

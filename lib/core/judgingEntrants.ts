@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma, RsvpStatus, SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
 import { escapeLikePattern } from "@/lib/core/teams";
 import { entrantDisplayName } from "@/lib/judgingDto";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
@@ -110,9 +111,7 @@ export async function listUnsubmittedEntrants(ctx: JudgingOrganiserContext, inpu
   if (cursor) {
     const after = decodeTimeCursor(cursor);
     if (!after) return empty;
-    // `createdAt` columns are UTC wall-clock timestamp(3).
-    const at = after.at.toISOString().replace("Z", "");
-    conditions.push(Prisma.sql`(e."registeredAt", e."id") > (${at}::timestamp(3), ${after.id})`);
+    conditions.push(Prisma.sql`(e."registeredAt", e."id") > (${sqlUtcTimestamp(after.at)}, ${after.id})`);
   }
   const rows = await prisma.$queryRaw<EntrantRow[]>`
     SELECT e.* FROM ${unsubmittedEntrantsSql(eventId)}

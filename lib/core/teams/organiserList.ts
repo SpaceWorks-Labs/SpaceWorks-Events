@@ -6,7 +6,8 @@ import { prisma } from "@/lib/db";
 import { decodeKeyCursor, encodeKeyCursor } from "@/lib/keysetCursor";
 import { ORGANISER_TEAM_FILTERS, type OrganiserTeamFilter } from "@/lib/organiserTeamFilters";
 import { personEmail, personName, type OrganiserEventContext } from "./shared";
-import { decodeTeamCursor, encodeTeamCursor, escapeLikePattern, sqlTimestamp } from "./paging";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
+import { decodeTeamCursor, encodeTeamCursor, escapeLikePattern } from "./paging";
 
 export type OrganiserTeamDto = {
   id: string;
@@ -95,8 +96,7 @@ export async function listEventTeamsForOrganiser(
   if (cursor) {
     const after = decodeTeamCursor(cursor);
     if (!after) return empty;
-    const at = sqlTimestamp(after.createdAt);
-    conditions.push(Prisma.sql`(t."createdAt", t."id") > (${at}::timestamp(3), ${after.id})`);
+    conditions.push(Prisma.sql`(t."createdAt", t."id") > (${sqlUtcTimestamp(after.createdAt)}, ${after.id})`);
   }
   const ids = await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT t."id" FROM "Team" t

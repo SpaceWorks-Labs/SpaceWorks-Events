@@ -67,11 +67,6 @@ export function decodeKeysetCursor(cursor: string): { at: Date; id: string } | n
   return decodeTimeCursor(cursor);
 }
 
-/** `timestamp(3)` columns hold UTC wall-clock time; compare a cursor time against them as such. */
-export function sqlTimestamp(at: Date): string {
-  return at.toISOString().replace("Z", "");
-}
-
 /** The organiser Teams view's cursor: the last team's creation time and id. */
 export function encodeTeamCursor(team: { createdAt: Date; id: string }): string {
   return encodeKeysetCursor(team.createdAt, team.id);
