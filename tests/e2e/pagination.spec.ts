@@ -195,9 +195,10 @@ test("People pages 50 at a time; Load more and the server search reach a guest p
   await expect(page.getByRole("group", { name: "Filter by status" }).getByRole("button", { name: /^All/ })).toContainText(String(TEAMS + 1));
   await expect(guests.filter({ hasText: needle.name })).toHaveCount(0);
 
-  await waitForHydration(page, "button");
+  await waitForHydration(page, "button:has-text(\"Load more guests\")");
   await page.getByRole("button", { name: "Load more guests" }).click();
-  await expect(guests).toHaveCount(TEAMS + 1);
+  // The first Server Action call compiles on demand under `next dev`.
+  await expect(guests).toHaveCount(TEAMS + 1, { timeout: 30_000 });
   await expect(shown(page, `Showing ${TEAMS + 1} of ${TEAMS + 1} guests`)).toBeVisible();
   await expect(guests.filter({ hasText: needle.name })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Load more guests" })).toHaveCount(0);
@@ -225,9 +226,9 @@ test("Teams pages 50 at a time with Load more", async ({ browser }) => {
   await page.goto(`${dashboard()}?tab=guests&sub=teams`);
   const teams = page.getByRole("list", { name: "Teams", exact: true }).locator(":scope > li");
   await expect(teams).toHaveCount(50);
-  await waitForHydration(page, "button");
+  await waitForHydration(page, "button:has-text(\"Load more teams\")");
   await page.getByRole("button", { name: "Load more teams" }).click();
-  await expect(teams).toHaveCount(TEAMS);
+  await expect(teams).toHaveCount(TEAMS, { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Load more teams" })).toHaveCount(0);
   // Both ends of the list are loaded once, with no row repeated across pages.
   for (const index of [0, TEAMS - 1]) await expect(teams.filter({ hasText: teamName(index) })).toHaveCount(1);
