@@ -69,7 +69,9 @@ test("the New event dialog reads start and end on the chosen event timezone", as
   const suggestedInstant = Date.parse(zonedInputToIso(suggested, "Asia/Kolkata")!);
   expect(suggestedInstant - Date.now()).toBeGreaterThan(29 * 60_000);
 
-  await dialog.getByLabel(/^Timezone/).selectOption("America/New_York");
+  await dialog.getByRole("combobox", { name: /^Timezone/ }).click();
+  await page.getByRole("option", { name: "America/New_York" }).click();
+  await expect(dialog.getByRole("combobox", { name: /^Timezone/ })).toContainText("America/New_York");
   // The earliest allowed start follows the chosen clock.
   const minimum = await start.getAttribute("min");
   expect(minimum?.slice(0, 13)).toBe(zonedDatetimeLocalValue(new Date(), "America/New_York").slice(0, 13));

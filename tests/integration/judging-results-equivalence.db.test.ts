@@ -144,7 +144,7 @@ beforeAll(async () => {
   const id = () => `eq${randomUUID().replaceAll("-", "").slice(0, 22)}`;
   const org = await prisma.organisation.create({ data: { name: "Equivalence", slug: `equivalence-${suffix}` } });
   organisationId = org.id;
-  const owner = await prisma.user.create({ data: { name: "Owner Person", email: `owner-${suffix}@load.yuyu.test` } });
+  const owner = await prisma.user.create({ data: { name: "Owner Person", email: `owner-${suffix}@load.example.test` } });
   userIds.push(owner.id);
   await prisma.membership.create({ data: { userId: owner.id, organisationId, role: "OWNER" } });
   const event = await prisma.event.create({
@@ -167,7 +167,7 @@ beforeAll(async () => {
 
   const judges: string[] = [];
   for (let i = 0; i < 9; i++) {
-    const judge = await prisma.user.create({ data: { name: `Judge ${i}`, email: `judge-${i}-${suffix}@load.yuyu.test` } });
+    const judge = await prisma.user.create({ data: { name: `Judge ${i}`, email: `judge-${i}-${suffix}@load.example.test` } });
     userIds.push(judge.id);
     judges.push(judge.id);
   }
@@ -189,7 +189,7 @@ beforeAll(async () => {
     teams.push({ id: teamId, eventId: event.id, name: `Team ${i}`, nameKey: `team ${i}`, status: "CONFIRMED", joinToken: id(), manageTokenHash: createHash("sha256").update(`${suffix}-${i}`).digest("hex") });
     // Judge 1 is a member of team 5: a conflict of interest for that project.
     const userId = i === 5 ? judges[1]! : null;
-    rsvps.push({ id: id(), eventId: event.id, teamId, userId, guestEmail: userId ? null : `m${i}-${suffix}@load.yuyu.test`, guestName: userId ? null : `Member ${i}`, attendeeKey: userId ? `user:${userId}` : `guest:m${i}-${suffix}@load.yuyu.test`, status: "CONFIRMED" });
+    rsvps.push({ id: id(), eventId: event.id, teamId, userId, guestEmail: userId ? null : `m${i}-${suffix}@load.example.test`, guestName: userId ? null : `Member ${i}`, attendeeKey: userId ? `user:${userId}` : `guest:m${i}-${suffix}@load.example.test`, status: "CONFIRMED" });
     const status = i < 125 ? "SUBMITTED" : i < 132 ? "DISQUALIFIED" : i < 136 ? "DRAFT" : "WITHDRAWN";
     submissions.push({ id: id(), eventId: event.id, teamId, title: `Project ${i % 40}`, status, submittedAt: status === "DRAFT" ? null : new Date(now.getTime() - (200 - i) * 60_000 - (i % 3) * 1000) });
   }
