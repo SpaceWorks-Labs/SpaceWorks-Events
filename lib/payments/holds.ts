@@ -14,12 +14,19 @@ export const HOLD_EXTENSION_CAP_MS = 30 * 60_000;
 const ATTEMPT_MARGIN_MS = 2 * 60_000;
 
 /**
+ * Spread into every RSVP count compared with a capacity: crew tickets
+ * (docs/CREW.md) count in headcounts but never take an attendee place.
+ */
+export const takesCapacity = { isCrew: false } as const satisfies Prisma.RSVPWhereInput;
+
+/**
  * Registrations that occupy a seat: confirmed ones and paid tickets whose
- * hold has not ended. Every capacity count uses this, under the same event
- * row lock, so a held seat can never be sold twice.
+ * hold has not ended, never crew tickets. Every capacity count uses this,
+ * under the same event row lock, so a held seat can never be sold twice.
  */
 export function seatTakingWhere(now: Date): Prisma.RSVPWhereInput {
   return {
+    ...takesCapacity,
     OR: [
       { status: RsvpStatus.CONFIRMED },
       { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now } },

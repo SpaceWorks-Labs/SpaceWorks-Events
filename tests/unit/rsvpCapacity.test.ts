@@ -21,7 +21,9 @@ const tx = {
 };
 
 // Confirmed registrations and unexpired paid holds both take a seat.
+// Crew tickets (docs/CREW.md) never take a seat.
 const seatsTaken = {
+  isCrew: false,
   OR: [
     { status: RsvpStatus.CONFIRMED },
     { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: expect.any(Date) } },

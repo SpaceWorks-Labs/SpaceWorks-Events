@@ -202,7 +202,7 @@ export async function requestSubmissionLink(holder: { rsvpId: string; eventId: s
       const event = await lockEventShared(tx, holder.eventId);
       if (!event?.submissionsEnabled || event.status !== EventStatus.PUBLISHED) return fail("This event is not taking project submissions.");
       const rsvp = await tx.rSVP.findFirst({
-        where: { id: holder.rsvpId, eventId: event.id },
+        where: { id: holder.rsvpId, eventId: event.id, isCrew: false },
         select: { id: true, teamId: true, status: true, ...personSelect, submissionLink: { select: { createdAt: true } } },
       });
       if (!rsvp) return fail(NOT_FOUND);

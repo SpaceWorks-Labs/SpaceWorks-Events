@@ -42,6 +42,8 @@ export const webhookRegistrationSchema = z.object({
   displayName: z.string(),
   registeredAt: isoDate,
   checkedInAt: isoDate.nullable(),
+  /** An event crew ticket (docs/CREW.md): free, outside capacity. */
+  crew: z.boolean(),
 }).strict();
 
 const registrationCreatedData = z.object({ event: webhookEventRefSchema, registration: webhookRegistrationSchema }).strict();
@@ -143,7 +145,7 @@ export function webhookEventRef(source: EventRefSource): z.infer<typeof webhookE
 }
 
 export function webhookRegistration(
-  rsvp: { id: string; guestName: string | null; createdAt: Date; checkedInAt: Date | null; user?: { name: string | null } | null },
+  rsvp: { id: string; guestName: string | null; createdAt: Date; checkedInAt: Date | null; isCrew?: boolean; user?: { name: string | null } | null },
   status: RegistrationWebhookStatus,
 ): z.infer<typeof webhookRegistrationSchema> {
   return {
@@ -153,5 +155,6 @@ export function webhookRegistration(
     displayName: rsvp.user?.name?.trim() || rsvp.guestName?.trim() || "Participant",
     registeredAt: rsvp.createdAt.toISOString(),
     checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
+    crew: rsvp.isCrew === true,
   };
 }

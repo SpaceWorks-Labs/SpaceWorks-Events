@@ -1,5 +1,6 @@
 "use server";
 
+import { CREW_EMAIL_REFUSED, CREW_REGISTRATION_ERROR, hasCrewEmail } from "@/lib/core/crew/shared";
 import { Prisma, RsvpStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -81,6 +82,8 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
+  // Crew name and email live on the crew record (docs/CREW.md).
+  if (rsvp.isCrew) return { ok: false, error: CREW_REGISTRATION_ERROR };
 
   const formFields = rsvp.event?.registrationForm?.fields ?? [];
   const validated = validateAndNormalizeAnswers({
@@ -94,6 +97,8 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
     guestEmail: parsed.data.guestEmail?.trim().toLowerCase() || rsvp.guestEmail,
   };
   const guestEmail = "guestEmail" in guestUpdate ? guestUpdate.guestEmail : rsvp.guestEmail;
+  // Moving a ticket to a crew member's email would give them a second, capacity-taking place.
+  if (rsvp.eventId && guestEmail && guestEmail !== rsvp.guestEmail && (await hasCrewEmail(prisma, rsvp.eventId, [guestEmail]))) return { ok: false, error: CREW_EMAIL_REFUSED };
   try {
     await prisma.$transaction(async (tx) => {
       await tx.rSVP.update({
@@ -167,6 +172,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
+  if (rsvp.isCrew) return { ok: false, error: CREW_REGISTRATION_ERROR };
   // Paid tickets keep their money trail: they're cancelled (and refunded) as an order.
   if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead." };
 

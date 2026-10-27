@@ -32,6 +32,8 @@ export type RsvpWebhookSnapshot = {
   guestName: string | null;
   createdAt: Date;
   checkedInAt: Date | null;
+  /** A crew ticket (docs/CREW.md); absent means not crew. */
+  isCrew?: boolean;
 };
 
 export type WebhookEmission =
@@ -123,6 +125,7 @@ const rsvpSelect = {
   createdAt: true,
   checkedInAt: true,
   status: true,
+  isCrew: true,
   user: { select: { name: true } },
 } as const;
 

@@ -14,6 +14,7 @@ const EVENT_MATRIX: Record<Exclude<keyof EventCapabilities, "isJudgeOnly">, Even
   canExportAttendees: EventPermission.MANAGE_REGISTRATIONS,
   canViewAnalytics: EventPermission.MANAGE_REGISTRATIONS,
   canManageInvitations: EventPermission.MANAGE_INVITATIONS,
+  canManageCrew: EventPermission.MANAGE_REGISTRATIONS,
   canCheckIn: EventPermission.CHECK_IN,
   canCheckInToLists: EventPermission.CHECK_IN,
   canManageCheckInLists: EventPermission.EDIT_DETAILS,
