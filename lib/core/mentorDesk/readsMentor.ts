@@ -39,11 +39,12 @@ export async function loadMentorConsole(m: MentorContext, now = new Date()) {
   const assignedBy = new Map<string, Set<string>>();
   for (const a of activeAssignments) assignedBy.set(a.teamId, (assignedBy.get(a.teamId) ?? new Set()).add(a.mentorUserId));
   const who = (r: { team: { name: string } | null; rsvp: { guestName: string | null; user: { name: string | null } | null } | null }) => r.team?.name ?? (r.rsvp?.user?.name?.trim() || r.rsvp?.guestName?.trim() || "Participant");
-  const queue = open.map((r) => {
+  // A mentor never sees the text of help from their own team or a team they are conflicted with.
+  const queue = open.filter((r) => (r.teamId ? !blocked.has(r.teamId) : !ownRsvpIds.has(r.rsvpId!))).map((r) => {
     const assigned = r.teamId ? assignedBy.get(r.teamId) : undefined;
     const eligible = r.teamId
-      ? !blocked.has(r.teamId) && skillAndPriorityEligible({ assignedToMentor: Boolean(assigned?.has(m.userId)), teamHasAssignedMentor: Boolean(assigned?.size), priorityUntil: r.exclusiveUntil, now, mentorSkills: profile.skills, skillTags: r.category.skillTags })
-      : !ownRsvpIds.has(r.rsvpId!) && skillAndPriorityEligible({ assignedToMentor: false, teamHasAssignedMentor: false, priorityUntil: null, now, mentorSkills: profile.skills, skillTags: r.category.skillTags });
+      ? skillAndPriorityEligible({ assignedToMentor: Boolean(assigned?.has(m.userId)), teamHasAssignedMentor: Boolean(assigned?.size), priorityUntil: r.exclusiveUntil, now, mentorSkills: profile.skills, skillTags: r.category.skillTags })
+      : skillAndPriorityEligible({ assignedToMentor: false, teamHasAssignedMentor: false, priorityUntil: null, now, mentorSkills: profile.skills, skillTags: r.category.skillTags });
     return { id: r.id, version: r.version, category: r.category.label, priority: r.priority, summary: r.summary, location: r.location, who: who(r), assignedToMe: Boolean(assigned?.has(m.userId)), eligible, deadline: helpDeadline(r.expiresAt, event.endDateTime).toISOString(), createdAt: r.createdAt.toISOString() };
   });
   let board: Array<{ teamId: string; teamName: string; state: "due" | "seen" | "busy" | "done" | "conflict" }> | null = null;

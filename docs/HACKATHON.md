@@ -177,6 +177,11 @@ that lost awards are not given back (reassign them on the Awards tab).
 - **Conflict of interest:** a judge whose own account owns an RSVP on that
   entrant is never shown that submission and cannot score it (checked
   server-side).
+  With the [Mentor Desk](MENTOR_DESK.md) on, a judge who mentored a team (an
+  active or ended mentor assignment, in any round) or holds a mentor conflict
+  with it is conflicted the same way: the single rule `conflictKeysFor`
+  (`lib/core/judging/judges.ts`) adds `mentorJudgingConflicts`. Mentors'
+  round nominations are a private organiser shortlist and never enter scores.
 - Judges see the submission content (title, summary, links, team name). They
   never see entrant emails, answers, or ticket links.
 - The **Score** list is paged on the server: 25 at a time with **Load more**

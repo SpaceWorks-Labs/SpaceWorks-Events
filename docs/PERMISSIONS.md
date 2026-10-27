@@ -36,6 +36,7 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | `CHECK_IN` | The check-in desk and page: scan, search, preview, check in, undo, offline roster and sync, badge (ID card) printing; checking guests into and out of custom check-in lists |
 | `PUBLISH_AND_SCHEDULE` | The programme: schedule tracks, sessions and live delays (standalone events), and series schedule items. Despite the name, setting an event Live stays with owners and admins |
 | `JUDGE` | The hackathon judging workspace only ([Hackathon judging](HACKATHON.md)): reading and scoring the submissions the judge may see, with private reviews. Standalone events only. It satisfies no other check, and a non-member whose only grant is `JUDGE` is *judge-only*: the dashboard shows the judging workspace and nothing else (`isJudgeOnly`) |
+| `MENTOR` | The Mentor Desk console only ([Mentor Desk](MENTOR_DESK.md)): the help queue while on shift, own teams, own office hours, round visits and own profile. Standalone events only; staff MFA applies. It satisfies no other check (`canMentor`); a non-member whose grants are `MENTOR` (and possibly `JUDGE`) is *mentor-only*: the dashboard shows the mentor console (and the judging workspace for `JUDGE`) and nothing else (`isMentorOnly`). Managing the desk (`canManageMentorDesk`) stays with owners and admins |
 
 ## Event dashboard
 
@@ -95,6 +96,9 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Check-in page (`…/check-in`) | page and check-in actions: `CHECK_IN` | Yes | 404 | 404 | 404 | 404 | Yes | 404 | 404 | Yes |
 | Judging tab: shown | page render; `canJudge` or `canManageJudging`, and the event uses judging (`eventUsesJudging`) | Yes | — | — | — | — | — | — | Yes | Yes |
 | Judging: workspace (submissions to judge, scores, private review, Score next project) | `lib/judgingAccess.ts` `resolveJudgeContext`, `lib/core/judging.ts` (`nextSubmissionForJudge` uses the list's visibility query): admin or `JUDGE`; conflict-of-interest entries hidden | Yes | — | — | — | — | — | — | Yes | Yes |
+| Mentors tab: shown | page render; the desk is on and `canManageMentorDesk` or `canMentor` | Yes | — | — | — | — | — | — | — | — |
+| Mentor Desk: settings, mentors, queue commands, assignments, office hours, categories, rounds, shortlist, CSV ([MENTOR_DESK.md](MENTOR_DESK.md)) | `resolveDeskOrganiser`: admin (`canManageMentorDesk`) | Yes | — | — | — | — | — | — | — | — |
+| Mentor console: queue, claims, own teams, slots, visits, profile | `resolveMentorContext` + `liveMentor` in each command: the `MENTOR` grant (not in the columns above), staff MFA, on shift for queue and visits | `MENTOR` only | — | — | — | — | — | — | — | — |
 | Judging: settings, window, rubric, assignments, judging status, Hackathon emails switches | `resolveJudgingOrganiser`: admin (`canManageJudging`) | Yes | — | — | — | — | — | — | — | — |
 | Judging: disqualify, reinstate, awards, Adjust for harsh/generous judges, publish and unpublish results | `resolveJudgingOrganiser`: admin | Yes | — | — | — | — | — | — | — | — |
 | Judging: Send results email now (`sendResultsAnnouncement`) | `resolveJudgingOrganiser`: admin (same as publishing results); broadcast rate-limit bucket | Yes | — | — | — | — | — | — | — | — |
@@ -121,7 +125,10 @@ caller's organisation, or one they cannot open at all, answers
 ³ A non-member whose only grant is `JUDGE` sees the event header and the
 judging workspace and nothing else: no tabs, header numbers, page link, or
 check-in. A member or a co-organiser with other grants who also holds `JUDGE`
-gets the Judging tab next to what their other grants allow.
+gets the Judging tab next to what their other grants allow. Likewise a
+non-member whose grants are `MENTOR` (and possibly `JUDGE`) sees the event
+header, the mentor console and, with `JUDGE`, the judging workspace, and
+nothing else.
 
 A saved view only selects filters inside a list. It is never an access
 grant: the list's own check runs first, a shared view is listed only to

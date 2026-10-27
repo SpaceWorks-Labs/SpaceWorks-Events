@@ -13,7 +13,8 @@ import { resolveJudgeContext, resolveJudgingOrganiser } from "@/lib/judgingAcces
 import { createEventCollaboratorToken, hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
 import { acceptEventCollaboratorInviteToken } from "@/lib/inviteAcceptance";
 import { resolveDeskOrganiser, resolveMentorContext, resolveParticipantForUser } from "@/lib/core/mentorDesk/access";
-import { saveMentorProfile, syncMentorGrantLocked } from "@/lib/core/mentorDesk/configuration";
+import { saveMentorProfile } from "@/lib/core/mentorDesk/configuration";
+import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
 import { raiseHelp } from "@/lib/core/mentorDesk/help";
 import { helpCommand } from "@/lib/core/mentorDesk/helpCommands";
 import { createTeam, createUser, organisationId, organiserId, orgSlug, otherOrganisationId, otherOrganiserId, register, setUpJudgingSuite, tearDownJudgingSuite } from "./helpers/judging";

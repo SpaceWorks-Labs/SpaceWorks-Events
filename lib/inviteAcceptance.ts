@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
-import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/configuration";
+import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
 
 export type InviteAcceptance =
   | { ok: true; href: string }

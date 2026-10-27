@@ -14,7 +14,7 @@ import { getRequestOrigin } from "@/lib/publicUrl";
 import { startOutboxWorker } from "@/lib/outboxWorker";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import type { ActionResult } from "./org";
-import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/configuration";
+import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
