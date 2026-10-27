@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EventPrivacyType, EventStatus } from "@prisma/client";
 import { Plus } from "lucide-react";
 import { createEvent } from "@/app/actions/event";
-import { zonedInputToIso } from "@/lib/timeZone";
 import { Button } from "@/components/ui/button";
 import { SwitchRow } from "@/components/ui/choice";
 import { Callout } from "@/components/ui/display";
@@ -20,7 +19,7 @@ import {
   teamSettingsProblem,
   type TeamSettingsDraft,
 } from "./TeamSettingsFields";
-import { STEP_LABELS, STEP_TITLES, isRichTextEmpty, toDatetimeLocalValue } from "./CreateEventDialog/helpers";
+import { DEFAULT_TIMEZONE, STEP_LABELS, STEP_TITLES, addWallClockHours, checkSchedule, isRichTextEmpty, nextWholeHour } from "./CreateEventDialog/helpers";
 import { BasicsStep, ScheduleStep } from "./CreateEventDialog/steps";
 
 export function CreateEventDialog(props: {
@@ -32,23 +31,37 @@ export function CreateEventDialog(props: {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [start, setStart] = useState<Date | null>(null);
-  const [end, setEnd] = useState<Date | null>(null);
+  // `datetime-local` values on the event's clock (`timezone`).
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [tagsPreview, setTagsPreview] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [formKey, setFormKey] = useState(0);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  /** Set when Next/Back (or a schedule error) changes the step, so focus follows into it. */
+  const stepMoved = useRef(false);
 
   // Wizard States
   const [activeStep, setActiveStep] = useState(0);
   const [isOnline, setIsOnline] = useState(false);
   const [teamSettings, setTeamSettings] = useState<TeamSettingsDraft>(DEFAULT_TEAM_SETTINGS);
 
+  // Keyboard and screen-reader users land in the step they moved to, not on
+  // the Next button that is still under focus.
+  useEffect(() => {
+    if (!stepMoved.current) return;
+    stepMoved.current = false;
+    formRef.current?.querySelector<HTMLElement>(`[data-step="${activeStep}"] :is(input:not([type=hidden]), select, textarea, [contenteditable=true], button)`)?.focus();
+  }, [activeStep]);
+
   const resetDraft = () => {
     setActiveStep(0);
     setError(null);
-    setStart(null);
-    setEnd(null);
+    setStart("");
+    setEnd("");
+    setTimezone(DEFAULT_TIMEZONE);
     setTagsPreview([]);
     setTagInput("");
     setIsOnline(false);
@@ -74,19 +87,14 @@ export function CreateEventDialog(props: {
     const form = e.currentTarget;
     const fd = new FormData(form);
     // The picked wall-clock times belong to the chosen event timezone, not the browser's or the server's.
-    const timezone = String(fd.get("timezone") ?? "Asia/Kolkata");
-    const startDateTime = start ? zonedInputToIso(toDatetimeLocalValue(start), timezone) : null;
-    const endDateTime = end ? zonedInputToIso(toDatetimeLocalValue(end), timezone) : null;
-    if (!startDateTime || new Date(startDateTime) < new Date()) {
-      setError(startDateTime ? "Start time must be now or in the future." : "Choose a valid start time in the event timezone.");
+    const schedule = checkSchedule(start, end, timezone);
+    if ("error" in schedule) {
+      setError(schedule.error);
+      stepMoved.current = true;
       setActiveStep(1);
       return;
     }
-    if (!endDateTime || new Date(endDateTime) <= new Date(startDateTime)) {
-      setError(endDateTime ? "End time must be after start time." : "Choose a valid end time in the event timezone.");
-      setActiveStep(1);
-      return;
-    }
+    const { startIso: startDateTime, endIso: endDateTime } = schedule;
     startTransition(async () => {
       const res = await createEvent({
         organisationSlug,
@@ -120,14 +128,9 @@ export function CreateEventDialog(props: {
 
   const handleOpen = () => {
     resetDraft();
-    const now = new Date();
-    const base = new Date(now);
-    base.setMinutes(0, 0, 0);
-    base.setHours(base.getHours() + 1);
+    const base = nextWholeHour(DEFAULT_TIMEZONE);
     setStart(base);
-    const e = new Date(base);
-    e.setHours(e.getHours() + 1);
-    setEnd(e);
+    setEnd(addWallClockHours(base, 1));
     setOpen(true);
   };
 
@@ -143,6 +146,7 @@ export function CreateEventDialog(props: {
     <>
       {variant === "fab" ? (
         <button
+          ref={triggerRef}
           type="button"
           aria-label="Create event"
           onClick={handleOpen}
@@ -151,12 +155,20 @@ export function CreateEventDialog(props: {
           <Plus aria-hidden className="size-6" />
         </button>
       ) : (
-        <Button variant="primary" startIcon={<Plus />} onClick={handleOpen}>
+        <Button ref={triggerRef} variant="primary" startIcon={<Plus />} onClick={handleOpen}>
           New event
         </Button>
       )}
       <Dialog open={open} onOpenChange={(next) => { if (!next) closeDialog(); }}>
-        <DialogContent size="md">
+        <DialogContent
+          size="md"
+          // The dialog is opened from our own button, not a Radix trigger, so
+          // hand focus back to it on close (Escape, Cancel, the close icon).
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            triggerRef.current?.focus();
+          }}
+        >
           <form
             key={formKey}
             ref={formRef}
@@ -188,10 +200,10 @@ export function CreateEventDialog(props: {
               <BasicsStep activeStep={activeStep} tagInput={tagInput} setTagInput={setTagInput} addTag={addTag} tagsPreview={tagsPreview} setTagsPreview={setTagsPreview} />
 
               {/* Step 2: Schedule */}
-              <ScheduleStep activeStep={activeStep} start={start} setStart={setStart} end={end} setEnd={setEnd} />
+              <ScheduleStep activeStep={activeStep} start={start} setStart={setStart} end={end} setEnd={setEnd} timezone={timezone} setTimezone={setTimezone} />
 
               {/* Step 3: Location */}
-              <div className={cn("flex-col gap-4", activeStep === 2 ? "flex" : "hidden")}>
+              <div data-step="2" className={cn("flex-col gap-4", activeStep === 2 ? "flex" : "hidden")}>
                 <SwitchRow
                   name="isOnline"
                   label="Online event"
@@ -226,6 +238,7 @@ export function CreateEventDialog(props: {
                     variant="quiet"
                     onClick={() => {
                       setError(null);
+                      stepMoved.current = true;
                       setActiveStep((prev) => prev - 1);
                     }}
                     disabled={pending}
@@ -261,21 +274,13 @@ export function CreateEventDialog(props: {
                         }
                       }
                       if (activeStep === 1) {
-                        if (!start || !end) {
-                          setError("Please select both start and end times.");
-                          return;
-                        }
-                        const timezoneInput = formRef.current?.elements.namedItem("timezone") as HTMLSelectElement | null;
-                        const startInstant = zonedInputToIso(toDatetimeLocalValue(start), timezoneInput?.value || "Asia/Kolkata");
-                        if (!startInstant || new Date(startInstant) < new Date()) {
-                          setError("Start time must be now or in the future.");
-                          return;
-                        }
-                        if (end <= start) {
-                          setError("End time must be after start time.");
+                        const schedule = checkSchedule(start, end, timezone);
+                        if ("error" in schedule) {
+                          setError(schedule.error);
                           return;
                         }
                       }
+                      stepMoved.current = true;
                       setActiveStep((prev) => prev + 1);
                     }}
                   >

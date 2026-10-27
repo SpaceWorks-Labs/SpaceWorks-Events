@@ -54,6 +54,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **New event dialog on the event's clock.** The suggested start (a whole hour at least 30 minutes away), the earliest allowed start, the end that follows the start, the Next check and Create all use the selected event timezone, never the browser's; the timezone picker is controlled, focus moves into each step and returns to the button on close.
+- `/discover` no longer scrolls sideways on a phone when an event has a long unbroken title, tag or place.
 - Saving an event without touching its times keeps the stored start and end (the form sends whole minutes), so guests no longer get a spurious "the organiser changed the time" email.
 - **Private pages.** Signed-in areas, `/login`, invitations, `/reset-password`, `/verify-email`, `/verify-mfa`, order links and member ID verification, and any request with the session cookie are sent `private, no-store`; order, verification, invitation, reset and email-verification links send no referrer.
 - **Redis outages** no longer stall requests: request-path Redis commands have a 500 ms deadline, and the rate limiter answers at once while the client reconnects (still failing closed in production).
