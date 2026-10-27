@@ -11,6 +11,9 @@ import { evaluateGoogleSignIn } from "@/lib/googleSignIn";
 import { getClientIpFromHeaders } from "@/lib/rateLimit";
 import { getGoogleSsoSettings } from "@/lib/instanceSettings";
 import { logAuthError } from "@/lib/authLogger";
+import { actorSession } from "@/lib/actorSession";
+import { currentRequestActor } from "@/lib/requestActor";
+import type { Session } from "next-auth";
 
 /**
  * This code is returned only after the supplied password is valid. It lets the
@@ -35,7 +38,7 @@ class TooManyAttemptsError extends CredentialsSignin {
   code = "too_many_attempts";
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
+const nextAuth = NextAuth(async () => {
   const google = await getGoogleSsoSettings();
   return {
   adapter: authAdapter,
@@ -147,3 +150,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   },
   };
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+/**
+ * The signed-in session. Inside a mobile API request (lib/requestActor.ts)
+ * there is no cookie: the app session that authenticated the bearer token is
+ * presented as the session instead, so Server Action bodies run unchanged for
+ * the app with every payment, refund, webhook and notification rule intact.
+ * Its `mfaVerified` and `authenticatedAt` come from the app session.
+ */
+export async function auth(): Promise<Session | null> {
+  const actor = currentRequestActor();
+  if (!actor) return nextAuth.auth();
+  return actorSession(actor);
+}

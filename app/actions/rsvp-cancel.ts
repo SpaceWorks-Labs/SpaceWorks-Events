@@ -90,7 +90,7 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
     if (!current) return { error: "RSVP not found." };
     if (current.checkedInAt) return { error: "Cannot cancel — you have already checked in." };
     // Money was taken: refunds follow the order's policy, from the order page.
-    if (current.order && current.order.payments.length > 0) return { error: "Paid tickets are cancelled from the order page, under the event's refund policy." };
+    if (current.order && current.order.payments.length > 0) return { error: "Paid tickets are cancelled from the order page, under the event's refund policy.", code: "PAID_ORDER" as const };
     const title = rsvp.event?.title ?? rsvp.eventInstance!.series.title;
     const organisationId = rsvp.event?.organisation.id ?? rsvp.eventInstance!.series.organisation.id;
     if (current.order?.status === "REQUESTED") {
@@ -163,7 +163,7 @@ export async function cancelRsvp(input: unknown): Promise<ActionResult<{ cancell
     }
     return { error: null };
   });
-  if (cancellation.error) return { ok: false, error: cancellation.error };
+  if (cancellation.error) return { ok: false, error: cancellation.error, ...("code" in cancellation && cancellation.code ? { code: cancellation.code } : {}) };
   const cancelled = removed as { snapshot: RsvpWebhookSnapshot; previousStatus: RsvpStatus; } | null;
   if (cancelled) emitWebhookEvent({ type: "registration.status_changed", rsvpId: cancelled.snapshot.id, status: "CANCELLED", previousStatus: cancelled.previousStatus, snapshot: cancelled.snapshot });
   if (promotedId) emitWebhookEvent({ type: "registration.status_changed", rsvpId: promotedId, status: RsvpStatus.CONFIRMED, previousStatus: RsvpStatus.WAITLISTED });

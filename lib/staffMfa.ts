@@ -5,7 +5,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { hasValidMfaProof, MFA_PROOF_COOKIE, MFA_PROOF_MAX_AGE_SECONDS } from "@/lib/mfaProof";
+import { hasValidMfaProof, MFA_PROOF_COOKIE } from "@/lib/mfaProof";
+import { mobileMfaFresh } from "@/lib/staffMfaFresh";
 import { currentRequestActor } from "@/lib/requestActor";
 import { isSuperAdminEmail } from "@/lib/superAdminEmail";
 
@@ -29,11 +30,6 @@ export async function isStaff(userId: string) {
     prisma.eventCollaborator.findFirst({ where: { userId }, select: { id: true } }),
   ]);
   return Boolean(membership || grant);
-}
-
-/** Whether an app session's authenticator check is recent enough to count. */
-export function mobileMfaFresh(mfaVerifiedAt: Date | null, now = Date.now()) {
-  return Boolean(mfaVerifiedAt) && now - mfaVerifiedAt!.getTime() < MFA_PROOF_MAX_AGE_SECONDS * 1000 && mfaVerifiedAt!.getTime() <= now + 60_000;
 }
 
 async function standing(userId: string) {

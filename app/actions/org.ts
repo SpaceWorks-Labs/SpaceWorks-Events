@@ -12,6 +12,7 @@ import { flattenZodErrors } from "./utils";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { isOrganisationUploadUrl } from "@/lib/uploadUrl";
+import type { ActionErrorCode } from "@/lib/actionErrorCode";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -26,7 +27,7 @@ export type ActionResult<T = void> =
     /** The action needs a fresh sign-in (lib/reauth.ts); the UI offers one. */
     reauthRequired?: boolean;
     /** Machine-readable reason for API clients; e.g. a TEAMS_ONLY event refusing a solo registration. */
-    code?: "TEAM_REQUIRED";
+    code?: ActionErrorCode;
   };
 
 export async function createOrganisation(

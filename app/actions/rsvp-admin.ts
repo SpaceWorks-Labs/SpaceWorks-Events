@@ -168,7 +168,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
   // Paid tickets keep their money trail: they're cancelled (and refunded) as an order.
-  if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead." };
+  if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead.", code: "PAID_ORDER" };
 
   const teamEvent = rsvp.eventId && rsvp.event?.registrationMode === "TEAM" ? rsvp.eventId : null;
   const snapshot: Record<string, unknown> & { teamId?: string | null; submission?: SubmissionSnapshot | null; } = {
