@@ -36,8 +36,9 @@ function answerValue(answer: { valueText: string | null; valueBool: boolean | nu
     ?? "";
 }
 
-/** Team name and role for one registration; solo registrants get an empty team and "Solo". */
-function teamCells(rsvp: { id: string; team?: { name: string; leaderRsvpId: string | null } | null }) {
+/** Team name and role for one registration; solo registrants get an empty team and "Solo", crew "Crew". */
+function teamCells(rsvp: { id: string; isCrew: boolean; team?: { name: string; leaderRsvpId: string | null } | null }) {
+  if (rsvp.isCrew) return ["", "Crew"];
   if (!rsvp.team) return ["", "Solo"];
   return [rsvp.team.name, rsvp.team.leaderRsvpId === rsvp.id ? "Leader" : "Member"];
 }
@@ -134,7 +135,8 @@ export async function GET(request: Request, context: RouteContext) {
             rsvp.createdAt.toISOString(),
             rsvp.checkedInAt?.toISOString() ?? "",
             `${origin}/ticket/${rsvp.checkInToken}`,
-            rsvp.ticketType?.name ?? "",
+            // Crew tickets (docs/CREW.md) are free and have no ticket type: marked in the Ticket column.
+            rsvp.isCrew ? "Crew" : rsvp.ticketType?.name ?? "",
             rsvp.order?.reference ?? "",
             rsvp.order?.status ?? "",
             rsvp.order ? `${rsvp.order.currency} ${minorToDecimalString(rsvp.order.totalMinor, rsvp.order.currency)}` : "",
