@@ -55,6 +55,8 @@ export function JudgingPanelResults({
   exportHref,
   timezone,
   savedViews = NO_SAVED_VIEWS,
+  roundId = null,
+  readOnly = false,
 }: {
   scope: JudgingScope;
   initialPage: JudgingDashboardResultsPage;
@@ -66,6 +68,10 @@ export function JudgingPanelResults({
   timezone: string;
   /** Saved views for this list (the viewer's own and shared ones). */
   savedViews?: readonly SavedViewDto[];
+  /** A judging round other than the current one (docs/HACKATHON.md "Rounds"); null for the current round. */
+  roundId?: string | null;
+  /** An earlier or later round: no score-method switch and no publishing (both act on the current round). */
+  readOnly?: boolean;
 }) {
   const { organisationSlug, eventId } = scope;
   // Filters live in the address bar (saved views): a link reopens the same view.
@@ -97,7 +103,7 @@ export function JudgingPanelResults({
       view.current = next;
       setLoading(true);
       setError(null);
-      const res = await loadResultsPage({ organisationSlug, eventId, query: next.query.trim(), page: next.page, scored: next.scored });
+      const res = await loadResultsPage({ organisationSlug, eventId, query: next.query.trim(), page: next.page, scored: next.scored, ...(roundId ? { roundId } : {}) });
       if (seq !== requestSeq.current) return;
       setLoading(false);
       if (!res.ok || !res.data) {
@@ -107,7 +113,7 @@ export function JudgingPanelResults({
       setData(res.data);
       view.current = { query: next.query, scored: next.scored, page: res.data.page };
     },
-    [organisationSlug, eventId],
+    [organisationSlug, eventId, roundId],
   );
 
   // A search fetches its first page once typing pauses. A refresh after a
@@ -156,28 +162,28 @@ export function JudgingPanelResults({
   const scoreCounts = data.scoreCounts ?? initialPage.scoreCounts;
   return (
     <div className="flex flex-col gap-5">
-      <PublishCard scope={scope} judgingStatus={judgingStatus} resultsPublishedAt={resultsPublishedAt} resultsUrl={resultsUrl} timezone={timezone} />
+      {readOnly ? null : <PublishCard scope={scope} judgingStatus={judgingStatus} resultsPublishedAt={resultsPublishedAt} resultsUrl={resultsUrl} timezone={timezone} />}
       <Card as="section">
         <CardHeader
           title="Ranking"
           description={copy.description}
           action={
             <Button asChild variant="secondary" size="sm">
-              <a href={judgingResultsExportHref(exportHref, { query, method, scored })} download title="Export the ranked projects matching this search and score filter, with every review">
+              <a href={judgingResultsExportHref(exportHref, { query, method, scored, roundId })} download title="Export the ranked projects matching this search and score filter, with every review">
                 <Download aria-hidden className="size-4" />
                 Export CSV
               </a>
             </Button>
           }
         />
-        <SwitchRow
+        {readOnly ? null : <SwitchRow
           className="mb-4 rounded-lg border border-line p-3.5"
           label="Adjust for harsh/generous judges"
           description="Rank by each judge's scores relative to their own average. Both scores stay in the table and the CSV. Scores are never public."
           checked={adjusted}
           disabled={scoreMethod.pending}
           onCheckedChange={(on) => changeMethod(on ? "ZSCORE" : "RAW")}
-        />
+        />}
         {initialPage.rankedTotal === 0 ? (
           <EmptyState title="No submitted projects">The ranking fills in as judges submit their reviews.</EmptyState>
         ) : (

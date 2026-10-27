@@ -50,6 +50,8 @@ export function JudgingPanelProgress({
   timezone,
   now,
   savedViews = NO_SAVED_VIEWS,
+  roundId = null,
+  readOnly = false,
 }: {
   scope: JudgingScope;
   initial: JudgingProgressDto;
@@ -58,6 +60,10 @@ export function JudgingPanelProgress({
   now: string;
   /** Saved views for this page (the viewer's own and shared ones). */
   savedViews?: readonly SavedViewDto[];
+  /** A judging round other than the current one (docs/HACKATHON.md "Rounds"); null for the current round. */
+  roundId?: string | null;
+  /** Another round: no automatic assignment or target change (both act on the current round). */
+  readOnly?: boolean;
 }) {
   const { summary } = initial;
   // Which lists show lives in the address bar (saved views): a link reopens the same view.
@@ -83,10 +89,12 @@ export function JudgingPanelProgress({
           title="Judging progress"
           description={progressTargetLine(summary.target, summary.targetIsDefault)}
           action={
-            <Button variant="secondary" size="sm" onClick={() => setAssignOpen(true)} disabled={!canAssign || summary.projects === 0}>
-              <Shuffle aria-hidden className="size-4" />
-              Assign judges automatically
-            </Button>
+            readOnly ? null : (
+              <Button variant="secondary" size="sm" onClick={() => setAssignOpen(true)} disabled={!canAssign || summary.projects === 0}>
+                <Shuffle aria-hidden className="size-4" />
+                Assign judges automatically
+              </Button>
+            )
           }
         />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -101,8 +109,8 @@ export function JudgingPanelProgress({
           <StatTile label="Stale reviews" value={initial.stale.total} tone={initial.stale.total > 0 ? "attention" : "default"} hint={`Unsubmitted for over ${STALE_REVIEW_HOURS} hours`} />
         </div>
         {/* Keyed on the saved value so a refresh after a change (here or by automatic assignment) resets the field. */}
-        <TargetForm key={summary.reviewsPerProject ?? "default"} scope={scope} reviewsPerProject={summary.reviewsPerProject} />
-        {!canAssign ? <p className="mt-3 text-caption text-ink-muted">Judging is closed, so assignments can&apos;t change.</p> : null}
+        {readOnly ? null : <TargetForm key={summary.reviewsPerProject ?? "default"} scope={scope} reviewsPerProject={summary.reviewsPerProject} />}
+        {!canAssign && !readOnly ? <p className="mt-3 text-caption text-ink-muted">Judging is closed, so assignments can&apos;t change.</p> : null}
       </Card>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -120,6 +128,7 @@ export function JudgingPanelProgress({
       {visible("below-target") ? (
         <ProgressSection<ProgressBelowTargetRow>
           scope={scope}
+          roundId={roundId}
           section="below-target"
           initial={initial.belowTarget}
           title="Projects below target"
@@ -153,6 +162,7 @@ export function JudgingPanelProgress({
       {visible("judges") ? (
         <ProgressSection<ProgressJudgeRow>
           scope={scope}
+          roundId={roundId}
           section="judges"
           initial={initial.judges}
           title="Judges"
@@ -198,6 +208,7 @@ export function JudgingPanelProgress({
       {visible("outliers") ? (
         <ProgressSection<ProgressOutlierRow>
           scope={scope}
+          roundId={roundId}
           section="outliers"
           initial={initial.outliers}
           title="Outlier scores"
@@ -236,6 +247,7 @@ export function JudgingPanelProgress({
       {visible("stale") ? (
         <ProgressSection<ProgressStaleRow>
           scope={scope}
+          roundId={roundId}
           section="stale"
           initial={initial.stale}
           title="Stale reviews"

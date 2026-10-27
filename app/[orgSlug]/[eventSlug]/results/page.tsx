@@ -13,6 +13,7 @@ import { Breadcrumb } from "@/components/event/Breadcrumb";
 import { ProjectLinks } from "@/components/event/ProjectLinks";
 import { Callout, Chip, EmptyState } from "@/components/ui/display";
 import { cn } from "@/lib/cn";
+import { PublicFinalists } from "@/components/event/PublicFinalists";
 
 type Props = {
   params: Promise<{ orgSlug: string; eventSlug: string }>;
@@ -28,13 +29,28 @@ const RESULTS_SEARCH_THRESHOLD = 10;
 
 /**
  * Public results (docs/HACKATHON.md): awards and winning projects, shown only
- * once the organiser has published results. Never scores or judge comments.
+ * once the organiser has published results, and published finalists per
+ * judging round, which may come first. Never scores, ranks or judge comments.
  * The event page's visibility rules apply first; anything else is a 404.
  */
 export default async function EventResultsPage({ params, searchParams }: Props) {
-  const { org, event, preview, results, galleryOpen } = await loadResultsView({ params, searchParams });
+  const { org, event, preview, results, finalists, galleryOpen } = await loadResultsView({ params, searchParams });
   const eventHref = `/${org.slug}/${event.slug}`;
   const resultsPath = `${eventHref}/results`;
+  if (!results) {
+    // Finalists announced, results still to come.
+    return (
+      <div style={accentStyle(event.page?.accentColor)} className="yy-accent-scope flex flex-col gap-6">
+        {preview ? <Callout tone="info" title="Preview mode">Only authorised organisers can see this page until the event is published.</Callout> : null}
+        <Breadcrumb items={[{ label: event.title, href: eventHref }, { label: "Results" }]} />
+        <header className="flex flex-col gap-3">
+          <h1 className="text-display-m text-ink">Finalists</h1>
+          <p className="text-body-ui text-ink-muted">The winners are announced here after the final round of judging.</p>
+        </header>
+        <PublicFinalists rounds={finalists} />
+      </div>
+    );
+  }
   const awards = results.awards.filter((award) => award.winners.length > 0);
   const { query, totalWinners, matchedWinners } = results;
   // Only a long list gets a search; a shared `?q=` link keeps it either way.
@@ -133,6 +149,7 @@ export default async function EventResultsPage({ params, searchParams }: Props) 
           })}
         </div>
       )}
+      <PublicFinalists rounds={finalists} />
     </div>
   );
 }
