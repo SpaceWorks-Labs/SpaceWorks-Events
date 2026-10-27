@@ -84,6 +84,16 @@ hours, with one reminder a few hours before it ends.
   terminal), make tickets complimentary, send a payment link, refund in part or
   in full, or cancel tickets. Refunds go back the way the buyer paid.
 - **Buyers** can cancel within the refund policy from their order page.
+- **Saying No to "Are you still coming?"** ([Attendance confirmation](ATTENDANCE.md)),
+  when the organiser has turned on *Free the place when a guest says No*: a
+  ticket on an order of its own, answered by the person who bought it, is
+  cancelled exactly as the buyer would cancel it, under the refund policy frozen
+  on the order. Once that policy no longer allows it, the place is kept and a
+  refund request is opened for the organisers. An order with several tickets
+  (or a team ticket paying for the whole team), or a ticket somebody else paid
+  for, is never cancelled automatically: the answer is recorded, owners and
+  admins are emailed and told in chat, and the guest list shows *Said No · paid*.
+  The email and the form only promise a release when it would really happen.
 - **Cancelling an event or a series date** refunds everyone who paid in full
   (a pass gets its share for that date) and tells every guest by email.
 - **Chargebacks** arrive by webhook: the guest list marks the order, and the

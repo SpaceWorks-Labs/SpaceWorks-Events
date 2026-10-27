@@ -133,6 +133,10 @@ The event dashboard's long lists (Guests → People and Teams, Judging → Submi
 
 Only eligible confirmed attendees receive a scannable ticket by default. Organisers can explicitly handle exceptional status cases where supported by the check-in workflow.
 
+## Attendance confirmation
+
+See [Attendance confirmation](ATTENDANCE.md). Owners and admins ask every confirmed guest of a one-off event "Are you still coming?" from the **Emails** tab (never automatically), remind people who haven't replied at most every 12 hours, or share one guest's link by hand. Guests answer Yes or No with a note on a private page. With *Free the place when a guest says No* on, a No frees a free place, cancels a paid single ticket under the buyer refund policy, or opens a refund request once the policy has closed; orders with several tickets are left to the organisers. Replies show in Guests → People (badge, note, filter, CSV columns), at the check-in desk (badge only) and on the Overview.
+
 ## Event finance
 
 See [Event finance](FINANCE.md). The event dashboard's **Finance** tab:

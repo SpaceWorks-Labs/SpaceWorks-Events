@@ -34,7 +34,8 @@ Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), team registrat
 with paid team places (`docs/TEAMS.md`), hackathon submissions, judging, results,
 entry fees and prize payouts (`docs/HACKATHON.md`), event finance with expense
 claims, refund requests and a budget (`docs/FINANCE.md`), a Canva-style ticket
-designer with designed PNG/PDF tickets (`docs/TICKET_DESIGNER.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
+designer with designed PNG/PDF tickets (`docs/TICKET_DESIGNER.md`), manual "Are you still coming?"
+attendance confirmation with paid-ticket release rules (`docs/ATTENDANCE.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
 organiser lists with saved views and filtered CSV exports, a personal account area (registrations, organisations,
 data export), and a separate super-admin operations, insights, and
 instance-settings area, plus a tenant-bound machine API. Treat this as a production-oriented application:
