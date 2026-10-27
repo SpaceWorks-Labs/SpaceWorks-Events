@@ -76,8 +76,9 @@ export function attendeeStatusWhere(status: AttendeeStatusFilter): Prisma.RSVPWh
 /**
  * Everything but the status chip: the scope, guests-or-users, team-or-solo
  * (TEAM events only) and the search over names, emails and, on TEAM events,
- * the team name (matched inside the scoped event only). The chip counts use
- * this condition so they describe the current search.
+ * the team name (matched inside the scoped event only). The list and exports
+ * use this condition; the chip counts deliberately don't, so they always show
+ * the whole scope.
  */
 export function attendeeBaseWhere(scope: AttendeeScope, view: Pick<AttendeeListView, "query" | "kind" | "team">, options: { teamMode: boolean }): Prisma.RSVPWhereInput {
   const and: Prisma.RSVPWhereInput[] = [attendeeScopeWhere(scope)];

@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Guests · People chip counts always cover the whole event, whatever the search or dropdowns; the "Showing x of y" label and the export buttons follow a separate count of the matching registrations.
 - **Event dashboard tabs fail on their own.** A tab that fails to load (for example a dropped connection while it streams in) shows an error with **Try again** inside that tab instead of taking down the dashboard, and is reported as "Dashboard section crashed in the browser". **Try again** on the page and app error screens now re-fetches instead of re-rendering the failed payload, and the Teams and Invites lists show an error instead of loading forever when a request throws.
 - **Speaker and sponsor photos.** A failed upload no longer freezes the form: files over 5 MB are refused in the browser before the upload, the form unlocks whatever happens, and the error shows as a toast next to the form. Event page images (cover, page logo, speaker photos, sponsor logos) have their own rate-limit bucket, `eventPageUpload` (60 an hour), so the shared `upload` bucket for certificates, member IDs, ticket designs, organisation logos and profile photos stays at 12 an hour.
 - `db:restore` accepts `--via-local-tunnel` for a loopback tunnel to the production server and prints a clear reason when it refuses a target.
