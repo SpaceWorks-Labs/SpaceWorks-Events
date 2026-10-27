@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
+import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/configuration";
 
 export type InviteAcceptance =
   | { ok: true; href: string }
@@ -50,11 +51,14 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
     });
     if (claim.count !== 1) return { ok: false, reason: "unavailable" };
     if (invite.eventId) {
+      const before = await tx.eventCollaborator.findUnique({ where: { eventId_userId: { eventId: invite.eventId, userId: user.id } }, select: { permissions: true } });
       await tx.eventCollaborator.upsert({
         where: { eventId_userId: { eventId: invite.eventId, userId: user.id } },
         create: { eventId: invite.eventId, userId: user.id, permissions: invite.permissions },
         update: { permissions: invite.permissions },
       });
+      // A MENTOR grant gets its Mentor Desk profile (docs/MENTOR_DESK.md); it never creates an order.
+      await syncMentorGrantLocked(tx, invite.eventId, user.id, before?.permissions ?? [], invite.permissions, user.id);
     } else if (invite.eventSeriesId) {
       await tx.eventCollaborator.upsert({
         where: { eventSeriesId_userId: { eventSeriesId: invite.eventSeriesId, userId: user.id } },

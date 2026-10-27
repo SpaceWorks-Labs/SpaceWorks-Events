@@ -8,6 +8,7 @@ import { isOrgAdmin } from "@/lib/permissions";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { judgeAssignmentSchema } from "@/lib/validators";
 import { fail, type JudgingResult, NOT_FOUND, okEmpty, withOrganiserLock } from "./shared";
+import { mentorJudgingConflicts } from "@/lib/core/mentorDesk/eligibility";
 
 // ---------------------------------------------------------------------------
 // Judges: eligibility, assignment, conflict of interest
@@ -24,16 +25,27 @@ export async function isEligibleJudge(tx: Prisma.TransactionClient, organisation
 
 export type ConflictKeys = { rsvpIds: Set<string>; teamIds: Set<string> };
 
-/** Registrations the judge's own account owns on this event: those entrants are off limits. */
+/**
+ * The single conflict-of-interest rule: entrants the judge's own account is
+ * registered on, and, when the event's Mentor Desk is on, teams the judge
+ * mentored (an ACTIVE or ENDED assignment) or holds a mentor conflict with
+ * (docs/MENTOR_DESK.md, `mentorJudgingConflicts`).
+ */
 export async function conflictKeysFor(tx: Prisma.TransactionClient, eventId: string, userIds: string[]): Promise<Map<string, ConflictKeys>> {
   const result = new Map<string, ConflictKeys>(userIds.map((id) => [id, { rsvpIds: new Set<string>(), teamIds: new Set<string>() }]));
   if (userIds.length === 0) return result;
-  const rows = await tx.rSVP.findMany({ where: { eventId, userId: { in: userIds } }, select: { id: true, teamId: true, userId: true } });
+  const [rows, mentored] = await Promise.all([
+    tx.rSVP.findMany({ where: { eventId, userId: { in: userIds } }, select: { id: true, teamId: true, userId: true } }),
+    mentorJudgingConflicts(tx, eventId, userIds),
+  ]);
   for (const row of rows) {
     const keys = row.userId ? result.get(row.userId) : undefined;
     if (!keys) continue;
     keys.rsvpIds.add(row.id);
     if (row.teamId) keys.teamIds.add(row.teamId);
+  }
+  for (const [userId, teamIds] of mentored) {
+    for (const teamId of teamIds) result.get(userId)?.teamIds.add(teamId);
   }
   return result;
 }

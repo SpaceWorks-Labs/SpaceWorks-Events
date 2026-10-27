@@ -69,7 +69,35 @@ export type EventCapabilities = {
    * check-in, feedback, analytics, or settings.
    */
   isJudgeOnly: boolean;
+} & MentorPermissions;
+
+/** Mentor Desk flags (docs/MENTOR_DESK.md). */
+export type MentorPermissions = {
+  /** Holds the MENTOR grant on this event: the mentor console (the grant itself, never implied by a role). */
+  canMentor: boolean;
+  /** Mentor Desk settings, mentors, categories, assignments, office hours, rounds and the CSV: org owner/admin only. */
+  canManageMentorDesk: boolean;
+  /**
+   * A collaborator who is not an organisation member and whose grants are
+   * MENTOR (and possibly JUDGE) only. The page shows the mentor console (and
+   * the judging workspace for JUDGE) and nothing else.
+   */
+  isMentorOnly: boolean;
 };
+
+/**
+ * MENTOR is isolated like JUDGE: it opens the mentor console and nothing
+ * else, and no other permission check ever treats it as one of its grants.
+ */
+export function mentorPermissionsFor(isAdmin: boolean, isMember: boolean, grant: readonly EventPermission[]): MentorPermissions {
+  const hasMentor = grant.includes(EventPermission.MENTOR);
+  return {
+    canMentor: hasMentor,
+    canManageMentorDesk: isAdmin,
+    isMentorOnly: !isAdmin && !isMember && hasMentor
+      && grant.every((permission) => permission === EventPermission.MENTOR || permission === EventPermission.JUDGE),
+  };
+}
 
 export type SeriesCapabilities = {
   isAdmin: boolean;
@@ -128,6 +156,7 @@ export function eventCapabilities(
     canDeleteEvent: isAdmin,
     canManageCollaborators: isAdmin,
     ...judgingPermissionsFor(isAdmin, role != null, grant ?? []),
+    ...mentorPermissionsFor(isAdmin, role != null, grant ?? []),
   };
 }
 

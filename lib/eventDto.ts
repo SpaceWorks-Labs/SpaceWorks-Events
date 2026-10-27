@@ -13,6 +13,8 @@ export type EventClientDto = Omit<Event,
   | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
+  // Mentor Desk settings have their own view (lib/core/mentorDesk/).
+  | "mentorDeskEnabled" | "mentorHelpClaimedEmail"
 >;
 
 export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {
