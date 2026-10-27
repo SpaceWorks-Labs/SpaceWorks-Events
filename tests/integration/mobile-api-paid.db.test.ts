@@ -82,7 +82,7 @@ afterAll(async () => {
   vi.unstubAllGlobals();
 });
 
-const at = (eventId: string, extra: Record<string, string> = {}) => params({ orgSlug, eventId, ...extra });
+const at = <T extends Record<string, string>>(eventId: string, extra: T = {} as T) => params({ orgSlug, eventId, ...extra });
 
 describe.sequential("paid tickets through the mobile API", () => {
   it("holds a paid place for payment and never confirms it unpaid", async () => {

@@ -41,7 +41,6 @@ beforeEach(async () => {
   guard.consume.mockResolvedValue(false);
   guard.check.mockReturnValue(true);
 });
-const jwt = (args: unknown) => config.callbacks!.jwt!(args as Parameters<NonNullable<NonNullable<NextAuthConfig["callbacks"]>["jwt"]>>[0]);
 const authorize = (raw: Record<string, string>) => {
   const provider = config.providers[0] as CredentialsConfig;
   return provider.authorize(raw, new Request("https://example.test/api/auth/callback/credentials"));
