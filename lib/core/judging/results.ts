@@ -4,7 +4,8 @@ import "server-only";
 
 import { JudgingStatus, ScoreNormalization, SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { computeJudgingResults, type CriterionAverage } from "@/lib/judgingScore";
+import { computeJudgingResultsFromReviews, type CriterionAverage } from "@/lib/judgingScore";
+import { submittedReviewScores } from "./judgeWork";
 import {
   AWARD_CANDIDATES_PAGE_SIZE,
   awardCandidatesQuerySchema,
@@ -67,15 +68,15 @@ export type JudgingResultsDto = {
 export async function loadJudgingResults(ctx: JudgingOrganiserContext, options: { method?: ScoreNormalization } = {}): Promise<JudgingResultsDto | null> {
   const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: { ...judgingEventSelect, scoreNormalization: true } });
   if (!event) return null;
-  const [criteria, submissions, scores, reviews, eligible] = await Promise.all([
+  const [criteria, submissions, reviews, eligible] = await Promise.all([
     criteriaFor(prisma, event.id),
     prisma.submission.findMany({
       where: { eventId: event.id, status: { in: [SubmissionStatus.SUBMITTED, SubmissionStatus.DISQUALIFIED] } },
       select: { id: true, title: true, status: true, teamId: true, rsvpId: true, ...nameSourceSelect },
       orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
     }),
-    prisma.judgeScore.findMany({ where: { submission: { eventId: event.id } }, select: { submissionId: true, judgeUserId: true, criterionId: true, score: true } }),
-    prisma.judgeReview.findMany({ where: { submission: { eventId: event.id } }, select: { submissionId: true, judgeUserId: true, submittedAt: true } }),
+    // Submitted reviews of SUBMITTED projects with their scores, one row per review.
+    submittedReviewScores(prisma, event.id),
     listEligibleJudges(ctx),
   ]);
   const submitted = submissions.filter((row) => row.status === SubmissionStatus.SUBMITTED);
@@ -83,23 +84,19 @@ export async function loadJudgingResults(ctx: JudgingOrganiserContext, options: 
   const eligibleIds = new Set(eligible.map((judge) => judge.userId));
   const reviewAuthorIds = [...new Set(reviews.map((review) => review.judgeUserId))];
   const authorConflicts = await conflictKeysFor(prisma, event.id, reviewAuthorIds);
-  // Only reviews that may count: submitted, of a SUBMITTED project, by someone
-  // who can still judge this event, with no conflict of interest now. A
-  // revoked JUDGE grant or a judge who later registered on that entrant drops
-  // out of the score (their rows stay, for the organiser's record).
+  // Only reviews that may count: submitted, of a SUBMITTED project (both
+  // checked in SQL above), by someone who can still judge this event, with no
+  // conflict of interest now. A revoked JUDGE grant or a judge who later
+  // registered on that entrant drops out of the score (their rows stay, for
+  // the organiser's record).
   const submittedReviews = reviews.filter((review) => {
     const row = byId.get(review.submissionId);
-    return Boolean(
-      review.submittedAt &&
-        row?.status === SubmissionStatus.SUBMITTED &&
-        eligibleIds.has(review.judgeUserId) &&
-        !hasConflictOfInterest(row, authorConflicts.get(review.judgeUserId)),
-    );
+    return Boolean(row?.status === SubmissionStatus.SUBMITTED && eligibleIds.has(review.judgeUserId) && !hasConflictOfInterest(row, authorConflicts.get(review.judgeUserId)));
   });
   // The saved method ranks, unless the caller names one (the Results CSV
   // passes the method the organiser's table is showing).
   const method = options.method ?? event.scoreNormalization;
-  const results = computeJudgingResults({ submissionIds: submitted.map((row) => row.id), criteria, scores, submittedReviews, method });
+  const results = computeJudgingResultsFromReviews({ submissionIds: submitted.map((row) => row.id), criteria, reviews: submittedReviews, method });
   const rows: ResultRowDto[] = [
     ...results.map((result) => {
       const row = byId.get(result.submissionId)!;

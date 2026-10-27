@@ -63,19 +63,27 @@ export async function planJudgingResultsExport(
     for (let start = 0; start < matching.length; start += JUDGING_EXPORT_BATCH_SIZE) {
       const chunk = matching.slice(start, start + JUDGING_EXPORT_BATCH_SIZE);
       const ids = chunk.map((row) => row.submissionId);
-      const scoped = { id: { in: ids }, eventId: event!.id, event: { organisationId: ctx.organisationId } };
+      // Filter on the score and review rows' own `submissionId` (index lookups
+      // for this batch only), with the event and organisation re-checked.
+      const scoped = { submissionId: { in: ids }, submission: { eventId: event!.id, event: { organisationId: ctx.organisationId } } };
       const [scores, reviews] = await Promise.all([
-        prisma.judgeScore.findMany({ where: { submission: scoped }, select: { submissionId: true, judgeUserId: true, criterionId: true, score: true } }),
+        prisma.judgeScore.findMany({ where: scoped, select: { submissionId: true, judgeUserId: true, criterionId: true, score: true } }),
         prisma.judgeReview.findMany({
-          where: { submission: scoped },
+          where: scoped,
           select: { submissionId: true, judgeUserId: true, submittedAt: true, judge: { select: { name: true } } },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         }),
       ]);
       const scoreIndex = new Map(scores.map((score) => [`${score.submissionId}\u0000${score.judgeUserId}\u0000${score.criterionId}`, score.score]));
+      const reviewsBySubmission = new Map<string, typeof reviews>();
+      for (const review of reviews) {
+        const list = reviewsBySubmission.get(review.submissionId);
+        if (list) list.push(review);
+        else reviewsBySubmission.set(review.submissionId, [review]);
+      }
       const rows: string[][] = [];
       for (const row of chunk) {
-        const rowReviews = reviews.filter((review) => review.submissionId === row.submissionId);
+        const rowReviews = reviewsBySubmission.get(row.submissionId) ?? [];
         const base = [
           row.rank?.toString() ?? "",
           row.title,
