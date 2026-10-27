@@ -1,7 +1,7 @@
 import { eventForView } from "@/lib/frontend/eventView";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ContentVisibility, EventPrivacyType } from "@prisma/client";
+import { ContentVisibility, EventPageSectionType, EventPrivacyType, RegistrationMode } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { isEventPublished, shouldIndexPublicEvent } from "@/lib/eventVisibility";
@@ -13,6 +13,7 @@ import { canAcceptOnlinePayments } from "@/lib/payments/settings";
 import { isProjectGalleryVisible } from "@/lib/core/judging";
 import { projectGalleryPath, resultsPath } from "@/lib/submissionToken";
 import { ticketingInfo, viewerIsMember } from "@/lib/payments/ticketing";
+import { countCrewTickets, listPublicCrew } from "@/lib/core/crew";
 type Props = { params: Promise<{ orgSlug: string; eventSlug: string; }>; };
 export async function loadRouteMetadata({ params }: Props): Promise<Metadata> {
   const { orgSlug, eventSlug } = await params;
@@ -146,6 +147,14 @@ export async function loadEventView({ params }: Props) {
     // Members also see members-only tickets.
     viewerIsMember(org.id).then((member) => listPublicTicketTypes({ eventId: event.id }, event.currency ?? DEFAULT_CURRENCY, new Date(), { member })),
   ]);
+  // Crew (docs/CREW.md): cards only when the saved CREW section is on (pages
+  // without saved sections keep it off), and crew tickets counted as "going"
+  // only where the count is shown and the wording is per person.
+  const crewSectionOn = page?.sections.some((section) => section.type === EventPageSectionType.CREW && section.isVisible) ?? false;
+  const [crew, crewCount] = await Promise.all([
+    crewSectionOn ? listPublicCrew(event.id) : Promise.resolve([]),
+    event.showRegistrationCount && event.registrationMode !== RegistrationMode.TEAM ? countCrewTickets(event.id) : Promise.resolve(null),
+  ]);
   // What the form needs beyond the tickets: codes, add-ons, the refund terms.
   const ticketing = await ticketingInfo({ eventId: event.id }, tickets, event.currency ?? DEFAULT_CURRENCY, event);
   // Paid tickets are on sale only while the installation allows it and the
@@ -156,5 +165,5 @@ export async function loadEventView({ params }: Props) {
     resultsHref: event.submissionsEnabled && event.resultsPublishedAt ? resultsPath(org.slug, event.slug) : null,
     projectsHref: isProjectGalleryVisible(event) ? projectGalleryPath(org.slug, event.slug) : null,
   };
-  return { judging, org, preview, event: eventForView(event), page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing };
+  return { judging, org, preview, event: eventForView(event), page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing, crew, crewCount };
 }

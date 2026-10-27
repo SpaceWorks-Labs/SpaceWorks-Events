@@ -1,5 +1,6 @@
 import "server-only";
 
+import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import crypto from "crypto";
 import { EventPrivacyType, OfflinePaymentMethod, OrderStatus, PaymentStatus, RsvpStatus, TicketVisibility, type Prisma } from "@prisma/client";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
@@ -140,6 +141,8 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   const attendees = seatTypes.slice(1).map((_, index) => params.attendees[index] ?? {});
   const emails = [params.buyer.email, ...attendees.map((attendee) => attendee.email?.trim().toLowerCase()).filter(Boolean)];
   if (new Set(emails).size !== emails.length) throw new OrderError("Each ticket needs a different email address, or leave extra ones blank.");
+  // Crew already hold a free crew ticket (docs/CREW.md) and never buy one.
+  if ("eventId" in params.target && (await hasCrewEmail(tx, params.target.eventId, emails))) throw new OrderError(CREW_EMAIL_REFUSED);
 
   // An unpaid hold that has ended no longer blocks these people from registering again.
   const keys = [params.buyer.attendeeKey, ...attendees.flatMap((attendee) => (attendee.email ? [`guest:${attendee.email.trim().toLowerCase()}`] : []))];

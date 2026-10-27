@@ -172,7 +172,7 @@ export async function listSeekersForLeader(auth: TeamLeaderAuth, input: unknown 
 /** Seeker-side gate: the holder is a solo registrant with a visible profile on a matching event. */
 async function visibleSeekerHolder(holder: TicketHolder) {
   const rsvp = await prisma.rSVP.findFirst({
-    where: { id: holder.rsvpId, eventId: holder.eventId, teamId: null, status: { not: RsvpStatus.REJECTED }, seekerProfile: { visible: true } },
+    where: { id: holder.rsvpId, eventId: holder.eventId, teamId: null, isCrew: false, status: { not: RsvpStatus.REJECTED }, seekerProfile: { visible: true } },
     select: { id: true, event: { select: { registrationMode: true, soloPolicy: true, teamMaxSize: true } } },
   });
   return rsvp?.event && isMatchingEvent(rsvp.event) ? rsvp : null;

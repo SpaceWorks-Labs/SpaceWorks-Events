@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { getClientIpFromHeaders, checkRateLimitById } from "@/lib/rateLimit";
 import { CHECK_IN_STATION_COOKIE, createCheckInStationProof, hasValidCheckInStationProof, stationExpiresAt, stationOpensAt, verifyStationPin } from "@/lib/checkInStation";
 import { gateCheckInForStatus, parseCheckInPayload } from "@/lib/checkIn";
-import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { crewDoorSelect, doorExtras, getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
 import { commitCheckInProjection, commitUndoCheckInProjection } from "@/lib/checkInMutations";
 import { listRecentCheckIns } from "@/lib/checkInRecent";
 import { badgeBrandingFor, badgeDesignFor, loadBadgeEvent } from "@/lib/badge/data";
@@ -31,10 +31,10 @@ function failure(error = "Station access is unavailable.", status = 400) { retur
 function attendeeLabel(r: { user: { name: string | null; email: string | null } | null; guestName: string | null; guestEmail: string | null }) {
   return r.user?.name?.trim() || r.guestName?.trim() || r.user?.email || r.guestEmail || "Guest";
 }
-const rsvpInclude = { user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } }, team: { select: { name: true } }, answers: { include: { field: { select: { key: true, label: true } } } } } as const;
+const rsvpInclude = { user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } }, team: { select: { name: true } }, crewMember: crewDoorSelect, answers: { include: { field: { select: { key: true, label: true } } } } } as const;
 type StationRsvp = Prisma.RSVPGetPayload<{ include: typeof rsvpInclude }>;
 function toData(rsvp: StationRsvp, force = false) {
-  return { rsvpId: rsvp.id, displayName: attendeeLabel(rsvp), email: rsvp.user?.email ?? rsvp.guestEmail, status: rsvp.status, alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt?.toISOString() ?? null, checkInQrToken: rsvp.checkInToken, checkInDetails: getCheckInDetails(rsvp.answers), registrationDetails: getRegistrationDetails(rsvp.answers), teamName: rsvp.team?.name ?? null, photoUrl: attendeePhotoUrl(rsvp.user), gate: gateCheckInForStatus(rsvp.status, force) };
+  return { rsvpId: rsvp.id, displayName: attendeeLabel(rsvp), email: rsvp.user?.email ?? rsvp.guestEmail, status: rsvp.status, alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt?.toISOString() ?? null, checkInQrToken: rsvp.checkInToken, checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember), registrationDetails: getRegistrationDetails(rsvp.answers), ...doorExtras(rsvp), photoUrl: attendeePhotoUrl(rsvp.user), gate: gateCheckInForStatus(rsvp.status, force) };
 }
 
 export async function POST(request: Request) {
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
   }
   if (input.action === "lookup") {
     const rows = await prisma.rSVP.findMany({ where: { eventId: event.id, OR: [{ guestName: { contains: input.query!, mode: "insensitive" } }, { guestEmail: { contains: input.query!, mode: "insensitive" } }, { user: { name: { contains: input.query!, mode: "insensitive" } } }, { user: { email: { contains: input.query!, mode: "insensitive" } } }] }, take: 12, orderBy: { createdAt: "desc" }, include: { user: { select: { name: true, email: true } }, team: { select: { name: true } } } });
-    return NextResponse.json({ ok: true, data: { rows: rows.map((r) => ({ rsvpId: r.id, displayName: attendeeLabel({ ...r, guestName: r.guestName }), email: r.user?.email ?? r.guestEmail, status: r.status, checkedInAt: r.checkedInAt?.toISOString() ?? null, teamName: r.team?.name ?? null })) } });
+    return NextResponse.json({ ok: true, data: { rows: rows.map((r) => ({ rsvpId: r.id, displayName: attendeeLabel({ ...r, guestName: r.guestName }), email: r.user?.email ?? r.guestEmail, status: r.status, checkedInAt: r.checkedInAt?.toISOString() ?? null, ...doorExtras(r) })) } });
   }
   if (!rsvp) return failure("RSVP not found.");
   if (input.action === "undo") {

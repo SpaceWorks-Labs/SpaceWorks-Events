@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { CheckInResultData } from "@/app/actions/checkin";
+import { BadgeCheck } from "lucide-react";
 import { Chip, type ChipTone } from "@/components/ui/display";
 
 function DetailRows({ rows }: { rows: Array<{ key: string; label: string; value: string }> }) {
@@ -33,6 +34,11 @@ const statusChips: Record<string, { label: string; tone: ChipTone }> = {
   REJECTED: { label: "Rejected", tone: "danger" },
   CANCELLED: { label: "Cancelled", tone: "neutral" },
 };
+
+/** A crew ticket (docs/CREW.md). `isCrew` is optional on desk results, so older payloads and rosters show nothing. */
+export function CrewChip({ data }: { data: { isCrew?: boolean } }) {
+  return data.isCrew === true ? <Chip size="sm" tone="accent" icon={<BadgeCheck />}>Crew</Chip> : null;
+}
 
 export function StatusChip({ status }: { status: string }) {
   const chip = statusChips[status] ?? { label: status, tone: "neutral" as ChipTone };

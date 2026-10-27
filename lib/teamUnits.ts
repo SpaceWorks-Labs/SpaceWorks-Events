@@ -4,6 +4,9 @@ import { EventPrivacyType, Prisma, RegistrationMode, RsvpStatus, TeamJoinRequest
 import { enqueueRsvpStatusNotification, enqueueTeamCreated } from "@/lib/outbox";
 import { generateTeamManageToken } from "@/lib/teamToken";
 import { emitWebhookEvent, type RsvpWebhookSnapshot, type WebhookEmission } from "@/lib/webhooks/emit";
+import { takesCapacity } from "@/lib/payments/holds";
+
+export { takesCapacity };
 
 /**
  * Registration-unit helpers for TEAM events (docs/TEAMS.md). Every function
@@ -22,7 +25,7 @@ export async function countConfirmedUnits(tx: Prisma.TransactionClient, eventId:
     where: { eventId, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, members: { some: { holdExpiresAt: { gt: now } } } }] },
   });
   const solo = await tx.rSVP.count({
-    where: { eventId, teamId: null, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now }, order: { teamId: null } }] },
+    where: { eventId, teamId: null, ...takesCapacity, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now }, order: { teamId: null } }] },
   });
   return teams + solo;
 }
@@ -35,8 +38,8 @@ export async function teamPlacesTaken(tx: Prisma.TransactionClient, teamId: stri
 }
 
 /**
- * The number compared with `Event.capacity`. INDIVIDUAL events keep the plain
- * confirmed-RSVP count (unchanged query); TEAM events count units.
+ * The number compared with `Event.capacity`. INDIVIDUAL events count confirmed
+ * attendee RSVPs; TEAM events count units. Crew (docs/CREW.md) never count.
  */
 export async function countConfirmedForCapacity(
   tx: Prisma.TransactionClient,
@@ -44,7 +47,7 @@ export async function countConfirmedForCapacity(
   registrationMode: RegistrationMode | null | undefined,
 ): Promise<number> {
   if (registrationMode === RegistrationMode.TEAM) return countConfirmedUnits(tx, eventId);
-  return tx.rSVP.count({ where: { eventId, status: RsvpStatus.CONFIRMED } });
+  return tx.rSVP.count({ where: { eventId, status: RsvpStatus.CONFIRMED, ...takesCapacity } });
 }
 
 /**
@@ -69,6 +72,7 @@ export function rsvpWebhookSnapshot(rsvp: RsvpWebhookSnapshot): RsvpWebhookSnaps
     guestName: rsvp.guestName,
     createdAt: rsvp.createdAt,
     checkedInAt: rsvp.checkedInAt,
+    isCrew: rsvp.isCrew ?? false,
   };
 }
 
@@ -80,6 +84,7 @@ export const rsvpWebhookSnapshotSelect = {
   guestName: true,
   createdAt: true,
   checkedInAt: true,
+  isCrew: true,
 } as const satisfies Prisma.RSVPSelect;
 
 function memberEmail(member: { guestEmail: string | null; user: { email: string | null } | null }) {

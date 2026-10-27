@@ -12,7 +12,7 @@ async function limiter() {
   return import("@/lib/rateLimit");
 }
 
-async function allowed(check: (bucket: "upload" | "eventPageUpload", id: string) => Promise<boolean>, bucket: "upload" | "eventPageUpload", id: string, times: number) {
+async function allowed(check: (bucket: "upload" | "eventPageUpload" | "crewPhotoUpload" | "crewPhotoUploadEvent", id: string) => Promise<boolean>, bucket: "upload" | "eventPageUpload" | "crewPhotoUpload" | "crewPhotoUploadEvent", id: string, times: number) {
   let count = 0;
   for (let index = 0; index < times; index += 1) if (await check(bucket, id)) count += 1;
   return count;
@@ -23,5 +23,17 @@ describe("upload rate-limit buckets", () => {
     const { checkRateLimitById } = await limiter();
     expect(await allowed(checkRateLimitById, "eventPageUpload", "user_1", 70)).toBe(60);
     expect(await allowed(checkRateLimitById, "upload", "user_1", 20)).toBe(12);
+  });
+
+  it("gives crew-link photos their own budget, so they never use the shared upload budget", async () => {
+    const { checkRateLimitById } = await limiter();
+    expect(await allowed(checkRateLimitById, "crewPhotoUpload", "subject:link", 70)).toBe(60);
+    expect(await allowed(checkRateLimitById, "upload", "subject:link", 20)).toBe(12);
+  });
+
+  it("caps crew-link photos at 200 a day per event, whoever uploads them", async () => {
+    const { checkRateLimitById } = await limiter();
+    expect(await allowed(checkRateLimitById, "crewPhotoUploadEvent", "event:e1", 210)).toBe(200);
+    expect(await allowed(checkRateLimitById, "crewPhotoUploadEvent", "event:e2", 5)).toBe(5);
   });
 });

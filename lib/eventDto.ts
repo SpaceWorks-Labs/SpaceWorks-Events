@@ -10,7 +10,7 @@ export type EventClientDto = Omit<Event,
   // The entry fee is a BigInt and lives with the judging settings too.
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
   // Finance settings have their own view (lib/finance.ts).
-  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor"
+  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
 >;

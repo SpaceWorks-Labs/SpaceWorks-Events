@@ -22,7 +22,7 @@ export type SeekerViewDto = {
 /** Seeker-view gate: a solo, non-declined registrant of a matching event (listed or not). */
 async function seekerViewHolder(holder: TicketHolder) {
   const rsvp = await prisma.rSVP.findFirst({
-    where: { id: holder.rsvpId, eventId: holder.eventId, teamId: null, status: { not: RsvpStatus.REJECTED } },
+    where: { id: holder.rsvpId, eventId: holder.eventId, teamId: null, isCrew: false, status: { not: RsvpStatus.REJECTED } },
     select: {
       seekerProfile: { select: { headline: true, skills: true, visible: true } },
       event: { select: { registrationMode: true, soloPolicy: true, teamMaxSize: true } },

@@ -39,13 +39,13 @@ describe("countConfirmedUnits", () => {
     await expect(countConfirmedUnits(tx as never, "event_1", now)).resolves.toBe(5);
     expect(tx.team.count).toHaveBeenCalledWith({ where: { eventId: "event_1", OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, members: { some: { holdExpiresAt: { gt: now } } } }] } });
     // A member paying to join a team (Order.teamId set) takes no unit.
-    expect(tx.rSVP.count).toHaveBeenCalledWith({ where: { eventId: "event_1", teamId: null, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now }, order: { teamId: null } }] } });
+    expect(tx.rSVP.count).toHaveBeenCalledWith({ where: { eventId: "event_1", teamId: null, isCrew: false, OR: [{ status: RsvpStatus.CONFIRMED }, { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now }, order: { teamId: null } }] } });
   });
 
-  it("keeps the plain confirmed-RSVP query for INDIVIDUAL events", async () => {
+  it("counts confirmed attendee RSVPs, never crew, for INDIVIDUAL events", async () => {
     tx.rSVP.count.mockResolvedValue(7);
     await expect(countConfirmedForCapacity(tx as never, "event_1", "INDIVIDUAL")).resolves.toBe(7);
-    expect(tx.rSVP.count).toHaveBeenCalledWith({ where: { eventId: "event_1", status: RsvpStatus.CONFIRMED } });
+    expect(tx.rSVP.count).toHaveBeenCalledWith({ where: { eventId: "event_1", status: RsvpStatus.CONFIRMED, isCrew: false } });
     expect(tx.team.count).not.toHaveBeenCalled();
   });
 

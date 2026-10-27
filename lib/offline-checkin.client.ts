@@ -10,6 +10,8 @@ export type OfflineAttendee = {
   registrationDetails?: Array<{ key: string; label: string; value: string }>;
   /** TEAM events: the attendee's team name. */
   teamName?: string | null;
+  /** An event crew ticket (docs/CREW.md); absent on older rosters. */
+  isCrew?: boolean;
 };
 
 export type OfflineRoster = {

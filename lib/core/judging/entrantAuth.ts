@@ -26,7 +26,8 @@ export async function resolveEntrantByTeamManageToken(rawToken: string): Promise
  */
 export async function resolveEntrantForUser(userId: string, eventId: string): Promise<EntrantAuth | null> {
   if (!isId(userId) || !isId(eventId)) return null;
-  const rsvp = await prisma.rSVP.findFirst({ where: { eventId, userId }, select: { id: true, teamId: true } });
+  // Crew tickets (docs/CREW.md) run the event; they never enter a project.
+  const rsvp = await prisma.rSVP.findFirst({ where: { eventId, userId, isCrew: false }, select: { id: true, teamId: true } });
   if (!rsvp) return null;
   return rsvp.teamId
     ? { kind: "team-member", eventId, teamId: rsvp.teamId, userId }
@@ -87,6 +88,7 @@ export async function lockedEntrant(tx: Prisma.TransactionClient, auth: EntrantA
       id: auth.rsvpId,
       eventId: auth.eventId,
       teamId: null,
+      isCrew: false,
       ...(auth.kind === "solo-owner" ? { userId: auth.userId } : { submissionLink: { is: { tokenHash: auth.tokenHash } } }),
     },
     select: { id: true, status: true, ...personSelect },

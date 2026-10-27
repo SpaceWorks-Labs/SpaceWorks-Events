@@ -4,7 +4,7 @@ import { checkInByRsvpIdSchema } from "@/lib/validators";
 import type { ActionResult } from "../org";
 import { flattenZodErrors } from "../utils";
 import { commitCheckInProjection } from "@/lib/checkInMutations";
-import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { crewDoorSelect, doorExtras, getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
 import { attendeeLabel, requireOrgMemberForEvent, revalidateAfterCheckIn } from "./access";
 import type { CheckInPreviewData, CheckInResultData } from "../checkin";
 
@@ -33,7 +33,7 @@ export async function previewCheckInByRsvpId(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
-      team: { select: { name: true } },
+      team: { select: { name: true } }, crewMember: crewDoorSelect,
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
@@ -48,9 +48,9 @@ export async function previewCheckInByRsvpId(
       alreadyCheckedIn: Boolean(rsvp.checkedInAt),
       checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
       checkInQrToken: rsvp.checkInToken,
-      checkInDetails: getCheckInDetails(rsvp.answers),
+      checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember),
       registrationDetails: getRegistrationDetails(rsvp.answers),
-      teamName: rsvp.team?.name ?? null,
+      ...doorExtras(rsvp),
       gate: gateCheckInForStatus(rsvp.status, Boolean(force)),
     },
   };
@@ -78,7 +78,7 @@ export async function checkInByRsvpId(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
-      team: { select: { name: true } },
+      team: { select: { name: true } }, crewMember: crewDoorSelect,
       event: { select: { slug: true } },
       eventInstance: { select: { id: true } },
     },
@@ -108,9 +108,9 @@ export async function checkInByRsvpId(
         alreadyCheckedIn: true,
         checkedInAt: rsvp.checkedInAt.toISOString(),
         checkInQrToken: rsvp.checkInToken,
-        checkInDetails: getCheckInDetails(rsvp.answers),
+        checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember),
         registrationDetails: getRegistrationDetails(rsvp.answers),
-        teamName: rsvp.team?.name ?? null,
+        ...doorExtras(rsvp),
       },
     };
   }
@@ -139,9 +139,9 @@ export async function checkInByRsvpId(
         alreadyCheckedIn: true,
         checkedInAt: committed.checkedInAt.toISOString(),
         checkInQrToken: rsvp.checkInToken,
-        checkInDetails: getCheckInDetails(rsvp.answers),
+        checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember),
         registrationDetails: getRegistrationDetails(rsvp.answers),
-        teamName: rsvp.team?.name ?? null,
+        ...doorExtras(rsvp),
       },
     };
   }
@@ -162,9 +162,9 @@ export async function checkInByRsvpId(
       alreadyCheckedIn: false,
       checkedInAt: now.toISOString(),
       checkInQrToken: rsvp.checkInToken,
-      checkInDetails: getCheckInDetails(rsvp.answers),
+      checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember),
       registrationDetails: getRegistrationDetails(rsvp.answers),
-      teamName: rsvp.team?.name ?? null,
+      ...doorExtras(rsvp),
     },
   };
 }
