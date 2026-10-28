@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { getMembership, isOrgAdmin } from "@/lib/permissions";
 import { judgingPermissionsFor } from "@/lib/judgingPermissions";
+import { staffMfaSatisfied } from "@/lib/staffMfa";
 
 /*
  * Server-side judging resolvers (docs/HACKATHON.md). The organisation comes
@@ -38,7 +39,11 @@ async function loadEventInOrg(organisationSlug: string, eventId: string) {
   return event ? { org, event } : null;
 }
 
-/** "Can judge this event": organisation OWNER/ADMIN, or an event collaborator with JUDGE. */
+/**
+ * "Can judge this event": organisation OWNER/ADMIN, or an event collaborator
+ * with JUDGE, past the staff authenticator check (`getMembership` applies it
+ * to members; a JUDGE grant is checked here, as resolveMentorContext does).
+ */
 export async function resolveJudgeContext(userId: string, organisationSlug: string, eventId: string): Promise<JudgeContext | null> {
   if (!userId) return null;
   const found = await loadEventInOrg(organisationSlug, eventId);
@@ -49,6 +54,7 @@ export async function resolveJudgeContext(userId: string, organisationSlug: stri
     ? null
     : await prisma.eventCollaborator.findFirst({ where: { eventId: found.event.id, userId }, select: { permissions: true } });
   if (!judgingPermissionsFor(isAdmin, Boolean(membership), grant?.permissions ?? []).canJudge) return null;
+  if (!isAdmin && !(await staffMfaSatisfied(userId))) return null;
   return { userId, organisationId: found.org.id, orgSlug: found.org.slug, eventId: found.event.id, eventSlug: found.event.slug, isAdmin };
 }
 
