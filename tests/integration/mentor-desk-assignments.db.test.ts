@@ -120,7 +120,7 @@ describe.sequential("mentor desk assignments", () => {
   it("makes a mentored team a judging conflict only while the desk is on", async () => {
     const { event, teamIds } = await withTeams(1);
     const mentor = await addMentor(event, "judge-mentor");
-    await prisma.mentorTeamAssignment.create({ data: { eventId: event.id, mentorUserId: mentor.userId, teamId: teamIds[0]!, mode: "MANUAL", status: "ENDED", endedAt: new Date() } });
+    await prisma.mentorTeamAssignment.create({ data: { eventId: event.id, mentorUserId: mentor.userId, teamId: teamIds[0]!, mode: "MANUAL", status: "ENDED", activatedAt: new Date(), endedAt: new Date() } });
     expect((await conflictKeysFor(prisma, event.id, [mentor.userId])).get(mentor.userId)?.teamIds.has(teamIds[0]!)).toBe(true);
     await prisma.event.update({ where: { id: event.id }, data: { mentorDeskEnabled: false } });
     expect((await conflictKeysFor(prisma, event.id, [mentor.userId])).get(mentor.userId)?.teamIds.has(teamIds[0]!)).toBe(false);

@@ -14,7 +14,7 @@ import { z } from "zod";
 import { HELP_COMMENT_MAX_LENGTH, HELP_LOCATION_MAX_LENGTH, HELP_PRIORITY_WINDOW_MS, HELP_SUMMARY_MAX_LENGTH, helpExpiresAt } from "@/lib/mentorDesk/rules";
 import { deskEvent, liveMentor, liveParticipant, type MentorContext, type ParticipantContext } from "./access";
 import { visitEligible, type HelpScope } from "./eligibility";
-import { changeHelp, lockHelpRow, requireLive, requireStatus } from "./helpShared";
+import { changeHelp, lockHelpRow, requireBeforeDeadline, requireLive, requireStatus } from "./helpShared";
 import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockTeam, refuse } from "./shared";
 
 const raiseSchema = z.object({
@@ -121,7 +121,7 @@ export async function cancelHelp(p: ParticipantContext, input: unknown): Promise
     const row = await ownRequest(tx, p, parsed.data.requestId);
     checkVersion(row, parsed.data.expectedVersion);
     const now = new Date();
-    requireLive(row, event.endDateTime, now);
+    requireBeforeDeadline(row, event.endDateTime, now);
     requireStatus(row, HelpRequestStatus.OPEN, HelpRequestStatus.CLAIMED);
     await changeHelp(tx, row, { status: HelpRequestStatus.CANCELLED, claimedByUserId: null, claimId: null, claimExpiresAt: null, cancelledAt: now }, { actorUserId: p.userId, kind: "cancel" });
     return undefined;

@@ -86,7 +86,7 @@ describe.sequential("mentor desk help queue", () => {
     expect(await helpCommand(away, { requestId, action: "claim", expectedVersion: await requestVersion(requestId) })).toEqual({ ok: false, error: "You are outside your mentoring availability." });
     const assigned = await addMentor(event, "assigned");
     const other = await addMentor(event, "other");
-    await prisma.mentorTeamAssignment.create({ data: { eventId: event.id, mentorUserId: assigned.userId, teamId, mode: "MANUAL" } });
+    await prisma.mentorTeamAssignment.create({ data: { eventId: event.id, mentorUserId: assigned.userId, teamId, mode: "MANUAL", activatedAt: new Date() } });
     expect(await helpCommand(other, { requestId, action: "claim", expectedVersion: await requestVersion(requestId) })).toEqual({ ok: false, error: "This request needs another mentor." });
     await prisma.helpRequest.update({ where: { id: requestId }, data: { exclusiveUntil: new Date(Date.now() - 1000) } });
     expect((await helpCommand(other, { requestId, action: "claim", expectedVersion: await requestVersion(requestId) })).ok).toBe(true);

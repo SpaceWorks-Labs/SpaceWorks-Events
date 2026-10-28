@@ -105,7 +105,7 @@ describe.sequential("mentor desk permissions", () => {
     expect(await saveMentorProfile(ctx!, { mentorUserId: other.userId, expectedVersion: 1, bio: "x" })).toEqual({ ok: false, error: "Not found." });
     // Removing the grant ends live mappings.
     const { teamId } = await createTeam(await prisma.event.update({ where: { id: event.id }, data: { startDateTime: new Date(Date.now() + 3_600_000) } }), "Grant team");
-    await prisma.mentorTeamAssignment.create({ data: { eventId: event.id, mentorUserId: user.id, teamId, mode: "MANUAL" } });
+    await prisma.mentorTeamAssignment.create({ data: { eventId: event.id, mentorUserId: user.id, teamId, mode: "MANUAL", activatedAt: new Date() } });
     await prisma.$transaction((tx) => syncMentorGrantLocked(tx, event.id, user.id, [EventPermission.MENTOR], [], organiserId));
     expect(await prisma.mentorTeamAssignment.findFirstOrThrow({ where: { eventId: event.id, mentorUserId: user.id } })).toMatchObject({ status: "ENDED" });
   });

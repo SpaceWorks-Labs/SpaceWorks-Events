@@ -7,7 +7,7 @@ import { declareMentorConflict } from "@/app/actions/mentor-console";
 import { type DeskScope, ErrorLine, useDeskSave } from "../shared";
 
 /** A mentor declares a conflict with a team (they will not get its help, assignment or visits). */
-export function DeclareConflict({ scope, teams, conflicts }: { scope: DeskScope; teams: Array<{ id: string; name: string }>; conflicts: Array<{ teamId: string; teamName: string; kind: string; reason: string }> }) {
+export function DeclareConflict({ scope, teams, conflicts }: { scope: DeskScope; teams: Array<{ id: string; name: string }>; conflicts: Array<{ teamId: string; teamName: string; kind: string; reason: string; version: number; mine: boolean }> }) {
   const { pending, error, save } = useDeskSave();
   const [teamId, setTeam] = useState("");
   const [reason, setReason] = useState("");
@@ -18,8 +18,8 @@ export function DeclareConflict({ scope, teams, conflicts }: { scope: DeskScope;
         <ul className="flex flex-col gap-1">
           {conflicts.map((c) => (
             <li key={`${c.teamId}-${c.kind}`} className="flex items-center gap-2 text-caption text-ink-secondary">
-              {c.teamName} · {c.kind === "DECLARED" ? "declared by you" : "affiliation (set by organisers)"}
-              {c.kind === "DECLARED" ? <Button size="sm" variant="ghost" loading={pending} onClick={() => save(() => declareMentorConflict({ ...scope, teamId: c.teamId, kind: "DECLARED", active: false, reason: c.reason }), "Conflict cleared.")}>Clear</Button> : null}
+              {c.teamName} · {c.mine ? "declared by you" : "recorded by the organisers"}
+              {c.mine ? <Button size="sm" variant="ghost" loading={pending} onClick={() => save(() => declareMentorConflict({ ...scope, teamId: c.teamId, kind: "DECLARED", active: false, reason: c.reason, expectedVersion: c.version }), "Conflict cleared.")}>Clear</Button> : null}
             </li>
           ))}
         </ul>
@@ -30,7 +30,7 @@ export function DeclareConflict({ scope, teams, conflicts }: { scope: DeskScope;
           {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </Dropdown>
         <Input aria-label="Reason" placeholder="Reason (organisers only)" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className="max-w-64" />
-        <Button size="sm" variant="secondary" disabled={!teamId} loading={pending} onClick={() => save(() => declareMentorConflict({ ...scope, teamId, kind: "DECLARED", active: true, reason }), "Conflict declared.")}>Declare</Button>
+        <Button size="sm" variant="secondary" disabled={!teamId} loading={pending} onClick={() => save(() => declareMentorConflict({ ...scope, teamId, kind: "DECLARED", active: true, reason, expectedVersion: 0 }), "Conflict declared.")}>Declare</Button>
       </div>
       <ErrorLine error={error} />
     </fieldset>

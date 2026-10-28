@@ -76,7 +76,8 @@ export async function visitEligible(tx: Prisma.TransactionClient, params: {
 /**
  * Teams a judge must not score because of the Mentor Desk (policy.is_conflicted
  * for judging): any team they mentored (ACTIVE or ENDED assignment, in any
- * round) or hold an active conflict with. Empty unless the desk is on.
+ * round) or hold an active conflict with. A proposal that was never activated
+ * does not count. Empty unless the desk is on.
  */
 export async function mentorJudgingConflicts(client: Prisma.TransactionClient, eventId: string, userIds: readonly string[]): Promise<Map<string, Set<string>>> {
   const result = new Map<string, Set<string>>();
@@ -85,7 +86,7 @@ export async function mentorJudgingConflicts(client: Prisma.TransactionClient, e
   if (!event?.mentorDeskEnabled) return result;
   const ids = [...userIds];
   const [assignments, conflicts] = await Promise.all([
-    client.mentorTeamAssignment.findMany({ where: { eventId, mentorUserId: { in: ids }, status: { in: [MentorAssignmentStatus.ACTIVE, MentorAssignmentStatus.ENDED] } }, select: { mentorUserId: true, teamId: true } }),
+    client.mentorTeamAssignment.findMany({ where: { eventId, mentorUserId: { in: ids }, activatedAt: { not: null } }, select: { mentorUserId: true, teamId: true } }),
     client.mentorConflict.findMany({ where: { eventId, mentorUserId: { in: ids }, active: true }, select: { mentorUserId: true, teamId: true } }),
   ]);
   for (const row of [...assignments, ...conflicts]) {

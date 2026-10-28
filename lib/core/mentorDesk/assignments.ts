@@ -98,7 +98,7 @@ export async function applyAssignments(ctx: DeskOrganiserContext, input: unknown
     const status = data.proposed ? MentorAssignmentStatus.PROPOSED : MentorAssignmentStatus.ACTIVE;
     const created: string[] = [];
     for (const a of result.assignments) {
-      const row = await tx.mentorTeamAssignment.create({ data: { eventId: event.id, roundId: data.roundId, mentorUserId: a.mentorUserId, teamId: a.teamId, mode: data.mode, status, runId: run.id, createdByUserId: ctx.userId }, select: { id: true } });
+      const row = await tx.mentorTeamAssignment.create({ data: { eventId: event.id, roundId: data.roundId, mentorUserId: a.mentorUserId, teamId: a.teamId, mode: data.mode, status, runId: run.id, createdByUserId: ctx.userId, activatedAt: status === MentorAssignmentStatus.ACTIVE ? new Date() : null }, select: { id: true } });
       created.push(row.id);
     }
     if (status === MentorAssignmentStatus.ACTIVE) await notifyMentors(tx, created);
@@ -132,7 +132,7 @@ export async function transitionAssignment(ctx: DeskOrganiserContext, input: unk
     if (parsed.data.action === "activate") {
       if (row.status !== MentorAssignmentStatus.PROPOSED) refuse(COPY.stale);
       await requireAssignable(tx, { eventId: event.id, roundId: row.roundId }, row.mentorUserId, row.teamId, row.id);
-      await tx.mentorTeamAssignment.update({ where: { id: row.id }, data: { status: MentorAssignmentStatus.ACTIVE, activeFrom: now, version: { increment: 1 } } });
+      await tx.mentorTeamAssignment.update({ where: { id: row.id }, data: { status: MentorAssignmentStatus.ACTIVE, activeFrom: now, activatedAt: now, version: { increment: 1 } } });
       await notifyMentors(tx, [row.id]);
     } else {
       if (row.status === MentorAssignmentStatus.ENDED) refuse(COPY.stale);
@@ -154,7 +154,7 @@ export async function assignMentorManually(ctx: DeskOrganiserContext, input: unk
     await lockEvent(tx, event.id);
     const scope = { eventId: event.id, roundId: parsed.data.roundId };
     await requireAssignable(tx, scope, parsed.data.mentorUserId, parsed.data.teamId);
-    const row = await tx.mentorTeamAssignment.create({ data: { ...scope, mentorUserId: parsed.data.mentorUserId, teamId: parsed.data.teamId, mode: MentorAssignmentMode.MANUAL, manualOverride: true, createdByUserId: ctx.userId }, select: { id: true } });
+    const row = await tx.mentorTeamAssignment.create({ data: { ...scope, mentorUserId: parsed.data.mentorUserId, teamId: parsed.data.teamId, mode: MentorAssignmentMode.MANUAL, manualOverride: true, createdByUserId: ctx.userId, activatedAt: new Date() }, select: { id: true } });
     await notifyMentors(tx, [row.id]);
     await recordAuditEvent({ client: tx, action: "MENTOR_ASSIGNMENT_OVERRIDDEN", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "MentorTeamAssignment", targetId: row.id });
     return row;

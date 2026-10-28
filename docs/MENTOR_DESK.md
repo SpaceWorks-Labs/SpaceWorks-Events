@@ -46,15 +46,29 @@ availability."). An empty availability list means off duty. Profile edits,
 declared conflicts and nominations work off shift.
 
 **Grant lifecycle.** Accepting a `MENTOR` invite creates the profile
-(`syncMentorGrantLocked`, `lib/inviteAcceptance.ts`). Removing the grant (a
-permission change or revoking the collaborator) ends the mentor's live
-assignments, returns their claims to the queue (activity `role_ended`) and
-cancels their future office-hour bookings.
+(`syncMentorGrantLocked`, `lib/core/mentorDesk/grant.ts`). Removing the grant
+(a permission change or revoking the collaborator) ends the mentor's live
+assignments, returns their claims to the queue (activity `role_ended`),
+cancels their future office-hour slots (logged as `role_withdrawn`) and those
+slots' bookings (the teams and the mentor get `office-hour-cancelled`), ends
+their visit leases, and removes them from round pools, except a pool where
+they are the only member: deleting that row would open the round to every
+mentor, so it stays, inert without the grant.
 
-> **Crew hook.** After `feat/event-crew` merges, giving a mentor a crew
-> ticket belongs in `syncMentorGrantLocked`
-> (`lib/core/mentorDesk/grant.ts`), the single place a `MENTOR` grant
-> is added or removed.
+**Crew ticket** (Settings → Mentor Desk → *Give mentors a crew ticket*,
+`Event.mentorsGetCrewTicket`, off by default). After a `MENTOR` grant commits,
+`syncMentorCrewAfterGrant` (`lib/core/mentorDesk/crewLink.ts`) adds the mentor
+to the [event crew](CREW.md) through the crew core: role "Mentor", not listed
+publicly, a free crew ticket with no order. The place is recorded on
+`MentorProfile.crewMemberId`; removing the grant removes that place and only
+that one. Someone already registered for the event keeps their own ticket and
+gets no crew place. Mentors invited before the switch was turned on are not
+changed.
+
+**Reimbursements.** Like any co-organiser grant, a mentor-only grant passes
+`canViewEventDashboard` for its own event, so the server accepts a staff
+expense claim from a mentor for that event only ([Event finance](FINANCE.md));
+the console does not show the claim form yet.
 
 ## Mentor profiles
 
@@ -81,16 +95,19 @@ lock). `expiresAt` = min(now + expiry minutes, event end); the **deadline** is
 min(expiresAt, event end) and is checked inside every command.
 
 States: `OPEN → CLAIMED → RESOLVED`, or `CANCELLED` (the team) or `EXPIRED`.
+`HelpRequest.claimedByUserId` is `ON DELETE NO ACTION`: an account cannot be
+deleted while it holds a claim (at most an hour, the longest claim); once the
+claim ends or lapses the deletion goes through.
 
 | Command | Who | Rules |
 | --- | --- | --- |
 | claim | Mentor, on shift | OPEN; eligible (below); not holding another live claim ("Finish or release the current request first."); the mentor's lapsed claims are released first |
-| assign | Organiser | OPEN or CLAIMED; the target mentor is live, on shift, eligible, not busy |
+| assign | Organiser | OPEN or CLAIMED (also on a lapsed lease); the target mentor is live, on shift, eligible, not busy |
 | renew | The claiming mentor | Same claim id and generation; still eligible; lease = min(now + claim minutes, deadline) |
-| release | The claiming mentor or an organiser | CLAIMED → OPEN, a new open generation |
+| release | The claiming mentor, or an organiser (also on a lapsed lease) | CLAIMED → OPEN, a new open generation |
 | resolve | The claiming mentor or an organiser | CLAIMED → RESOLVED |
-| reopen | Organiser | RESOLVED → OPEN, with a reason; the assigned-mentor window starts again |
-| cancel | The team | OPEN or CLAIMED → CANCELLED |
+| reopen | Organiser | RESOLVED → OPEN, with a reason, within the team's open limit; the assigned-mentor window starts again |
+| cancel | The team | OPEN or CLAIMED (also on a lapsed lease) → CANCELLED, before the deadline |
 | comment | The team, or the claiming mentor | OPEN or CLAIMED, before the deadline; 1–2000 characters; never extends the deadline |
 | rate | The team | RESOLVED, once, 1–5 |
 
@@ -130,6 +147,10 @@ carry ids only. The CSV leaves the text out.
 `MentorTeamAssignment` maps a mentor to a team, event-wide (`roundId` null)
 or for one round. `PROPOSED → ACTIVE → ENDED` (CHECK: `endedAt` exactly with
 ENDED); one live mapping per mentor, team and scope (partial unique index).
+`activatedAt` is set when a mapping first becomes ACTIVE (CHECK: every ACTIVE
+row has it); only activated mappings count as *mentored*, so a proposal that
+was ended without being activated never creates a judging conflict or a
+fresh-eyes exclusion.
 
 Modes (`lib/mentorDesk/allocation.ts`, deterministic and pure):
 
@@ -167,12 +188,15 @@ earlier round; when off, SKILL_MATCH and RANDOM avoid it where possible.
 
 `MentorConflict`: `DECLARED` (by the mentor, or an organiser) or
 `AFFILIATION` (organisers), one live row per kind (partial unique index).
+`createdByUserId` records who set it: a mentor declares and clears only their
+own; one an organiser recorded is changed only by an organiser. Changes lock
+the live row and check its version (0 for a new conflict).
 Team membership always conflicts and is never overridable.
 
 **Judging.** When the desk is on, `mentorJudgingConflicts(client, eventId,
 userIds)` (`lib/core/mentorDesk/eligibility.ts`) returns the teams each user
-mentored (an ACTIVE or ENDED assignment, any round) or holds an active
-conflict with. It feeds judging's single conflict rule, `conflictKeysFor`
+mentored (an activated assignment, event-wide or in any round) or holds an
+active conflict with. A mentored team is a conflict in every judging round. It feeds judging's single conflict rule, `conflictKeysFor`
 (`lib/core/judging/judges.ts`), so those teams' projects are hidden from the
 judge, refused for assignment and not counted in results. Desk off: no effect.
 
@@ -189,7 +213,10 @@ still live and available for the whole slot and not conflicted; no
 overlapping booking for the team ("Your team has an overlapping booking.");
 the mentor not booked elsewhere at the time; capacity counted under the slot
 lock ("This slot is full."); one live booking per slot and team (partial
-unique index). Teams cancel until the slot starts ("Ask an organiser to cancel
+unique index). A cancellation is a conditional update of a still-BOOKED row
+under the slot lock, so concurrent cancels email once. A reschedule must start
+in the future and keep every booked team free of overlaps and conflicts. Teams
+cancel until the slot starts ("Ask an organiser to cancel
 a started slot."); organisers cancel any time. Every reschedule or
 cancellation is logged with a reason in the append-only `OfficeHourChange`.
 The team's members and the mentor get `office-hour-booked` (with a calendar

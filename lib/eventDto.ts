@@ -14,7 +14,7 @@ export type EventClientDto = Omit<Event,
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
   // Mentor Desk settings have their own view (lib/core/mentorDesk/).
-  | "mentorDeskEnabled" | "mentorHelpClaimedEmail"
+  | "mentorDeskEnabled" | "mentorHelpClaimedEmail" | "mentorsGetCrewTicket"
 >;
 
 /** Copies only the DTO fields, so a full Event record never reaches the browser. */

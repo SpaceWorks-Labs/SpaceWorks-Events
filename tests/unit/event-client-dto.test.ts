@@ -58,6 +58,7 @@ describe("event browser DTO", () => {
       emailSubmissionReceipts: true,
       mentorDeskEnabled: true,
       mentorHelpClaimedEmail: true,
+      mentorsGetCrewTicket: true,
       shortCode: null,
       checkInStationPinHash: "bcrypt-secret",
       checkInStationPinEncrypted: "encrypted-secret",

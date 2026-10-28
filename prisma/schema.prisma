@@ -361,6 +361,7 @@ model User {
   mentorAssignments            MentorTeamAssignment[] @relation("MentorAssignmentMentor")
   mentorAssignmentsCreated     MentorTeamAssignment[] @relation("MentorAssignmentCreatedBy")
   mentorConflicts              MentorConflict[]
+  mentorConflictsRecorded      MentorConflict[] @relation("MentorConflictCreatedBy")
   officeHourSlots              OfficeHourSlot[]
   officeHourBookings           OfficeHourBooking[]
   officeHourChanges            OfficeHourChange[]
@@ -791,6 +792,9 @@ model Event {
   mentorDeskEnabled                   Boolean          @default(false)
   /// Email the team when a mentor claims its help request (off by default).
   mentorHelpClaimedEmail              Boolean          @default(false)
+  /// Accepting a MENTOR grant also adds the mentor to the event crew with a
+  /// free crew ticket (docs/CREW.md); removing the grant removes that ticket.
+  mentorsGetCrewTicket                Boolean          @default(false)
   mentorProfiles        MentorProfile[]
   helpCategories        HelpCategory[]
   helpRequests          HelpRequest[]
@@ -1617,6 +1621,8 @@ model EventCrewMember {
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   rsvp  RSVP  @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  /// Set when the Mentor Desk added this place for a mentor (docs/MENTOR_DESK.md).
+  mentorProfile MentorProfile?
 
   @@unique([eventId, email])
   @@index([eventId, sortOrder])
@@ -2779,12 +2785,16 @@ model MentorProfile {
   availability   Json     @default("[]")
   maxActiveTeams Int      @default(4)
   showOnPage     Boolean  @default(false)
+  /// The crew place created for this mentor by `mentorsGetCrewTicket`; only
+  /// such a place is removed with the grant.
+  crewMemberId   String?  @unique
   version        Int      @default(1)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  crewMember EventCrewMember? @relation(fields: [crewMemberId], references: [id], onDelete: SetNull)
 
   @@unique([eventId, userId])
 }
@@ -2939,6 +2949,9 @@ model MentorTeamAssignment {
   /// An organiser changed this mapping by hand after a run.
   manualOverride  Boolean                @default(false)
   activeFrom      DateTime               @default(now())
+  /// Set when the mapping first becomes ACTIVE. Only activated mappings count
+  /// as "mentored" (judging conflicts, fresh eyes); a rejected proposal never does.
+  activatedAt     DateTime?
   endedAt         DateTime?
   createdByUserId String?
   version         Int                    @default(1)
@@ -2966,14 +2979,17 @@ model MentorConflict {
   teamId       String
   kind         MentorConflictKind
   reason       String             @default("")
+  /// Who recorded it: a mentor clears only conflicts they declared themselves.
+  createdByUserId String?
   active       Boolean            @default(true)
   version      Int                @default(1)
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
   event  Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  mentor User  @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
-  team   Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mentor    User  @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+  team      Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("MentorConflictCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([eventId, mentorUserId])
   @@index([teamId])

@@ -15,6 +15,7 @@ import { startOutboxWorker } from "@/lib/outboxWorker";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import type { ActionResult } from "./org";
 import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
+import { syncMentorCrewAfterGrant } from "@/lib/core/mentorDesk/crewLink";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -87,11 +88,12 @@ export async function revokeEventCollaborator(input: unknown): Promise<ActionRes
       : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
   };
   // A revoked MENTOR grant ends its assignments and claims (docs/MENTOR_DESK.md).
-  const deleted = await prisma.$transaction(async (tx) => {
+  const { deleted, existing } = await prisma.$transaction(async (tx) => {
     const existing = await tx.eventCollaborator.findFirst({ where, select: { eventId: true, userId: true, permissions: true } });
     if (existing?.eventId) await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, [], session.user!.id!);
-    return tx.eventCollaborator.deleteMany({ where });
+    return { deleted: await tx.eventCollaborator.deleteMany({ where }), existing };
   });
+  if (deleted.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: [], actorUserId: session.user.id });
   if (!deleted.count) return { ok: false, error: "Collaborator not found." };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_REVOKED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId });
   if (parsed.data.eventId) revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}`);
@@ -111,11 +113,12 @@ export async function updateEventCollaboratorPermissions(input: unknown): Promis
       ? { eventId: parsed.data.eventId, event: { organisationId: org.id } }
       : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
   };
-  const updated = await prisma.$transaction(async (tx) => {
+  const { updated, existing } = await prisma.$transaction(async (tx) => {
     const existing = await tx.eventCollaborator.findFirst({ where, select: { eventId: true, userId: true, permissions: true } });
     if (existing?.eventId) await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, parsed.data.permissions, session.user!.id!);
-    return tx.eventCollaborator.updateMany({ where, data: { permissions: parsed.data.permissions } });
+    return { updated: await tx.eventCollaborator.updateMany({ where, data: { permissions: parsed.data.permissions } }), existing };
   });
+  if (updated.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: parsed.data.permissions, actorUserId: session.user.id });
   if (!updated.count) return { ok: false, error: "Collaborator not found." };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_PERMISSIONS_UPDATED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId, metadata: { permissions: parsed.data.permissions.join(",") } });
   if (parsed.data.eventId) revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}`);

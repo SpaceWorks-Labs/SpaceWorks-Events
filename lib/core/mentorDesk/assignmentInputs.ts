@@ -8,7 +8,7 @@ import "server-only";
  */
 
 import { createHash } from "node:crypto";
-import { EventPermission, MentorAssignmentStatus, Prisma, RsvpStatus } from "@prisma/client";
+import { EventPermission, Prisma, RsvpStatus } from "@prisma/client";
 import { normaliseTags } from "@/lib/mentorDesk/rules";
 import type { AllocationCandidate, AllocationMode, AllocationTeam } from "@/lib/mentorDesk/allocation";
 import { COPY, refuse } from "./shared";
@@ -52,7 +52,7 @@ export async function readAllocationInputs(tx: Prisma.TransactionClient, scope: 
     tx.mentorTeamAssignment.groupBy({ by: ["mentorUserId"], where: { ...loadWhere(scope), mentorUserId: { in: mentorIds }, ...(ignoreAssignmentId ? { id: { not: ignoreAssignmentId } } : {}) }, _count: { _all: true } }),
     round && round.earlierIds.length
       ? Promise.all([
-        tx.mentorTeamAssignment.findMany({ where: { roundId: { in: round.earlierIds }, status: { in: [MentorAssignmentStatus.ACTIVE, MentorAssignmentStatus.ENDED] } }, select: { mentorUserId: true, teamId: true } }),
+        tx.mentorTeamAssignment.findMany({ where: { roundId: { in: round.earlierIds }, activatedAt: { not: null } }, select: { mentorUserId: true, teamId: true } }),
         tx.mentoringCheckIn.findMany({ where: { roundId: { in: round.earlierIds } }, select: { mentorUserId: true, teamId: true } }),
       ]).then(([a, b]) => [...a, ...b])
       : Promise.resolve([] as Array<{ mentorUserId: string; teamId: string }>),

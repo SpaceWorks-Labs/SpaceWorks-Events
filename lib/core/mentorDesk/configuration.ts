@@ -25,7 +25,7 @@ export function localToDate(value: string, timeZone: string): Date | null {
   return iso ? new Date(iso) : null;
 }
 
-const settingsSchema = z.object({ mentorDeskEnabled: z.boolean(), mentorHelpClaimedEmail: z.boolean() }).strict();
+const settingsSchema = z.object({ mentorDeskEnabled: z.boolean(), mentorHelpClaimedEmail: z.boolean(), mentorsGetCrewTicket: z.boolean().optional() }).strict();
 
 /** The Mentor Desk switch and its optional email; owners and admins only. Switching off removes authority, never data. */
 export async function updateDeskSettings(ctx: DeskOrganiserContext, input: unknown): Promise<DeskResult> {
@@ -140,9 +140,16 @@ const conflictSchema = z.object({
   kind: z.nativeEnum(MentorConflictKind),
   active: z.boolean(),
   reason: z.string().trim().max(CONFLICT_REASON_MAX_LENGTH).default(""),
+  /** 0 for a new conflict; the live row's version to change or clear it. */
+  expectedVersion: z.number().int().min(0),
 }).strict();
 
-/** A mentor declares their own conflict; organisers record declared or affiliation conflicts for anyone. */
+/**
+ * configuration_workflow.conflict: a mentor declares (and clears) only their
+ * own DECLARED conflicts; organisers record or clear any. A conflict an
+ * organiser recorded is cleared only by an organiser. The live row is locked
+ * and version-checked; a new one starts at version 0.
+ */
 export async function setMentorConflict(actor: MentorContext | DeskOrganiserContext, input: unknown): Promise<DeskResult> {
   const parsed = conflictSchema.safeParse(input);
   if (!parsed.success) return fail(COPY.invalid);
@@ -153,13 +160,18 @@ export async function setMentorConflict(actor: MentorContext | DeskOrganiserCont
     await liveMentor(tx, event.id, data.mentorUserId, { onShift: false });
     const team = await tx.team.findFirst({ where: { id: data.teamId, eventId: event.id }, select: { id: true } });
     if (!team) refuse(COPY.notFound);
+    await tx.$queryRaw`SELECT "id" FROM "MentorConflict" WHERE "eventId" = ${event.id} AND "mentorUserId" = ${data.mentorUserId} AND "teamId" = ${team.id} AND "kind" = ${data.kind}::"MentorConflictKind" AND "active" FOR UPDATE`;
     const existing = await tx.mentorConflict.findFirst({ where: { eventId: event.id, mentorUserId: data.mentorUserId, teamId: team.id, kind: data.kind, active: true } });
     if (existing) {
+      checkVersion(existing, data.expectedVersion);
+      if (actor.kind === "mentor" && existing.createdByUserId !== actor.userId) refuse("Only the organisers can change a conflict they recorded.");
       await tx.mentorConflict.update({ where: { id: existing.id }, data: { active: data.active, reason: data.reason, version: { increment: 1 } } });
-    } else if (data.active) {
-      await tx.mentorConflict.create({ data: { eventId: event.id, mentorUserId: data.mentorUserId, teamId: team.id, kind: data.kind, reason: data.reason } });
+    } else {
+      if (data.expectedVersion !== 0) refuse(COPY.stale);
+      if (!data.active) refuse(COPY.notFound);
+      await tx.mentorConflict.create({ data: { eventId: event.id, mentorUserId: data.mentorUserId, teamId: team.id, kind: data.kind, reason: data.reason, createdByUserId: actor.userId } });
     }
     await recordAuditEvent({ client: tx, action: data.active ? "MENTOR_CONFLICT_RECORDED" : "MENTOR_CONFLICT_CLEARED", actorUserId: actor.userId, organisationId: actor.organisationId, targetType: "Team", targetId: team.id, metadata: { kind: data.kind } });
     return undefined;
-  });
+  }, COPY.stale);
 }

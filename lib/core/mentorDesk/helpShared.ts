@@ -24,7 +24,8 @@ export const helpRowSelect = {
   firstClaimedAt: true,
   rating: true,
   version: true,
-  category: { select: { skillTags: true, claimMinutes: true } },
+  categoryId: true,
+  category: { select: { skillTags: true, claimMinutes: true, openLimit: true } },
 } satisfies Prisma.HelpRequestSelect;
 
 export type HelpRow = Prisma.HelpRequestGetPayload<{ select: typeof helpRowSelect }>;
@@ -42,6 +43,11 @@ export function requireLive(row: HelpRow, eventEnd: Date, now: Date) {
   const liveness = helpLiveness(row, eventEnd, now);
   if (liveness === "expired") refuse(COPY.expired);
   if (liveness === "lease-lost") refuse(COPY.leaseLost);
+}
+
+/** Deadline only: commands that end or move a claim (team cancel, organiser release or assign) work on a lapsed lease too. */
+export function requireBeforeDeadline(row: HelpRow, eventEnd: Date, now: Date) {
+  if (row.status === "EXPIRED" || helpDeadline(row.expiresAt, eventEnd).getTime() <= now.getTime()) refuse(COPY.expired);
 }
 
 export function requireStatus(row: { status: HelpRequestStatus }, ...allowed: HelpRequestStatus[]) {

@@ -55,7 +55,7 @@ export async function SettingsPanel({ ctx, judgingInUse = false }: { ctx: EventD
           pendingInvites={pending.map((invite) => ({ id: invite.id, email: invite.email, expiresAt: invite.expiresAt.toISOString(), permissions: invite.permissions }))}
         />
       ) : null}
-      {mentorDesk ? <MentorDeskSettingsCard scope={{ organisationSlug: organisation.slug, eventId: event.id }} enabled={mentorDesk.enabled} helpClaimedEmail={mentorDesk.helpClaimedEmail} /> : null}
+      {mentorDesk ? <MentorDeskSettingsCard scope={{ organisationSlug: organisation.slug, eventId: event.id }} enabled={mentorDesk.enabled} helpClaimedEmail={mentorDesk.helpClaimedEmail} crewTicket={mentorDesk.crewTicket} /> : null}
       {judgingCard ? <JudgingSettingsCard scope={judgingCard.scope} settings={judgingCard.settings} now={ctx.now.toISOString()} /> : null}
       {/* Address, clone, embed and delete are organisation-admin actions on the server. */}
       {permissions.isAdmin ? (

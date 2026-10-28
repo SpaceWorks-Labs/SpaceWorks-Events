@@ -31,7 +31,7 @@ export async function loadDeskOrganiserView(ctx: DeskOrganiserContext, now = new
   if (!event) return null;
   const tz = safeTimeZone(event.timezone);
   const local = (d: Date) => zonedDatetimeLocalValue(d, tz);
-  const [grants, categories, queue, assignments, runs, slots, rounds, teams, nominations] = await Promise.all([
+  const [grants, categories, queue, assignments, runs, slots, rounds, teams, nominations, conflicts] = await Promise.all([
     prisma.eventCollaborator.findMany({ where: { eventId: event.id, permissions: { has: EventPermission.MENTOR } }, select: { userId: true, user: { select: { name: true, email: true, mentorProfiles: { where: { eventId: event.id } } } } }, orderBy: { createdAt: "asc" } }),
     prisma.helpCategory.findMany({ where: { eventId: event.id }, orderBy: { position: "asc" } }),
     prisma.helpRequest.findMany({
@@ -47,6 +47,7 @@ export async function loadDeskOrganiserView(ctx: DeskOrganiserContext, now = new
     prisma.mentoringRound.findMany({ where: { eventId: event.id }, orderBy: { position: "asc" }, include: { mentors: { select: { mentorUserId: true } }, _count: { select: { checkIns: true } } } }),
     prisma.team.findMany({ where: { eventId: event.id, status: RsvpStatus.CONFIRMED }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 1000 }),
     prisma.mentorNomination.groupBy({ by: ["roundId", "teamId"], where: { eventId: event.id }, _count: { _all: true } }),
+    prisma.mentorConflict.findMany({ where: { eventId: event.id, active: true }, orderBy: { createdAt: "asc" }, take: 500, select: { id: true, version: true, kind: true, reason: true, mentorUserId: true, teamId: true, createdByUserId: true, mentor: { select: { name: true } }, team: { select: { name: true } } } }),
   ]);
   const loads = new Map<string, number>();
   for (const a of assignments) if (a.status !== MentorAssignmentStatus.ENDED) loads.set(a.mentorUserId, (loads.get(a.mentorUserId) ?? 0) + 1);
@@ -88,6 +89,8 @@ export async function loadDeskOrganiserView(ctx: DeskOrganiserContext, now = new
       // Private advisory shortlist: never part of judging scores.
       shortlist: (shortlist.get(r.id) ?? []).sort((a, b) => b.nominations - a.nominations || a.teamName.localeCompare(b.teamName)),
     })),
+    // Private: affiliations and reasons are organiser-only.
+    conflicts: conflicts.map((c) => ({ id: c.id, version: c.version, kind: c.kind, reason: c.reason, mentorUserId: c.mentorUserId, mentorName: c.mentor.name?.trim() || "Mentor", teamId: c.teamId, teamName: c.team.name, declaredByMentor: c.createdByUserId === c.mentorUserId })),
     teams,
   };
 }

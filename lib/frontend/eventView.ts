@@ -17,7 +17,7 @@ const eventFieldList = [
   // Hackathon state the dashboard tabs and settings read (docs/HACKATHON.md).
   "submissionsEnabled", "judgingStatus", "resultsPublishedAt", "submissionFeeMinor", "submissionFeeRefundOnDisqualify",
   // Mentor Desk switches the dashboard tab and settings read (docs/MENTOR_DESK.md).
-  "mentorDeskEnabled", "mentorHelpClaimedEmail",
+  "mentorDeskEnabled", "mentorHelpClaimedEmail", "mentorsGetCrewTicket",
   "page", "highlights", "speakers", "sponsors", "resources", "faqs", "sessions", "scheduleTracks", "organisation", "feedbackForm", "registrationForm", "badgeDesign", "_count",
 ] as const;
 const eventFields = new Set<string>(eventFieldList);

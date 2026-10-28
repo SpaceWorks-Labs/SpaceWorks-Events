@@ -14,7 +14,7 @@ import { claimLeaseExpiry, helpDeadline, HELP_NOTE_MAX_LENGTH, HELP_PRIORITY_WIN
 import { HELP_CLAIMED_KIND, enqueueMentorMessages } from "@/lib/outbox/mentor";
 import { deskEvent, liveMentor, type DeskOrganiserContext, type LockedEvent, type MentorContext } from "./access";
 import { visitEligible } from "./eligibility";
-import { changeHelp, claimValues, CLEARED_CLAIM, clearMentorClaims, type HelpRow, lockHelpRow, requireLive, requireStatus } from "./helpShared";
+import { changeHelp, claimValues, CLEARED_CLAIM, clearMentorClaims, type HelpRow, lockHelpRow, requireBeforeDeadline, requireLive, requireStatus } from "./helpShared";
 import { COPY, checkVersion, type DeskResult, fail, inTransaction, refuse } from "./shared";
 
 export type HelpAction = "claim" | "renew" | "release" | "resolve" | "assign" | "reopen";
@@ -76,7 +76,9 @@ async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): 
   const row = await lockHelpRow(tx, event.id, input.requestId);
   if (!isOrganiser && (input.action === "release" || input.action === "resolve") && row.claimedByUserId !== actor.userId) refuse(COPY.notFound);
   checkVersion(row, input.expectedVersion);
-  requireLive(row, event.endDateTime, now);
+  // Organisers can release or reassign a lapsed claim; everything else needs a live lease too.
+  if (isOrganiser && (input.action === "release" || input.action === "assign")) requireBeforeDeadline(row, event.endDateTime, now);
+  else requireLive(row, event.endDateTime, now);
   switch (input.action) {
     case "claim":
       requireStatus(row, HelpRequestStatus.OPEN);
@@ -104,6 +106,9 @@ async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): 
     case "reopen": {
       requireStatus(row, HelpRequestStatus.RESOLVED);
       if (!input.note.trim()) refuse(COPY.reasonRequired);
+      // Reopening counts against the team's open limit like a new request.
+      const open = await tx.helpRequest.count({ where: { eventId: event.id, categoryId: row.categoryId, teamId: row.teamId, rsvpId: row.rsvpId, status: { in: [HelpRequestStatus.OPEN, HelpRequestStatus.CLAIMED] } } });
+      if (open >= row.category.openLimit) refuse(COPY.limit);
       await changeHelp(tx, row, { status: HelpRequestStatus.OPEN, resolvedAt: null, exclusiveUntil: new Date(now.getTime() + HELP_PRIORITY_WINDOW_MS), lastOpenedAt: now, openGeneration: row.openGeneration + 1 }, { actorUserId: actor.userId, kind: "reopen", note: input.note.trim() });
       await recordAuditEvent({ client: tx, action: "MENTOR_HELP_REOPENED", actorUserId: actor.userId, organisationId: actor.organisationId, targetType: "HelpRequest", targetId: row.id });
       return;
