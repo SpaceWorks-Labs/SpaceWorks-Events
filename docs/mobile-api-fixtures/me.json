@@ -45,6 +45,19 @@
         "judgingStatus": "OPEN"
       }
     ],
-    "staffMfa": "ok"
+    "staffMfa": "ok",
+    "mentoring": [
+      {
+        "organisation": {
+          "slug": "design-club",
+          "name": "Design Club"
+        },
+        "eventId": "clevent000000000000000003",
+        "eventTitle": "Design Hackathon",
+        "startDateTime": "2030-06-01T09:00:00.000Z",
+        "endDateTime": "2030-06-02T18:00:00.000Z",
+        "timezone": "Europe/London"
+      }
+    ]
   }
 }

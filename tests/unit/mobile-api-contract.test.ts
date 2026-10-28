@@ -120,6 +120,10 @@ const fixtures: Array<[file: string, component: string, zod: z.ZodType]> = [
   // Volunteer shifts (docs/VOLUNTEERS.md).
   ["my-shifts.json", "MyShiftsResponse", dto.successEnvelope(dto.myShiftsDtoSchema.nullable())],
   ["volunteer-roster.json", "VolunteerRosterResponse", dto.successEnvelope(dto.volunteerRosterDtoSchema)],
+  ["judge-rounds.json", "JudgeRoundsResponse", dto.successEnvelope(dto.judgeRoundsDtoSchema)],
+  ["participant-desk.json", "ParticipantDeskResponse", dto.successEnvelope(dto.participantDeskDtoSchema)],
+  ["mentor-console.json", "MentorConsoleResponse", dto.successEnvelope(dto.mentorConsoleDtoSchema)],
+  ["desk-queue.json", "DeskQueueResponse", dto.successEnvelope(dto.deskQueueDtoSchema)],
 ];
 
 describe("mobile API contract", () => {
@@ -265,6 +269,18 @@ describe("mobile API contract", () => {
     ["RosterShift", dto.rosterShiftSchema],
     ["Contributor", dto.contributorSchema],
     ["VolunteerRoster", dto.volunteerRosterDtoSchema],
+    ["JudgeRound", dto.judgeRoundSchema],
+    ["JudgeRounds", dto.judgeRoundsDtoSchema],
+    ["JudgingRoundsSummary", dto.judgingRoundsSummaryDtoSchema],
+    ["PublicFinalists", dto.publicFinalistsDtoSchema],
+    ["ParticipantHelp", dto.participantHelpSchema],
+    ["ParticipantDesk", dto.participantDeskDtoSchema],
+    ["MentorQueueItem", dto.mentorQueueItemSchema],
+    ["MentorQueue", dto.mentorQueueDtoSchema],
+    ["MentorConsole", dto.mentorConsoleDtoSchema],
+    ["MentorTeams", dto.mentorTeamsDtoSchema],
+    ["MentorSlots", dto.mentorSlotsDtoSchema],
+    ["DeskQueue", dto.deskQueueDtoSchema],
     ["FeedbackForm", dto.feedbackFormDtoSchema],
     ["EventPermissions", dto.eventPermissionsSchema],
     ["EventCounts", dto.eventCountsSchema],

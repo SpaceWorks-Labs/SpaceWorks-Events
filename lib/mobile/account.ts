@@ -39,8 +39,23 @@ export async function loadMe(userId: string, baseUrl: string) {
       },
     }),
   ]);
+  // Events this user mentors (a MENTOR grant) while their Mentor Desk is on.
+  const mentorGrants = await prisma.eventCollaborator.findMany({
+    where: { userId, permissions: { has: EventPermission.MENTOR }, event: { is: { mentorDeskEnabled: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    select: { event: { select: { id: true, title: true, startDateTime: true, endDateTime: true, timezone: true, organisation: { select: { slug: true, name: true } } } } },
+  });
   return meDtoSchema.parse({
     user: toUserDto(user, baseUrl),
+    mentoring: mentorGrants.flatMap((grant) => grant.event ? [{
+      organisation: { slug: grant.event.organisation.slug, name: grant.event.organisation.name },
+      eventId: grant.event.id,
+      eventTitle: grant.event.title,
+      startDateTime: grant.event.startDateTime.toISOString(),
+      endDateTime: grant.event.endDateTime.toISOString(),
+      timezone: grant.event.timezone,
+    }] : []),
     staffMfa: await staffMfaState(userId),
     organisations: memberships.map((membership) => ({
       id: membership.organisation.id,
@@ -52,7 +67,8 @@ export async function loadMe(userId: string, baseUrl: string) {
     // JUDGE is web-only (docs/HACKATHON.md) and not part of the mobile DTO:
     // drop it, and drop JUDGE-only grants entirely.
     collaborations: collaborations.flatMap((grant) => {
-      const permissions = grant.permissions.filter((permission) => permission !== EventPermission.JUDGE);
+      // JUDGE and MENTOR open their own workspaces (`judging`, `mentoring`), not the organiser tools.
+      const permissions = grant.permissions.filter((permission) => permission !== EventPermission.JUDGE && permission !== EventPermission.MENTOR);
       return grant.event && permissions.length > 0 ? [{
         organisation: { slug: grant.event.organisation.slug, name: grant.event.organisation.name },
         eventId: grant.event.id,

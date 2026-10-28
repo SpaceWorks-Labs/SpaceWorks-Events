@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "data": {
+    "rounds": [
+      {
+        "id": "clround00000000000000001",
+        "name": "Heats",
+        "position": 0,
+        "judgingStatus": "CLOSED",
+        "isCurrent": false
+      },
+      {
+        "id": "clround00000000000000002",
+        "name": "Final",
+        "position": 1,
+        "judgingStatus": "OPEN",
+        "isCurrent": true
+      }
+    ],
+    "currentRoundId": "clround00000000000000002",
+    "onPanel": true
+  }
+}

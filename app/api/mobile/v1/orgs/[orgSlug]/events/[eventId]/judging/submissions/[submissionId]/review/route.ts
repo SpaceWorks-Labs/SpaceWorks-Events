@@ -4,7 +4,7 @@ import { saveJudgeScores, submitJudgeReview } from "@/lib/core/judging";
 import { mobileActionError, mobileError, parseJsonBody, zodFieldErrors } from "@/lib/mobile/http";
 import { judgeDetailResponse, judgingRoute } from "@/lib/mobile/judging";
 import { judgeReviewSchema } from "@/lib/validators";
-import { currentRoundReview } from "@/lib/mobile/judgeReview";
+import { currentRoundReview, refuseUnlessCurrentRound } from "@/lib/mobile/judgeReview";
 
 type Params = { orgSlug: string; eventId: string; submissionId: string };
 
@@ -20,6 +20,9 @@ const bodySchema = z.object({
  * the project as `GET …/judging/submissions/:id`.
  */
 export const POST = judgingRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events/:eventId/judging/submissions/:submissionId/review", "action", async (request, { submissionId }, { judge }) => {
+  // Scores and reviews are written to the current round only.
+  const notCurrent = await refuseUnlessCurrentRound(judge, new URL(request.url).searchParams.get("roundId"));
+  if (notCurrent) return notCurrent;
   const body = await parseJsonBody(request, bodySchema);
   if ("response" in body) return body.response;
   const { scores, comment } = body.data;

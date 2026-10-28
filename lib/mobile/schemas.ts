@@ -14,6 +14,7 @@ export * from "./schemas/organiser";
 export * from "./schemas/judging";
 export * from "./schemas/commerce";
 export * from "./schemas/volunteers";
+export * from "./schemas/mentor";
 
 export type UserDto = z.infer<typeof userDtoSchema>;
 export type EventSummaryDto = z.infer<typeof eventSummarySchema>;

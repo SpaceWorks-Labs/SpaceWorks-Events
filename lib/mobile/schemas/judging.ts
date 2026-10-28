@@ -65,8 +65,27 @@ export const judgeCountsSchema = z.object({
   reviewed: z.number().int(),
 }).strict();
 
+/** A judging round as the judge workspace names it (docs/HACKATHON.md "Rounds"). */
+export const judgeRoundSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  position: z.number().int(),
+  judgingStatus: judgingStatusSchema,
+  /** The round judges score now; scores and reviews are written only to it. */
+  isCurrent: z.boolean(),
+}).strict();
+
+export const judgeRoundsDtoSchema = z.object({
+  rounds: z.array(judgeRoundSchema),
+  currentRoundId: z.string().nullable(),
+  /** False when the current round has its own panel and this judge is not on it. */
+  onPanel: z.boolean(),
+}).strict();
+
 export const judgeSubmissionListDtoSchema = z.object({
   judgingStatus: judgingStatusSchema,
+  /** The round shown (null before the event has any round). */
+  round: judgeRoundSchema.nullable(),
   submissions: z.array(judgeSubmissionSchema),
   nextCursor: z.string().nullable(),
   counts: judgeCountsSchema,
@@ -74,6 +93,7 @@ export const judgeSubmissionListDtoSchema = z.object({
 
 export const judgingCriteriaDtoSchema = z.object({
   judgingStatus: judgingStatusSchema,
+  round: judgeRoundSchema.nullable(),
   criteria: z.array(judgingCriterionSchema),
 }).strict();
 
@@ -85,6 +105,30 @@ export const judgeSubmissionDetailDtoSchema = z.object({
   /** This judge's own private comment (null before one is saved). */
   myComment: z.string().nullable(),
   mySubmittedAt: iso.nullable(),
+}).strict();
+
+/** Judging → Rounds for organisers, read-only. */
+export const judgingRoundsSummaryDtoSchema = z.object({
+  rounds: z.array(z.object({
+    id: z.string(), name: z.string(), position: z.number().int(),
+    status: z.enum(["DRAFT", "OPEN", "CLOSED"]), entrySource: z.enum(["ALL_SUBMITTED", "ADVANCED"]),
+    judgesSeeAll: z.boolean(), freshEyes: z.boolean(), reviewsPerProject: z.number().int().nullable(),
+    opensAt: iso.nullable(), closesAt: iso.nullable(), finalistsPublishedAt: iso.nullable(), finalizedAt: iso.nullable(),
+    isCurrent: z.boolean(), isFinal: z.boolean(), panelSize: z.number().int(), criteria: z.number().int(),
+    finalists: z.number().int(), reviewsSubmitted: z.number().int(),
+  }).strict()),
+}).strict();
+
+/** Published finalists for the public results (titles, entrant names, links; never scores). */
+export const publicFinalistsDtoSchema = z.object({
+  rounds: z.array(z.object({
+    roundName: z.string(),
+    publishedAt: iso,
+    finalists: z.array(z.object({
+      title: z.string(), entrantName: z.string(), isTeam: z.boolean(),
+      links: z.object({ repo: url.nullable(), demo: url.nullable(), video: url.nullable() }).strict(),
+    }).strict()),
+  }).strict()),
 }).strict();
 
 export const judgeNextDtoSchema = z.object({

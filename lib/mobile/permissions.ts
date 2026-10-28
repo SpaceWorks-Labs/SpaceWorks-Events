@@ -31,9 +31,18 @@ export function eventPermissionsFor(
     manageOrders: can.canManageRegistrations,
     manageCrew: can.canManageCrew,
     // Anyone on the event dashboard files their own claims (docs/FINANCE.md).
-    fileClaims: role !== null || grant.length > 0,
+    fileClaims: role !== null || hasOrganiserGrant(grant),
     manageFinance: can.isAdmin,
   };
+}
+
+/**
+ * Whether a grant opens the organiser surfaces. JUDGE and MENTOR are isolated
+ * (lib/eventDashboard/capabilities.ts): they open only the judging workspace
+ * and the mentor console.
+ */
+export function hasOrganiserGrant(grant: readonly EventPermission[]): boolean {
+  return grant.some((permission) => permission !== "JUDGE" && permission !== "MENTOR");
 }
 
 /** Guests and counts are visible to registration managers and to the check-in desk (which already sees the roster). */
