@@ -206,9 +206,9 @@ export async function leadsPaidTeam(tx: Prisma.TransactionClient, rsvpId: string
   return rsvp?.order?.teamName != null && rsvp.order.totalMinor > BigInt(0) && rsvp.event?.teamTicketMode === TeamTicketMode.PER_TEAM;
 }
 
-/** An applying team's paid place (docs/ADMISSION.md): the members held with the leader are confirmed and sent their tickets. */
+/** An applying team's paid place (docs/ADMISSION.md): the members waiting on the leader's payment are confirmed and sent their tickets. */
 async function confirmApplyingTeamMembers(tx: Prisma.TransactionClient, params: { teamId: string; leaderRsvpId: string; eventTitle: string; teamName: string }) {
-  const members = await tx.rSVP.findMany({ where: { teamId: params.teamId, id: { not: params.leaderRsvpId }, status: RsvpStatus.PENDING_PAYMENT }, select: { id: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } });
+  const members = await tx.rSVP.findMany({ where: { teamId: params.teamId, id: { not: params.leaderRsvpId }, status: RsvpStatus.PENDING_APPROVAL }, select: { id: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } });
   if (members.length === 0) return;
   await tx.rSVP.updateMany({ where: { id: { in: members.map((member) => member.id) } }, data: { status: RsvpStatus.CONFIRMED, holdExpiresAt: null } });
   for (const member of members) {

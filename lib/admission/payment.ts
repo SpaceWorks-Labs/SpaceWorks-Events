@@ -15,8 +15,8 @@ import { AdmissionError, setUnitStatus, unitOrder, type AdmissionEvent, type App
  * never confirmed unpaid: "Accept and pay" holds the place for a day while
  * the order is paid through the usual payment link (offerInTransaction for a
  * solo registration). On a TEAM event the leader pays once for the team
- * (PER_TEAM): the team and all its members hold the place together, and the
- * settled payment confirms them all (placePaidTeamOrder). When a hold ends
+ * (PER_TEAM): the team holds its place through the leader's hold, and the
+ * settled payment confirms every member (placePaidTeamOrder). When a hold ends
  * unpaid, the offer stands again until its respond-by time
  * (`reopenEndedHold`), after which it expires.
  */
@@ -58,7 +58,10 @@ async function holdTeamPlace(
   }
   const holdExpiresAt = new Date(now.getTime() + PAYMENT_LINK_HOLD_MS);
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.PENDING, holdExpiresAt, holdCapAt: new Date(holdExpiresAt.getTime() + HOLD_EXTENSION_CAP_MS), testMode: account.testMode } });
-  await setUnitStatus(tx, { rsvpId: null, teamId: params.teamId }, RsvpStatus.PENDING_PAYMENT, holdExpiresAt);
+  // The team holds its unit through the leader's hold (countConfirmedUnits); the members, who
+  // have no order of their own, stay pending until the payment confirms them all.
+  await tx.team.update({ where: { id: params.teamId }, data: { status: RsvpStatus.PENDING_PAYMENT } });
+  await tx.rSVP.updateMany({ where: { orderId: order.id, teamId: params.teamId }, data: { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt } });
   const payment = await tx.payment.create({
     data: { organisationId: event.organisationId, orderId: order.id, amountMinor: order.totalMinor, currency: order.currency, provider: account.provider, testMode: account.testMode, description: subject.title.slice(0, 300) },
     select: { id: true },
