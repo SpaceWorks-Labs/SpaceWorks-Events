@@ -8,20 +8,30 @@ import "server-only";
  */
 
 import { createHash } from "node:crypto";
-import { EventPermission, Prisma, RsvpStatus } from "@prisma/client";
-import { normaliseTags } from "@/lib/mentorDesk/rules";
+import { EventPermission, MentoringRoundStatus, Prisma, RsvpStatus } from "@prisma/client";
+import { inWindows, normaliseTags, parseAvailability } from "@/lib/mentorDesk/rules";
 import type { AllocationCandidate, AllocationMode, AllocationTeam } from "@/lib/mentorDesk/allocation";
 import { COPY, refuse } from "./shared";
 
 export type AssignmentScope = { eventId: string; roundId: string | null };
 
-export type AllocationInputs = { teams: AllocationTeam[]; candidates: AllocationCandidate[]; names: Map<string, string>; teamNames: Map<string, string> };
+/** `skippedTeamIds`: teams left out because they already have a live mapping in this scope. */
+export type AllocationInputs = { teams: AllocationTeam[]; candidates: AllocationCandidate[]; names: Map<string, string>; teamNames: Map<string, string>; skippedTeamIds: string[] };
 
-/** The round (scope), its pool and the earlier rounds whose teams count for fresh eyes. */
+/**
+ * `skipCovered`: leave out teams with a live (proposed or active) mapping in
+ * this scope, so re-applying a run never stacks a second mentor on them.
+ * `onShiftAt`: only mentors inside one of their availability windows then
+ * (the preview's default, as in Space Works); hand edits and activation pass none.
+ */
+export type AllocationOptions = { skipCovered?: boolean; onShiftAt?: Date | null };
+
+/** The round (scope), its pool and the earlier rounds whose teams count for fresh eyes. A closed or skipped round takes no assignments. */
 async function roundScope(tx: Prisma.TransactionClient, scope: AssignmentScope) {
   if (!scope.roundId) return null;
-  const round = await tx.mentoringRound.findFirst({ where: { id: scope.roundId, eventId: scope.eventId }, select: { id: true, position: true, freshEyesAcrossStages: true, mentors: { select: { mentorUserId: true } } } });
+  const round = await tx.mentoringRound.findFirst({ where: { id: scope.roundId, eventId: scope.eventId }, select: { id: true, status: true, position: true, freshEyesAcrossStages: true, mentors: { select: { mentorUserId: true } } } });
   if (!round) refuse(COPY.notFound);
+  if (round.status !== MentoringRoundStatus.DRAFT && round.status !== MentoringRoundStatus.LIVE) refuse(COPY.roundClosed);
   const earlier = await tx.mentoringRound.findMany({ where: { eventId: scope.eventId, position: { lt: round.position } }, select: { id: true } });
   return { ...round, pool: new Set(round.mentors.map((m) => m.mentorUserId)), earlierIds: earlier.map((r) => r.id) };
 }
@@ -32,20 +42,26 @@ function loadWhere(scope: AssignmentScope): Prisma.MentorTeamAssignmentWhereInpu
 }
 
 /** `ignoreAssignmentId`: a PROPOSED mapping being activated does not count against itself. */
-export async function readAllocationInputs(tx: Prisma.TransactionClient, scope: AssignmentScope, teamFilter?: readonly string[], ignoreAssignmentId?: string): Promise<AllocationInputs> {
+export async function readAllocationInputs(tx: Prisma.TransactionClient, scope: AssignmentScope, teamFilter?: readonly string[], ignoreAssignmentId?: string, options: AllocationOptions = {}): Promise<AllocationInputs> {
   const round = await roundScope(tx, scope);
   const grants = await tx.eventCollaborator.findMany({
     where: { eventId: scope.eventId, permissions: { has: EventPermission.MENTOR } },
-    select: { userId: true, user: { select: { name: true, mentorProfiles: { where: { eventId: scope.eventId }, select: { skills: true, maxActiveTeams: true } } } } },
+    select: { userId: true, user: { select: { name: true, mentorProfiles: { where: { eventId: scope.eventId }, select: { skills: true, maxActiveTeams: true, availability: true } } } } },
   });
   // A round with a pool uses only that pool; no rows means every eligible mentor.
-  const mentors = grants.filter((g) => g.user.mentorProfiles.length > 0 && (!round || round.pool.size === 0 || round.pool.has(g.userId)));
+  const onShiftAt = options.onShiftAt;
+  const mentors = grants.filter((g) => g.user.mentorProfiles.length > 0 && (!round || round.pool.size === 0 || round.pool.has(g.userId))
+    && (!onShiftAt || inWindows(parseAvailability(g.user.mentorProfiles[0]!.availability), onShiftAt)));
   const mentorIds = mentors.map((m) => m.userId);
-  const teams = await tx.team.findMany({
+  const allTeams = await tx.team.findMany({
     where: { eventId: scope.eventId, status: RsvpStatus.CONFIRMED, ...(teamFilter ? { id: { in: [...teamFilter] } } : {}) },
     select: { id: true, name: true, members: { select: { userId: true, seekerProfile: { select: { skills: true } } } }, helpRequests: { select: { category: { select: { skillTags: true } } } } },
     orderBy: { id: "asc" },
   });
+  const covered = options.skipCovered
+    ? new Set((await tx.mentorTeamAssignment.findMany({ where: { eventId: scope.eventId, roundId: scope.roundId, endedAt: null, teamId: { in: allTeams.map((t) => t.id) } }, select: { teamId: true } })).map((row) => row.teamId))
+    : new Set<string>();
+  const teams = allTeams.filter((team) => !covered.has(team.id));
   const [conflicts, live, loads, earlier] = await Promise.all([
     tx.mentorConflict.findMany({ where: { eventId: scope.eventId, active: true, mentorUserId: { in: mentorIds } }, select: { mentorUserId: true, teamId: true } }),
     tx.mentorTeamAssignment.findMany({ where: { eventId: scope.eventId, endedAt: null, roundId: scope.roundId, mentorUserId: { in: mentorIds }, ...(ignoreAssignmentId ? { id: { not: ignoreAssignmentId } } : {}) }, select: { mentorUserId: true, teamId: true } }),
@@ -82,15 +98,18 @@ export async function readAllocationInputs(tx: Prisma.TransactionClient, scope: 
     })),
     candidates,
     names: new Map(mentors.map((m) => [m.userId, m.user.name?.trim() || "Mentor"])),
-    teamNames: new Map(teams.map((t) => [t.id, t.name])),
+    teamNames: new Map(allTeams.map((t) => [t.id, t.name])),
+    skippedTeamIds: allTeams.filter((team) => covered.has(team.id)).map((team) => team.id),
   };
 }
 
-/** A stable digest of everything the allocation depends on. */
-export function inputFingerprint(params: { mode: AllocationMode; scope: AssignmentScope; inputs: AllocationInputs; manual?: Readonly<Record<string, string>> }): string {
+/** A stable digest of everything the allocation depends on, the RANDOM seed included. */
+export function inputFingerprint(params: { mode: AllocationMode; scope: AssignmentScope; inputs: AllocationInputs; manual?: Readonly<Record<string, string>>; seed?: string | null }): string {
   const canonical = {
     mode: params.mode,
+    seed: params.seed ?? null,
     roundId: params.scope.roundId,
+    skipped: [...params.inputs.skippedTeamIds].sort(),
     teams: params.inputs.teams.map((t) => [t.id, [...t.skills].sort()]),
     candidates: [...params.inputs.candidates].sort((a, b) => (a.id < b.id ? -1 : 1)).map((c) => [c.id, [...c.skills].sort(), c.load, c.capacity, [...c.excludedTeamIds].sort(), [...(c.avoidTeamIds ?? [])].sort()]),
     manual: Object.entries(params.manual ?? {}).sort(),
