@@ -163,6 +163,8 @@ export type JudgeWorkspaceDto = JudgeSubmissionsPageDto & {
   rounds: JudgeRoundDto[];
   /** False when the round has its own panel and this judge is not on it. */
   onPanel: boolean;
+  /** Projects this judge recused themselves from in the round (left out of the list; each can be undone while it is open). */
+  recusals: Array<{ submissionId: string; title: string }>;
 };
 
 export type JudgeSubmissionDetailDto = {
@@ -171,6 +173,8 @@ export type JudgeSubmissionDetailDto = {
   submission: JudgeSubmissionDto;
   myScores: Array<{ criterionId: string; score: number }>;
   myReview: { comment: string; submittedAt: Date | null } | null;
+  /** The judge may recuse themselves: assigned to it in the open, current round, with no submitted review. */
+  canRecuse: boolean;
 };
 
 /** The entrant's own submission (team page, ticket page, or `/submit/{token}`). */

@@ -20,6 +20,7 @@ import { criteriaFor, isId, judgingEventSelect, projectSelect } from "./shared";
 import { conflictKeysFor, isEligibleJudge } from "./judges";
 import { judgeFilterSql, judgeVisibleSql, reviewedBySql, scoredBySql, visibleSubmissionIds } from "./judgeVisibility";
 import { judgingStatusFor, type JudgingRoundScope, onRoundPanel, resolveJudgingRound, roundProjectsWhere, roundScoresWhere } from "./rounds/scope";
+import { listJudgeRecusals } from "./recusal";
 
 /** Which round the workspace shows: `roundId`, else the current round (the one judges score). */
 export type JudgeRoundOption = { roundId?: string | null };
@@ -126,11 +127,12 @@ export async function listSubmissionsForJudge(ctx: JudgeContext, input: unknown 
   const scope = await judgeListScope(ctx, options);
   if (!scope) return null;
   const parsed = judgeSubmissionsQuerySchema.safeParse(input);
-  const [criteria, counts, page, rounds] = await Promise.all([
+  const [criteria, counts, page, rounds, recusals] = await Promise.all([
     criteriaFor(prisma, scope.round),
     judgeSubmissionCounts(scope.round, scope.visible, ctx.userId),
     parsed.success ? judgeSubmissionsPage(scope, ctx.userId, parsed.data) : Promise.resolve({ submissions: [], nextCursor: null }),
     roundBriefs(scope.event.id),
+    listJudgeRecusals(ctx, scope.round),
   ]);
   return {
     judgingStatus: judgingStatusFor(scope.round.status),
@@ -140,6 +142,7 @@ export async function listSubmissionsForJudge(ctx: JudgeContext, input: unknown 
     round: roundBrief(scope.round),
     rounds,
     onPanel: onRoundPanel(scope.round, ctx.userId),
+    recusals,
   };
 }
 
@@ -165,11 +168,12 @@ export async function loadSubmissionForJudge(ctx: JudgeContext, submissionId: st
   if (!round || !workspaceRound(round)) return null;
   const ids = await visibleSubmissionIds(prisma, round, ctx.userId, submissionId);
   if (!ids.includes(submissionId)) return null;
-  const [criteria, row, scores, review] = await Promise.all([
+  const [criteria, row, scores, review, assigned] = await Promise.all([
     criteriaFor(prisma, round),
     prisma.submission.findFirst({ where: { id: submissionId, eventId: event.id }, select: projectSelect }),
     prisma.judgeScore.findMany({ where: { submissionId, judgeUserId: ctx.userId, ...roundScoresWhere(round) }, select: { criterionId: true, score: true } }),
     prisma.judgeReview.findFirst({ where: { roundId: round.id, submissionId, judgeUserId: ctx.userId }, select: { comment: true, submittedAt: true } }),
+    prisma.judgeAssignment.count({ where: { roundId: round.id, submissionId, judgeUserId: ctx.userId } }),
   ]);
   if (!row) return null;
   return {
@@ -178,6 +182,7 @@ export async function loadSubmissionForJudge(ctx: JudgeContext, submissionId: st
     submission: judgeSubmissionDto(row, { scoredCriteria: scores.length, reviewSubmitted: Boolean(review?.submittedAt) }),
     myScores: scores.map((score) => ({ criterionId: score.criterionId, score: score.score })),
     myReview: review ? { comment: review.comment, submittedAt: review.submittedAt } : null,
+    canRecuse: round.isCurrent && round.status === JudgingRoundStatus.OPEN && assigned > 0 && !review?.submittedAt,
   };
 }
 

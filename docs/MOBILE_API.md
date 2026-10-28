@@ -863,6 +863,12 @@ saved). `Criterion = { "id", "name", "description", "weight", "maxScore" }`.
   then submits the review once every criterion is scored. Without `comment`
   the saved draft comment is kept. Refusals: `JUDGING_CLOSED`,
   `INCOMPLETE_SCORES` (scores already saved stay saved), `NOT_VISIBLE`.
+- `POST …/judging/submissions/:submissionId/recusal` → `null`. Recuses this
+  judge from a project assigned to them in the open round (as the web "Recuse
+  myself", [Hackathon judging](HACKATHON.md) "Recusal"): it leaves their list
+  and coverage, and organisers see it. `DELETE` on the same path undoes it.
+  Both are idempotent. Refusals: `JUDGING_CLOSED`, `NOT_VISIBLE` (not assigned
+  to you in the open round), `CONFLICT` (your review of it is submitted).
 
 Comments are private to organisers; judges cannot see each other's work.
 

@@ -139,6 +139,9 @@ export async function assignJudge(ctx: JudgingOrganiserContext, input: unknown, 
     if ((await freshEyesBlockedPairs(tx, round)).has(pairKey(parsed.data.judgeUserId, submission.id))) {
       return fail("This judge reviewed this project in an earlier round, and this round uses fresh eyes.");
     }
+    if (await tx.judgeAssignment.findFirst({ where: { roundId: round.id, judgeUserId: parsed.data.judgeUserId, submissionId: submission.id, recusedAt: { not: null } }, select: { id: true } })) {
+      return fail("This judge recused themselves from this project in this round.");
+    }
     const created = await tx.judgeAssignment.createMany({
       data: [{ eventId: event.id, roundId: round.id, judgeUserId: parsed.data.judgeUserId, submissionId: submission.id }],
       skipDuplicates: true,

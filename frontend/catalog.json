@@ -1584,6 +1584,11 @@
     },
     {
       "module": "app/actions/judging",
+      "name": "setJudgeRecusalAction",
+      "id": "judging:setJudgeRecusalAction"
+    },
+    {
+      "module": "app/actions/judging",
       "name": "loadJudgeWorkspaceRound",
       "id": "judging:loadJudgeWorkspaceRound"
     },

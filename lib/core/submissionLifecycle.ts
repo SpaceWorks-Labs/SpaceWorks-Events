@@ -85,7 +85,8 @@ export const submissionSnapshotSchema = z.object({
     submittedAt: isoDate.nullable(),
     createdAt: isoDate,
   })).max(1_000),
-  assignments: z.array(z.object({ roundId: z.string().min(1).max(128).nullish(), judgeUserId: z.string().min(1).max(128), createdAt: isoDate })).max(1_000),
+  // `recusedAt`: the judge's recusal (absent from older snapshots).
+  assignments: z.array(z.object({ roundId: z.string().min(1).max(128).nullish(), judgeUserId: z.string().min(1).max(128), createdAt: isoDate, recusedAt: isoDate.nullish() })).max(1_000),
   awardWins: z.array(z.object({ awardId: z.string().min(1).max(128), place: z.number().int().min(1).max(1000) })).max(200),
   /** Rounds the project had advanced into (absent from older snapshots). */
   roundEntries: z.array(z.object({
@@ -125,7 +126,7 @@ export async function captureSubmissionSnapshotTx(
       createdAt: true,
       scores: { select: { judgeUserId: true, criterionId: true, score: true, createdAt: true } },
       reviews: { select: { roundId: true, judgeUserId: true, comment: true, submittedAt: true, createdAt: true } },
-      assignments: { select: { roundId: true, judgeUserId: true, createdAt: true } },
+      assignments: { select: { roundId: true, judgeUserId: true, createdAt: true, recusedAt: true } },
       awardWins: { select: { awardId: true, place: true } },
       roundEntries: { select: { roundId: true, advancedByUserId: true, advancedAt: true, sourceRank: true, round: { select: { status: true } } } },
     },
@@ -145,7 +146,7 @@ export async function captureSubmissionSnapshotTx(
     createdAt: row.createdAt.toISOString(),
     scores: row.scores.map((score) => ({ ...score, createdAt: score.createdAt.toISOString() })),
     reviews: row.reviews.map((review) => ({ ...review, submittedAt: review.submittedAt?.toISOString() ?? null, createdAt: review.createdAt.toISOString() })),
-    assignments: row.assignments.map((assignment) => ({ ...assignment, createdAt: assignment.createdAt.toISOString() })),
+    assignments: row.assignments.map((assignment) => ({ ...assignment, createdAt: assignment.createdAt.toISOString(), recusedAt: assignment.recusedAt?.toISOString() ?? null })),
     awardWins: row.awardWins,
     roundEntries: row.roundEntries.map(({ round, ...entry }) => ({ ...entry, advancedAt: entry.advancedAt.toISOString(), roundOpened: round.status !== JudgingRoundStatus.DRAFT })),
   };
@@ -221,7 +222,14 @@ export async function restoreSubmissionSnapshotTx(
   const assignments = snapshot.assignments.filter((assignment) => liveUsers.has(assignment.judgeUserId) && roundLive(assignment.roundId));
   if (assignments.length > 0) {
     await tx.judgeAssignment.createMany({
-      data: assignments.map((assignment) => ({ eventId: owner.eventId, roundId: assignment.roundId ?? firstRoundId, judgeUserId: assignment.judgeUserId, submissionId: snapshot.id, createdAt: new Date(assignment.createdAt) })),
+      data: assignments.map((assignment) => ({
+        eventId: owner.eventId,
+        roundId: assignment.roundId ?? firstRoundId,
+        judgeUserId: assignment.judgeUserId,
+        submissionId: snapshot.id,
+        createdAt: new Date(assignment.createdAt),
+        recusedAt: assignment.recusedAt ? new Date(assignment.recusedAt) : null,
+      })),
       skipDuplicates: true,
     });
   }

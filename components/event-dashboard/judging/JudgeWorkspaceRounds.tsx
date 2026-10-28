@@ -7,6 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { JudgingRoundSwitcher } from "@/components/event-dashboard/panels/JudgingRoundSwitcher";
 import type { JudgeRoundDto, JudgeWorkspaceDto } from "@/lib/judgingDto";
 import { JudgeWorkspaceClient } from "./JudgeWorkspaceClient";
+import { RecusedProjects } from "./JudgeWorkspaceClient/Recusal";
 import type { WorkspaceAudience } from "./judgeProgress";
 
 /**
@@ -72,6 +73,9 @@ export function JudgeWorkspaceRounds({
           criteria={shown.criteria}
           initialPage={{ submissions: shown.submissions, nextCursor: shown.nextCursor, counts: shown.counts }}
         />
+      ) : null}
+      {shown && !loading ? (
+        <RecusedProjects scope={{ organisationSlug, eventId }} recusals={shown.recusals} canUndo={shown === workspace && shown.judgingStatus === "OPEN"} />
       ) : null}
     </div>
   );

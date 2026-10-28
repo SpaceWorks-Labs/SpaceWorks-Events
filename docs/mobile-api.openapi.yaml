@@ -768,6 +768,39 @@ paths:
         "429": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/submissions/{submissionId}/recusal:
+    post:
+      tags: [Judging]
+      summary: Recuse yourself from an assigned project
+      description: |
+        As the web "Recuse myself": the project leaves this judge's list and
+        doesn't count towards coverage, and organisers see the recusal.
+        Only for a project assigned to this judge in the open round, before
+        their review of it is submitted. Idempotent. Refusals:
+        `JUDGING_CLOSED` (409), `NOT_VISIBLE` (404, not assigned to you in
+        the open round), `CONFLICT` (409, your review of it is submitted).
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Judging]
+      summary: Undo a recusal
+      description: The project returns to this judge's list while the round is open. Idempotent. Refusals as for `POST`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
   /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in/preview:
     post:
       tags: [Check-in]

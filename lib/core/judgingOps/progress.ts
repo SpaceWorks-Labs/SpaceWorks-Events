@@ -8,6 +8,7 @@ import { listRoundJudges } from "@/lib/core/judging/judges";
 import { conflictedPairs, judgeWorkOnSubmitted } from "@/lib/core/judging/judgeWork";
 import { judgingStatusFor, resolveJudgingRound, roundProjectsWhere } from "@/lib/core/judging/rounds/scope";
 import { freshEyesBlockedPairs } from "@/lib/core/judging/rounds/freshEyes";
+import { recusedPairs } from "@/lib/core/judging/recusal";
 import { entrantDisplayName } from "@/lib/judgingDto";
 import { judgeWeightedPercent } from "@/lib/judgingScore";
 import { pairKey } from "@/lib/judgingAssignment";
@@ -75,6 +76,14 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date, round
   const conflicted = conflictedPairs(projects, conflicts);
   const projectById = new Map(projects.map((row) => [row.id, row]));
   for (const key of await freshEyesBlockedPairs(prisma, round)) if (projectById.has(key.slice(key.indexOf("\u0000") + 1))) conflicted.add(key);
+  // A judge's recusal (lib/core/judging/recusal.ts) counts like a missing review: the pair leaves coverage and the judge's expected work.
+  const recusedByJudge = new Map<string, number>();
+  for (const key of await recusedPairs(prisma, round)) {
+    const [judgeUserId, submissionId] = key.split("\u0000") as [string, string];
+    if (!projectById.has(submissionId)) continue;
+    conflicted.add(key);
+    recusedByJudge.set(judgeUserId, (recusedByJudge.get(judgeUserId) ?? 0) + 1);
+  }
   // A pair counts only when the judge can still judge the event and has no conflict with that entrant.
   const valid = (judgeUserId: string, submissionId: string) =>
     projectById.has(submissionId) && judgeById.has(judgeUserId) && !conflicted.has(pairKey(judgeUserId, submissionId));
@@ -183,6 +192,7 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date, round
       assigned: expected,
       started,
       submitted: submittedSet.size,
+      recused: recusedByJudge.get(judge.userId) ?? 0,
       completion: completionPercent(done, expected),
     });
   }

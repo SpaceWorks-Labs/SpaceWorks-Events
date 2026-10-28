@@ -7,6 +7,7 @@ import type { JudgeSubmissionFilter } from "@/lib/judgingPaging";
 import { type ConflictKeys, conflictKeysFor, hasConflictOfInterest } from "./judges";
 import { type JudgingRoundScope, onRoundPanel, roundProjectsSql, roundProjectsWhere, roundScoreSql } from "./rounds/scope";
 import { freshEyesSql, freshEyesWhere } from "./rounds/freshEyes";
+import { notRecusedSql, notRecusedWhere } from "./recusal";
 
 type VisibilityRound = Pick<JudgingRoundScope, "id" | "eventId" | "entrySource" | "judgesSeeAll" | "panelUserIds" | "position" | "freshEyes">;
 
@@ -14,8 +15,8 @@ type VisibilityRound = Pick<JudgingRoundScope, "id" | "eventId" | "entrySource" 
  * Submissions this judge may see in a round: the round's projects (SUBMITTED;
  * advanced into it for an ADVANCED round), assigned in that round unless
  * judgesSeeAll, on the round's panel when it has one, not reviewed by
- * this judge in an earlier round when the round has fresh eyes on, and no
- * conflict of interest.
+ * this judge in an earlier round when the round has fresh eyes on, not one
+ * they recused from in this round (./recusal.ts), and no conflict of interest.
  */
 export async function visibleSubmissionIds(client: Prisma.TransactionClient, round: VisibilityRound, judgeUserId: string, onlyId?: string) {
   if (!onRoundPanel(round, judgeUserId)) return [];
@@ -24,7 +25,7 @@ export async function visibleSubmissionIds(client: Prisma.TransactionClient, rou
       ...roundProjectsWhere(round),
       ...(onlyId ? { id: onlyId } : {}),
       ...(round.judgesSeeAll ? {} : { assignments: { some: { judgeUserId, roundId: round.id } } }),
-      ...freshEyesWhere(round, judgeUserId),
+      AND: [freshEyesWhere(round, judgeUserId), notRecusedWhere(round, judgeUserId)],
     },
     select: { id: true, teamId: true, rsvpId: true },
   });
@@ -44,6 +45,7 @@ export function judgeVisibleSql(round: VisibilityRound, judgeUserId: string, con
   }
   const freshEyes = freshEyesSql(round, judgeUserId);
   if (freshEyes) conditions.push(freshEyes);
+  conditions.push(notRecusedSql(round, judgeUserId));
   const teamIds = [...(conflicts?.teamIds ?? [])];
   const rsvpIds = [...(conflicts?.rsvpIds ?? [])];
   if (teamIds.length) conditions.push(Prisma.sql`(s."teamId" IS NULL OR s."teamId" NOT IN (${Prisma.join(teamIds)}))`);
