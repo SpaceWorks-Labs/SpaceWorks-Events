@@ -117,6 +117,11 @@ const fixtures: Array<[file: string, component: string, zod: z.ZodType]> = [
   ["check-in-lists.json", "CheckInListsResponse", dto.successEnvelope(dto.checkInListsDtoSchema)],
   ["error-staff-mfa.json", "ErrorEnvelope", dto.errorEnvelopeSchema],
   ["crew.json", "CrewListResponse", dto.successEnvelope(dto.crewListDtoSchema)],
+  // Volunteer shifts (docs/VOLUNTEERS.md).
+  ["my-shifts.json", "MyShiftsResponse", dto.successEnvelope(dto.myShiftsDtoSchema.nullable())],
+  ["volunteer-roster.json", "VolunteerRosterResponse", dto.successEnvelope(dto.volunteerRosterDtoSchema)],
+  ["volunteer-signup-write.json", "VolunteerSignupWriteResponse", dto.successEnvelope(dto.volunteerSignupWriteDtoSchema)],
+  ["volunteer-hours-write.json", "VolunteerHoursWriteResponse", dto.successEnvelope(dto.volunteerHoursWriteDtoSchema)],
   ["judge-rounds.json", "JudgeRoundsResponse", dto.successEnvelope(dto.judgeRoundsDtoSchema)],
   ["participant-desk.json", "ParticipantDeskResponse", dto.successEnvelope(dto.participantDeskDtoSchema)],
   ["mentor-console.json", "MentorConsoleResponse", dto.successEnvelope(dto.mentorConsoleDtoSchema)],
@@ -263,6 +268,9 @@ describe("mobile API contract", () => {
     ["ListCheckInResult", dto.listCheckInResultSchema],
     ["CrewMember", dto.crewMemberSchema],
     ["CrewList", dto.crewListDtoSchema],
+    // Volunteer shifts (docs/VOLUNTEERS.md).
+    ["MyShift", dto.myShiftSchema], ["MyShifts", dto.myShiftsDtoSchema], ["RosterSignup", dto.rosterSignupSchema], ["RosterShift", dto.rosterShiftSchema],
+    ["Contributor", dto.contributorSchema], ["VolunteerRoster", dto.volunteerRosterDtoSchema], ["VolunteerSignupWrite", dto.volunteerSignupWriteDtoSchema], ["VolunteerHoursWrite", dto.volunteerHoursWriteDtoSchema],
     ["JudgeRound", dto.judgeRoundSchema],
     ["JudgeRounds", dto.judgeRoundsDtoSchema],
     ["JudgingRoundsSummary", dto.judgingRoundsSummaryDtoSchema],

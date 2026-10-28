@@ -3,6 +3,7 @@ import "server-only";
 import type { EventPermission } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
+import { linkCrewAccount } from "@/lib/core/crew/shared";
 import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
 
 export type InviteAcceptance =
@@ -63,6 +64,8 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
       // A MENTOR grant gets its Mentor Desk profile (docs/MENTOR_DESK.md); it never creates an order.
       await syncMentorGrantLocked(tx, invite.eventId, user.id, before?.permissions ?? [], invite.permissions, user.id);
       mentorGrant = { eventId: invite.eventId, userId: user.id, before: before?.permissions ?? [], after: invite.permissions };
+      // The invited email may also be on the event crew: link that crew record to this account (docs/VOLUNTEERS.md).
+      await linkCrewAccount(tx, user.id, invite.email, invite.eventId);
     } else if (invite.eventSeriesId) {
       await tx.eventCollaborator.upsert({
         where: { eventSeriesId_userId: { eventSeriesId: invite.eventSeriesId, userId: user.id } },

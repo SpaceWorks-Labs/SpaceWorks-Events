@@ -1,0 +1,93 @@
+{
+  "ok": true,
+  "data": {
+    "enabled": true,
+    "isAdmin": true,
+    "timeZone": "Europe/London",
+    "shifts": [
+      {
+        "id": "shift_1",
+        "title": "Registration desk",
+        "zone": "Hall A",
+        "task": "Badges",
+        "startsAt": "2035-01-01T09:00:00.000Z",
+        "endsAt": "2035-01-01T12:00:00.000Z",
+        "signupDeadline": "2035-01-01T09:00:00.000Z",
+        "graceMinutes": 15,
+        "requiresApproval": true,
+        "capacity": 2,
+        "waitlistEnabled": true,
+        "closed": false,
+        "approved": 1,
+        "signups": [
+          {
+            "id": "signup_1",
+            "crewMemberId": "crew_1",
+            "name": "Ada Lovelace",
+            "kind": "VOLUNTEER",
+            "status": "APPROVED",
+            "attendance": "CHECKED_OUT",
+            "queuedAt": "2034-12-20T10:00:00.000Z",
+            "checkedInAt": "2035-01-01T08:55:00.000Z",
+            "checkedOutAt": "2035-01-01T11:40:00.000Z",
+            "breakMinutes": 15,
+            "hours": {
+              "id": "hours_1",
+              "minutes": 150,
+              "state": "PENDING"
+            },
+            "isViewer": false
+          },
+          {
+            "id": "signup_2",
+            "crewMemberId": "crew_2",
+            "name": "Grace Hopper",
+            "kind": "MENTOR",
+            "status": "WAITLISTED",
+            "attendance": "SCHEDULED",
+            "queuedAt": "2034-12-21T10:00:00.000Z",
+            "checkedInAt": null,
+            "checkedOutAt": null,
+            "breakMinutes": 0,
+            "hours": null,
+            "isViewer": false
+          }
+        ]
+      }
+    ],
+    "contributors": [
+      {
+        "crewMemberId": "crew_1",
+        "name": "Ada Lovelace",
+        "kind": "VOLUNTEER",
+        "role": "Registration desk",
+        "verifiedMinutes": 0,
+        "pendingHours": 1,
+        "certificate": null,
+        "eligible": false,
+        "isViewer": false,
+        "claims": {
+          "open": 1,
+          "total": 2
+        }
+      },
+      {
+        "crewMemberId": "crew_2",
+        "name": "Grace Hopper",
+        "kind": "MENTOR",
+        "role": "Mentor",
+        "verifiedMinutes": 0,
+        "pendingHours": 0,
+        "certificate": {
+          "issuedAt": "2035-01-02T10:00:00.000Z"
+        },
+        "eligible": true,
+        "isViewer": false,
+        "claims": {
+          "open": 0,
+          "total": 0
+        }
+      }
+    ]
+  }
+}

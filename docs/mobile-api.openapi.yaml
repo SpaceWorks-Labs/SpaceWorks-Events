@@ -44,6 +44,7 @@ tags:
   - name: Finance
   - name: Mentor Desk
   - name: Mentor console
+  - name: Volunteers
 
 paths:
   /api/mobile/v1/auth/login:
@@ -1962,6 +1963,92 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
+  /api/mobile/v1/me/registrations/{rsvpId}/shifts:
+    get:
+      tags: [Volunteers]
+      summary: The caller's volunteer shifts on their own crew ticket (null when the event has no shifts on)
+      description: The crew ticket must belong to the caller's account, or its crew record be linked to it (docs/VOLUNTEERS.md). `certificateUrl` is the caller's own contributor certificate download, a bearer capability.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyShiftsResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/registrations/{rsvpId}/shifts/{id}/{action}:
+    post:
+      tags: [Volunteers]
+      summary: Sign up for a shift (apply, with a shift id), or withdraw, check in or check out (with one of the caller's sign-up ids)
+      parameters:
+        - { $ref: "#/components/parameters/rsvpId" }
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: action, in: path, required: true, schema: { type: string, enum: [apply, withdraw, check-in, check-out] } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyShiftsResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/volunteer-shifts:
+    get:
+      tags: [Organiser]
+      summary: Volunteer shifts, sign-ups, attendance, hours and contributors (MANAGE_REGISTRATIONS)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VolunteerRosterResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/volunteer-shifts/signups/{signupId}/{action}:
+    post:
+      tags: [Organiser]
+      summary: Approve, decline or cancel a sign-up, or the attendance desk (check-in, check-out, no-show) (MANAGE_REGISTRATIONS)
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { $ref: "#/components/parameters/eventId" }
+        - { name: signupId, in: path, required: true, schema: { type: string } }
+        - { name: action, in: path, required: true, schema: { type: string, enum: [approve, decline, cancel, check-in, check-out, no-show] } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action, scoped to this path; a retry with the same key and body replays the first answer." }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: { occurredAt: { type: string, format: date-time, description: "Desk only: an earlier time (needs reason)." }, reason: { type: string, maxLength: 500 }, breakMinutes: { type: integer, minimum: 0, maximum: 720, description: Check-out only. } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VolunteerSignupWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/volunteer-shifts/hours/{hoursId}/{action}:
+    post:
+      tags: [Organiser]
+      summary: Verify pending hours, or adjust verified hours with minutes and a reason (organisation owners and admins; never their own hours)
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { $ref: "#/components/parameters/eventId" }
+        - { name: hoursId, in: path, required: true, schema: { type: string } }
+        - { name: action, in: path, required: true, schema: { type: string, enum: [verify, adjust] } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action, scoped to this path; a retry with the same key and body replays the first answer." }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: { minutes: { type: integer, minimum: 0, maximum: 1440 }, reason: { type: string, maxLength: 500 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VolunteerHoursWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
   /api/ticket/{token}/status:
     get:
       tags: [Reused web endpoints]
@@ -3548,3 +3635,133 @@ components:
     MentorSlotsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MentorSlots" } } }
     DeskQueueResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/DeskQueue" } } }
     MentoringEvent: { type: object, additionalProperties: false, required: [organisation, eventId, eventTitle, startDateTime, endDateTime, timezone], properties: { organisation: { type: object, additionalProperties: false, required: [slug, name], properties: { slug: { type: string }, name: { type: string } } }, eventId: { type: string }, eventTitle: { type: string }, startDateTime: { $ref: "#/components/schemas/DateTime" }, endDateTime: { $ref: "#/components/schemas/DateTime" }, timezone: { type: string } } }
+    VolunteerSignupStatus: { type: string, enum: [APPLIED, WAITLISTED, APPROVED, WITHDRAWN, DECLINED] }
+    VolunteerAttendance: { type: string, enum: [SCHEDULED, CHECKED_IN, CHECKED_OUT, NO_SHOW] }
+    VolunteerHoursState: { type: string, enum: [PENDING, VERIFIED, ADJUSTED] }
+    CrewKind: { type: string, enum: [ORGANISER, VOLUNTEER, MENTOR, JUDGE], description: Display only; never grants anything. }
+    MyShift:
+      type: object
+      additionalProperties: false
+      required: [id, title, zone, task, startsAt, endsAt, signupDeadline, graceMinutes, requiresApproval, open, placesLeft, checkInOpen, signup]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        zone: { type: string }
+        task: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        signupDeadline: { type: string, format: date-time }
+        graceMinutes: { type: integer }
+        requiresApproval: { type: boolean }
+        open: { type: boolean, description: Taking sign-ups now. }
+        placesLeft: { type: [integer, "null"], description: Null when the shift has no limit. }
+        checkInOpen: { type: boolean, description: Check-in is open now (from the grace period before the start until the end). }
+        signup:
+          oneOf:
+            - type: "null"
+            - type: object
+              additionalProperties: false
+              required: [id, status, attendance, checkedInAt, checkedOutAt, minutes, hoursState]
+              properties:
+                id: { type: string }
+                status: { $ref: "#/components/schemas/VolunteerSignupStatus" }
+                attendance: { $ref: "#/components/schemas/VolunteerAttendance" }
+                checkedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+                checkedOutAt: { $ref: "#/components/schemas/NullableDateTime" }
+                minutes: { type: [integer, "null"] }
+                hoursState: { oneOf: [{ $ref: "#/components/schemas/VolunteerHoursState" }, { type: "null" }] }
+    MyShifts:
+      type: object
+      additionalProperties: false
+      required: [timeZone, verifiedMinutes, certificateUrl, shifts]
+      properties:
+        timeZone: { type: string }
+        verifiedMinutes: { type: integer }
+        certificateUrl: { $ref: "#/components/schemas/NullableUrl" }
+        shifts: { type: array, items: { $ref: "#/components/schemas/MyShift" } }
+    MyShiftsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/MyShifts" }, { type: "null" }] } } }
+    RosterSignup:
+      type: object
+      additionalProperties: false
+      required: [id, crewMemberId, name, kind, status, attendance, queuedAt, checkedInAt, checkedOutAt, breakMinutes, hours, isViewer]
+      properties:
+        id: { type: string }
+        crewMemberId: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/CrewKind" }
+        status: { $ref: "#/components/schemas/VolunteerSignupStatus" }
+        attendance: { $ref: "#/components/schemas/VolunteerAttendance" }
+        queuedAt: { type: string, format: date-time }
+        checkedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+        checkedOutAt: { $ref: "#/components/schemas/NullableDateTime" }
+        breakMinutes: { type: integer }
+        hours:
+          oneOf:
+            - type: "null"
+            - { type: object, additionalProperties: false, required: [id, minutes, state], properties: { id: { type: string }, minutes: { type: integer }, state: { $ref: "#/components/schemas/VolunteerHoursState" } } }
+        isViewer: { type: boolean, description: The caller's own sign-up; they cannot verify these hours. }
+    RosterShift:
+      type: object
+      additionalProperties: false
+      required: [id, title, zone, task, startsAt, endsAt, signupDeadline, graceMinutes, requiresApproval, capacity, waitlistEnabled, closed, approved, signups]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        zone: { type: string }
+        task: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        signupDeadline: { type: string, format: date-time }
+        graceMinutes: { type: integer }
+        requiresApproval: { type: boolean }
+        capacity: { type: integer, description: 0 means no limit. }
+        waitlistEnabled: { type: boolean }
+        closed: { type: boolean }
+        approved: { type: integer }
+        signups: { type: array, items: { $ref: "#/components/schemas/RosterSignup" } }
+    Contributor:
+      type: object
+      additionalProperties: false
+      required: [crewMemberId, name, kind, role, verifiedMinutes, pendingHours, certificate, eligible, isViewer, claims]
+      properties:
+        crewMemberId: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/CrewKind" }
+        role: { type: string }
+        verifiedMinutes: { type: integer }
+        pendingHours: { type: integer }
+        certificate: { oneOf: [{ type: "null" }, { type: object, additionalProperties: false, required: [issuedAt], properties: { issuedAt: { type: string, format: date-time } } }] }
+        eligible: { type: boolean }
+        isViewer: { type: boolean }
+        claims: { type: object, additionalProperties: false, required: [open, total], properties: { open: { type: integer }, total: { type: integer } } }
+    VolunteerRoster:
+      type: object
+      additionalProperties: false
+      required: [enabled, isAdmin, timeZone, shifts, contributors]
+      properties:
+        enabled: { type: boolean }
+        isAdmin: { type: boolean, description: May verify and adjust hours. }
+        timeZone: { type: string }
+        shifts: { type: array, items: { $ref: "#/components/schemas/RosterShift" } }
+        contributors: { type: array, items: { $ref: "#/components/schemas/Contributor" } }
+    VolunteerRosterResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/VolunteerRoster" } } }
+    VolunteerSignupWrite:
+      type: object
+      additionalProperties: false
+      required: [signupId, status, attendance, minutes]
+      properties:
+        signupId: { type: string }
+        status: { $ref: "#/components/schemas/VolunteerSignupStatus" }
+        attendance: { $ref: "#/components/schemas/VolunteerAttendance" }
+        minutes: { type: [integer, "null"], description: Pending or verified minutes once checked out. }
+    VolunteerSignupWriteResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/VolunteerSignupWrite" } } }
+    VolunteerHoursWrite:
+      type: object
+      additionalProperties: false
+      required: [hoursId, state, minutes, revokedCertificate]
+      properties:
+        hoursId: { type: string }
+        state: { $ref: "#/components/schemas/VolunteerHoursState" }
+        minutes: { type: integer }
+        revokedCertificate: { type: boolean, description: An issued certificate was revoked because the hours changed. }
+    VolunteerHoursWriteResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/VolunteerHoursWrite" } } }

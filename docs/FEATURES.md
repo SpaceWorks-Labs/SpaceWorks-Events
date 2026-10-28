@@ -97,6 +97,7 @@ One-off events can register people in teams (hackathons, game jams, competitions
 ## Event crew
 
 One-off events can list their organising team. The design contract is [Event crew](CREW.md).
+When volunteer shifts are on, crew sign up for shifts from their crew ticket, check in and out of each shift, and get verified hours and a contributor certificate; see [Volunteer shifts](VOLUNTEERS.md).
 
 - Organisers add, edit, reorder, show or hide, and remove crew members (name, email, food preference, role, bio, photo, LinkedIn) in **Guests → Crew**, which also groups food preferences for catering.
 - Every crew member gets a free confirmed ticket by email ("You're on the crew", with the designed ticket), a **Crew** chip on the ticket page, at the check-in desk and on ID badges (with their role), and *Crew* on designed tickets. Crew count as going but never against the event's capacity or paid seat holds, never buy tickets, and never join teams or projects. Adding someone who registered for free turns their registration into the crew ticket and offers the freed place to the waitlist; bought tickets are never converted.

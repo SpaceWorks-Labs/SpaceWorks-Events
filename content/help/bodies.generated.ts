@@ -102,4 +102,7 @@ export const helpArticleBodies: Readonly<Record<string, () => Promise<{ default:
   "registration/team-registration": () => import("./registration/team-registration.mdx"),
   "troubleshooting/common-problems": () => import("./troubleshooting/common-problems.mdx"),
   "troubleshooting/faq": () => import("./troubleshooting/faq.mdx"),
+  "volunteers/contributor-certificates": () => import("./volunteers/contributor-certificates.mdx"),
+  "volunteers/my-shifts": () => import("./volunteers/my-shifts.mdx"),
+  "volunteers/shifts-and-hours": () => import("./volunteers/shifts-and-hours.mdx"),
 };

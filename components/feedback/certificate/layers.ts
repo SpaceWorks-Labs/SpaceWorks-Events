@@ -83,6 +83,8 @@ export function sampleValues(input: { name: string; eventTitle?: string; eventDa
     eventDate: input.eventDateLabel?.trim() || certificateMergeTags.eventDate.sample,
     organisation: input.organisationName?.trim() || certificateMergeTags.organisation.sample,
     issueDate: input.issueDate,
+    role: certificateMergeTags.role.sample,
+    hours: certificateMergeTags.hours.sample,
   };
 }
 

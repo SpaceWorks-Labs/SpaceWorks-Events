@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "data": {
+    "hoursId": "hours_1",
+    "state": "VERIFIED",
+    "minutes": 150,
+    "revokedCertificate": false
+  }
+}

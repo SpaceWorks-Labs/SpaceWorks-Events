@@ -19,17 +19,20 @@ webhooks.
 - Crew are never part of a team, never hackathon entrants, never buy a
   ticket, and never take part in the guest registration flows (see
   [What the other flows refuse](#what-the-other-flows-refuse)).
-- `EventCrewMember` is a person record with a ticket. Later work may add a
-  `kind` (volunteer, mentor) and an optional account link; the ticket rules
-  below stay the same.
+- `EventCrewMember` is a person record with a ticket. It has a `kind`
+  (`ORGANISER`, `VOLUNTEER`, `MENTOR`, `JUDGE`; default `VOLUNTEER`) for
+  display, badges and the crew list filter only, and an optional account
+  link (`userId`). Neither grants anything; the ticket rules below stay the
+  same. Volunteer shifts, hours and contributor certificates build on the
+  crew: see [Volunteer shifts](VOLUNTEERS.md).
 
 ## Data model
 
 | Model / field | Meaning |
 | --- | --- |
-| `EventCrewMember` | One crew member: `name`, `email` (trimmed, lowercase; unique per event), `foodPreference`, `role`, `bio`, `photoUrl`, `linkedinUrl`, `showOnPage`, `joinedViaLink`, `sortOrder`. Belongs to the event and to exactly one RSVP (`rsvpId`, unique), and cascades from both. |
+| `EventCrewMember` | One crew member: `name`, `email` (trimmed, lowercase; unique per event), `foodPreference`, `role`, `bio`, `photoUrl`, `linkedinUrl`, `showOnPage`, `joinedViaLink`, `sortOrder`, `kind` (display only), `userId` (optional account link, set null when the account is deleted; see [Volunteer shifts](VOLUNTEERS.md#data-model) for when it is set). Belongs to the event and to exactly one RSVP (`rsvpId`, unique), and cascades from both. |
 | `RSVP.isCrew` | Marks that RSVP as the member's crew ticket. |
-| `EventCrewJoinLink` | At most one per event: the crew sign-up `token` and its `createdAt`. Cascades with the event. |
+| `EventCrewJoinLink` | At most one per event: the crew sign-up `token`, the `kind` link sign-ups get (default `VOLUNTEER`), and its `createdAt`. Cascades with the event. |
 | `EventPageSectionType.CREW` | The public Crew section of the event page. |
 | `ExpenseClaimKind.CREW`, `Event.crewClaimsEnabled` | Crew expense claims (off by default). |
 
@@ -85,7 +88,8 @@ counts are shown) but never in *spots left* or *sold out*.
 - The check-in desk, scanner, details dialog, search results, offline roster
   and venue station show a **Crew** badge and the crew food preference.
 - ID badges: *Event crew* and *Confirmed attendees (no crew)* filters for
-  bulk sheets; a crew badge prints *Crew · Role* in the team slot and the crew
+  bulk sheets; a crew badge prints the kind and role (*Volunteer · Role*, or
+  the kind alone) in the team slot and the crew
   photo when it is a crew upload of the same organisation (storage key only).
 - The attendee CSV marks crew in the *Ticket* column (and *Team role* on
   team events), so columns keep their positions.

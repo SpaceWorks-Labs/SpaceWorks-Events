@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "data": {
+    "timeZone": "Europe/London",
+    "verifiedMinutes": 150,
+    "certificateUrl": "https://events.example.org/api/crew/certificate/cert_capability_example_0000000000000",
+    "shifts": [
+      {
+        "id": "shift_1",
+        "title": "Registration desk",
+        "zone": "Hall A",
+        "task": "Badges",
+        "startsAt": "2035-01-01T09:00:00.000Z",
+        "endsAt": "2035-01-01T12:00:00.000Z",
+        "signupDeadline": "2035-01-01T09:00:00.000Z",
+        "graceMinutes": 15,
+        "requiresApproval": true,
+        "open": false,
+        "placesLeft": 0,
+        "checkInOpen": false,
+        "signup": {
+          "id": "signup_1",
+          "status": "APPROVED",
+          "attendance": "CHECKED_OUT",
+          "checkedInAt": "2035-01-01T08:55:00.000Z",
+          "checkedOutAt": "2035-01-01T11:40:00.000Z",
+          "minutes": 150,
+          "hoursState": "VERIFIED"
+        }
+      },
+      {
+        "id": "shift_2",
+        "title": "Doors",
+        "zone": "",
+        "task": "",
+        "startsAt": "2035-01-01T13:00:00.000Z",
+        "endsAt": "2035-01-01T15:00:00.000Z",
+        "signupDeadline": "2035-01-01T12:30:00.000Z",
+        "graceMinutes": 10,
+        "requiresApproval": false,
+        "open": true,
+        "placesLeft": null,
+        "checkInOpen": false,
+        "signup": null
+      }
+    ]
+  }
+}

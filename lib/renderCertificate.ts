@@ -38,13 +38,15 @@ export function standardCertificateSvg(input: { organisationName: string; attend
 }
 
 /** Merge-tag values for one certificate; dates use the event's timezone. */
-export function certificateMergeValues(input: { name: string; eventTitle: string; eventStart: Date; timeZone: string; organisationName: string; issuedAt: Date }): CertificateMergeValues {
+export function certificateMergeValues(input: { name: string; eventTitle: string; eventStart: Date; timeZone: string; organisationName: string; issuedAt: Date; role?: string; hours?: string }): CertificateMergeValues {
   return {
     name: input.name,
     event: input.eventTitle,
     eventDate: formatDate(input.eventStart, input.timeZone),
     organisation: input.organisationName,
     issueDate: formatDate(input.issuedAt, input.timeZone),
+    role: input.role ?? "",
+    hours: input.hours ?? "",
   };
 }
 
