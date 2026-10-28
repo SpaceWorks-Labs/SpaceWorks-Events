@@ -29,7 +29,8 @@
           "crew": 0,
           "checkedIn": 12,
           "capacity": 80,
-          "capacityUsed": 42
+          "capacityUsed": 42,
+          "attendance": null
         },
         "myPermissions": {
           "checkIn": true,

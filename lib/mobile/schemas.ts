@@ -13,6 +13,8 @@ export * from "./schemas/events";
 export * from "./schemas/organiser";
 export * from "./schemas/judging";
 export * from "./schemas/commerce";
+export * from "./schemas/mentor";
+export * from "./schemas/attendance";
 export * from "./schemas/reimbursements";
 
 export type UserDto = z.infer<typeof userDtoSchema>;

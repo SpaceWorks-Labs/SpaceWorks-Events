@@ -17,6 +17,7 @@ New here? Start with [Features](FEATURES.md) for what it does, then [Local devel
 | [Features](FEATURES.md) | Current user-facing and administrative capabilities |
 | [Mobile API v1](MOBILE_API.md) | User-authenticated API for the Space Works apps (Android and iOS), with an [OpenAPI 3.1 spec](mobile-api.openapi.yaml) and [fixtures](mobile-api-fixtures/) |
 | [Team registration](TEAMS.md) | Design contract for team events: settings, capacity units, team status, join links, the team page, looking for a team, and organiser team actions |
+| [Attendance confirmation](ATTENDANCE.md) | "Are you still coming?": who is asked, sending and reminders, the guest's form, what a No releases on free and paid tickets, and what organisers see |
 | [Event crew](CREW.md) | Design contract for an event's organising team: free crew tickets outside capacity and payments, the crew sign-up link, the public Crew section, crew claims, and what the other flows refuse ([test conditions](CREW_TEST_CONDITIONS.md)) |
 | [Hackathon submissions, judging, and results](HACKATHON.md) | Design contract for hackathon events: project submissions and links, judges and conflicts of interest, the rubric and result score, awards, and published results |
 | [Paid tickets](PAYMENTS.md) | Turning paid events on, connecting Razorpay or Stripe, selling, refunds, receipts and reporting |

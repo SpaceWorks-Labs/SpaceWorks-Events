@@ -1,5 +1,6 @@
 import "server-only";
 
+import { loadAttendanceCounts } from "@/lib/mobile/attendance";
 import { RsvpStatus, type Membership, type Prisma } from "@prisma/client";
 import { decodeCursor, encodeCursor } from "@/lib/api/v1/pagination";
 import { getRegistrationDetails } from "@/lib/checkInDetails";
@@ -9,7 +10,7 @@ import { getMembership, isOrgAdmin } from "@/lib/permissions";
 import { attendeeDisplayName, eventSummarySelect, guestRsvpSelect, toEventSummary, toGuest } from "@/lib/mobile/dto";
 import type { EventCountsDto, EventPermissionsDto } from "@/lib/mobile/schemas";
 import { canSeeGuests, eventPermissionsFor } from "@/lib/mobile/permissions";
-import { hasNonJudgePermission } from "@/lib/judgingPermissions";
+import { hasOrganiserGrant } from "@/lib/mobile/permissions";
 
 export { canSeeGuests, eventPermissionsFor };
 import {
@@ -57,7 +58,7 @@ export async function resolveEventContext(userId: string, orgSlug: string, event
   // A JUDGE-only grant opens the judging workspace and nothing else: the
   // organiser routes treat it as no access, and the judging routes resolve
   // judges separately (lib/mobile/judging.ts, docs/HACKATHON.md).
-  if (!access.membership && !(grant && hasNonJudgePermission(grant.permissions))) return null;
+  if (!access.membership && !(grant && hasOrganiserGrant(grant.permissions))) return null;
   return {
     organisation: access.organisation,
     membership: access.membership,
@@ -66,8 +67,8 @@ export async function resolveEventContext(userId: string, orgSlug: string, event
   };
 }
 
-async function loadCounts(eventIds: string[]): Promise<Map<string, Omit<EventCountsDto, "capacity">>> {
-  const result = new Map<string, Omit<EventCountsDto, "capacity">>();
+async function loadCounts(eventIds: string[]): Promise<Map<string, Omit<EventCountsDto, "capacity" | "attendance">>> {
+  const result = new Map<string, Omit<EventCountsDto, "capacity" | "attendance">>();
   if (eventIds.length === 0) return result;
   const now = new Date();
   const [byStatus, checkedIn, teamed, teams, held, crew] = await Promise.all([
@@ -120,7 +121,7 @@ export async function listOrgEvents(userId: string, orgSlug: string, filter: "up
         select: { eventId: true, permissions: true },
       });
   // A JUDGE-only grant does not list the event here (judges find it in GET /me `judging`).
-  const visibleGrantEventIds = allGrants.filter((row) => hasNonJudgePermission(row.permissions)).map((row) => row.eventId!);
+  const visibleGrantEventIds = allGrants.filter((row) => hasOrganiserGrant(row.permissions)).map((row) => row.eventId!);
   if (!access.membership && visibleGrantEventIds.length === 0) return null;
   const grantByEvent = new Map(allGrants.map((grant) => [grant.eventId!, grant.permissions]));
 
@@ -137,13 +138,18 @@ export async function listOrgEvents(userId: string, orgSlug: string, filter: "up
     take: ORG_EVENTS_LIMIT,
   });
   const permissionsByEvent = new Map(events.map((event) => [event.id, eventPermissionsFor(access.membership?.role ?? null, grantByEvent.get(event.id) ?? [], { submissionsEnabled: event.submissionsEnabled })]));
-  const counts = await loadCounts(events.filter((event) => canSeeGuests(permissionsByEvent.get(event.id)!)).map((event) => event.id));
+  const counted = events.filter((event) => canSeeGuests(permissionsByEvent.get(event.id)!));
+  const [counts, attendance] = await Promise.all([
+    loadCounts(counted.map((event) => event.id)),
+    // Attendance replies follow the Overview rule: only viewers who may email guests.
+    loadAttendanceCounts(counted.filter((event) => permissionsByEvent.get(event.id)!.sendEmails).map((event) => event.id)),
+  ]);
   return orgEventsDtoSchema.parse({
     events: events.map((event) => {
       const eventCounts = counts.get(event.id);
       return {
         ...toEventSummary(event, baseUrl),
-        counts: eventCounts ? { ...eventCounts, capacity: event.capacity } : null,
+        counts: eventCounts ? { ...eventCounts, capacity: event.capacity, attendance: attendance.get(event.id) ?? null } : null,
         myPermissions: permissionsByEvent.get(event.id)!,
       };
     }),
@@ -165,6 +171,7 @@ export async function loadOrgEventDetail(ctx: MobileEventContext, baseUrl: strin
     },
   });
   const counts = canSeeGuests(ctx.permissions) ? (await loadCounts([event.id])).get(event.id) : undefined;
+  const attendance = counts && ctx.permissions.sendEmails ? (await loadAttendanceCounts([event.id])).get(event.id) ?? null : null;
   const window = registrationWindowState(event);
   return orgEventDetailDtoSchema.parse({
     event: {
@@ -178,7 +185,7 @@ export async function loadOrgEventDetail(ctx: MobileEventContext, baseUrl: strin
       eventUrl: `${baseUrl}/${event.organisation.slug}/${event.slug}`,
       shortUrl: event.shortCode ? `${baseUrl}/${event.shortCode}` : null,
     },
-    counts: counts ? { ...counts, capacity: event.capacity } : null,
+    counts: counts ? { ...counts, capacity: event.capacity, attendance } : null,
     myPermissions: ctx.permissions,
   });
 }

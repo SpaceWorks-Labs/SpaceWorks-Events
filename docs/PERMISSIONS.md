@@ -63,6 +63,8 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Overview: "See how it went" (ended) | Analytics visibility | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: list, filters, ticket links | `loadAttendeesFirstPage` / `loadAttendeesPage` only for `canManageRegistrations` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: approve, decline, give spot, add, edit, remove, undo remove | `app/actions/rsvp-lifecycle`, `app/actions/rsvp-admin.ts`: `canManageRegistrationsFor` | Yes | — | — | Yes | — | — | — | — | Yes |
+| Guests · People: attendance confirmation badge, note, filter and counts; CSV attendance columns ([ATTENDANCE.md](ATTENDANCE.md)) | same list query and attendee CSV route: admin or `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |
+| Guests · People: Share attendance link | `lib/core/attendanceCheck/link.ts`: admin (`canManageEvents`, as broadcasts) | Yes | — | — | — | — | — | — | — | — |
 | Guests · Crew ([Event crew](CREW.md)): list and food summary, add, edit, show/hide, reorder, remove, photo upload, sign-up link create/replace/turn off (`canManageCrew`) | `app/actions/crew.ts` via `resolveOrganiserEvent` (`lib/core/teams.ts`): `canManageRegistrationsFor` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: undo check-in | `app/actions/checkin.ts`: `CHECK_IN` | Yes | — | — | — | — | — | — | — | Yes |
 | Guests · People: Export CSV / Export emails (current filters) | `GET /api/exports/events/:id/attendees`, `…/attendee-emails`: admin or `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |
@@ -72,6 +74,7 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Event page · Page & programme: content editor | `app/actions/event-website.ts`: `EDIT_DETAILS` | Yes | — | Yes | — | — | — | — | — | Yes |
 | Event page · Page & programme: "Open schedule" | schedule page and actions: `PUBLISH_AND_SCHEDULE` | Yes | — | — | — | — | — | Yes | — | Yes |
 | Event page · Registration form | `app/actions/registration-form.ts`: `requireOrgRole(ADMIN)` | Yes | — | — | — | — | — | — | — | — |
+| Emails: Attendance confirmation card (preview, ask, ask newly confirmed, remind, release switch); Overview attendance line | `lib/core/attendanceCheck/*`: admin (`canManageEvents`, exactly as broadcasts) | Yes | — | — | — | — | — | — | — | — |
 | Emails: compose, test, send, history | `app/actions/broadcasts.ts`: admin | Yes | — | — | — | — | — | — | — | — |
 | Check-in: desk, counts, ID cards | `app/actions/checkin.ts`: `CHECK_IN` | Yes | — | — | — | — | Yes | — | — | Yes |
 | Check-in: check-in lists card, list switcher, scan/search into a list, undo, list guest view | `app/actions/checkin-lists.ts` over `lib/core/checkinLists.ts` (`checkInToListForUser`, `undoListCheckInForUser`, `lookupListAttendeesForUser`): `CHECK_IN` (`canCheckInToLists`) | Yes | — | — | — | — | Yes | — | — | Yes |

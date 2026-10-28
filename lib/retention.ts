@@ -15,7 +15,7 @@ export async function purgeExpiredOperationalData(now = new Date()) {
   );
   const sentBefore = new Date(now.getTime() - outboxRetentionDays * DAY_MS);
   const webhookBefore = new Date(now.getTime() - 30 * DAY_MS);
-  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents, webhookDeliveries, mobileSessions] = await prisma.$transaction([
+  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents, webhookDeliveries, mobileSessions, idempotencyKeys] = await prisma.$transaction([
     prisma.verificationToken.deleteMany({ where: { expires: { lt: now } } }),
     prisma.session.deleteMany({ where: { expires: { lt: now } } }),
     prisma.organisationInvite.deleteMany({ where: { usedAt: null, expiresAt: { lt: now } } }),
@@ -40,6 +40,8 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     prisma.mobileSession.deleteMany({
       where: { OR: [{ refreshExpiresAt: { lt: now } }, { revokedAt: { lt: new Date(now.getTime() - 7 * DAY_MS) } }] },
     }),
+    // Mobile idempotency keys past their day.
+    prisma.mobileIdempotencyKey.deleteMany({ where: { expiresAt: { lt: now } } }),
   ]);
   // Crew photos nobody saved within a day (docs/CREW.md); objects too, so outside the transaction.
   const unusedCrewPhotos = await purgeUnusedCrewPhotos(now);
@@ -54,6 +56,7 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     processedWebhookEvents: webhookEvents.count,
     webhookDeliveries: webhookDeliveries.count,
     mobileSessions: mobileSessions.count,
+    idempotencyKeys: idempotencyKeys.count,
     unusedCrewPhotos,
   };
 }

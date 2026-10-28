@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Dropdown, SearchInput } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
 import { GUEST_FILTERS, type GuestKindFilter, type GuestStatusFilter, type GuestTeamFilter } from "@/components/event-dashboard/guests/guestList";
-import type { AttendeeFilterCounts } from "@/lib/eventDashboard/attendees";
+import type { AttendeeAttendanceCounts, AttendeeFilterCounts } from "@/lib/eventDashboard/attendees";
+import { ATTENDEE_ATTENDANCE_FILTERS, type AttendeeAttendanceFilter } from "@/lib/attendeeListQuery";
+import { ATTENDANCE_STATE_LABELS } from "@/lib/attendanceCheck";
 import type { SavedViewDto, ViewParams } from "@/lib/savedViews";
 import { SavedViewsMenu } from "@/components/event-dashboard/views/SavedViewsMenu";
 import { FILTER_DOTS } from "./constants";
@@ -72,7 +74,7 @@ export function GuestsHeaderActions({
   );
 }
 
-/** Status chips with counts, the registration-type and team dropdowns, and the search box. */
+/** Status chips with counts, the registration-type, attendance and team dropdowns, and the search box. */
 export function GuestFilters({
   status,
   setStatus,
@@ -84,6 +86,9 @@ export function GuestFilters({
   setTeam,
   query,
   setQuery,
+  attendance,
+  setAttendance,
+  attendanceCounts,
 }: {
   status: GuestStatusFilter;
   setStatus: Dispatch<SetStateAction<GuestStatusFilter>>;
@@ -95,6 +100,10 @@ export function GuestFilters({
   setTeam: Dispatch<SetStateAction<GuestTeamFilter>>;
   query: string;
   setQuery: Dispatch<SetStateAction<string>>;
+  /** Attendance confirmation reply (docs/ATTENDANCE.md); null hides the dropdown. */
+  attendance: AttendeeAttendanceFilter | null;
+  setAttendance: (value: AttendeeAttendanceFilter) => void;
+  attendanceCounts: AttendeeAttendanceCounts | null;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
@@ -119,7 +128,7 @@ export function GuestFilters({
           );
         })}
       </div>
-      <div className="flex w-full min-w-0 flex-wrap gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
+      <div className="flex w-full min-w-0 flex-wrap gap-2 sm:ml-auto sm:w-auto xl:flex-nowrap">
         <div className="min-w-0 flex-1 sm:w-[160px] sm:flex-none">
           <label htmlFor="guest-kind" className="sr-only">Registration type</label>
           <Dropdown id="guest-kind" value={kind} onChange={(event) => setKind(event.target.value as GuestKindFilter)} className="py-2 sm:text-sm">
@@ -128,6 +137,19 @@ export function GuestFilters({
             <option value="users">Signed-in users</option>
           </Dropdown>
         </div>
+        {attendance != null ? (
+          <div className="min-w-0 flex-1 sm:w-[190px] sm:flex-none">
+            <label htmlFor="guest-attendance" className="sr-only">Attendance confirmation</label>
+            <Dropdown id="guest-attendance" value={attendance} onChange={(event) => setAttendance(event.target.value as AttendeeAttendanceFilter)} className="py-2 sm:text-sm">
+              {ATTENDEE_ATTENDANCE_FILTERS.map((value) => (
+                <option key={value} value={value}>
+                  {value === "all" ? "Any attendance reply" : ATTENDANCE_STATE_LABELS[value]}
+                  {attendanceCounts && value !== "all" ? ` (${attendanceCounts[value]})` : ""}
+                </option>
+              ))}
+            </Dropdown>
+          </div>
+        ) : null}
         {teamMode ? (
           <div className="min-w-0 flex-1 sm:w-[140px] sm:flex-none">
             <label htmlFor="guest-team" className="sr-only">Team</label>

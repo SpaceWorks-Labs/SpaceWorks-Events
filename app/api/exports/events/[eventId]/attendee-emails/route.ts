@@ -53,7 +53,7 @@ export async function GET(request: Request, context: RouteContext) {
     targetType: "Event",
     targetId: event.id,
     // Filter names only; the search text can contain personal data.
-    metadata: { format: "emails", status: view.status, kind: view.kind, team: view.team, searched: Boolean(view.query) },
+    metadata: { format: "emails", status: view.status, kind: view.kind, team: view.team, attendance: view.attendance, searched: Boolean(view.query) },
   });
 
   // Pull-based: the next batch is read only once the download has taken the last one.

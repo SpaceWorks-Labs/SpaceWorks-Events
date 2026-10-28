@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { attendanceCountsSchema } from "./attendance";
 import { attendanceSchema, iso, privacyTypeSchema, rsvpStatusSchema, url } from "./core";
 import { eventSummarySchema } from "./events";
 import { paymentInfoSchema } from "./commerce";
@@ -38,6 +39,8 @@ export const eventCountsSchema = z.object({
   capacity: z.number().int().nullable(),
   /** What `capacity` is compared with: confirmed RSVPs, or on TEAM events confirmed teams plus solo registrants. */
   capacityUsed: z.number().int(),
+  /** Attendance confirmation replies (docs/ATTENDANCE.md): only for viewers who may email guests, and null until anyone was asked. */
+  attendance: attendanceCountsSchema.nullable(),
 }).strict();
 
 export const orgEventsDtoSchema = z.object({

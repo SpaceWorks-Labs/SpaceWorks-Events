@@ -16,7 +16,7 @@ export const rsvpStatusSchema = z.enum(["CONFIRMED", "WAITLISTED", "PENDING_APPR
 export const eventStatusSchema = z.enum(["DRAFT", "PUBLISHED", "HIDDEN", "CANCELLED"]);
 export const privacyTypeSchema = z.enum(["PUBLIC", "HIDDEN_LINK", "APPROVAL_REQUIRED", "INVITE_ONLY"]);
 export const membershipRoleSchema = z.enum(["OWNER", "ADMIN", "MEMBER"]);
-export const eventPermissionSchema = z.enum(["EDIT_DETAILS", "MANAGE_REGISTRATIONS", "MANAGE_INVITATIONS", "CHECK_IN", "PUBLISH_AND_SCHEDULE", "JUDGE"]);
+export const eventPermissionSchema = z.enum(["EDIT_DETAILS", "MANAGE_REGISTRATIONS", "MANAGE_INVITATIONS", "CHECK_IN", "PUBLISH_AND_SCHEDULE", "JUDGE", "MENTOR"]);
 export const fieldTypeSchema = z.enum(["TEXT", "TEXTAREA", "EMAIL", "PHONE", "SELECT", "MULTI_SELECT", "RADIO", "CHECKBOX", "NUMBER", "DATE"]);
 export const attendanceSchema = z.enum(["ANY", "CHECKED_IN", "NOT_CHECKED_IN"]);
 export const registrationModeSchema = z.enum(["INDIVIDUAL", "TEAM"]);
@@ -29,7 +29,7 @@ export const mobileErrorCodeSchema = z.enum([
   "INCOMPLETE_SCORES", "NOT_VISIBLE", "INTERNAL_ERROR",
   // Space Works additions: staff authenticator, sign-in protections, payments.
   "STAFF_MFA_REQUIRED", "STAFF_MFA_ENROLMENT_REQUIRED", "EMAIL_CODE_REQUIRED", "TOO_MANY_ATTEMPTS", "REAUTH_REQUIRED",
-  "PAID_ORDER", "REGISTRATION_CLOSED", "PAYMENT_UNAVAILABLE", "PAYLOAD_TOO_LARGE",
+  "PAID_ORDER", "REGISTRATION_CLOSED", "PAYMENT_UNAVAILABLE", "PAYLOAD_TOO_LARGE", "IDEMPOTENCY_STALE",
 ]);
 
 export const errorEnvelopeSchema = z.object({
@@ -104,6 +104,8 @@ export const meDtoSchema = z.object({
   organisations: z.array(orgSummarySchema),
   collaborations: z.array(collaborationSchema),
   judging: z.array(judgingEventSchema),
+  /** Space Works: events this user mentors (a MENTOR grant, Mentor Desk on); the console is under orgs/:orgSlug/events/:eventId/mentor. */
+  mentoring: z.array(judgingEventSchema.omit({ judgingStatus: true }).strict()),
   /**
    * The staff authenticator rule for this app session: "ok", "verify" (POST
    * /auth/mfa with a code) or "enrol" (set an authenticator up on the website;

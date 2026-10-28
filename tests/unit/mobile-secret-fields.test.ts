@@ -52,6 +52,11 @@ describe("mobile DTO secrets", () => {
     expect(keysOf(schema).has("ticketToken")).toBe(false);
   });
 
+  it("walks into the mentor round's form questions and visit leases", () => {
+    const keys = keysOf(dto.mentorConsoleDtoSchema);
+    for (const key of ["label", "options", "leaseId", "generation"]) expect(keys.has(key)).toBe(true);
+  });
+
   it("never returns a ticket for a paid place not yet paid", () => {
     const paid = { rsvpId: "r1", status: "PENDING_PAYMENT", orderId: "o1", checkoutUrl: null, holdExpiresAt: null };
     expect(dto.rsvpResultDtoSchema.safeParse({ ...paid, ticketToken: null }).success).toBe(true);

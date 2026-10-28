@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "data": {
+    "response": "NOT_ATTENDING",
+    "released": false,
+    "releaseFailed": "Your ticket was paid for on an order the organisers manage, so nothing was cancelled automatically."
+  }
+}

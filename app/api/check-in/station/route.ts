@@ -8,6 +8,7 @@ import { getClientIpFromHeaders, checkRateLimitById } from "@/lib/rateLimit";
 import { CHECK_IN_STATION_COOKIE, createCheckInStationProof, hasValidCheckInStationProof, stationExpiresAt, stationOpensAt, verifyStationPin } from "@/lib/checkInStation";
 import { gateCheckInForStatus, parseCheckInPayload } from "@/lib/checkIn";
 import { crewDoorSelect, doorExtras, getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { deskAttendanceState } from "@/lib/attendanceCheck";
 import { commitCheckInProjection, commitUndoCheckInProjection } from "@/lib/checkInMutations";
 import { listRecentCheckIns } from "@/lib/checkInRecent";
 import { badgeBrandingFor, badgeDesignFor, loadBadgeEvent } from "@/lib/badge/data";
@@ -27,14 +28,15 @@ const bodySchema = z.object({
   if (value.action === "lookup" && !value.query) ctx.addIssue({ code: "custom", path: ["query"], message: "Search query is required." });
 });
 
+// The attendance confirmation badge travels to the station, never the guest's note (docs/ATTENDANCE.md).
 function failure(error = "Station access is unavailable.", status = 400) { return NextResponse.json({ ok: false, error }, { status }); }
 function attendeeLabel(r: { user: { name: string | null; email: string | null } | null; guestName: string | null; guestEmail: string | null }) {
   return r.user?.name?.trim() || r.guestName?.trim() || r.user?.email || r.guestEmail || "Guest";
 }
-const rsvpInclude = { user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } }, team: { select: { name: true } }, crewMember: crewDoorSelect, answers: { include: { field: { select: { key: true, label: true } } } } } as const;
+const rsvpInclude = { user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } }, team: { select: { name: true } }, crewMember: crewDoorSelect, attendanceCheck: { select: { response: true } }, answers: { include: { field: { select: { key: true, label: true } } } } } as const;
 type StationRsvp = Prisma.RSVPGetPayload<{ include: typeof rsvpInclude }>;
 function toData(rsvp: StationRsvp, force = false) {
-  return { rsvpId: rsvp.id, displayName: attendeeLabel(rsvp), email: rsvp.user?.email ?? rsvp.guestEmail, status: rsvp.status, alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt?.toISOString() ?? null, checkInQrToken: rsvp.checkInToken, checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember), registrationDetails: getRegistrationDetails(rsvp.answers), ...doorExtras(rsvp), photoUrl: attendeePhotoUrl(rsvp.user), gate: gateCheckInForStatus(rsvp.status, force) };
+  return { rsvpId: rsvp.id, displayName: attendeeLabel(rsvp), email: rsvp.user?.email ?? rsvp.guestEmail, status: rsvp.status, alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt?.toISOString() ?? null, checkInQrToken: rsvp.checkInToken, checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember), registrationDetails: getRegistrationDetails(rsvp.answers), ...doorExtras(rsvp), attendance: deskAttendanceState(rsvp.attendanceCheck), photoUrl: attendeePhotoUrl(rsvp.user), gate: gateCheckInForStatus(rsvp.status, force) };
 }
 
 export async function POST(request: Request) {
@@ -88,8 +90,8 @@ export async function POST(request: Request) {
     rsvp = await prisma.rSVP.findFirst({ where: { id: input.rsvpId, eventId: event.id }, include: rsvpInclude });
   }
   if (input.action === "lookup") {
-    const rows = await prisma.rSVP.findMany({ where: { eventId: event.id, OR: [{ guestName: { contains: input.query!, mode: "insensitive" } }, { guestEmail: { contains: input.query!, mode: "insensitive" } }, { user: { name: { contains: input.query!, mode: "insensitive" } } }, { user: { email: { contains: input.query!, mode: "insensitive" } } }] }, take: 12, orderBy: { createdAt: "desc" }, include: { user: { select: { name: true, email: true } }, team: { select: { name: true } } } });
-    return NextResponse.json({ ok: true, data: { rows: rows.map((r) => ({ rsvpId: r.id, displayName: attendeeLabel({ ...r, guestName: r.guestName }), email: r.user?.email ?? r.guestEmail, status: r.status, checkedInAt: r.checkedInAt?.toISOString() ?? null, ...doorExtras(r) })) } });
+    const rows = await prisma.rSVP.findMany({ where: { eventId: event.id, OR: [{ guestName: { contains: input.query!, mode: "insensitive" } }, { guestEmail: { contains: input.query!, mode: "insensitive" } }, { user: { name: { contains: input.query!, mode: "insensitive" } } }, { user: { email: { contains: input.query!, mode: "insensitive" } } }] }, take: 12, orderBy: { createdAt: "desc" }, include: { user: { select: { name: true, email: true } }, team: { select: { name: true } }, attendanceCheck: { select: { response: true } } } });
+    return NextResponse.json({ ok: true, data: { rows: rows.map((r) => ({ rsvpId: r.id, displayName: attendeeLabel({ ...r, guestName: r.guestName }), email: r.user?.email ?? r.guestEmail, status: r.status, checkedInAt: r.checkedInAt?.toISOString() ?? null, ...doorExtras(r), attendance: deskAttendanceState(r.attendanceCheck) })) } });
   }
   if (!rsvp) return failure("RSVP not found.");
   if (input.action === "undo") {

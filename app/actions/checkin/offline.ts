@@ -1,10 +1,11 @@
-import { Prisma, type RsvpStatus } from "@prisma/client";
+import { Prisma, type AttendanceResponse, type RsvpStatus } from "@prisma/client";
 import { gateCheckInForStatus } from "@/lib/checkIn";
 import { prisma } from "@/lib/db";
 import { offlineCheckInRosterSchema, syncOfflineCheckInsSchema } from "@/lib/validators";
 import type { ActionResult } from "../org";
 import { commitCheckInProjection } from "@/lib/checkInMutations";
 import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { deskAttendanceState } from "@/lib/attendanceCheck";
 import { attendeeLabel, requireOrgMemberForEvent, revalidatePath } from "./access";
 import type { OfflineCheckInRosterRow } from "../checkin";
 
@@ -26,14 +27,16 @@ export async function downloadOfflineCheckInRoster(
   const rosterStatuses: RsvpStatus[] = ["CONFIRMED", "WAITLISTED", "PENDING_APPROVAL"];
   const [rsvps, answers] = await Promise.all([
     prisma.$queryRaw<
-      Array<{ id: string; checkInToken: string; guestName: string | null; guestEmail: string | null; status: RsvpStatus; checkedInAt: Date | null; userId: string | null; userName: string | null; userEmail: string | null; teamName: string | null; isCrew: boolean; crewFood: string | null; }>
+      Array<{ id: string; checkInToken: string; guestName: string | null; guestEmail: string | null; status: RsvpStatus; checkedInAt: Date | null; userId: string | null; userName: string | null; userEmail: string | null; teamName: string | null; isCrew: boolean; crewFood: string | null; attendanceResponse: AttendanceResponse | null; attendanceAsked: boolean; }>
     >`
       SELECT r."id", r."checkInToken", r."guestName", r."guestEmail", r."status", r."checkedInAt", r."userId",
-        u."name" AS "userName", u."email" AS "userEmail", t."name" AS "teamName", r."isCrew", c."foodPreference" AS "crewFood"
+        u."name" AS "userName", u."email" AS "userEmail", t."name" AS "teamName", r."isCrew", c."foodPreference" AS "crewFood",
+        ac."response" AS "attendanceResponse", (ac."id" IS NOT NULL) AS "attendanceAsked"
       FROM "RSVP" r
       LEFT JOIN "User" u ON u."id" = r."userId"
       LEFT JOIN "Team" t ON t."id" = r."teamId"
       LEFT JOIN "EventCrewMember" c ON c."rsvpId" = r."id"
+      LEFT JOIN "AttendanceCheck" ac ON ac."rsvpId" = r."id"
       WHERE r."eventId" = ${ctx.event.id} AND r."status"::text IN (${Prisma.join(rosterStatuses)})
       ORDER BY r."createdAt" DESC`,
     prisma.rsvpAnswer.findMany({
@@ -66,6 +69,8 @@ export async function downloadOfflineCheckInRoster(
           checkInDetails: getCheckInDetails(rsvpAnswers, r.crewFood != null ? { foodPreference: r.crewFood } : null),
           registrationDetails: getRegistrationDetails(rsvpAnswers),
           teamName: r.teamName,
+          // The attendance reply only (docs/ATTENDANCE.md); never the note.
+          attendance: deskAttendanceState(r.attendanceAsked ? { response: r.attendanceResponse } : null),
           isCrew: r.isCrew,
         };
       }),

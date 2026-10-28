@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Callout, Chip } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { CheckInDetailsList, CheckInTimestamp, CrewChip, RegistrationDetailsList, StatusChip } from "./parts";
+import { AttendanceChip } from "@/components/attendance/AttendanceChip";
 
 /** Confirms a scanned or searched attendee before checking them in; Enter confirms. */
 export function ConfirmScanDialog({
@@ -48,6 +49,7 @@ export function ConfirmScanDialog({
               <div className="flex flex-wrap gap-1.5 pt-1">
                 <StatusChip status={scanPreview.status} />
                 <CrewChip data={scanPreview} />
+                <AttendanceChip state={scanPreview.attendance} />
                 {scanPreview.alreadyCheckedIn ? <Chip size="sm" tone="neutral">Already checked in</Chip> : null}
               </div>
               {!scanPreview.gate.ok ? <Callout tone={scanPreview.gate.blocked ? "danger" : "warning"}>{scanPreview.gate.reason}</Callout> : null}
@@ -97,6 +99,7 @@ export function AttendeeDetailsDialog({
               <div className="flex flex-wrap gap-1.5">
                 <StatusChip status={detailsAttendee.status} />
                 <CrewChip data={detailsAttendee} />
+                <AttendanceChip state={detailsAttendee.attendance} />
                 {detailsAttendee.alreadyCheckedIn ? <Chip size="sm" tone="success">Already checked in</Chip> : null}
               </div>
               {detailsAttendee.checkedInAt ? <p className="text-sm">Checked in: <CheckInTimestamp value={detailsAttendee.checkedInAt} /></p> : null}
