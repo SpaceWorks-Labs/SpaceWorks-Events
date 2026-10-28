@@ -3,7 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { enqueueVolunteerNotice } from "@/lib/outbox/volunteer";
 import { promoteLocked } from "./signups";
-import { NOT_FOUND, approvedCount, fail, lockShift, shiftInputSchema, type VolunteerResult, type VolunteerStaff } from "./shared";
+import { NOT_FOUND, approvedCount, fail, hasOverlappingDuty, lockCrewMembers, lockShift, shiftInputSchema, type VolunteerResult, type VolunteerStaff } from "./shared";
 
 /*
  * Shift setup (docs/VOLUNTEERS.md): organisers with the crew rule create,
@@ -47,6 +47,15 @@ export async function updateShift(staff: VolunteerStaff, shiftId: string, input:
     const windowChanged = data.startsAt.getTime() !== shift.startsAt.getTime() || data.endsAt.getTime() !== shift.endsAt.getTime() || data.graceMinutes !== shift.graceMinutes;
     if (windowChanged && (await tx.volunteerShiftSignup.count({ where: { shiftId: shift.id, attendance: { not: "SCHEDULED" } } })) > 0) {
       return fail("Work has started on this shift, so its times can no longer change.");
+    }
+    if (windowChanged) {
+      // Everyone with a place keeps one duty at a time: the new window must not overlap their other approved shifts.
+      const holders = await tx.volunteerShiftSignup.findMany({ where: { shiftId: shift.id, status: "APPROVED" }, select: { crewMemberId: true } });
+      const ids = holders.map((row) => row.crewMemberId);
+      await lockCrewMembers(tx, staff.eventId, ids);
+      let clashes = 0;
+      for (const id of ids) if (await hasOverlappingDuty(tx, id, { id: shift.id, startsAt: data.startsAt, endsAt: data.endsAt })) clashes += 1;
+      if (clashes > 0) return fail(`${clashes === 1 ? "1 volunteer" : `${clashes} volunteers`} with a place would then overlap another of their shifts. Cancel those places or choose other times.`);
     }
     const updated = await tx.volunteerShift.update({ where: { id: shift.id }, data });
     await promoteLocked(tx, updated, staff.organisationId, now);
