@@ -13,6 +13,8 @@ export type EventClientDto = Omit<Event,
   | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
+  // Volunteer shifts have their own view (lib/eventDashboard/volunteerShifts.ts).
+  | "volunteerShiftsEnabled" | "contributorCertificateTemplate"
 >;
 
 /** Copies only the DTO fields, so a full Event record never reaches the browser. */

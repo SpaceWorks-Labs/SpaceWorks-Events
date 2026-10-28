@@ -43,6 +43,8 @@ describe("event browser DTO", () => {
       participantClaimsEnabled: true,
       participantClaimCapMinor: null,
       crewClaimsEnabled: true,
+      volunteerShiftsEnabled: true,
+      contributorCertificateTemplate: null,
       ticketDesignId: null,
       submissionsEnabled: true,
       submissionsOpenAt: null,
