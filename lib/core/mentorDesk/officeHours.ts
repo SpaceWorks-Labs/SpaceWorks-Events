@@ -5,7 +5,9 @@ import "server-only";
  * bookings. Booking locks the team, then the slot: no overlapping booking
  * for the team, the mentor available for the whole slot, capacity counted
  * under the slot lock, and no team cancellation once the slot has started.
- * Every schedule change is logged with its reason (append-only).
+ * Every schedule change and cancellation is logged with its reason
+ * (append-only). Lock order: the mentor's grant (FOR SHARE), the teams, then
+ * the slot, as the grant removal takes the grant before the slots.
  */
 
 import { OfficeHourBookingStatus, Prisma } from "@prisma/client";
@@ -16,6 +18,7 @@ import { OFFICE_HOUR_BOOKED_KIND, OFFICE_HOUR_CANCELLED_KIND } from "@/lib/outbo
 import { notifyBooking, scheduleOf } from "./officeHourMail";
 import { deskEvent, liveMentor, liveParticipant, type DeskOrganiserContext, type MentorContext, type ParticipantContext } from "./access";
 import { localToDate } from "./configuration";
+import { hasApprovedShiftBetween } from "@/lib/volunteer/shared";
 import { isBlockedForTeam } from "./eligibility";
 import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockTeam, refuse } from "./shared";
 
@@ -34,6 +37,13 @@ async function lockSlot(tx: Prisma.TransactionClient, eventId: string, slotId: s
   const slot = await tx.officeHourSlot.findFirst({ where: { id: slotId, eventId } });
   if (!slot) refuse(COPY.notFound);
   return slot;
+}
+
+/** Takes the slot mentor's grant (FOR SHARE) before any team or slot lock; a slot's mentor never changes. */
+async function slotMentorFirst(tx: Prisma.TransactionClient, eventId: string, slotId: string) {
+  const slot = await tx.officeHourSlot.findFirst({ where: { id: slotId, eventId }, select: { mentorUserId: true } });
+  if (!slot) refuse(COPY.notFound);
+  return liveMentor(tx, eventId, slot.mentorUserId, { onShift: false });
 }
 
 /** Parses a slot window in the event's zone and checks it against the event, the mentor and their other slots. */
@@ -80,6 +90,7 @@ export async function rescheduleOfficeHourSlot(actor: Staff, input: unknown): Pr
   if (!parsed.success) return fail(COPY.invalid);
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, actor);
+    await slotMentorFirst(tx, event.id, parsed.data.slotId);
     // Lock order as everywhere: teams before the slot (booking takes them in that order too).
     const teams = await tx.officeHourBooking.findMany({ where: { slotId: parsed.data.slotId, eventId: event.id, status: OfficeHourBookingStatus.BOOKED }, select: { teamId: true }, orderBy: { teamId: "asc" } });
     for (const { teamId } of teams) await lockTeam(tx, teamId);
@@ -128,13 +139,16 @@ export async function bookOfficeHour(p: ParticipantContext, input: unknown): Pro
     const event = await deskEvent(tx, p);
     const { teamId } = await liveParticipant(tx, p);
     if (!teamId) refuse(COPY.teamOnly);
+    const mentor = await slotMentorFirst(tx, event.id, parsed.data.slotId);
     await lockTeam(tx, teamId);
     const slot = await lockSlot(tx, event.id, parsed.data.slotId);
     checkVersion(slot, parsed.data.expectedVersion);
     const now = new Date();
     if (slot.cancelledAt || slot.startsAt <= now || slot.bookingDeadline <= now) refuse(COPY.slotClosed);
-    const mentor = await liveMentor(tx, event.id, slot.mentorUserId, { onShift: false });
     if (!coversInterval(mentor.availability, slot.startsAt, slot.endsAt)) refuse(COPY.bookingConflict);
+    // A mentor on an approved volunteer shift at the time is unavailable (office_hours_workflow.book).
+    const crewMemberId = (await tx.mentorProfile.findUnique({ where: { id: mentor.profileId }, select: { crewMemberId: true } }))?.crewMemberId;
+    if (await hasApprovedShiftBetween(tx, event.id, { userId: slot.mentorUserId, crewMemberId }, slot.startsAt, slot.endsAt)) refuse(COPY.bookingConflict);
     if (await isBlockedForTeam(tx, event.id, slot.mentorUserId, teamId)) refuse(COPY.bookingConflict);
     const overlap = { eventId: event.id, status: OfficeHourBookingStatus.BOOKED, slot: { startsAt: { lt: slot.endsAt }, endsAt: { gt: slot.startsAt } } };
     if (await tx.officeHourBooking.findFirst({ where: { ...overlap, teamId }, select: { id: true } })) refuse(COPY.teamOverlap);
@@ -149,16 +163,20 @@ export async function bookOfficeHour(p: ParticipantContext, input: unknown): Pro
 
 /**
  * Cancels one booking only if it is still BOOKED (conditional update under the
- * slot lock), so two concurrent cancels never double-email or overwrite the reason.
+ * slot lock), so two concurrent cancels never double-email or overwrite the
+ * reason. The booking keeps the code; the log keeps the person's reason (or the code).
  */
-async function cancelBookedLocked(tx: Prisma.TransactionClient, bookingId: string, reason: string) {
-  const done = await tx.officeHourBooking.updateMany({ where: { id: bookingId, status: OfficeHourBookingStatus.BOOKED }, data: { status: OfficeHourBookingStatus.CANCELLED, cancelledAt: new Date(), cancelReason: reason } });
+async function cancelBookedLocked(tx: Prisma.TransactionClient, slot: Parameters<typeof scheduleOf>[0] & { id: string; eventId: string }, bookingId: string, code: string, actorUserId: string | null, reason: string) {
+  const done = await tx.officeHourBooking.updateMany({ where: { id: bookingId, status: OfficeHourBookingStatus.BOOKED }, data: { status: OfficeHourBookingStatus.CANCELLED, cancelledAt: new Date(), cancelReason: code } });
   if (done.count !== 1) refuse(COPY.stale);
+  await tx.officeHourChange.create({ data: { eventId: slot.eventId, slotId: slot.id, actorUserId, reason: reason || code, oldSchedule: scheduleOf(slot), newSchedule: { ...scheduleOf(slot), cancelledBookingId: bookingId } } });
 }
 
-/** The team cancels its own booking before the slot starts. */
+const bookingCancelSchema = z.object({ bookingId: z.string().min(1).max(128), reason: z.string().trim().max(OFFICE_HOUR_REASON_MAX_LENGTH).optional().default("") });
+
+/** The team cancels its own booking before the slot starts, with an optional reason. */
 export async function cancelOfficeHourBooking(p: ParticipantContext, input: unknown): Promise<DeskResult> {
-  const parsed = z.object({ bookingId: z.string().min(1).max(128) }).safeParse(input);
+  const parsed = bookingCancelSchema.safeParse(input);
   if (!parsed.success) return fail(COPY.invalid);
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, p, { allowDisabled: true });
@@ -167,22 +185,22 @@ export async function cancelOfficeHourBooking(p: ParticipantContext, input: unkn
     if (!booking || !teamId) refuse(COPY.notFound);
     const slot = await lockSlot(tx, event.id, booking.slotId);
     if (slot.startsAt <= new Date()) refuse(COPY.slotStarted);
-    await cancelBookedLocked(tx, booking.id, "team_cancelled");
+    await cancelBookedLocked(tx, slot, booking.id, "team_cancelled", p.userId, parsed.data.reason);
     await notifyBooking(tx, [booking.id], OFFICE_HOUR_CANCELLED_KIND);
     return undefined;
   });
 }
 
-/** An organiser cancels any booking, at any time. */
+/** An organiser cancels any booking, at any time, with an optional reason. */
 export async function cancelBookingAsOrganiser(ctx: DeskOrganiserContext, input: unknown): Promise<DeskResult> {
-  const parsed = z.object({ bookingId: z.string().min(1).max(128) }).safeParse(input);
+  const parsed = bookingCancelSchema.safeParse(input);
   if (!parsed.success) return fail(COPY.invalid);
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, ctx, { allowDisabled: true });
     const booking = await tx.officeHourBooking.findFirst({ where: { id: parsed.data.bookingId, eventId: event.id }, select: { id: true, slotId: true, status: true } });
     if (!booking) refuse(COPY.notFound);
-    await lockSlot(tx, event.id, booking.slotId);
-    await cancelBookedLocked(tx, booking.id, "organiser");
+    const slot = await lockSlot(tx, event.id, booking.slotId);
+    await cancelBookedLocked(tx, slot, booking.id, "organiser", ctx.userId, parsed.data.reason);
     await notifyBooking(tx, [booking.id], OFFICE_HOUR_CANCELLED_KIND);
     await recordAuditEvent({ client: tx, action: "MENTOR_OFFICE_HOUR_CANCELLED", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "OfficeHourBooking", targetId: booking.id });
     return undefined;

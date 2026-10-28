@@ -14,7 +14,8 @@ import { getRequestOrigin } from "@/lib/publicUrl";
 import { startOutboxWorker } from "@/lib/outboxWorker";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import type { ActionResult } from "./org";
-import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
+import { lockCollaborator, requireNoMentoringInProgress, syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
+import { DeskError } from "@/lib/core/mentorDesk/shared";
 import { syncMentorCrewAfterGrant } from "@/lib/core/mentorDesk/crewLink";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
@@ -33,6 +34,16 @@ const inviteSchema = targetFields
   .refine((v) => Boolean(v.eventId) !== Boolean(v.eventSeriesId))
   .refine(judgeOnlyOnEvents);
 
+
+/** Runs a grant change; a Mentor Desk refusal (work in progress) becomes the action's error. */
+async function mentorGrantChange<T>(run: () => Promise<T>): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  try {
+    return { ok: true, data: await run() };
+  } catch (error) {
+    if (error instanceof DeskError) return { ok: false, error: error.message };
+    throw error;
+  }
+}
 
 async function requireAdmin(orgSlug: string, userId: string) {
   const org = await prisma.organisation.findUnique({ where: { slug: orgSlug } });
@@ -88,11 +99,17 @@ export async function revokeEventCollaborator(input: unknown): Promise<ActionRes
       : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
   };
   // A revoked MENTOR grant ends its assignments and claims (docs/MENTOR_DESK.md).
-  const { deleted, existing } = await prisma.$transaction(async (tx) => {
-    const existing = await tx.eventCollaborator.findFirst({ where, select: { eventId: true, userId: true, permissions: true } });
-    if (existing?.eventId) await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, [], session.user!.id!);
+  // The row is locked first, so a mentor command in flight finishes before the cleanup (or sees the grant gone).
+  const outcome = await mentorGrantChange(() => prisma.$transaction(async (tx) => {
+    const existing = await lockCollaborator(tx, where);
+    if (existing?.eventId) {
+      if (existing.permissions.includes(EventPermission.MENTOR)) await requireNoMentoringInProgress(tx, existing.eventId, existing.userId);
+      await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, [], session.user!.id!);
+    }
     return { deleted: await tx.eventCollaborator.deleteMany({ where }), existing };
-  });
+  }));
+  if (!outcome.ok) return outcome;
+  const { deleted, existing } = outcome.data;
   if (deleted.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: [], actorUserId: session.user.id });
   if (!deleted.count) return { ok: false, error: "Collaborator not found." };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_REVOKED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId });
@@ -113,11 +130,16 @@ export async function updateEventCollaboratorPermissions(input: unknown): Promis
       ? { eventId: parsed.data.eventId, event: { organisationId: org.id } }
       : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
   };
-  const { updated, existing } = await prisma.$transaction(async (tx) => {
-    const existing = await tx.eventCollaborator.findFirst({ where, select: { eventId: true, userId: true, permissions: true } });
-    if (existing?.eventId) await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, parsed.data.permissions, session.user!.id!);
+  const outcome = await mentorGrantChange(() => prisma.$transaction(async (tx) => {
+    const existing = await lockCollaborator(tx, where);
+    if (existing?.eventId) {
+      if (existing.permissions.includes(EventPermission.MENTOR) && !parsed.data.permissions.includes(EventPermission.MENTOR)) await requireNoMentoringInProgress(tx, existing.eventId, existing.userId);
+      await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, parsed.data.permissions, session.user!.id!);
+    }
     return { updated: await tx.eventCollaborator.updateMany({ where, data: { permissions: parsed.data.permissions } }), existing };
-  });
+  }));
+  if (!outcome.ok) return outcome;
+  const { updated, existing } = outcome.data;
   if (updated.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: parsed.data.permissions, actorUserId: session.user.id });
   if (!updated.count) return { ok: false, error: "Collaborator not found." };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_PERMISSIONS_UPDATED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId, metadata: { permissions: parsed.data.permissions.join(",") } });

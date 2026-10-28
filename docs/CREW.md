@@ -194,6 +194,11 @@ member or link to the event and organisation, so ids from another tenant are
   submitted* (`lib/core/judging/entrantAuth.ts`,
   `lib/core/judging/entrantSubmissions.ts`, `lib/core/judgingEntrants.ts`).
   Prizes follow projects, so crew never win one.
+- The Mentor Desk as a participant: a crew ticket never raises, follows or
+  rates help or books office hours, on the website or the app
+  (`resolveParticipantForUser` and `liveParticipant` in
+  `lib/core/mentorDesk/access.ts` filter `isCrew: false`). A crew member who
+  is also a mentor uses the mentor console through their `MENTOR` grant.
 
 ## Code and tests
 

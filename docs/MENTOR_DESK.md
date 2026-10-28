@@ -26,7 +26,7 @@ Actions in `app/actions/mentor-desk.ts` (organisers),
 | --- | --- | --- |
 | Organisation OWNER/ADMIN | `resolveDeskOrganiser` (`getMembership`, staff MFA) | Everything: settings, mentors' profiles and conflicts, the queue (assign, release, resolve, reopen), assignments, office hours, categories, rounds and pools, the shortlist, the CSV (`canManageMentorDesk`) |
 | Mentor | An `EventCollaborator` grant with `MENTOR` (invited from Settings → Co-organisers), the staff authenticator check (`staffMfaSatisfied`), and a `MentorProfile` (`resolveMentorContext`) | The mentor console: my queue, my claim, my teams, my office hours, the live round's visits, my profile and declared conflicts (`canMentor`) |
-| Participant | The team's management link (`/team/:token`), or the signed-in owner of a CONFIRMED registration (`resolveParticipantForUser`) | Get help (raise, follow, comment, cancel, rate), the listed mentors, and for teams office-hour booking. A ticket link alone never raises help |
+| Participant | The team's management link (`/team/:token`), or the signed-in owner of a CONFIRMED registration that is not a crew ticket (`resolveParticipantForUser`; crew never use the desk as participants, [CREW.md](CREW.md)) | Get help (raise, follow, comment, cancel, rate), the listed mentors, and for teams office-hour booking. A ticket link alone never raises help |
 | Public | — | The event page's **Mentors** section: mentors who opted in (`showOnPage`), with name, bio and skills only |
 
 `MENTOR` is isolated exactly like `JUDGE`: no other permission check accepts
@@ -39,16 +39,23 @@ so they must use an authenticator app and pass the check each session
 or a registration.
 
 **Live eligibility.** Every mentor command re-reads, inside its transaction,
-the `MENTOR` grant and the profile (`liveMentor`). Queue and visit commands
+the `MENTOR` grant (locked `FOR SHARE`) and the profile (`liveMentor`). Queue and visit commands
 also require the mentor to be inside one of their availability windows:
 outside them they are *off shift* ("You are outside your mentoring
 availability."). An empty availability list means off duty. Profile edits,
 declared conflicts and nominations work off shift.
 
 **Grant lifecycle.** Accepting a `MENTOR` invite creates the profile
-(`syncMentorGrantLocked`, `lib/core/mentorDesk/grant.ts`). Removing the grant
-(a permission change or revoking the collaborator) ends the mentor's live
-assignments, returns their claims to the queue (activity `role_ended`),
+(`syncMentorGrantLocked`, `lib/core/mentorDesk/grant.ts`). Every grant change
+first locks the `EventCollaborator` row `FOR UPDATE` (`lockCollaborator`), so
+a mentor command in flight finishes first or sees the grant gone. Removing
+the grant is refused while one of the mentor's booked office hours is under
+way ("Work is in progress: a booked office hour with this mentor has
+started. …", Space Works `work_locked`). Otherwise removing it (a permission
+change or revoking the collaborator) ends the mentor's live assignments,
+returns their claims to the queue under each request's row lock (activity
+`role_ended`; a request resolved meanwhile is left alone, one past its
+deadline expires),
 cancels their future office-hour slots (logged as `role_withdrawn`) and those
 slots' bookings (the teams and the mentor get `office-hour-cancelled`), ends
 their visit leases, and removes them from round pools, except a pool where
@@ -91,7 +98,8 @@ exactly one), raised by the participant (origin `TEAM`), by a mentor on a
 team's behalf (`MENTOR`, the mentor must be eligible), or by a round trigger
 (`ROUND`). Summary 1–1000 characters, location up to 120. A team holds at most
 `openLimit` OPEN/CLAIMED requests per category (counted under the team row
-lock). `expiresAt` = min(now + expiry minutes, event end); the **deadline** is
+lock, or the solo registration's; a reopen takes the same lock before the
+request row). `expiresAt` = min(now + expiry minutes, event end); the **deadline** is
 min(expiresAt, event end) and is checked inside every command.
 
 States: `OPEN → CLAIMED → RESOLVED`, or `CANCELLED` (the team) or `EXPIRED`.
@@ -118,7 +126,8 @@ mentors claiming at once are serialised by the row lock, and the loser gets a
 version refusal. Every command checks `expectedVersion`. A lapsed claim is
 refused as "This help claim expired. Refresh the queue."
 
-**Eligibility** (`visitEligible`): never for the mentor's own team (or own
+**Eligibility** (`visitEligible`): only a CONFIRMED team or a CONFIRMED solo
+registration (never a crew ticket); never for the mentor's own team (or own
 solo registration), never with an active declared/affiliation conflict. An
 assigned mentor (an ACTIVE event-wide assignment, or one for the live round)
 always qualifies; while an assigned mentor's priority window is open (5
@@ -166,8 +175,15 @@ Modes (`lib/mentorDesk/allocation.ts`, deterministic and pure):
 
 Every mode skips team members, declared/affiliation conflicts, existing live
 mappings in the scope and full mentors (`maxActiveTeams`, counting event-wide
-mappings and the scope's). **Preview writes nothing** and shows the seed and
-an inputs fingerprint (SHA-256). **Apply** re-reads everything under the event
+mappings and the scope's). A team that already has a live (proposed or
+active) mapping in the scope is left out of the run and listed as *skipped*,
+so re-applying never stacks a second mentor on it (hand edits still can).
+Like Space Works, the preview leaves out mentors outside their availability
+right now, unless the organiser ticks *Include mentors outside their
+availability right now*. Closed and skipped rounds take no runs, activations
+or hand edits ("This round has closed."). **Preview writes nothing** and shows
+the seed and an inputs fingerprint (SHA-256, over the seed too; the seed is
+also in the run's audit metadata). **Apply** re-reads everything under the event
 lock, refuses if the fingerprint changed ("The mentors or teams changed;
 refresh the preview."), and records an append-only `MentorAssignmentRun`
 (mode, seed, fingerprint, decisions, uncovered teams). Activating a proposed
@@ -198,7 +214,9 @@ userIds)` (`lib/core/mentorDesk/eligibility.ts`) returns the teams each user
 mentored (an activated assignment, event-wide or in any round) or holds an
 active conflict with. A mentored team is a conflict in every judging round. It feeds judging's single conflict rule, `conflictKeysFor`
 (`lib/core/judging/judges.ts`), so those teams' projects are hidden from the
-judge, refused for assignment and not counted in results. Desk off: no effect.
+judge, refused for assignment and not counted in results. Desk off: no
+effect, unless an assignment was ever activated on the event; then the
+conflicts stay, so turning the desk off never clears mentoring that happened.
 
 ## Office hours
 
@@ -209,7 +227,9 @@ own; organisers open, cancel and reschedule anyone's.
 
 Booking (teams only: a team member signed in, or the management link) locks
 the team, then the slot: open, before the start and the deadline; the mentor
-still live and available for the whole slot and not conflicted; no
+still live and available for the whole slot, not conflicted and not on an
+approved [volunteer shift](VOLUNTEERS.md) at the time (through a crew place
+linked to their account or their mentor crew place); no
 overlapping booking for the team ("Your team has an overlapping booking.");
 the mentor not booked elsewhere at the time; capacity counted under the slot
 lock ("This slot is full."); one live booking per slot and team (partial
@@ -218,7 +238,10 @@ under the slot lock, so concurrent cancels email once. A reschedule must start
 in the future and keep every booked team free of overlaps and conflicts. Teams
 cancel until the slot starts ("Ask an organiser to cancel
 a started slot."); organisers cancel any time. Every reschedule or
-cancellation is logged with a reason in the append-only `OfficeHourChange`.
+cancellation is logged with a reason in the append-only `OfficeHourChange`:
+a slot change or cancellation needs one; a booking cancellation by the team
+or an organiser takes an optional reason (else its code, `team_cancelled` or
+`organiser`, which the booking's `cancelReason` always keeps).
 The team's members and the mentor get `office-hour-booked` (with a calendar
 invite, `lib/calendarInvite.ts`) and `office-hour-cancelled` emails.
 
@@ -227,7 +250,7 @@ invite, `lib/calendarInvite.ts`) and `office-hour-cancelled` emails.
 Rounds are stages of team check-in visits, **never judging**.
 `DRAFT → LIVE → CLOSED`, or `SKIPPED`; at most one LIVE round per event
 (partial unique index `MentoringRound_one_live`); opening only inside its
-window; closing ends every visit lease. While DRAFT, organisers set the
+window; closing (or skipping) locks the round, then ends every visit lease. While DRAFT, organisers set the
 window (inside the event), the round's own form (up to 12 text, rating 1–5,
 yes/no or choice questions; none can ask a date of birth or age), help
 triggers, and whether revisits or declared conflicts may be overridden with a
@@ -260,7 +283,9 @@ Transactional outbox kinds (`lib/outbox/mentor.ts`), ids only, rebuilt and
 re-checked at send time (dropped when they no longer apply or the recipient no
 longer belongs): `mentor-assigned`, `office-hour-booked`,
 `office-hour-cancelled`, and the optional `help-claimed` (Settings switch,
-`Event.mentorHelpClaimedEmail`; once per request, on its first claim). There
+`Event.mentorHelpClaimedEmail`; once per request, on its first claim; to the
+participant who raised it, or for a mentor- or round-raised request to the
+team leader or the solo registrant). There
 is no email per queue change.
 
 ## Surfaces
@@ -309,4 +334,8 @@ earlier visits are not shown to other mentors.
   cancel after start, one live round, visit leases, fresh eyes, away
   check-ins, nominations privacy, triggers, took part), and
   `mentor-desk-permissions` (MENTOR isolation, staff MFA, tenancy,
-  participant proof, grant lifecycle).
+  participant proof, grant lifecycle), `mentor-desk-followups`, and
+  `mentor-desk-audit` / `mentor-desk-audit-assign` (grant fencing and work in
+  progress, crew refused, help-claimed recipient, reopen races, round close
+  locks, closed rounds, skipped covered teams, off-shift preview, seed
+  fingerprint, volunteer-shift clashes, cancellation reasons).

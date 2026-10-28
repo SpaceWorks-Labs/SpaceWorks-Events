@@ -97,6 +97,8 @@ export async function transitionMentoringRound(ctx: DeskOrganiserContext, input:
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, ctx, { allowDisabled: parsed.data.action !== "open" });
     await lockEvent(tx, event.id);
+    // The round before its visits, as visit commands take them (round, then visit): no deadlock with a visit in flight.
+    await tx.$queryRaw`SELECT "id" FROM "MentoringRound" WHERE "id" = ${parsed.data.roundId} AND "eventId" = ${event.id} FOR UPDATE`;
     const row = await tx.mentoringRound.findFirst({ where: { id: parsed.data.roundId, eventId: event.id } });
     if (!row) refuse(COPY.notFound);
     checkVersion(row, parsed.data.expectedVersion);

@@ -93,6 +93,23 @@ export async function hasOverlappingDuty(tx: Prisma.TransactionClient, crewMembe
   return Boolean(clash);
 }
 
+/**
+ * Whether a person holds an approved shift on the event overlapping the
+ * interval, through a crew place linked to their account or the given one
+ * (a mentor's office hours never clash with their volunteer duty, docs/MENTOR_DESK.md).
+ */
+export async function hasApprovedShiftBetween(tx: Prisma.TransactionClient, eventId: string, person: { userId: string; crewMemberId?: string | null }, startsAt: Date, endsAt: Date) {
+  const clash = await tx.volunteerShiftSignup.findFirst({
+    where: {
+      eventId, status: "APPROVED",
+      crewMember: { OR: [{ userId: person.userId }, ...(person.crewMemberId ? [{ id: person.crewMemberId }] : [])] },
+      shift: { startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
+    },
+    select: { id: true },
+  });
+  return Boolean(clash);
+}
+
 export function approvedCount(tx: Prisma.TransactionClient, shiftId: string) {
   return tx.volunteerShiftSignup.count({ where: { shiftId, status: "APPROVED" } });
 }

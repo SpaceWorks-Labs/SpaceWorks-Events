@@ -31,6 +31,9 @@ import { GET as queue } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId
 import { POST as helpCommand } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/mentor/help/[requestId]/[command]/route";
 import { GET as deskQueue } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/mentor-desk/queue/route";
 import { GET as eventDetail } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/route";
+import { GET as mentorTeams } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/mentor/teams/route";
+import { POST as teamConflict } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/mentor/teams/[teamId]/conflict/route";
+import { POST as raiseForTeam } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/mentor/teams/[teamId]/help/route";
 
 let eventId = "";
 let memberToken = "";
@@ -114,6 +117,25 @@ describe.sequential("the Mentor Desk through the mobile API", () => {
     expect(view.data.requests).toHaveLength(1);
     expect(JSON.stringify(view)).not.toContain("@example.test");
     expect((await consoleView(get("/x", organiser), scope())).status).toBe(403);
+  });
+
+  it("lets a mentor raise help for a team and declare and clear a conflict, like the website", async () => {
+    const team = await prisma.team.findFirstOrThrow({ where: { eventId } });
+    const at = params({ orgSlug, eventId, teamId: team.id });
+    const body = { categoryKey: "code", summary: "Raised by a mentor" };
+    const raised = await raiseForTeam(keyed("/x", body, mentorB.token, "mentor-raise-01"), at);
+    expect(raised.status).toBe(201);
+    const { data } = await raised.json();
+    expect(await prisma.helpRequest.findUniqueOrThrow({ where: { id: data.id } })).toMatchObject({ origin: "MENTOR", teamId: team.id, raisedByUserId: mentorB.userId });
+    expect((await raiseForTeam(keyed("/x", body, mentorB.token, "mentor-raise-01"), at)).headers.get("idempotent-replayed")).toBe("true");
+    expect((await raiseForTeam(keyed("/x", body, memberToken, "member-raise-01"), at)).status).toBe(404);
+    expect((await teamConflict(keyed("/x", { active: true, expectedVersion: 0, reason: "Former colleague" }, mentorB.token, "conflict-on-01"), at)).status).toBe(200);
+    const view = await (await mentorTeams(get("/x", mentorB.token), scope())).json();
+    const conflict = view.data.conflicts.find((c: { teamId: string }) => c.teamId === team.id);
+    expect(conflict).toMatchObject({ kind: "DECLARED", mine: true });
+    expect(JSON.stringify(view)).not.toContain("Former colleague");
+    expect((await teamConflict(keyed("/x", { active: false, expectedVersion: conflict.version }, mentorB.token, "conflict-off-01"), at)).status).toBe(200);
+    expect(await prisma.mentorConflict.count({ where: { eventId, mentorUserId: mentorB.userId, active: true } })).toBe(0);
   });
 
   it("holds a mentor-only app session to a fresh authenticator check", async () => {

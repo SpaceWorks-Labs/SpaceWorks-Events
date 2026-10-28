@@ -20,16 +20,19 @@ const MODES = [
 /**
  * Mentors → Assignments: event-wide or per round (stage). Preview writes
  * nothing; Apply records the run, its seed and the teams left uncovered.
- * Conflicts, team membership, capacity and the round's pool always apply.
+ * Conflicts, team membership, capacity and the round's pool always apply;
+ * teams already mapped in the scope are skipped, and mentors outside their
+ * availability are left out unless the organiser includes them.
  */
 export function AssignmentsPanel({ scope, view }: { scope: DeskScope; view: DeskOrganiserView }) {
   const { pending, error, save } = useDeskSave();
   const [roundId, setRoundId] = useState("");
   const [mode, setMode] = useState<(typeof MODES)[number]["value"]>("SKILL_MATCH");
   const [proposed, setProposed] = useState(false);
+  const [includeOffShift, setIncludeOffShift] = useState(false);
   const [preview, setPreview] = useState<AssignmentPreview | null>(null);
   const scopeInput = { ...scope, roundId: roundId || null };
-  const runPreview = (seed?: string) => save(() => previewMentorAssignments({ ...scopeInput, mode, ...(seed ? { seed } : {}) }), "", (r) => setPreview("data" in r ? (r.data as AssignmentPreview) : null));
+  const runPreview = (seed?: string) => save(() => previewMentorAssignments({ ...scopeInput, mode, includeOffShift, ...(seed ? { seed } : {}) }), "", (r) => setPreview("data" in r ? (r.data as AssignmentPreview) : null));
   const roundLabel = (id: string | null) => (id ? view.rounds.find((r) => r.id === id)?.label ?? "Round" : "Event-wide");
   const live = view.assignments.filter((a) => a.status !== "ENDED" && (a.roundId ?? "") === roundId);
   return (
@@ -47,6 +50,7 @@ export function AssignmentsPanel({ scope, view }: { scope: DeskScope; view: Desk
           <Button variant="secondary" loading={pending} onClick={() => runPreview()}>Preview</Button>
         </div>
         <p className="text-caption text-ink-muted">{MODES.find((m) => m.value === mode)?.hint}</p>
+        <CheckboxField label="Include mentors outside their availability right now" checked={includeOffShift} onCheckedChange={(v) => { setIncludeOffShift(v === true); setPreview(null); }} />
         {preview ? (
           <div className="flex flex-col gap-2">
             {preview.seed ? (
@@ -59,9 +63,10 @@ export function AssignmentsPanel({ scope, view }: { scope: DeskScope; view: Desk
               {preview.assignments.map((a) => <li key={a.teamId} className="flex justify-between gap-3 py-1.5 text-body-ui"><span className="text-ink">{a.teamName}</span><span className="text-ink-secondary">{a.mentorName}</span></li>)}
             </ul>
             {preview.uncovered.length ? <p className="text-caption text-warning-fg">Left uncovered: {preview.uncovered.map((u) => u.teamName).join(", ")}</p> : null}
+            {preview.skipped.length ? <p className="text-caption text-ink-muted">Skipped, already assigned here: {preview.skipped.map((u) => u.teamName).join(", ")}</p> : null}
             <CheckboxField label="Propose only (activate each one later)" checked={proposed} onCheckedChange={(v) => setProposed(v === true)} />
             <Button variant="primary" className="self-start" loading={pending} disabled={preview.assignments.length === 0}
-              onClick={() => save(() => applyMentorAssignments({ ...scopeInput, mode: preview.mode, seed: preview.seed ?? undefined, fingerprint: preview.fingerprint, proposed }), "Assignments applied.", () => setPreview(null))}>
+              onClick={() => save(() => applyMentorAssignments({ ...scopeInput, mode: preview.mode, seed: preview.seed ?? undefined, includeOffShift, fingerprint: preview.fingerprint, proposed }), "Assignments applied.", () => setPreview(null))}>
               Apply {preview.assignments.length} assignments
             </Button>
           </div>

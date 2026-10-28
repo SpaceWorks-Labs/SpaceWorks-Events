@@ -117,12 +117,19 @@ describe.sequential("mentor desk assignments", () => {
     expect(teamIds).toHaveLength(2);
   });
 
-  it("makes a mentored team a judging conflict only while the desk is on", async () => {
-    const { event, teamIds } = await withTeams(1);
+  it("makes a mentored team a judging conflict, kept after the desk is turned off", async () => {
+    const { event, teamIds } = await withTeams(2);
     const mentor = await addMentor(event, "judge-mentor");
+    await prisma.mentorConflict.create({ data: { eventId: event.id, mentorUserId: mentor.userId, teamId: teamIds[1]!, kind: "DECLARED" } });
+    await prisma.event.update({ where: { id: event.id }, data: { mentorDeskEnabled: false } });
+    // Desk off and nothing ever activated: no effect.
+    expect((await conflictKeysFor(prisma, event.id, [mentor.userId])).get(mentor.userId)?.teamIds.has(teamIds[1]!)).toBe(false);
+    await prisma.event.update({ where: { id: event.id }, data: { mentorDeskEnabled: true } });
     await prisma.mentorTeamAssignment.create({ data: { eventId: event.id, mentorUserId: mentor.userId, teamId: teamIds[0]!, mode: "MANUAL", status: "ENDED", activatedAt: new Date(), endedAt: new Date() } });
     expect((await conflictKeysFor(prisma, event.id, [mentor.userId])).get(mentor.userId)?.teamIds.has(teamIds[0]!)).toBe(true);
+    // Mentoring happened: turning the desk off keeps its conflicts.
     await prisma.event.update({ where: { id: event.id }, data: { mentorDeskEnabled: false } });
-    expect((await conflictKeysFor(prisma, event.id, [mentor.userId])).get(mentor.userId)?.teamIds.has(teamIds[0]!)).toBe(false);
+    const kept = (await conflictKeysFor(prisma, event.id, [mentor.userId])).get(mentor.userId)?.teamIds;
+    expect(kept?.has(teamIds[0]!) && kept.has(teamIds[1]!)).toBe(true);
   });
 });

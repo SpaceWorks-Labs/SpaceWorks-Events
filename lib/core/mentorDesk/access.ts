@@ -72,9 +72,12 @@ export type LiveMentor = { userId: string; skills: string[]; maxActiveTeams: num
 /**
  * policy.mentor_for: the live MENTOR grant and profile, checked inside the
  * transaction. `at` defaults to now; `onShift: false` skips the availability
- * window (profile edits, conflict declarations, nominations).
+ * window (profile edits, conflict declarations, nominations). The grant row
+ * is read FOR SHARE, so a grant removal (which locks it FOR UPDATE before its
+ * cleanup, ./grant.ts) waits for the command or the command sees it gone.
  */
 export async function liveMentor(tx: Prisma.TransactionClient, eventId: string, userId: string, options: { at?: Date; onShift?: boolean } = {}): Promise<LiveMentor> {
+  await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${eventId} AND "userId" = ${userId} FOR SHARE`;
   const [grant, profile] = await Promise.all([
     tx.eventCollaborator.findFirst({ where: { eventId, userId, permissions: { has: EventPermission.MENTOR } }, select: { id: true } }),
     tx.mentorProfile.findUnique({ where: { eventId_userId: { eventId, userId } }, select: { id: true, version: true, skills: true, maxActiveTeams: true, availability: true } }),
@@ -85,13 +88,17 @@ export async function liveMentor(tx: Prisma.TransactionClient, eventId: string, 
   return { userId, skills: profile.skills, maxActiveTeams: profile.maxActiveTeams, availability, profileId: profile.id, profileVersion: profile.version };
 }
 
-/** The signed-in owner of a CONFIRMED registration on the event (a ticket QR alone is never enough). */
+/**
+ * The signed-in owner of a CONFIRMED registration on the event (a ticket QR
+ * alone is never enough). A crew ticket is not a participant place: crew
+ * never use the desk as participants (docs/CREW.md).
+ */
 export async function resolveParticipantForUser(userId: string, orgSlug: string, eventId: string): Promise<ParticipantContext | null> {
   if (!userId) return null;
   const found = await eventInOrg(orgSlug, eventId);
   if (!found || !found.event.mentorDeskEnabled) return null;
   const rsvp = await prisma.rSVP.findFirst({
-    where: { eventId: found.event.id, userId, status: RsvpStatus.CONFIRMED },
+    where: { eventId: found.event.id, userId, status: RsvpStatus.CONFIRMED, isCrew: false },
     select: { id: true, teamId: true, team: { select: { status: true } } },
     orderBy: { createdAt: "asc" },
   });
@@ -117,7 +124,7 @@ export async function liveParticipant(tx: Prisma.TransactionClient, p: Participa
     if (!team) refuse(COPY.notFound);
     return { teamId: team.id, rsvpId: null };
   }
-  const rsvp = await tx.rSVP.findFirst({ where: { id: p.rsvpId, eventId: p.eventId, userId: p.userId, status: RsvpStatus.CONFIRMED }, select: { teamId: true, team: { select: { status: true } } } });
+  const rsvp = await tx.rSVP.findFirst({ where: { id: p.rsvpId, eventId: p.eventId, userId: p.userId, status: RsvpStatus.CONFIRMED, isCrew: false }, select: { teamId: true, team: { select: { status: true } } } });
   if (!rsvp || rsvp.teamId !== p.teamId || (rsvp.teamId && rsvp.team?.status !== RsvpStatus.CONFIRMED)) refuse(COPY.notFound);
   return p.teamId ? { teamId: p.teamId, rsvpId: null } : { teamId: null, rsvpId: p.rsvpId };
 }

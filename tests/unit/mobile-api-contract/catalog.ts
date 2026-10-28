@@ -52,6 +52,8 @@ export const fixtures: Array<[file: string, component: string, zod: z.ZodType]> 
   ["judge-rounds.json", "JudgeRoundsResponse", dto.successEnvelope(dto.judgeRoundsDtoSchema)],
   ["participant-desk.json", "ParticipantDeskResponse", dto.successEnvelope(dto.participantDeskDtoSchema)],
   ["mentor-console.json", "MentorConsoleResponse", dto.successEnvelope(dto.mentorConsoleDtoSchema)],
+  ["mentor-teams.json", "MentorTeamsResponse", dto.successEnvelope(dto.mentorTeamsDtoSchema)],
+  ["desk-write.json", "DeskWriteResponse", dto.successEnvelope(dto.deskWriteDtoSchema)],
   ["desk-queue.json", "DeskQueueResponse", dto.successEnvelope(dto.deskQueueDtoSchema)],
   ["my-attendance.json", "MyAttendanceResponse", dto.successEnvelope(dto.myAttendanceDtoSchema)],
   ["attendance-reply.json", "AttendanceReplyResponse", dto.successEnvelope(dto.attendanceReplyDtoSchema)],

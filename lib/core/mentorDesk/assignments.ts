@@ -5,7 +5,10 @@ import "server-only";
  * Preview writes nothing and shows the seed (RANDOM) and the inputs
  * fingerprint; apply re-reads the inputs under the event lock, refuses when
  * they changed since the preview, and records the run with every decision
- * and every uncovered team. PROPOSED -> ACTIVE -> ENDED commands recheck
+ * and every uncovered team. Teams already mapped in the scope are skipped
+ * (reported), mentors outside their availability are left out unless the
+ * organiser asks for them, and closed or skipped rounds take no runs.
+ * PROPOSED -> ACTIVE -> ENDED commands recheck
  * eligibility, conflicts and capacity. Organisers can then hand-edit; those
  * mappings are marked manualOverride.
  */
@@ -26,6 +29,8 @@ const runSchema = z.object({
   mode: z.nativeEnum(MentorAssignmentMode),
   seed: z.string().regex(/^[a-f0-9]{16,64}$/).optional(),
   manual: z.record(z.string().max(128), z.string().max(128)).optional(),
+  /** Space Works previews only mentors on shift now; this includes the others too. */
+  includeOffShift: z.boolean().default(false),
 });
 
 export type AssignmentPreview = {
@@ -35,20 +40,23 @@ export type AssignmentPreview = {
   fingerprint: string;
   assignments: Array<{ teamId: string; teamName: string; mentorUserId: string; mentorName: string }>;
   uncovered: Array<{ teamId: string; teamName: string }>;
+  /** Teams that already have a live mapping in this scope; a run never stacks another mentor on them. */
+  skipped: Array<{ teamId: string; teamName: string }>;
 };
 
 async function plan(tx: Prisma.TransactionClient, eventId: string, data: z.infer<typeof runSchema>, seed: string | null): Promise<AssignmentPreview> {
   const scope: AssignmentScope = { eventId, roundId: data.roundId };
   const manual = data.mode === MentorAssignmentMode.MANUAL ? data.manual ?? {} : undefined;
-  const inputs = await readAllocationInputs(tx, scope, manual ? Object.keys(manual) : undefined);
+  const inputs = await readAllocationInputs(tx, scope, manual ? Object.keys(manual) : undefined, undefined, { skipCovered: true, onShiftAt: data.includeOffShift ? null : new Date() });
   const result = allocate({ teams: inputs.teams, candidates: inputs.candidates, mode: data.mode, manual, seed: seed ?? undefined });
   return {
     mode: data.mode,
     roundId: data.roundId,
     seed,
-    fingerprint: inputFingerprint({ mode: data.mode, scope, inputs, manual }),
+    fingerprint: inputFingerprint({ mode: data.mode, scope, inputs, manual, seed }),
     assignments: result.assignments.map((a) => ({ ...a, teamName: inputs.teamNames.get(a.teamId) ?? "Team", mentorName: inputs.names.get(a.mentorUserId) ?? "Mentor" })),
     uncovered: result.uncoveredTeamIds.map((teamId) => ({ teamId, teamName: inputs.teamNames.get(teamId) ?? "Team" })),
+    skipped: inputs.skippedTeamIds.map((teamId) => ({ teamId, teamName: inputs.teamNames.get(teamId) ?? "Team" })),
   };
 }
 
@@ -77,7 +85,7 @@ async function notifyMentors(tx: Prisma.TransactionClient, ids: string[]) {
 }
 
 /** Applies a previewed run under the event lock; refused when anything it depended on changed. */
-export async function applyAssignments(ctx: DeskOrganiserContext, input: unknown): Promise<DeskResult<{ runId: string; created: number; uncovered: number }>> {
+export async function applyAssignments(ctx: DeskOrganiserContext, input: unknown): Promise<DeskResult<{ runId: string; created: number; uncovered: number; skipped: number }>> {
   const parsed = applySchema.safeParse(input);
   if (!parsed.success) return fail(COPY.invalid);
   const data = parsed.data;
@@ -102,8 +110,8 @@ export async function applyAssignments(ctx: DeskOrganiserContext, input: unknown
       created.push(row.id);
     }
     if (status === MentorAssignmentStatus.ACTIVE) await notifyMentors(tx, created);
-    await recordAuditEvent({ client: tx, action: "MENTOR_ASSIGNMENT_RUN_APPLIED", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "MentorAssignmentRun", targetId: run.id, metadata: { mode: data.mode, assigned: created.length, uncovered: result.uncovered.length } });
-    return { runId: run.id, created: created.length, uncovered: result.uncovered.length };
+    await recordAuditEvent({ client: tx, action: "MENTOR_ASSIGNMENT_RUN_APPLIED", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "MentorAssignmentRun", targetId: run.id, metadata: { mode: data.mode, seed: result.seed, includeOffShift: data.includeOffShift, assigned: created.length, uncovered: result.uncovered.length, skipped: result.skipped.length } });
+    return { runId: run.id, created: created.length, uncovered: result.uncovered.length, skipped: result.skipped.length };
   });
 }
 

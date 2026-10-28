@@ -916,7 +916,7 @@ Commands also take the record's `expectedVersion` (from the last read) and
 answer `CONFLICT` when someone changed it first.
 
 **Participants** (signed in, with a CONFIRMED registration on the event or a
-place in a team that has one; a ticket alone is never enough), under
+place in a team that has one; a ticket alone, or a crew ticket, is never enough), under
 `/me/mentoring/:orgSlug/:eventId`:
 
 - `GET` → help categories, the team's (or solo registrant's) own requests with
@@ -926,7 +926,7 @@ place in a team that has one; a ticket alone is never enough), under
   `{ "expectedVersion", "body" }`, `…/cancel` `{ "expectedVersion" }`,
   `…/rate` `{ "rating" }`.
 - `POST …/office-hours/:slotId/book` `{ "expectedVersion" }` → `201 { "id" }`;
-  `POST …/bookings/:bookingId/cancel`.
+  `POST …/bookings/:bookingId/cancel` `{ "reason?" }` (kept in the office-hour log).
 
 **Mentors** (a `MENTOR` grant on an event with the desk on, past the staff
 authenticator check, so a mentor-only app session needs a fresh code), under
@@ -944,9 +944,16 @@ it opens the console and nothing else (organiser routes answer `NOT_FOUND`).
   before it expires. Renew, release and resolve must name the held `claimId`
   and `claimGeneration` (from the console), as on the website. Of two mentors claiming at once one wins and the other
   gets `CONFLICT`. `POST …/help/:requestId/comment`.
-- `GET …/teams` (assigned teams and declared conflicts, names only),
-  `PUT …/profile`, `GET`/`POST …/slots`, `POST …/slots/:slotId/reschedule`
-  and `…/cancel`.
+- `GET …/teams` (assigned teams and declared conflicts, names only, with each
+  conflict's `version`), `PUT …/profile`, `GET`/`POST …/slots`,
+  `POST …/slots/:slotId/reschedule` and `…/cancel`.
+- `POST …/teams/:teamId/conflict` `{ "active", "expectedVersion", "reason?" }`:
+  declare (`expectedVersion` 0) or clear (the conflict's `version`) this
+  mentor's own `DECLARED` conflict with a team; one an organiser recorded is
+  refused. `POST …/teams/:teamId/help` `{ "categoryKey", "summary",
+  "location?" }` → `201 { "id" }`: raise help on a team's behalf (origin
+  `MENTOR`; the mentor must be on shift and eligible for the team and
+  category), as the website's console does.
 - Mentoring rounds: `POST …/rounds/:roundId/teams/:teamId/claim|heartbeat|release|check-in`
   `{ "expectedVersion", "leaseId"?, "generation"?, "formVersion"?, "answers"?, "away"?, "nominate"? }`
   (send a heartbeat while with the team; each with its own key). Every
