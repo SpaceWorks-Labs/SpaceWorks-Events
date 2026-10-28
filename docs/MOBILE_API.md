@@ -760,9 +760,12 @@ out), never paid and never in teams. Guests and the caller's own
 registrations carry `isCrew: true`.
 
 - `GET …/crew` → `{ "members": [{ "id", "name", "email", "role", "foodPreference", "showOnPage", "joinedViaLink", "rsvpId", "checkedInAt|null" }], "food": [{ "label", "count" }] }`.
-- `POST …/crew` `{ "name", "email", "role?", "foodPreference?" }` → `201`, the
+- `POST …/crew` `{ "name", "email", "role?", "foodPreference?", "withdrawApplication?" }` → `201`, the
   list, by Guests → Crew's own action (it never converts a paid ticket, a team
-  member or an entrant, and emails the crew ticket).
+  member or an entrant, and emails the crew ticket). An applicant with an open
+  application is refused with `ADMISSION_MANAGED` (409) until
+  `withdrawApplication: true` confirms withdrawing it ([CREW.md](CREW.md#applicants)).
+
 - `DELETE …/crew/:memberId` removes the member and their crew ticket.
 
 The crew sign-up link, photos and crew expense claims stay on the website.

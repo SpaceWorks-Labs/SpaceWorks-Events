@@ -81,6 +81,19 @@ counts are shown) but never in *spots left* or *sold out*.
   Refused: a registration with an order or ticket type or `PENDING_PAYMENT`
   (*This person bought a ticket. Cancel or refund their order first.*), a
   team member, and an entrant with a hackathon project.
+- <a id="applicants"></a>**Applicants** ([ADMISSION.md](ADMISSION.md)): on an
+  event with applications, the application is detached from the registration
+  before it becomes the crew ticket and kept, with its reviews and decisions,
+  as history. A closed application (rejected, declined, expired, withdrawn)
+  needs nothing more, so a rejected applicant can still volunteer. An open
+  one (in review, waitlisted, offered or accepted) is refused with code
+  `ADMISSION_MANAGED` and a warning until the organiser ticks *Withdraw their
+  application and add them to the crew* (`withdrawApplication: true`; the
+  mobile `POST …/crew` takes the same field); it is then WITHDRAWN in the same
+  transaction and the waitlist is offered the freed place after the commit
+  (`promoteWaitlisted`). A crew ticket never accepts an offer or holds one.
+  The crew link never converts anyone.
+
 - The ticket page shows a **Crew** chip and *You're on the crew*, with no
   cancel, payment, transfer, refund, team or project controls; **Account →
   Registrations** shows *Crew* and offers no cancel.

@@ -10,7 +10,10 @@ const bodySchema = z.object({
   email: z.string().max(320),
   role: z.string().max(80).optional(),
   foodPreference: z.string().max(80).optional(),
+  /** Confirms withdrawing the person's open application (409 ADMISSION_MANAGED without it). */
+  withdrawApplication: z.boolean().optional(),
 }).strict();
+
 
 async function crewList(organisationId: string, eventId: string, actorUserId: string) {
   const { members, food } = await listCrewForOrganiser({ organisationId, eventId, actorUserId });

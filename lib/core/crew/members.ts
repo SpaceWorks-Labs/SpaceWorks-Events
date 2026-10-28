@@ -5,10 +5,13 @@ import { prisma } from "@/lib/db";
 import { notifyChatAbout } from "@/lib/chat/notify";
 import { enqueueCrewTicket } from "@/lib/outbox/crew";
 import { enqueueOperatorNotice } from "@/lib/outbox/enqueue";
+import { AdmissionError } from "@/lib/admission/state";
+import { promoteWaitlisted } from "@/lib/admission/promotion";
 import { fillFromWaitlist } from "@/lib/payments/operations";
 import { isOrganisationUploadUrl } from "@/lib/uploadUrl";
 import { rsvpWebhookSnapshot, rsvpWebhookSnapshotSelect } from "@/lib/teamUnits";
 import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
+import { detachApplicationForCrew } from "./application";
 import {
   ALREADY_ON_CREW,
   ALREADY_REGISTERED,
@@ -85,19 +88,21 @@ export async function listCrewForOrganiser(ctx: OrganiserCrewContext): Promise<{
   return { members, food: summariseFoodPreferences(members.map((member) => member.foodPreference)) };
 }
 
-type AddOutcome = { id: string; rsvpId: string; webhook: WebhookEmission | null; freedPlace: boolean };
+type AddOutcome = { id: string; rsvpId: string; webhook: WebhookEmission | null; freedPlace: boolean; withdrewApplication: boolean };
 
 /**
  * Add one crew member and queue their ticket. An organiser adding an email
  * that already has a free solo registration turns it into the crew ticket
  * (same QR code and check-in; a confirmed place is freed and offered to the
  * waitlist). Paid tickets, team members, hackathon entrants and link
- * sign-ups never convert.
+ * sign-ups never convert. An applicant's application is detached first
+ * (./application.ts): a closed one as it is, an open one withdrawn only with
+ * `withdrawApplication` (the organiser confirmed).
  */
 export async function addCrewMemberTx(
   event: EventForCrew,
   profile: CrewProfileInput,
-  options: { showOnPage: boolean; joinedViaLink: boolean; kind?: CrewKind },
+  options: { showOnPage: boolean; joinedViaLink: boolean; kind?: CrewKind; withdrawApplication?: boolean },
 ): Promise<CrewResult<AddOutcome>> {
   const data = cleanProfile(profile);
   if (data.photoUrl && !isOrganisationUploadUrl(data.photoUrl, event.organisationId, CREW_PHOTO_CATEGORY)) return fail("Choose an uploaded crew photo.");
@@ -117,7 +122,11 @@ export async function addCrewMemberTx(
       if (existing?.submission) return fail("This person has a hackathon project. Withdraw or remove it before adding them to the crew.");
       let rsvp: { id: string; checkInToken: string };
       let webhook: WebhookEmission | null = null;
+      let withdrewApplication = false;
       if (existing) {
+        const application = await detachApplicationForCrew(tx, existing.id, options.withdrawApplication === true);
+        if (!application.ok) return { ok: false, error: application.error, code: "ADMISSION_MANAGED" };
+        withdrewApplication = application.withdrew;
         rsvp = await tx.rSVP.update({
           where: { id: existing.id },
           // A guest ticket takes the crew name; an account-linked one keeps the account's identity.
@@ -148,19 +157,21 @@ export async function addCrewMemberTx(
       });
       await enqueueCrewTicket(tx, { to: data.email, checkInToken: rsvp.checkInToken, organisationId: locked.organisationId });
       if (options.joinedViaLink) await notifyChatAbout(tx, { eventId: event.id }, "registration", (title) => `${data.name} joined the crew for ${title}.`);
-      return { ok: true, data: { id: member.id, rsvpId: rsvp.id, webhook, freedPlace: existing?.status === RsvpStatus.CONFIRMED } };
+      return { ok: true, data: { id: member.id, rsvpId: rsvp.id, webhook, freedPlace: existing?.status === RsvpStatus.CONFIRMED, withdrewApplication } };
     });
   } catch (error) {
     if (isUniqueViolation(error)) return fail(uniqueViolationModel(error) === "EventCrewMember" ? ALREADY_ON_CREW : ALREADY_REGISTERED);
+    if (error instanceof AdmissionError) return fail(error.message);
     throw error;
   }
 }
 
-/** After commit: the registration webhook, and the freed place offered to the waitlist. */
+/** After commit: the registration webhook, and the freed place (or offer) given to the waitlist. */
 export async function afterCrewAdded(eventId: string, result: CrewResult<AddOutcome>) {
   if (!result.ok) return;
   if (result.data.webhook) emitWebhookEvent(result.data.webhook);
-  if (result.data.freedPlace) await fillFromWaitlist({ eventId }).catch(() => 0);
+  if (result.data.withdrewApplication) await promoteWaitlisted(eventId).catch(() => 0);
+  else if (result.data.freedPlace) await fillFromWaitlist({ eventId }).catch(() => 0);
 }
 
 export async function organiserEvent(ctx: OrganiserCrewContext): Promise<EventForCrew | null> {
@@ -172,8 +183,8 @@ export async function addCrewMemberAsOrganiser(ctx: OrganiserCrewContext, input:
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the crew member's details.");
   const event = await organiserEvent(ctx);
   if (!event) return fail("Event not found.");
-  const { showOnPage, kind, ...profile } = parsed.data;
-  const result = await addCrewMemberTx(event, profile, { showOnPage, joinedViaLink: false, kind });
+  const { showOnPage, kind, withdrawApplication, ...profile } = parsed.data;
+  const result = await addCrewMemberTx(event, profile, { showOnPage, joinedViaLink: false, kind, withdrawApplication });
   await afterCrewAdded(event.id, result);
   return result.ok ? { ok: true, data: { id: result.data.id } } : result;
 }

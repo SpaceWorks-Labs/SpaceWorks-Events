@@ -248,6 +248,15 @@ registration, which withdraws and detaches the application (see Retention).
 Attendance confirmation asks CONFIRMED registrations only, so accepted
 applicants are asked like anyone else. Crew places of every kind (organiser,
 volunteer, mentor, judge crew) are crew tickets and never applications.
+Adding an applicant to the crew ([CREW.md](CREW.md#applicants)) detaches
+their application first (`lib/core/crew/application.ts`): a closed one as it
+is, so a rejected applicant can still volunteer; an open one (in review,
+waitlisted, offered or accepted) only once the organiser confirms, and then
+WITHDRAWN, with the freed offer re-offered (`promoteWaitlisted`). The
+`rsvp_admission_crew_detached` trigger refuses a registration becoming crew
+while an application is still attached, so a crew ticket never accepts an
+offer or holds one.
+
 
 ## Old paths refused
 
