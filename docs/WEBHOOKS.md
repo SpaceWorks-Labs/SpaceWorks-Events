@@ -28,6 +28,7 @@ Creating, editing, rotating, enabling, disabling, deleting and automatic disabli
 | `event.published` | An event goes live (create, edit, or the Overview **Publish event** button) |
 | `event.cancelled` | An event's status is set to cancelled |
 | `feedback.submitted` | Someone submits the event's feedback form |
+| `expense_claim.status_changed` | An expense claim is filed (`previousStatus` null), withdrawn, approved, rejected, paid, or its payment is reversed (back to `APPROVED`) (docs/FINANCE.md) |
 | `ping` | **Send test**. Always delivered to the endpoint being tested; it cannot be subscribed to |
 
 Paid tickets raise the same registration events: `registration.created` when an order is placed (pending payment), `registration.status_changed` from `PENDING_PAYMENT` when it is paid (online, by hand or waived), and `CANCELLED` when an order's tickets are cancelled (by the buyer, an organiser, or an event cancellation), including the members of a team cancelled with its team ticket.
@@ -109,6 +110,7 @@ The `registration` object (`displayName` falls back to `Participant`):
 | `checkin.undone` | `{ event, registration, undoneAt }` |
 | `event.published`, `event.cancelled` | `{ event: { …event, status }, previousStatus }` (`status` and `previousStatus` are `DRAFT`, `PUBLISHED`, `HIDDEN` or `CANCELLED`; `previousStatus` is `null` for an event created in that state) |
 | `feedback.submitted` | `{ event, feedback: { id, submittedAt } }`; no answers and no link to a registration, even for certificate-enabled feedback |
+| `expense_claim.status_changed` | `{ event, claim: { id, kind, status, category, amountMinor, approvedMinor, currency, registrationId, policyId }, previousStatus }`; amounts in minor units; never the payee's name or email, the details, the note or receipts |
 | `ping` | `{ endpointId, message }` |
 
 Example `registration.status_changed`:

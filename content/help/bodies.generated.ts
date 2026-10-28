@@ -46,6 +46,7 @@ export const helpArticleBodies: Readonly<Record<string, () => Promise<{ default:
   "finance/expense-claims": () => import("./finance/expense-claims.mdx"),
   "finance/overview-and-budget": () => import("./finance/overview-and-budget.mdx"),
   "finance/refund-requests": () => import("./finance/refund-requests.mdx"),
+  "finance/reimbursement-policies": () => import("./finance/reimbursement-policies.mdx"),
   "getting-started/key-terms": () => import("./getting-started/key-terms.mdx"),
   "getting-started/organiser-quick-start": () => import("./getting-started/organiser-quick-start.mdx"),
   "getting-started/welcome": () => import("./getting-started/welcome.mdx"),

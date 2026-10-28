@@ -16,6 +16,7 @@ event budget. Prize money for hackathon awards is in
 | Withdraw a claim before it is decided | Their own | Their own | Their own |
 | Approve, reject, record payment, reverse a payment | Yes | — | — |
 | Budget and participant-claim settings | Yes | — | — |
+| Reimbursement policies (create, edit, close, delete) | Yes | — | Claim under the ones open to them, from the ticket page |
 | Refund requests (decide) | Yes | — | Ask, from the order page |
 | Money summary and **Download CSV** | Yes | — | — |
 
@@ -57,6 +58,76 @@ matter, like prize payouts and payment settings. Every step is audited.
 - Audit actions: `EXPENSE_CLAIM_SUBMITTED`, `EXPENSE_CLAIM_WITHDRAWN`,
   `EXPENSE_CLAIM_APPROVED`, `EXPENSE_CLAIM_REJECTED`, `CLAIM_PAYOUT_RECORDED`,
   `CLAIM_PAYOUT_REVERSED`, `EVENT_FINANCE_UPDATED`, `EVENT_FINANCE_EXPORTED`.
+
+## Reimbursement policies
+
+Per-stage reimbursements (travel grants for finalists, mentored teams, crew,
+or everyone confirmed) on free and paid events alike: a claim never depends
+on ticket payment, only on a confirmed registration. The Finance tab's
+**Reimbursement policies** card lists each policy with who it is for, its
+cap, window, budget used and left, and claim count; owners and admins
+create, edit, close (**Close to new claims**) and delete them
+(`lib/claims/policies/manage.ts`, under the event row lock, audited
+`REIMBURSEMENT_POLICY_CREATED`, `_UPDATED`, `_CLOSED`, `_REOPENED`,
+`_DELETED`). Up to 20 per event.
+
+- A policy (`ReimbursementPolicy`) has a name, who may claim
+  (`eligibility`), a cap per person, the categories it covers, an optional
+  claim window (event time), *only people checked in*, an optional budget for
+  the whole policy, an active switch and an optional *email people when they
+  can claim*.
+- Who may claim, one resolver per kind in `lib/claims/policies/eligibility/`
+  (a registry: a new kind adds its enum value, its stage column and CHECK,
+  and one resolver):
+  - `CONFIRMED_PARTICIPANT`: every confirmed participant who is not crew.
+  - `CREW`: every confirmed crew member ([Event crew](CREW.md)).
+  - `JUDGING_ROUND_ENTRY` (`judgingRoundId`, a round that takes advanced
+    projects): the person's team's project, or their own when solo, has a
+    `JudgingRoundEntry` in the round and is not withdrawn or disqualified;
+    optionally only once the round's finalists are published.
+  - `MENTORING_ROUND` (`mentoringRoundId`): the person's team took part in
+    the Mentor Desk round (a submitted, non-away check-in, Mentor Desk's own
+    `tookPartInRound`). Solo participants never qualify.
+  Every kind needs a confirmed registration, and a check-in when the policy
+  asks for attendance. A CHECK keeps exactly the kind's stage id set and a
+  trigger keeps the stage in the policy's event. Who a policy is for is fixed
+  once claims are filed under it; a claimed policy can be closed but not
+  deleted (`ExpenseClaim.policyId` is NO ACTION), and a judging round a
+  policy uses can't be deleted.
+- **Filing** (ticket page, or the mobile app with `policyId`): the claim form
+  lists only the policies open to that person now, each with what is left for
+  them (the smaller of their cap and the policy's budget), and limits the
+  categories to the policy's. Under the event row lock the server checks the
+  policy is active and in its window, the category, eligibility, the cap per
+  person per policy (waiting claims at the amount asked, decided ones at the
+  amount approved) and the policy budget (waiting plus approved). The
+  policy's terms are frozen into `ExpenseClaim.eligibilitySnapshot` with the
+  eligibility facts (ids, statuses and flags only), so a later policy edit
+  never rewrites them. Policy claims are kind `PARTICIPANT` or `CREW`.
+- **Approving** re-checks, under the event lock: the person must still
+  qualify by the frozen terms (eligibility is decided at decision time), stay
+  within the frozen cap with everything else decided for them, and the policy
+  within its current budget. The approval check is added to the snapshot.
+  Waiting claims whose person no longer qualifies (a check-in undone, a
+  project disqualified or withdrawn) show **Eligibility changed since
+  submission** with the reason; they can be rejected. The claims list shows
+  each claim's policy and filters by it.
+- **Email** (optional, per policy, off by default): the beat's
+  `reimbursement-notices` job (every 5 minutes) queues
+  `reimbursement-available` once per person and policy
+  (`ReimbursementNotice`, row lock per policy) when the policy is open and
+  the person qualifies, for example once finalists are published or their
+  team has been mentored. The payload holds ids only; at send time the policy
+  and the person's eligibility are checked again and the ticket link is built.
+- General participant claims (`participantClaimsEnabled`, its cap) and crew
+  claims (`crewClaimsEnabled`) work exactly as before; the general cap counts
+  only claims without a policy. Deleting the event keeps its claims (their
+  policy link is cleared; the terms stay in the snapshot).
+- Webhook: `expense_claim.status_changed` ([Webhooks](WEBHOOKS.md)) on filing,
+  withdrawal, approval, rejection, payment and reversal, with ids and amounts
+  only.
+- Not included: Space Works' award and reservation flow (offer, accept,
+  reserve from a pool), which could be a later phase.
 
 ## Receipts
 
@@ -116,7 +187,8 @@ matter, like prize payouts and payment settings. Every step is audited.
 ## In the mobile apps
 
 Participants file and withdraw claims from a registration with receipt photos
-and see their decisions; staff file and withdraw their own; owners and admins
+(under a reimbursement policy with `policyId`, listed by
+`GET …/reimbursements`) and see their decisions; staff file and withdraw their own; owners and admins
 see every claim and refund request and approve, decline or decide them
 ([Mobile API](MOBILE_API.md)). Payouts, the budget and participant-claim
 settings stay on the website. Decisions from the app are held to the event in
@@ -129,3 +201,7 @@ the path.
   reversed; participant claims refused when off, capped, and counted after a
   rejection; refund requests asked once, declined only with a reason,
   approved in part (one refund), never twice.
+- `tests/unit/reimbursement-policies.test.ts`: cap and budget arithmetic, the
+  frozen snapshot, and each eligibility resolver.
+- `reimbursements-claims.db.test.ts`, `reimbursements-eligibility.db.test.ts`,
+  `reimbursements-admin.db.test.ts`: see [Testing](TESTING.md).

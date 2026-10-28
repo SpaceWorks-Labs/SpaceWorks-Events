@@ -64,7 +64,7 @@ export async function FinancePanel({ ctx }: { ctx: EventDashboardContext; }) {
         <ClaimsList scope={data.scope} claims={finance.claims} admin timezone={timezone} currency={data.currency} />
       </Card>
       <Card as="section" className="rounded-xl" aria-labelledby="reimbursement-policies-title">
-        <CardHeader title={<span id="reimbursement-policies-title">Reimbursement policies</span>} description="Pay back travel and costs per stage: finalists of a judging round, teams mentored in a round, crew or everyone confirmed. Each has a cap per person and an optional budget." />
+        <CardHeader title={<span id="reimbursement-policies-title" className="inline-flex items-center gap-1">Reimbursement policies<HelpLink article="finance/reimbursement-policies" /></span>} description="Pay back travel and costs per stage: finalists of a judging round, teams mentored in a round, crew or everyone confirmed. Each has a cap per person and an optional budget." />
         <ReimbursementPolicies scope={data.scope} policies={data.policies} options={data.policyOptions} currency={data.currency} timezone={timezone} />
       </Card>
       <Card as="section" className="rounded-xl" aria-labelledby="refund-requests-title">
