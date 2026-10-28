@@ -678,11 +678,9 @@ The crew sign-up link, photos and crew expense claims stay on the website.
 
 ### Pending
 
-Attendance confirmation, judging rounds, the Mentor Desk and volunteer shifts
-arrive with those features: attendance replies, round-scoped judging lists
-and finalists, the help queue and mentor console, and shift sign-up and
-check-in. The routing, DTO and permission layer above is shaped
-for them (`eventRoute` requirements, `eventPermissionsFor`, `forUser`).
+Attendance confirmation and volunteer shifts arrive with those features. The
+routing, DTO and permission layer above is shaped for them (`eventRoute`
+requirements, `eventPermissionsFor`, `forUser`).
 
 ## Judging (judges)
 
@@ -738,6 +736,83 @@ saved). `Criterion = { "id", "name", "description", "weight", "maxScore" }`.
   `INCOMPLETE_SCORES` (scores already saved stay saved), `NOT_VISIBLE`.
 
 Comments are private to organisers; judges cannot see each other's work.
+
+### Judging rounds
+
+Events judge in rounds ([Hackathon judging](HACKATHON.md) "Rounds"). Every
+judging read above takes an optional `?roundId=` and otherwise shows the
+current round (the one judges score now). Scores and reviews are written to
+the current round only: a `?roundId=` naming any other round answers
+`JUDGING_CLOSED`.
+
+- `GET …/judging/rounds` → `{ "rounds": [JudgeRound], "currentRoundId", "onPanel" }`:
+  the rounds this judge may open (rounds that have opened, and the current
+  one; never a later DRAFT round, which every read refuses as `NOT_FOUND`).
+  `JudgeRound = { "id", "name", "position", "judgingStatus", "isCurrent" }`.
+  The list and criteria answers carry the `round` they show.
+- `GET …/judging/rounds/summary` (organisation owners and admins) → each
+  round's status, entry source, dates, panel size, rubric size, finalists and
+  submitted reviews. Managing rounds stays on the website.
+- `GET /public/events/:orgSlug/:eventSlug/finalists` → published finalists
+  per round: titles, entrant display names and links, never scores or ranks,
+  under the results page's visibility rules.
+
+## Mentor Desk
+
+The Mentor Desk ([MENTOR_DESK.md](MENTOR_DESK.md)) for participants, mentors
+and organisers. Reads use the website's own read models; every write runs the
+website's action body as the app session. Help text reaches only the team
+that raised it and mentors who may see it; it is never logged.
+
+**Idempotency.** Every Mentor Desk write needs an `Idempotency-Key` header (8
+to 128 printable characters, a fresh one per user action, kept for retries of
+that action). The first request runs; a retry with the same key and body
+within a day gets the first answer again with `Idempotent-Replayed: true`. The
+same key with another body, or while the first is still running, is
+`CONFLICT`. Commands also take the record's `expectedVersion` (from the last
+read) and answer `CONFLICT` when someone changed it first.
+
+**Participants** (signed in, with a CONFIRMED registration on the event or a
+place in a team that has one; a ticket alone is never enough), under
+`/me/mentoring/:orgSlug/:eventId`:
+
+- `GET` → help categories, the team's (or solo registrant's) own requests with
+  comments, public mentor profiles, bookable office-hour slots and bookings.
+- `POST …/help` `{ "categoryKey", "summary", "location?" }` → `201 { "id" }`;
+  `GET …/help/:requestId`; `POST …/help/:requestId/comment`
+  `{ "expectedVersion", "body" }`, `…/cancel` `{ "expectedVersion" }`,
+  `…/rate` `{ "rating" }`.
+- `POST …/office-hours/:slotId/book` `{ "expectedVersion" }` → `201 { "id" }`;
+  `POST …/bookings/:bookingId/cancel`.
+
+**Mentors** (a `MENTOR` grant on an event with the desk on, past the staff
+authenticator check, so a mentor-only app session needs a fresh code), under
+`/orgs/:orgSlug/events/:eventId/mentor`. `MENTOR` is isolated like `JUDGE`:
+it opens the console and nothing else (organiser routes answer `NOT_FOUND`).
+`GET /me` lists these events under `mentoring`.
+
+- `GET` → profile and shift, the request this mentor holds (with comments,
+  `claimId` and `claimGeneration`), the queue size, categories, and the live
+  mentoring round's board with this mentor's own visit leases.
+- `GET …/queue?cursor=` → open help this mentor may see, 25 at a time (never
+  their own team's or a conflicted team's), with `eligible`.
+- `POST …/help/:requestId/claim|renew|release|resolve` `{ "expectedVersion",
+  "claimId"?, "claimGeneration"?, "note"? }`: a claim is a lease; renew it
+  before it expires. Of two mentors claiming at once one wins and the other
+  gets `CONFLICT`. `POST …/help/:requestId/comment`.
+- `GET …/teams` (assigned teams and declared conflicts, names only),
+  `PUT …/profile`, `GET`/`POST …/slots`, `POST …/slots/:slotId/reschedule`
+  and `…/cancel`.
+- Mentoring rounds: `POST …/rounds/:roundId/teams/:teamId/claim|heartbeat|release|check-in`
+  `{ "expectedVersion", "leaseId"?, "generation"?, "formVersion"?, "answers"?, "away"?, "nominate"? }`
+  (send a heartbeat while with the team; each with its own key), and
+  `POST …/rounds/:roundId/teams/:teamId/nominate`.
+
+**Organisers** (organisation owners and admins), under
+`/orgs/:orgSlug/events/:eventId/mentor-desk`: `GET …/queue` (every request,
+mentors with shift and load, no emails), `POST …/help/:requestId/assign`
+`{ "expectedVersion", "mentorUserId", "note?" }` and `…/reopen`. Settings,
+categories, assignments, slots for others and rounds stay on the website.
 
 ## App links
 

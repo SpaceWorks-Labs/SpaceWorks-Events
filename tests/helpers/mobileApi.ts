@@ -71,3 +71,22 @@ export async function signIn(email: string, options: { deviceName?: string; devi
 export async function confirmAuthenticator(userId: string) {
   await prisma.mobileSession.updateMany({ where: { userId, revokedAt: null }, data: { mfaVerifiedAt: new Date() } });
 }
+
+/** An app session for a fixture user without a password, as a sign-in would issue it (authenticator checked unless `mfa: false`). */
+export async function appSession(userId: string, options: { mfa?: boolean; } = {}) {
+  const { issueMobileSession } = await import("@/lib/mobileAuth");
+  const { deviceHash } = await import("@/lib/loginSecurity");
+  const { sessionVersion } = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { sessionVersion: true } });
+  const issued = await issueMobileSession({ userId, verifiedSessionVersion: sessionVersion, deviceHash: deviceHash(newDeviceId())!, method: "password", mfaVerified: options.mfa ?? true });
+  if (!issued) throw new Error("no session");
+  return issued.accessToken;
+}
+
+/** A write with an Idempotency-Key. */
+export function keyed(path: string, body: unknown, token: string, key: string, method = "POST") {
+  return new Request(`${BASE}${path}`, {
+    method,
+    headers: { "content-type": "application/json", "x-real-ip": address(), authorization: `Bearer ${token}`, "idempotency-key": key },
+    body: JSON.stringify(body),
+  });
+}

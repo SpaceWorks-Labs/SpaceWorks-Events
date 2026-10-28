@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "data": {
+    "requests": [
+      {
+        "id": "clhelp000000000000000001",
+        "version": 2,
+        "status": "CLAIMED",
+        "origin": "TEAM",
+        "category": "Code",
+        "priority": 0,
+        "summary": "Our build fails on deploy",
+        "location": "Table 12",
+        "who": "Byte Club",
+        "claimedBy": "Grace Hopper",
+        "claimedByUserId": "cluser0000000000000000009",
+        "claimExpiresAt": "2030-06-01T10:15:00.000Z",
+        "deadline": "2030-06-01T14:00:00.000Z",
+        "createdAt": "2030-06-01T10:00:00.000Z",
+        "rating": null,
+        "lapsed": false
+      }
+    ],
+    "mentors": [
+      {
+        "userId": "cluser0000000000000000009",
+        "name": "Grace Hopper",
+        "onShift": true,
+        "load": 2
+      }
+    ]
+  }
+}
