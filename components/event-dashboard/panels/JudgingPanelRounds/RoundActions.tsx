@@ -69,7 +69,7 @@ export function RoundActions({
             Unpublish finalists
           </Button>
         ) : (
-          <Button variant="accent" size="sm" loading={busy === "finalists"} disabled={pending} onClick={() => run("finalists", () => publishRoundFinalists(target), "Finalists published and entrants emailed.")}>
+          <Button variant="accent" size="sm" loading={busy === "finalists"} disabled={pending} onClick={() => run("finalists", () => publishRoundFinalists(target), "Finalists published. Entrants are emailed only when results emails are on in Setup.")}>
             Publish finalists
           </Button>
         )

@@ -11,5 +11,6 @@ export { type JudgingRoundScope, judgingStatusFor, roundStatusFor } from "./judg
 export { createJudgingRound, updateJudgingRound, deleteJudgingRound, reorderJudgingRounds, setJudgingRoundPanel, setJudgingRoundStatus } from "./judging/rounds/manage";
 export { FINALIZE_REASON_MAX_LENGTH, type RoundCoverageDto, finalizeJudgingRound, unfinalizeJudgingRound } from "./judging/rounds/finalize";
 export { type AdvancementCandidateDto, type AdvancementPreviewDto, previewAdvancement, applyAdvancement } from "./judging/rounds/advance";
-export { entrantJudgingEmailsEnabled, publishFinalists, unpublishFinalists, type PublicFinalistsDto, loadPublicFinalists } from "./judging/rounds/finalists";
+export { entrantJudgingEmailsEnabled, publishFinalists, unpublishFinalists } from "./judging/rounds/finalists";
+export { type PublicFinalistsDto, loadPublicFinalists } from "./judging/rounds/publicFinalists";
 export { type JudgingRoundDto, loadJudgingRounds, type RoundFinalistDto, loadRoundFinalists } from "./judging/rounds/read";

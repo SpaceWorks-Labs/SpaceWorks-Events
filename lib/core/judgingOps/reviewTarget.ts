@@ -32,6 +32,7 @@ export async function setReviewsPerProject(ctx: JudgingOrganiserContext, input: 
     if (!event) return fail(EVENT_NOT_FOUND);
     const round = await ensureJudgingRound(tx, event);
     if (round.reviewsPerProject === value) return ok({ reviewsPerProject: value });
+    if (round.finalizedAt) return fail("This round is finalised, so its target can't change. Undo finalising first.");
     await tx.judgingRound.update({ where: { id: round.id! }, data: { reviewsPerProject: value } });
     await syncCurrentRound(tx, event.id);
     await recordAuditEvent({

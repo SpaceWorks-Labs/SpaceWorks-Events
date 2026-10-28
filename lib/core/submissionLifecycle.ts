@@ -183,11 +183,14 @@ export async function restoreSubmissionSnapshotTx(
     judgeIds.length > 0 ? tx.user.findMany({ where: { id: { in: judgeIds } }, select: { id: true } }) : Promise.resolve([]),
     tx.judgingCriterion.findMany({ where: { eventId: owner.eventId }, select: { id: true, maxScore: true } }),
     tx.eventAward.findMany({ where: { eventId: owner.eventId }, select: { id: true } }),
-    tx.judgingRound.findMany({ where: { eventId: owner.eventId }, select: { id: true } }),
+    tx.judgingRound.findMany({ where: { eventId: owner.eventId }, orderBy: { position: "asc" }, select: { id: true } }),
   ]);
   const liveUsers = new Set(users.map((user) => user.id));
-  // A row from a round deleted since is skipped; an older snapshot's row (no round) goes to the current round.
+  // A row from a round deleted since is skipped. An older snapshot predates
+  // rounds, so its rows (no round) go back to the first round, where its
+  // criteria are: reviews, assignments and scores stay together.
   const liveRounds = new Set(rounds.map((round) => round.id));
+  const firstRoundId = rounds[0]?.id ?? null;
   const roundLive = (roundId: string | null | undefined) => roundId == null || liveRounds.has(roundId);
   const maxScore = new Map(criteria.map((criterion) => [criterion.id, criterion.maxScore]));
   const liveAwards = new Set(awards.map((award) => award.id));
@@ -203,7 +206,7 @@ export async function restoreSubmissionSnapshotTx(
   if (reviews.length > 0) {
     await tx.judgeReview.createMany({
       data: reviews.map((review) => ({
-        roundId: review.roundId ?? null,
+        roundId: review.roundId ?? firstRoundId,
         submissionId: snapshot.id,
         judgeUserId: review.judgeUserId,
         comment: review.comment,
@@ -216,7 +219,7 @@ export async function restoreSubmissionSnapshotTx(
   const assignments = snapshot.assignments.filter((assignment) => liveUsers.has(assignment.judgeUserId) && roundLive(assignment.roundId));
   if (assignments.length > 0) {
     await tx.judgeAssignment.createMany({
-      data: assignments.map((assignment) => ({ eventId: owner.eventId, roundId: assignment.roundId ?? null, judgeUserId: assignment.judgeUserId, submissionId: snapshot.id, createdAt: new Date(assignment.createdAt) })),
+      data: assignments.map((assignment) => ({ eventId: owner.eventId, roundId: assignment.roundId ?? firstRoundId, judgeUserId: assignment.judgeUserId, submissionId: snapshot.id, createdAt: new Date(assignment.createdAt) })),
       skipDuplicates: true,
     });
   }

@@ -6,6 +6,7 @@ export type EventClientDto = Omit<Event,
   // Judging settings have their own DTOs (lib/core/judging.ts).
   | "submissionsEnabled" | "submissionsOpenAt" | "submissionsCloseAt" | "judgingStatus" | "judgesSeeAll"
   | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization" | "currentJudgingRoundId"
+  | "emailEntrantsOnResults" | "emailSubmissionReceipts"
   // The entry fee is a BigInt and lives with the judging settings too.
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
   // Finance settings have their own view (lib/finance.ts).

@@ -54,6 +54,8 @@ describe("event browser DTO", () => {
       reviewsPerProject: 3,
       scoreNormalization: "ZSCORE",
       currentJudgingRoundId: "round-secret",
+      emailEntrantsOnResults: true,
+      emailSubmissionReceipts: true,
       shortCode: null,
       checkInStationPinHash: "bcrypt-secret",
       checkInStationPinEncrypted: "encrypted-secret",
@@ -70,6 +72,8 @@ describe("event browser DTO", () => {
     expect(serialized).not.toContain("judgingStatus");
     expect(serialized).not.toContain("judgesSeeAll");
     expect(serialized).not.toContain("resultsAnnouncedAt");
+    expect(serialized).not.toContain("emailEntrantsOnResults");
+    expect(serialized).not.toContain("emailSubmissionReceipts");
     expect(serialized).not.toContain("reviewsPerProject");
     expect(serialized).not.toContain("scoreNormalization");
     expect(serialized).not.toContain("currentJudgingRoundId");

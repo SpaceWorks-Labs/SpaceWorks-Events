@@ -66,12 +66,12 @@ export async function applyRoundFinalists(input: unknown): Promise<ActionResult<
 }
 
 /** Publish a round's finalists and queue their announcement (the broadcast rate-limit bucket applies). */
-export async function publishRoundFinalists(input: unknown): Promise<ActionResult<{ queued: number }>> {
+export async function publishRoundFinalists(input: unknown): Promise<ActionResult<{ queued: number; emailed: boolean }>> {
   return run(
     input,
     async (ctx, fields) => {
       const result = await rounds.publishFinalists(ctx, fields.roundId);
-      return result.ok ? { ok: true, data: { queued: result.data.queued } } : result;
+      return result.ok ? { ok: true, data: { queued: result.data.queued, emailed: result.data.emailed } } : result;
     },
     "broadcast",
   );

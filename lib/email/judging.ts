@@ -90,7 +90,8 @@ export async function sendFinalistsAnnouncedEmail(params: {
   to: string;
   eventTitle: string;
   roundName: string;
-  projectTitle: string;
+  /** Every finalist project of this person, in one email. */
+  projectTitles: string[];
   resultsPath: string;
   recipientName?: string;
   messageId?: string;
@@ -101,9 +102,9 @@ export async function sendFinalistsAnnouncedEmail(params: {
   const subject = `You're through to ${headerText(params.roundName)} · ${headerText(params.eventTitle)}`;
   const html = emailLayout(escapeHtml(subject), `
           <h2 style="${HEADING_STYLE}">You're a finalist</h2>
-          <p style="${BODY_STYLE}">${salutation.html}<br><br>Your project <strong>${escapeHtml(params.projectTitle)}</strong> has advanced to <strong>${escapeHtml(params.roundName)}</strong> of <strong>${escapeHtml(params.eventTitle)}</strong>. The organisers will share what happens next.</p>
+          <p style="${BODY_STYLE}">${salutation.html}<br><br>${params.projectTitles.length === 1 ? "Your project" : "Your projects"} ${params.projectTitles.map((title) => `<strong>${escapeHtml(title)}</strong>`).join(", ")} ${params.projectTitles.length === 1 ? "has" : "have"} advanced to <strong>${escapeHtml(params.roundName)}</strong> of <strong>${escapeHtml(params.eventTitle)}</strong>. The organisers will share what happens next.</p>
           ${emailButton(resultsUrl, "See the finalists")}`);
-  const text = `${subject}\n\n${salutation.text}\n\nYour project "${params.projectTitle}" has advanced to ${params.roundName} of "${params.eventTitle}". The organisers will share what happens next.\n\n${resultsUrl}\n\nBest regards,\nSpace Works Events`;
+  const text = `${subject}\n\n${salutation.text}\n\n${params.projectTitles.length === 1 ? "Your project" : "Your projects"} ${params.projectTitles.map((title) => `"${title}"`).join(", ")} ${params.projectTitles.length === 1 ? "has" : "have"} advanced to ${params.roundName} of "${params.eventTitle}". The organisers will share what happens next.\n\n${resultsUrl}\n\nBest regards,\nSpace Works Events`;
   if (!transporter) {
     console.log("[EMAIL MOCK] finalists announcement queued");
     return;

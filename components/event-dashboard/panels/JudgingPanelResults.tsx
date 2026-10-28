@@ -51,6 +51,9 @@ export function JudgingPanelResults({
   criteria,
   judgingStatus,
   resultsPublishedAt,
+  resultsAnnouncedAt = null,
+  emailEntrantsOnResults = false,
+  announcementRecipients = 0,
   resultsUrl,
   exportHref,
   timezone,
@@ -63,6 +66,12 @@ export function JudgingPanelResults({
   criteria: JudgingDashboardCriterion[];
   judgingStatus: JudgingStatus;
   resultsPublishedAt: string | null;
+  /** Set once entrants were emailed the results. */
+  resultsAnnouncedAt?: string | null;
+  /** "Email entrants when results are published" (Judging → Setup), off by default. */
+  emailEntrantsOnResults?: boolean;
+  /** How many entrants an announcement would email now. */
+  announcementRecipients?: number;
   resultsUrl: string;
   exportHref: string;
   timezone: string;
@@ -162,7 +171,18 @@ export function JudgingPanelResults({
   const scoreCounts = data.scoreCounts ?? initialPage.scoreCounts;
   return (
     <div className="flex flex-col gap-5">
-      {readOnly ? null : <PublishCard scope={scope} judgingStatus={judgingStatus} resultsPublishedAt={resultsPublishedAt} resultsUrl={resultsUrl} timezone={timezone} />}
+      {readOnly ? null : (
+        <PublishCard
+          scope={scope}
+          judgingStatus={judgingStatus}
+          resultsPublishedAt={resultsPublishedAt}
+          resultsAnnouncedAt={resultsAnnouncedAt}
+          emailEntrantsOnResults={emailEntrantsOnResults}
+          announcementRecipients={announcementRecipients}
+          resultsUrl={resultsUrl}
+          timezone={timezone}
+        />
+      )}
       <Card as="section">
         <CardHeader
           title="Ranking"

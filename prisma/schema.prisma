@@ -766,6 +766,13 @@ model Event {
   currentJudgingRoundId               String?          @unique
   currentJudgingRound                 JudgingRound?    @relation("EventCurrentJudgingRound", fields: [currentJudgingRoundId], references: [id], onDelete: SetNull)
   judgingRounds                       JudgingRound[]   @relation("EventJudgingRounds")
+  /// Hackathon emails the organiser opts into (off by default). When false,
+  /// publishing results queues no `results-published` email (an organiser can
+  /// send it later with sendResultsAnnouncement) and a project becoming
+  /// SUBMITTED, including when its entry fee is paid, queues no
+  /// `submission-received` receipt. Registration and payment emails are never gated.
+  emailEntrantsOnResults              Boolean          @default(false)
+  emailSubmissionReceipts             Boolean          @default(false)
   /// Fee to submit a project, in minor units of the event's currency; null
   /// is free. Paid once per entrant through the normal checkout (Order.submissionId).
   submissionFeeMinor                  BigInt?
@@ -2442,6 +2449,7 @@ model JudgingRound {
   entries     JudgingRoundEntry[]
   panel       JudgingRoundJudge[]
   assignmentRuns JudgingAssignmentRun[]
+  finalistNotices JudgingFinalistNotice[]
 
   @@unique([eventId, position])
   @@index([eventId, status])
@@ -2759,4 +2767,22 @@ model JudgingAssignmentRun {
   createdBy User?        @relation("JudgingAssignmentRunBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([roundId, createdAt])
+}
+
+/// Who has been told about a round's finalists (docs/HACKATHON.md "Rounds"):
+/// one row per round and recipient, kept after the outbox row is delivered and
+/// cleaned up, so republishing never emails anyone twice. Only a SHA-256 of
+/// the lowercased address is stored (64 hex characters, CHECK).
+/// `outboxMessageId` names the queued email, so an unpublish that withdraws it
+/// undelivered can forget the recipient again.
+model JudgingFinalistNotice {
+  id              String   @id @default(cuid())
+  roundId         String
+  emailHash       String
+  outboxMessageId String?
+  createdAt       DateTime @default(now())
+
+  round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, emailHash])
 }

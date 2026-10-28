@@ -60,10 +60,11 @@ export async function createJudgingRound(ctx: JudgingOrganiserContext, input: un
 }
 
 /**
- * Change a round's settings. Its name, planned times, visibility, target and
- * score method can change at any time (as the event-level settings could);
- * which projects it judges only while it is a DRAFT without finalists, and
- * the first round always takes every submitted project.
+ * Change a round's settings. Its name, planned times and visibility can
+ * change at any time (as the event-level settings could), its target and
+ * score method until it is finalised; fresh eyes and which projects it judges
+ * only while it is a DRAFT (the latter without finalists), and the first
+ * round always takes every submitted project.
  */
 export async function updateJudgingRound(ctx: JudgingOrganiserContext, roundId: unknown, input: unknown): Promise<JudgingResult> {
   const parsed = judgingRoundSchema.safeParse(input);
@@ -74,6 +75,12 @@ export async function updateJudgingRound(ctx: JudgingOrganiserContext, roundId: 
       if (round.position === 1) return fail("The first round always judges every submitted project.", { entrySource: ["The first round always judges every submitted project."] });
       if (round.status !== JudgingRoundStatus.DRAFT) return fail("Which projects a round judges is fixed once it opens.");
       if ((await tx.judgingRoundEntry.count({ where: { roundId: round.id } })) > 0) return fail("Remove this round's finalists before changing which projects it judges.");
+    }
+    // Fresh eyes decides who may see and review, so it is fixed once judging in the round starts.
+    if (data.freshEyes !== round.freshEyes && round.status !== JudgingRoundStatus.DRAFT) return fail("Fresh eyes is fixed once the round opens.", { freshEyes: ["Fresh eyes is fixed once the round opens."] });
+    // A finalised round's ranking is final: its target and score method stay as they were.
+    if (round.finalizedAt && (data.scoreNormalization !== round.scoreNormalization || data.reviewsPerProject !== round.reviewsPerProject)) {
+      return fail("This round is finalised, so its target and score method can't change. Undo finalising first.");
     }
     await tx.judgingRound.update({ where: { id: round.id }, data });
     await syncCurrentRound(tx, event.id);

@@ -94,25 +94,32 @@ describe.sequential("finalist advancement", () => {
     expect((await loadJudgingResults(ctx, { roundId: first.id }))?.rows[0]?.submissionId).toBe(projects[0]!.id);
   });
 
-  it("publishes finalists separately from results and emails their entrants once", async () => {
+  it("publishes finalists separately from results, emailing entrants once only when results emails are on", async () => {
     const { event, ctx, projects, roundTwoId } = await twoRoundEvent([9, 7, 5]);
     expect(await publishFinalists(ctx, roundTwoId)).toMatchObject({ ok: false });
     const preview = must(await previewAdvancement(ctx, roundTwoId, { mode: "top", count: 2 }));
     must(await applyAdvancement(ctx, roundTwoId, { mode: "top", count: 2, fingerprint: preview.fingerprint }));
     expect(await loadPublicFinalists(event.id)).toEqual([]);
-    expect(must(await publishFinalists(ctx, roundTwoId)).queued).toBe(2);
-    const announced = await prisma.outboxMessage.findMany({ where: { kind: "finalists-announced", payload: { path: ["roundId"], equals: roundTwoId } } });
-    expect(announced.map((row) => (row.payload as { submissionId: string }).submissionId).sort()).toEqual([projects[0]!.id, projects[1]!.id].sort());
+    // Off by default: the finalists go public, nobody is emailed or recorded as told.
+    expect(must(await publishFinalists(ctx, roundTwoId))).toMatchObject({ queued: 0, emailed: false });
+    expect(await prisma.judgingFinalistNotice.count({ where: { roundId: roundTwoId } })).toBe(0);
     const [block] = await loadPublicFinalists(event.id);
     expect(block?.roundName).toBe("Finals");
     expect(block?.finalists.map((row) => row.title).sort()).toEqual(["Project 1", "Project 2"]);
     expect(JSON.stringify(block)).not.toMatch(/score|rank|email|submissionId/i);
-    // Changing finalists needs an unpublish; nobody is emailed twice.
+    must(await unpublishFinalists(ctx, roundTwoId));
+    await prisma.event.update({ where: { id: event.id }, data: { emailEntrantsOnResults: true } });
+    expect(must(await publishFinalists(ctx, roundTwoId))).toMatchObject({ queued: 2, emailed: true });
+    const announced = await prisma.outboxMessage.findMany({ where: { kind: "finalists-announced", payload: { path: ["roundId"], equals: roundTwoId } } });
+    expect(announced.flatMap((row) => (row.payload as { submissionIds: string[] }).submissionIds).sort()).toEqual([projects[0]!.id, projects[1]!.id].sort());
+    expect(await prisma.judgingFinalistNotice.count({ where: { roundId: roundTwoId } })).toBe(2);
+    // Changing finalists needs an unpublish; nobody is emailed twice, even once the outbox rows are gone.
     expect(await previewAdvancement(ctx, roundTwoId, { mode: "top", count: 1 })).toMatchObject({ ok: false });
     expect(must(await publishFinalists(ctx, roundTwoId)).queued).toBe(0);
     await prisma.outboxMessage.updateMany({ where: { id: announced[0]!.id }, data: { status: OutboxStatus.SENT, sentAt: new Date() } });
     must(await unpublishFinalists(ctx, roundTwoId));
-    expect(await prisma.outboxMessage.count({ where: { kind: "finalists-announced", payload: { path: ["roundId"], equals: roundTwoId } } })).toBe(1);
+    expect(await prisma.judgingFinalistNotice.count({ where: { roundId: roundTwoId } })).toBe(1);
+    await prisma.outboxMessage.deleteMany({ where: { id: announced[0]!.id } });
     expect(must(await publishFinalists(ctx, roundTwoId)).queued).toBe(1);
     expect(await setJudgingRoundStatus(ctx, roundTwoId, "OPEN")).toMatchObject({ ok: true });
   });

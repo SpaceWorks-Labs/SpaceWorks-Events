@@ -97,8 +97,8 @@ describe.sequential("assignment in rounds", () => {
     const auto = must(await previewAutoAssignment(ctx, { perProject: 1, mode: "keep", judgeUserIds: [users.j1, users.j2, users.j3] }));
     expect(auto.judges.find((row) => row.userId === users.j3)?.added).toBe(2);
     expect(auto.judges.filter((row) => row.userId !== users.j3).every((row) => row.added === 0)).toBe(true);
-    // Fresh eyes off: everyone sees the finalists again.
-    must(await updateJudgingRound(ctx, roundTwoId, { name: "Finals", entrySource: "ADVANCED", judgesSeeAll: true, freshEyes: false, reviewsPerProject: "", scoreNormalization: "RAW", opensAt: "", closesAt: "" }));
-    expect((await listSubmissionsForJudge(await judge(event, users.j1)))?.counts.all).toBe(2);
+    // Fresh eyes is fixed once the round has opened.
+    expect(await updateJudgingRound(ctx, roundTwoId, { name: "Finals", entrySource: "ADVANCED", judgesSeeAll: true, freshEyes: false, reviewsPerProject: "", scoreNormalization: "RAW", opensAt: "", closesAt: "" })).toMatchObject({ ok: false, fieldErrors: { freshEyes: [expect.any(String)] } });
+    expect((await listSubmissionsForJudge(await judge(event, users.j1)))?.counts.all).toBe(0);
   });
 });

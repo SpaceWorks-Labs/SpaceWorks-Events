@@ -36,16 +36,23 @@ async function judgeListScope(ctx: JudgeContext, options: JudgeRoundOption = {})
   if (!event?.submissionsEnabled) return null;
   if (!(await isEligibleJudge(prisma, event.organisationId, event.id, ctx.userId))) return null;
   const round = await resolveJudgingRound(prisma, event, options.roundId);
-  if (!round) return null;
+  if (!round || !workspaceRound(round)) return null;
   const conflicts = (await conflictKeysFor(prisma, event.id, [ctx.userId])).get(ctx.userId);
   return { event, round, visible: judgeVisibleSql(round, ctx.userId, conflicts) };
 }
 
-/** Every round of the event, as the workspace's switcher names them. */
+/** A round the workspace may show: one that has opened, or the current round (never a later DRAFT round). */
+function workspaceRound(round: Pick<JudgingRoundScope, "status" | "isCurrent">): boolean {
+  return round.isCurrent || round.status !== JudgingRoundStatus.DRAFT;
+}
+
+/** The rounds the workspace's switcher offers (see workspaceRound), in order. */
 async function roundBriefs(eventId: string): Promise<JudgeRoundDto[]> {
   const rows = await prisma.judgingRound.findMany({ where: { eventId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, status: true } });
   const current = [...rows].reverse().find((row) => row.status !== JudgingRoundStatus.DRAFT) ?? rows[0];
-  return rows.map((row) => ({ id: row.id, name: row.name, position: row.position, judgingStatus: judgingStatusFor(row.status), isCurrent: row.id === current?.id }));
+  return rows
+    .filter((row) => row.id === current?.id || row.status !== JudgingRoundStatus.DRAFT)
+    .map((row) => ({ id: row.id, name: row.name, position: row.position, judgingStatus: judgingStatusFor(row.status), isCurrent: row.id === current?.id }));
 }
 
 function roundBrief(round: JudgingRoundScope): JudgeRoundDto | null {
@@ -155,7 +162,7 @@ export async function loadSubmissionForJudge(ctx: JudgeContext, submissionId: st
   if (!event?.submissionsEnabled) return null;
   if (!(await isEligibleJudge(prisma, event.organisationId, event.id, ctx.userId))) return null;
   const round = await resolveJudgingRound(prisma, event, options.roundId);
-  if (!round) return null;
+  if (!round || !workspaceRound(round)) return null;
   const ids = await visibleSubmissionIds(prisma, round, ctx.userId, submissionId);
   if (!ids.includes(submissionId)) return null;
   const [criteria, row, scores, review] = await Promise.all([

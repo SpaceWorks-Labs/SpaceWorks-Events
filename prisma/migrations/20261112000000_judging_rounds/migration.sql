@@ -132,6 +132,20 @@ ALTER TABLE "JudgingRoundJudge" ADD CONSTRAINT "JudgingRoundJudge_userId_fkey" F
 ALTER TABLE "JudgingAssignmentRun" ADD CONSTRAINT "JudgingAssignmentRun_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "JudgingRound"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "JudgingAssignmentRun" ADD CONSTRAINT "JudgingAssignmentRun_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
+-- CreateTable
+CREATE TABLE "JudgingFinalistNotice" (
+    "id" TEXT NOT NULL,
+    "roundId" TEXT NOT NULL,
+    "emailHash" TEXT NOT NULL,
+    "outboxMessageId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "JudgingFinalistNotice_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "JudgingFinalistNotice_email_hash_shape" CHECK ("emailHash" ~ '^[0-9a-f]{64}$')
+);
+CREATE UNIQUE INDEX "JudgingFinalistNotice_roundId_emailHash_key" ON "JudgingFinalistNotice"("roundId", "emailHash");
+ALTER TABLE "JudgingFinalistNotice" ADD CONSTRAINT "JudgingFinalistNotice_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "JudgingRound"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 -- Backfill: one "Main" round per event with judging data, copying the
 -- event-level judging fields, then point the event and its rows at it.
 INSERT INTO "JudgingRound" ("id", "eventId", "name", "position", "status", "reviewsPerProject", "scoreNormalization", "judgesSeeAll", "entrySource", "createdAt", "updatedAt")
