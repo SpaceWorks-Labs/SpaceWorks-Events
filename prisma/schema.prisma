@@ -27,6 +27,9 @@ enum EventPermission {
   /// Hackathon judging workspace only (docs/HACKATHON.md). A collaborator with
   /// just this grant sees no guests, answers, emails, check-in, or editing.
   JUDGE
+  /// Application review workspace only (docs/ADMISSION.md): the applications
+  /// assigned to them, as the stage allows (blind stages hide who applied).
+  REVIEW_APPLICATIONS
 }
 
 enum EventStatus {
@@ -203,6 +206,61 @@ enum JudgeAssignmentStrategy {
   RANDOM
 }
 
+/// Applications (docs/ADMISSION.md). MANUAL: organisers release decisions in
+/// batches. AUTO: each application is offered a place as it arrives, or
+/// waitlisted when the offers are full.
+enum AdmissionMode {
+  MANUAL
+  AUTO
+}
+
+enum AdmissionStageStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+/// An application's state, mirrored on its registration(s): IN_REVIEW and
+/// OFFERED are PENDING_APPROVAL (or PENDING_PAYMENT while an accepted offer is
+/// being paid), WAITLISTED is WAITLISTED, ACCEPTED is CONFIRMED, and the
+/// closed states are REJECTED.
+enum AdmissionStatus {
+  IN_REVIEW
+  OFFERED
+  WAITLISTED
+  ACCEPTED
+  REJECTED
+  DECLINED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum AdmissionDecisionOutcome {
+  ADVANCE
+  ACCEPT
+  WAITLIST
+  REJECT
+}
+
+enum AdmissionBatchStatus {
+  DRAFT
+  RELEASED
+  CANCELLED
+}
+
+enum AdmissionAssignmentStatus {
+  ASSIGNED
+  SUBMITTED
+  RECUSED
+}
+
+/// ALL: the application entered the first stage when it was made. ADVANCED:
+/// a released ADVANCE decision moved it here.
+enum AdmissionEntrySource {
+  ALL
+  ADVANCED
+}
+
 /// Which paged event-dashboard list a saved view filters (Saved views in
 /// docs/FEATURES.md). Each surface has its own allow-list in lib/savedViews.ts.
 enum SavedViewSurface {
@@ -376,6 +434,14 @@ model User {
   claimPayoutsRecorded         ClaimPayout[]  @relation("ClaimPayoutRecordedBy")
   ticketDesignsUpdated         TicketDesign[] @relation("TicketDesignUpdatedBy")
   refundRequestsDecided        RefundRequest[] @relation("RefundRequestDecidedBy")
+  admissionStagePanels         AdmissionStageReviewer[]
+  admissionAssignments         AdmissionReviewAssignment[]
+  admissionReviews             AdmissionReview[]
+  admissionConflicts           AdmissionReviewConflict[]
+  admissionRuns                AdmissionAssignmentRun[] @relation("AdmissionAssignmentRunBy")
+  admissionEntriesAdvanced     AdmissionStageEntry[] @relation("AdmissionStageEntryAdvancedBy")
+  admissionDecisionsDrafted    AdmissionDecision[] @relation("AdmissionDecisionBy")
+  admissionBatchesReleased     AdmissionDecisionBatch[] @relation("AdmissionBatchReleasedBy")
 }
 
 model Account {
@@ -800,6 +866,24 @@ model Event {
   judgingCriteria     JudgingCriterion[]
   judgeAssignments    JudgeAssignment[]
   awards              EventAward[]
+  /// Applications and shortlisting (docs/ADMISSION.md), on any one-off event.
+  /// On: every registration (a team or a solo registrant) is an application
+  /// reviewed in stages; places are offered, and an offer is accepted (and
+  /// paid for, on paid tickets) before the place is confirmed. A CHECK keeps
+  /// the event APPROVAL_REQUIRED while it is on. Turned on or off only while
+  /// the event has no registrations (crew aside).
+  admissionEnabled                    Boolean          @default(false)
+  admissionMode                       AdmissionMode    @default(MANUAL)
+  /// Days an applicant has to accept an offer (CHECK 1..30).
+  admissionRsvpDays                   Int              @default(7)
+  /// Most offers out at once (offered + accepted); null uses Event.capacity.
+  admissionOfferCapacity              Int?
+  /// Email applicants when they move to the next stage (off by default).
+  emailApplicantsOnStageAdvance       Boolean          @default(false)
+  admissionStages       AdmissionStage[]
+  admissionApplications AdmissionApplication[]
+  admissionBatches      AdmissionDecisionBatch[]
+  admissionConflicts    AdmissionReviewConflict[]
   @@unique([organisationId, slug])
   @@index([organisationId])
   @@index([organisationId, status])
@@ -1569,6 +1653,9 @@ model RSVP {
   submissionLink    SubmissionLink?
   expenseClaims     ExpenseClaim[]
   crewMember        EventCrewMember?
+  /// A solo registrant's application on an admission event (docs/ADMISSION.md).
+  admissionApplication AdmissionApplication?
+  admissionAnswerRevisions AdmissionAnswerRevision[]
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
   @@index([userId, createdAt])
@@ -2279,6 +2366,8 @@ model Team {
   orders       Order[]
 
   submission   Submission?
+  /// The team's application on an admission event (docs/ADMISSION.md).
+  admissionApplication AdmissionApplication?
   @@unique([eventId, nameKey])
   @@index([eventId, status, createdAt])
   /// Guests · Teams oldest first (keyset on createdAt, id).
@@ -2846,4 +2935,281 @@ model JudgingFinalistNotice {
   round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
 
   @@unique([roundId, emailHash])
+}
+
+/// One review stage of an event's applications (docs/ADMISSION.md), in order.
+/// Every application enters stage 1; later stages hold only the applications
+/// advanced into them (AdmissionStageEntry). Reviewers review only while a
+/// stage is OPEN. CHECKs keep the name 1..80 characters, the position >= 1,
+/// reviewsPerApplication 1..20, at most 10 criteria and the window ordered.
+model AdmissionStage {
+  id                    String               @id @default(cuid())
+  eventId               String
+  position              Int
+  name                  String
+  status                AdmissionStageStatus @default(DRAFT)
+  /// Counted reviews an application needs here before a decision is released
+  /// without an override reason.
+  reviewsPerApplication Int                  @default(1)
+  /// Reviewers don't see who applied (names, emails, phone numbers, team names).
+  blindReview           Boolean              @default(false)
+  /// What reviewers score, each 1..5; none means one overall score.
+  criteria              String[]             @default([])
+  /// Up to 2000 characters shown to reviewers.
+  guidance              String               @default("")
+  opensAt               DateTime?
+  closesAt              DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  event       Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  entries     AdmissionStageEntry[]
+  currentFor  AdmissionApplication[]      @relation("AdmissionCurrentStage")
+  panel       AdmissionStageReviewer[]
+  assignments AdmissionReviewAssignment[]
+  reviews     AdmissionReview[]
+  runs        AdmissionAssignmentRun[]
+  decisions   AdmissionDecision[]
+
+  @@unique([eventId, position])
+}
+
+/// One application: a team, or a solo registration (CHECK exactly one, each
+/// unique; a trigger keeps it on its event and never on a crew ticket). Made
+/// by a trigger when the registration is created on an admission event.
+/// `version` changes with every state change, so a drafted decision can't be
+/// released over a newer state; `decisionRevision` counts released decisions,
+/// so an outdated email is dropped.
+model AdmissionApplication {
+  id                  String          @id @default(cuid())
+  eventId             String
+  rsvpId              String?         @unique
+  teamId              String?         @unique
+  status              AdmissionStatus @default(IN_REVIEW)
+  /// The latest stage it reached (the stage it is reviewed in now).
+  currentStageId      String?
+  submittedAt         DateTime        @default(now())
+  offeredAt           DateTime?
+  /// OFFERED: accept by then, or the offer expires.
+  respondBy           DateTime?
+  offerReminderSentAt DateTime?
+  /// WAITLISTED: its place in the queue (first in, first offered).
+  queuedAt            DateTime?
+  /// Why promotion last passed over it (a full ticket type, an incomplete team).
+  skipReason          String?
+  decisionRevision    Int             @default(0)
+  /// Bumped when the answers change; reviews count only on the current answers.
+  answersRevision     Int             @default(1)
+  /// Set at the first released decision; answers can't change after.
+  answersLockedAt     DateTime?
+  version             Int             @default(1)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @default(now()) @updatedAt
+
+  event           Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsvp            RSVP?                       @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  team            Team?                       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  currentStage    AdmissionStage?             @relation("AdmissionCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
+  entries         AdmissionStageEntry[]
+  assignments     AdmissionReviewAssignment[]
+  reviews         AdmissionReview[]
+  decisions       AdmissionDecision[]
+  answerRevisions AdmissionAnswerRevision[]
+  conflicts       AdmissionReviewConflict[]
+
+  @@index([eventId, status, queuedAt, id])
+  @@index([eventId, status, respondBy])
+  @@index([currentStageId, status])
+}
+
+/// An application reached a stage. Never updated (trigger); query it for
+/// "reached stage N" (applicationReachedStage in lib/admission/stages.ts).
+model AdmissionStageEntry {
+  id               String               @id @default(cuid())
+  stageId          String
+  applicationId    String
+  source           AdmissionEntrySource @default(ALL)
+  advancedByUserId String?
+  advancedAt       DateTime             @default(now())
+  /// Its rank in the previous stage when advanced, if the organiser gave one.
+  sourceRank       Int?
+
+  stage       AdmissionStage       @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  advancedBy  User?                @relation("AdmissionStageEntryAdvancedBy", fields: [advancedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([stageId, applicationId])
+  @@index([applicationId])
+}
+
+/// A stage's own reviewer panel. A stage with no rows is reviewed by every
+/// REVIEW_APPLICATIONS collaborator of the event; with rows, by these people
+/// (who must still hold the grant, or be organisation owners/admins).
+model AdmissionStageReviewer {
+  id        String   @id @default(cuid())
+  stageId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  stage AdmissionStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([stageId, userId])
+  @@index([userId])
+}
+
+/// A reviewer assigned an application in a stage. RECUSED stays (the pair is
+/// never assigned again); SUBMITTED once their review on the current answers is in.
+model AdmissionReviewAssignment {
+  id             String                    @id @default(cuid())
+  stageId        String
+  applicationId  String
+  reviewerUserId String
+  status         AdmissionAssignmentStatus @default(ASSIGNED)
+  /// The automatic run that made it, if any.
+  runId          String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @default(now()) @updatedAt
+
+  stage       AdmissionStage          @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  application AdmissionApplication    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer    User                    @relation(fields: [reviewerUserId], references: [id], onDelete: Cascade)
+  run         AdmissionAssignmentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  reviews     AdmissionReview[]
+
+  @@unique([stageId, applicationId, reviewerUserId])
+  @@index([reviewerUserId, status])
+  @@index([applicationId])
+}
+
+/// A submitted review: never updated (trigger). One per assignment and
+/// answers revision; `scores` maps each criterion (or "overall") to 1..5.
+model AdmissionReview {
+  id              String   @id @default(cuid())
+  assignmentId    String
+  stageId         String
+  applicationId   String
+  reviewerUserId  String
+  answersRevision Int
+  scores          Json
+  /// Up to 2000 characters; organisers only.
+  notes           String   @default("")
+  createdAt       DateTime @default(now())
+
+  assignment  AdmissionReviewAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  stage       AdmissionStage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  application AdmissionApplication      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer    User                      @relation(fields: [reviewerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, answersRevision])
+  @@index([applicationId, stageId])
+}
+
+/// A declared conflict of interest: the reviewer never reviews the application.
+model AdmissionReviewConflict {
+  id             String   @id @default(cuid())
+  eventId        String
+  reviewerUserId String
+  applicationId  String
+  /// "declared" (by the reviewer when recusing) or "organiser".
+  reason         String   @default("declared")
+  createdAt      DateTime @default(now())
+
+  event       Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  reviewer    User                 @relation(fields: [reviewerUserId], references: [id], onDelete: Cascade)
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewerUserId, applicationId])
+  @@index([eventId])
+}
+
+/// One applied automatic reviewer assignment of a stage, as JudgingAssignmentRun:
+/// the strategy, the RANDOM seed (CHECK: 32 hex characters exactly for RANDOM),
+/// the target and fingerprints of the inputs and the plan.
+model AdmissionAssignmentRun {
+  id               String                  @id @default(cuid())
+  stageId          String
+  strategy         JudgeAssignmentStrategy
+  /// "keep" or "replace".
+  mode             String
+  seed             String?
+  perApplication   Int
+  reviewers        Int
+  added            Int
+  removed          Int
+  inputFingerprint String
+  planFingerprint  String
+  createdByUserId  String?
+  createdAt        DateTime                @default(now())
+
+  stage       AdmissionStage              @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  createdBy   User?                       @relation("AdmissionAssignmentRunBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignments AdmissionReviewAssignment[]
+
+  @@index([stageId, createdAt])
+}
+
+/// Drafted decisions, released or cancelled as a whole (one DRAFT batch per
+/// event, partial unique index).
+model AdmissionDecisionBatch {
+  id               String               @id @default(cuid())
+  eventId          String
+  status           AdmissionBatchStatus @default(DRAFT)
+  releasedByUserId String?
+  releasedAt       DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime             @default(now())
+
+  event      Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  releasedBy User?               @relation("AdmissionBatchReleasedBy", fields: [releasedByUserId], references: [id], onDelete: SetNull)
+  decisions  AdmissionDecision[]
+
+  @@index([eventId, createdAt])
+}
+
+/// One drafted decision. Never updated once its batch is released (trigger).
+/// `expectedVersion` is the application's version when drafted; release
+/// refuses a decision whose application changed since. Without enough counted
+/// reviews, release needs `overrideReason`.
+model AdmissionDecision {
+  id              String                   @id @default(cuid())
+  batchId         String
+  applicationId   String
+  /// The stage the decision was made in.
+  stageId         String
+  outcome         AdmissionDecisionOutcome
+  expectedVersion Int
+  /// Up to 200 characters, organisers only.
+  note            String                   @default("")
+  /// Up to 500 characters; needed when the application is short of reviews.
+  overrideReason  String?
+  sourceRank      Int?
+  createdByUserId String?
+  createdAt       DateTime                 @default(now())
+
+  batch       AdmissionDecisionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  application AdmissionApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  stage       AdmissionStage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  createdBy   User?                  @relation("AdmissionDecisionBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, applicationId])
+  @@index([applicationId])
+}
+
+/// The answers an applicant replaced, kept whenever they edit them before
+/// the application locks. Never updated (trigger).
+model AdmissionAnswerRevision {
+  id              String   @id @default(cuid())
+  applicationId   String
+  rsvpId          String
+  /// The revision these answers belonged to.
+  answersRevision Int
+  /// [{ fieldId, label, value }] as they were.
+  answers         Json
+  createdAt       DateTime @default(now())
+
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  rsvp        RSVP                 @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
 }
