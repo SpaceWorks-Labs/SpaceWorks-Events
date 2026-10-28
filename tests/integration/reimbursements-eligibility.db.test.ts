@@ -5,7 +5,7 @@ vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
 
 import { prisma } from "@/lib/db";
 import { approveClaim } from "@/lib/claims/decide";
-import { queueReimbursementNotices } from "@/lib/claims/policies/notices";
+import { POLICIES_PER_PASS, queueReimbursementNotices } from "@/lib/claims/policies/notices";
 import { submitParticipantClaim } from "@/lib/claims/submit";
 import { loadTicketClaims } from "@/lib/claims/ticketView";
 import { deliverReimbursementAvailable, REIMBURSEMENT_AVAILABLE_KIND } from "@/lib/outbox/reimbursement";
@@ -100,6 +100,31 @@ describe.sequential("per-stage eligibility", () => {
     expect(await deliverReimbursementAvailable(mine[0]!.payload, "<test@outbox.invalid>")).toBe("sent");
     await prisma.reimbursementPolicy.update({ where: { id: notify }, data: { active: false } });
     expect(await deliverReimbursementAvailable(mine[1]!.payload, "<test2@outbox.invalid>")).toBe("dropped");
+    // A dropped email clears its notice, so the person is told once the policy is open again.
+    const droppedFor = (mine[1]!.payload as { rsvpId: string }).rsvpId;
+    expect(await prisma.reimbursementNotice.count({ where: { policyId: notify, rsvpId: droppedFor } })).toBe(0);
+    await prisma.reimbursementPolicy.update({ where: { id: notify }, data: { active: true } });
+    await queueReimbursementNotices();
+    expect(await prisma.reimbursementNotice.findMany({ where: { policyId: notify }, select: { rsvpId: true } })).toHaveLength(2);
+    await prisma.reimbursementPolicy.update({ where: { id: notify }, data: { active: false } });
     expect(await deliverReimbursementAvailable({ to: "x" }, "<bad@outbox.invalid>")).toBeNull();
+  });
+
+  it("reaches every policy across passes when there are more than a pass takes", async () => {
+    const total = POLICIES_PER_PASS + 5;
+    const ids: string[] = [];
+    for (let batch = 0; batch < 3; batch += 1) {
+      const event = await freeEvent();
+      await person(event);
+      for (let index = batch * 20; index < Math.min(total, batch * 20 + 20); index += 1) {
+        ids.push((await prisma.reimbursementPolicy.create({ data: { eventId: event.id, name: `P${index}`, eligibility: "CONFIRMED_PARTICIPANT", capPerPersonMinor: BigInt(100), categories: ["TRAVEL"], notifyWhenAvailable: true } })).id);
+      }
+    }
+    const unchecked = () => prisma.reimbursementPolicy.count({ where: { id: { in: ids }, noticesCheckedAt: null } });
+    await queueReimbursementNotices();
+    expect(await unchecked()).toBeGreaterThanOrEqual(5);
+    await queueReimbursementNotices();
+    expect(await unchecked()).toBe(0);
+    expect(await prisma.reimbursementNotice.count({ where: { policyId: { in: ids } } })).toBe(total);
   });
 });

@@ -11,11 +11,14 @@ import { eligibleRegistrationIds } from "./eligibility";
  * registration that qualifies now and hasn't been told (ReimbursementNotice,
  * unique per policy and registration). A person qualifies later, for
  * example when finalists are published or their team takes part in a
- * mentoring round, and is told on the next pass. Each policy is handled
- * under its own row lock, so two beats never queue the same person twice.
+ * mentoring round, and is told on a later pass. Each pass takes the policies
+ * checked longest ago (`noticesCheckedAt`), so none starves behind others,
+ * and handles each under its own row lock, so two beats never queue the
+ * same person twice. A message dropped at delivery clears its notice
+ * (lib/outbox/reimbursement.ts), so the person can be told later.
  */
 
-const POLICIES_PER_PASS = 50;
+export const POLICIES_PER_PASS = 50;
 const PEOPLE_PER_POLICY = 200;
 
 export async function queueReimbursementNotices(now = new Date()) {
@@ -26,19 +29,21 @@ export async function queueReimbursementNotices(now = new Date()) {
       event: { status: EventStatus.PUBLISHED },
       AND: [{ OR: [{ claimOpensAt: null }, { claimOpensAt: { lte: now } }] }, { OR: [{ claimClosesAt: null }, { claimClosesAt: { gt: now } }] }],
     },
-    orderBy: { id: "asc" },
+    orderBy: [{ noticesCheckedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
     take: POLICIES_PER_PASS,
     select: { id: true },
   });
   let queued = 0;
-  for (const { id } of policies) queued += await prisma.$transaction((tx) => queueForPolicy(tx, id));
-  return { queued };
+  for (const { id } of policies) queued += await prisma.$transaction((tx) => queueForPolicy(tx, id, now));
+  return { queued, policies: policies.length };
 }
 
-async function queueForPolicy(tx: Prisma.TransactionClient, policyId: string) {
+async function queueForPolicy(tx: Prisma.TransactionClient, policyId: string, now: Date) {
   await tx.$queryRaw`SELECT "id" FROM "ReimbursementPolicy" WHERE "id" = ${policyId} FOR UPDATE`;
   const policy = await tx.reimbursementPolicy.findUnique({ where: { id: policyId }, include: { event: { select: { organisationId: true } } } });
-  if (!policy?.active || !policy.notifyWhenAvailable) return 0;
+  if (!policy) return 0;
+  await tx.reimbursementPolicy.update({ where: { id: policyId }, data: { noticesCheckedAt: now } });
+  if (!policy.active || !policy.notifyWhenAvailable) return 0;
   const ids = await eligibleRegistrationIds(tx, policy.eventId, policy, PEOPLE_PER_POLICY, { reimbursementNotices: { none: { policyId } } });
   if (ids.length === 0) return 0;
   const people = await tx.rSVP.findMany({ where: { id: { in: ids } }, select: { id: true, guestEmail: true, user: { select: { email: true } } } });

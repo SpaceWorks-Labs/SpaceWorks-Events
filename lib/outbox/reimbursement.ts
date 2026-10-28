@@ -27,10 +27,20 @@ export function asReimbursementAvailablePayload(value: Prisma.JsonValue): Reimbu
   return p as ReimbursementAvailablePayload;
 }
 
-/** "sent", "dropped" when it no longer applies, or null for an invalid payload (permanent). */
+/**
+ * "sent", "dropped" when it no longer applies, or null for an invalid payload
+ * (permanent). A dropped message clears its ReimbursementNotice, so the beat
+ * tells the person once the policy applies to them again.
+ */
 export async function deliverReimbursementAvailable(value: Prisma.JsonValue, messageId: string): Promise<"sent" | "dropped" | null> {
   const payload = asReimbursementAvailablePayload(value);
   if (!payload) return null;
+  const outcome = await deliver(payload, messageId);
+  if (outcome === "dropped") await prisma.reimbursementNotice.deleteMany({ where: { policyId: payload.policyId, rsvpId: payload.rsvpId } });
+  return outcome;
+}
+
+async function deliver(payload: ReimbursementAvailablePayload, messageId: string): Promise<"sent" | "dropped"> {
   const policy = await prisma.reimbursementPolicy.findUnique({
     where: { id: payload.policyId },
     include: { event: { select: { id: true, title: true, status: true, currency: true, timezone: true, organisationId: true } } },

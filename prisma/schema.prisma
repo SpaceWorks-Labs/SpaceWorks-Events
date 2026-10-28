@@ -2898,6 +2898,9 @@ model ReimbursementPolicy {
   active                    Boolean                  @default(true)
   /// Email each person once when the policy becomes available to them.
   notifyWhenAvailable       Boolean                  @default(false)
+  /// When the beat last looked for people to email under this policy; the
+  /// pass takes the longest-unchecked policies first so none starves.
+  noticesCheckedAt          DateTime?
   createdAt                 DateTime                 @default(now())
   updatedAt                 DateTime                 @updatedAt
 
