@@ -37,4 +37,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   const result = await addCrewMember({ organisationSlug: event.organisation.slug, eventId: event.event.id, member: body.data });
   if (!result.ok) return mobileActionError(result);
   return mobileOk(await crewList(event.organisation.id, event.event.id, auth.userId), 201);
-});
+}, { idempotent: true });

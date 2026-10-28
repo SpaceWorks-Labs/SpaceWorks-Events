@@ -36,6 +36,7 @@ export function judgingRoute<P extends JudgingParams = JudgingParams>(
   routeId: string,
   bucket: "action" | "search",
   handler: (request: Request, params: P, context: AuthedRouteContext & { judge: JudgeContext }) => Promise<Response>,
+  options: { idempotent?: true } = {},
 ) {
   return authedMobileRoute<P>(routeId, async (request, params, context) => {
     if (await isActionRateLimited(bucket, context.auth.userId)) return mobileError("RATE_LIMITED");
@@ -45,7 +46,7 @@ export function judgingRoute<P extends JudgingParams = JudgingParams>(
       return mobileError(visible ? "FORBIDDEN" : "NOT_FOUND");
     }
     return handler(request, params, { ...context, judge });
-  }, { staff: true });
+  }, { staff: true, ...options });
 }
 
 export const judgeListQuerySchema = z.object({

@@ -5,13 +5,15 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { deriveSecretKey } from "@/lib/instanceConfigSecrets";
-import { mobileError, readJsonBody } from "@/lib/mobile/http";
+import { readBoundedBody } from "@/lib/mobile/boundedBody";
+import { MAX_BODY_BYTES, mobileError, readJsonBody } from "@/lib/mobile/http";
 
 /*
- * Idempotency for mobile writes that venue Wi-Fi tends to retry (the Mentor
- * Desk). Each write must send `Idempotency-Key` (8 to 128 printable
- * characters, one per user action). The first request with a key runs and its
- * answer is kept for a day by user, route and key; a retry with the same key,
+ * Idempotency for mobile writes that venue Wi-Fi tends to retry: every
+ * signed-in write that moves money or creates or changes a record
+ * (docs/MOBILE_API.md lists the few that are exempt). Each write must send
+ * `Idempotency-Key` (8 to 128 printable characters, one per user action).
+ * The first request with a key runs and its answer is kept for a day by user, route and key; a retry with the same key,
  * path and body gets that answer again (`Idempotent-Replayed: true`) without
  * acting twice. The same key on another path (another event, request, slot or
  * round) or with another body is CONFLICT, never another resource's answer.
@@ -25,8 +27,10 @@ import { mobileError, readJsonBody } from "@/lib/mobile/http";
  * that key. Re-read the record and, if the change is not there, send a new key.
  *
  * Keys and bodies are stored only as HMACs under a key derived from
- * MFA_ENCRYPTION_KEY for this purpose alone, and the kept answers are the
- * routes' small DTOs (ids and versions, never help text).
+ * MFA_ENCRYPTION_KEY for this purpose alone. The kept answers are the routes'
+ * DTOs, as the caller saw them, minus ticket links: every `ticketToken` is
+ * kept as null, so a replay never carries one (re-read the record for it).
+ * Expired rows are purged daily (lib/retention.ts).
  */
 
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60_000;
@@ -52,23 +56,58 @@ function isTransient(status: number, kept: unknown) {
   return typeof code === "string" && TRANSIENT_CODES.has(code);
 }
 
+/** Ticket links are bearer capabilities: never kept in a stored answer. */
+function keepable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(keepable);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, key === "ticketToken" && item != null ? null : keepable(item)]));
+}
+
+/** The body's fingerprint: JSON by its parsed value, a multipart form by its fields and files (a retry may pick a new boundary), else its bytes. */
+async function bodyFingerprint(contentType: string, bytes: Uint8Array) {
+  const hash = crypto.createHash("sha256");
+  if (/^multipart\/form-data;/i.test(contentType)) {
+    const form = await new Response(Buffer.from(bytes), { headers: { "content-type": contentType } }).formData().catch(() => null);
+    if (form) {
+      for (const [name, value] of form.entries()) {
+        hash.update(`${name.length}:${name}`);
+        if (typeof value === "string") hash.update(`s${value.length}:${value}`);
+        else hash.update(`f${value.name.length}:${value.name}:${value.type}:${value.size}:`).update(Buffer.from(await value.arrayBuffer()));
+      }
+      return `form:${hash.digest("hex")}`;
+    }
+  }
+  const text = new TextDecoder().decode(bytes);
+  try {
+    if (text.trim()) return `json:${hash.update(JSON.stringify(JSON.parse(text))).digest("hex")}`;
+  } catch {
+    // Not JSON: the bytes themselves.
+  }
+  return `bytes:${hash.update(bytes).digest("hex")}`;
+}
+
 /**
- * Run `write` at most once per Idempotency-Key. `write` gets the parsed JSON
- * body; transient answers (see above) are not kept, so a retry runs again.
+ * Run `run` at most once per Idempotency-Key. The body is read here (up to
+ * `maxBytes`) and handed to `run` in a fresh copy of the request, so a route
+ * reads it as usual. Transient answers (see above) are not kept, so a retry
+ * runs again.
  */
-export async function idempotentWrite(
+export async function idempotentRequest(
   request: Request,
   userId: string,
   routeId: string,
-  write: (body: unknown) => Promise<Response>,
+  run: (request: Request) => Promise<Response>,
+  maxBytes = MAX_BODY_BYTES,
 ): Promise<Response> {
   const key = request.headers.get("idempotency-key")?.trim() ?? "";
   if (!KEY_PATTERN.test(key)) return mobileError("INVALID_REQUEST", "Send an Idempotency-Key header (8 to 128 characters) with this request.");
-  const body = await readJsonBody(request);
-  if ("response" in body) return body.response;
+  const bytes = await readBoundedBody(request, maxBytes);
+  if (bytes === "too_large") return mobileError("PAYLOAD_TOO_LARGE");
+  if (bytes === "unreadable") return mobileError("INVALID_REQUEST", "Invalid request body.");
+  const contentType = request.headers.get("content-type") ?? "";
   const url = new URL(request.url);
   const keyHash = digest(`key\n${routeId}\n${key}`);
-  const requestHash = digest(`request\n${request.method}\n${url.pathname}${url.search}\n${JSON.stringify(body.value ?? null)}`);
+  const requestHash = digest(`request\n${request.method}\n${url.pathname}${url.search}\n${await bodyFingerprint(contentType, bytes)}`);
   const where = { userId_route_keyHash: { userId, route: routeId, keyHash } };
   const forget = () => prisma.mobileIdempotencyKey.deleteMany({ where: { userId, route: routeId, keyHash } }).catch(() => undefined);
   const now = new Date();
@@ -87,9 +126,11 @@ export async function idempotentWrite(
     return mobileError("CONFLICT", "The first request with this Idempotency-Key is still running. Try again shortly.");
   }
 
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
   let response: Response;
   try {
-    response = await write(body.value);
+    response = await run(new Request(request.url, { method: request.method, headers, body: bytes.byteLength > 0 ? Buffer.from(bytes) : undefined }));
   } catch (error) {
     await forget();
     throw error;
@@ -100,10 +141,23 @@ export async function idempotentWrite(
     return response;
   }
   try {
-    await prisma.mobileIdempotencyKey.update({ where, data: { status: response.status, body: kept ?? Prisma.DbNull } });
+    await prisma.mobileIdempotencyKey.update({ where, data: { status: response.status, body: kept == null ? Prisma.DbNull : keepable(kept) as Prisma.InputJsonValue } });
   } catch {
     // The write happened; keep the row in progress (it turns stale) rather than let the key run it twice.
     console.error(`[mobile-api] ${routeId} could not keep its idempotent answer`);
   }
   return response;
+}
+
+/** As idempotentRequest, for a JSON write: `write` gets the parsed body. */
+export function idempotentWrite(
+  request: Request,
+  userId: string,
+  routeId: string,
+  write: (body: unknown) => Promise<Response>,
+): Promise<Response> {
+  return idempotentRequest(request, userId, routeId, async (copy) => {
+    const body = await readJsonBody(copy);
+    return "response" in body ? body.response : write(body.value);
+  });
 }

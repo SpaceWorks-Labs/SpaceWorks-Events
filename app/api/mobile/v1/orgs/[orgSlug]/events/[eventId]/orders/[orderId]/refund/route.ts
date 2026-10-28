@@ -16,4 +16,4 @@ export const POST = eventRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events
   if (!result.ok) return result.error === "Order not found." ? notFound() : mobileActionError(result);
   const order = await loadOrganiserOrder(event.event.id, orderId);
   return order ? mobileOk(order) : notFound();
-});
+}, { idempotent: true });

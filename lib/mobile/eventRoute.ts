@@ -2,7 +2,7 @@ import "server-only";
 
 import { mobileError } from "@/lib/mobile/http";
 import { resolveEventContext, type MobileEventContext } from "@/lib/mobile/organiser";
-import { authedMobileRoute, type AuthedRouteContext } from "@/lib/mobile/route";
+import { authedMobileRoute, type AuthedRouteContext, type RouteOptions } from "@/lib/mobile/route";
 import type { EventPermissionsDto } from "@/lib/mobile/schemas";
 
 type EventParams = { orgSlug: string; eventId: string };
@@ -17,11 +17,12 @@ export function eventRoute<P extends EventParams = EventParams>(
   routeId: string,
   requirement: ((permissions: EventPermissionsDto) => boolean) | null,
   handler: (request: Request, params: P, context: AuthedRouteContext & { event: MobileEventContext }) => Promise<Response>,
+  options: Pick<RouteOptions, "idempotent"> = {},
 ) {
   return authedMobileRoute<P>(routeId, async (request, params, context) => {
     const event = await resolveEventContext(context.auth.userId, params.orgSlug, params.eventId);
     if (!event) return mobileError("NOT_FOUND");
     if (requirement && !requirement(event.permissions)) return mobileError("FORBIDDEN");
     return handler(request, params, { ...context, event });
-  }, { staff: true });
+  }, { staff: true, idempotent: options.idempotent });
 }

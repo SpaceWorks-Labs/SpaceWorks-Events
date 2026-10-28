@@ -19,7 +19,7 @@ vi.mock("@/lib/outboxWorker", () => ({ startOutboxWorker: vi.fn() }));
 
 import { prisma } from "@/lib/db";
 import { addCrewMemberAsOrganiser } from "@/lib/core/crew";
-import { createEvent, createUser, get, keyed, params, post, signIn, type SignedIn } from "../helpers/mobileApi";
+import { createEvent, createUser, get, keyed, params, post, signIn, unkeyed, type SignedIn } from "../helpers/mobileApi";
 import { GET as myShifts } from "@/app/api/mobile/v1/me/registrations/[rsvpId]/shifts/route";
 import { POST as myShiftAction } from "@/app/api/mobile/v1/me/registrations/[rsvpId]/shifts/[id]/[action]/route";
 import { GET as roster } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/volunteer-shifts/route";
@@ -99,7 +99,7 @@ describe.sequential("volunteer shifts through the mobile API", () => {
     const teardown = await signupFor(ids.later);
     expect((await signupAction(post("/x", {}, tokens.helper.accessToken), at({ signupId: teardown.id, action: "launch" }))).status).toBe(404);
     // Desk and approval writes need an Idempotency-Key; a retry replays the first answer without acting twice.
-    expect((await signupAction(post("/x", {}, tokens.helper.accessToken), at({ signupId: teardown.id, action: "approve" }))).status).toBe(400);
+    expect((await signupAction(unkeyed("/x", {}, tokens.helper.accessToken), at({ signupId: teardown.id, action: "approve" }))).status).toBe(400);
     const approved = await signupAction(keyed("/x", {}, tokens.helper.accessToken, `approve-${suffix}`), at({ signupId: teardown.id, action: "approve" }));
     expect(await approved.json()).toEqual({ ok: true, data: { signupId: teardown.id, status: "APPROVED", attendance: "SCHEDULED", minutes: null } });
     const replayed = await signupAction(keyed("/x", {}, tokens.helper.accessToken, `approve-${suffix}`), at({ signupId: teardown.id, action: "approve" }));

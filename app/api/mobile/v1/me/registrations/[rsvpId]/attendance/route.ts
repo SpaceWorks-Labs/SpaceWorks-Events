@@ -30,4 +30,4 @@ export const POST = authedMobileRoute<Params>("POST /api/mobile/v1/me/registrati
   const result = await respondToAttendanceCheckForUser(auth.userId, rsvpId, body.value);
   if (!result.ok || !result.data) return mobileActionError(result.ok ? { ok: false, error: "This link is no longer valid." } : result);
   return mobileOk(attendanceReplyDtoSchema.parse({ response: result.data.response, released: result.data.released, releaseFailed: result.data.releaseFailed ?? null }));
-});
+}, { idempotent: true });

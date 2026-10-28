@@ -12,4 +12,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   const result = await setRegistrationWindowForUser(auth.userId, { organisationSlug: event.organisation.slug, eventId: event.event.id, open: body.data.open });
   if (!result.ok) return mobileActionError(result);
   return result.data ? mobileOk(registrationStateDtoSchema.parse(result.data)) : mobileError("INTERNAL_ERROR");
-});
+}, { idempotent: true });

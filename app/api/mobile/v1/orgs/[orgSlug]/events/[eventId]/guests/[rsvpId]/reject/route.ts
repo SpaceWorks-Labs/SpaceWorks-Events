@@ -17,4 +17,4 @@ export const POST = eventRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events
   if (!result.ok) return mobileActionError(result);
   const guest = await loadGuestAfterDecision(event, rsvpId);
   return mobileOk(guest ?? { ...before, status: "REJECTED" as const });
-});
+}, { idempotent: true });

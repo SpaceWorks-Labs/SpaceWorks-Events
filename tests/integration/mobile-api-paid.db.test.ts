@@ -25,7 +25,7 @@ import { INSTANCE_SETTINGS_ID } from "@/lib/instanceSettings";
 import { encryptPaymentSecret } from "@/lib/payments/secrets";
 import { newWebhookPathId } from "@/lib/payments/settings";
 import { createFakeProvider, FAKE_PROVIDER_ORIGIN } from "../helpers/fakeProviderFetch";
-import { createEvent, createUser, get, params, post, signIn, type SignedIn } from "../helpers/mobileApi";
+import { createEvent, createUser, get, keyed, params, post, signIn, type SignedIn } from "../helpers/mobileApi";
 import { POST as rsvp } from "@/app/api/mobile/v1/rsvp/route";
 import { POST as cancelMine } from "@/app/api/mobile/v1/me/registrations/[rsvpId]/cancel/route";
 import { GET as myOrder } from "@/app/api/mobile/v1/me/orders/[orderId]/route";
@@ -34,6 +34,7 @@ import { POST as reject } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[event
 import { POST as reaccept } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/guests/[rsvpId]/reaccept/route";
 import { GET as organiserOrder } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/orders/[orderId]/route";
 import { POST as preview } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/check-in/preview/route";
+import { POST as refund } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/orders/[orderId]/refund/route";
 
 const suffix = randomUUID().replaceAll("-", "").slice(0, 16);
 const email = (name: string) => `${name}-${suffix}@example.test`;
@@ -130,6 +131,37 @@ describe.sequential("paid tickets through the mobile API", () => {
     await expect(prisma.rSVP.findUnique({ where: { id: held.id } })).resolves.toMatchObject({ status: RsvpStatus.CONFIRMED });
     // Someone else's ticket is simply not found.
     expect((await cancelMine(post("/x", {}, other.accessToken), params({ rsvpId: held.id }))).status).toBe(404);
+  });
+
+  it("refunds a replayed partial refund once, and registers a replayed order once", async () => {
+    const held = await prisma.rSVP.findFirstOrThrow({ where: { eventId: ids.event, userId: ids.buyer }, select: { orderId: true } });
+    const orderId = held.orderId!;
+    const path = `/api/mobile/v1/orgs/${orgSlug}/events/${ids.event}/orders/${orderId}/refund`;
+    const body = { amount: "100", reason: "Partial refund for a missed session" };
+    // Without a key nothing happens.
+    const unkeyed = new Request(`https://events.example.test${path}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${owner.accessToken}` }, body: JSON.stringify(body) });
+    expect((await refund(unkeyed, at(ids.event, { orderId }))).status).toBe(400);
+    const first = await refund(keyed(path, body, owner.accessToken, `refund-${suffix}`), at(ids.event, { orderId }));
+    expect(first.status, await first.clone().text()).toBe(200);
+    // Venue Wi-Fi retries the same tap: the first answer again, no second refund.
+    const again = await refund(keyed(path, body, owner.accessToken, `refund-${suffix}`), at(ids.event, { orderId }));
+    expect(again.status).toBe(200);
+    expect(again.headers.get("idempotent-replayed")).toBe("true");
+    await expect(again.json()).resolves.toEqual(await first.json());
+    // The same key for another amount is refused, never run.
+    expect((await refund(keyed(path, { ...body, amount: "200" }, owner.accessToken, `refund-${suffix}`), at(ids.event, { orderId }))).status).toBe(409);
+    const refunds = await prisma.paymentRefund.findMany({ where: { payment: { orderId } }, select: { amountMinor: true } });
+    expect(refunds).toEqual([{ amountMinor: BigInt(10000) }]);
+
+    // A signed-in registration with a replayed key holds one order, and the kept answer never holds a ticket token.
+    const register = () => rsvp(keyed("/api/mobile/v1/rsvp", { orgSlug, eventSlug: `paid-${suffix}`, items: [{ ticketTypeId: ids.ticket, quantity: 1 }] }, other.accessToken, `rsvp-${suffix}`), params({}));
+    const placed = await (await register()).json();
+    const replayed = await register();
+    expect(replayed.headers.get("idempotent-replayed")).toBe("true");
+    await expect(replayed.json()).resolves.toMatchObject({ data: { orderId: placed.data.orderId } });
+    await expect(prisma.order.count({ where: { eventId: ids.event, buyerUserId: ids.other } })).resolves.toBe(1);
+    await prisma.order.deleteMany({ where: { eventId: ids.event, buyerUserId: ids.other } });
+    await prisma.rSVP.deleteMany({ where: { eventId: ids.event, userId: ids.other } });
   });
 
   it("answers a paid request as pending approval, and re-accepting it offers a payment link", async () => {

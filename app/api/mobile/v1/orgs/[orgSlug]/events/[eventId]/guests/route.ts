@@ -41,4 +41,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   const guest = result.data ? await loadGuest(event, result.data.rsvpId) : null;
   if (!guest) return mobileError("INTERNAL_ERROR");
   return mobileOk(guestSchema.parse(guest), 201);
-});
+}, { idempotent: true });

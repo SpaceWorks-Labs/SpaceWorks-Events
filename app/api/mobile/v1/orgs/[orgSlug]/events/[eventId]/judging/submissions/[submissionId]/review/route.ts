@@ -40,4 +40,4 @@ export const POST = judgingRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/even
   revalidatePath(`/dashboard/${judge.orgSlug}/event/${judge.eventId}`);
   if (!submitted.ok) return mobileActionError(submitted);
   return judgeDetailResponse(judge, submissionId);
-});
+}, { idempotent: true });

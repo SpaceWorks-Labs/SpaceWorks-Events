@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 process.env.MFA_ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
 
 import { prisma } from "@/lib/db";
-import { idempotentWrite, STALE_AFTER_MS } from "@/lib/mobile/idempotency";
+import { idempotentRequest, idempotentWrite, STALE_AFTER_MS } from "@/lib/mobile/idempotency";
 import { mobileError, mobileOk } from "@/lib/mobile/http";
 
 const ROUTE = "POST /api/mobile/v1/test/:thingId/act";
@@ -71,6 +71,29 @@ describe.sequential("mobile idempotent writes", () => {
     const retried = await idempotentWrite(request("/api/mobile/v1/test/t/act", key), userId, ROUTE, write);
     expect(retried.headers.get("idempotent-replayed")).toBeNull();
     expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it("never keeps a ticket token in the stored answer", async () => {
+    const write = counter(() => mobileOk({ rsvpId: "r1", ticketToken: "secret-ticket-token", order: { tickets: [{ ticketToken: "another-secret" }] } }));
+    const first = await idempotentWrite(request("/api/mobile/v1/test/k/act", "ticket-key-01"), userId, ROUTE, write);
+    await expect(first.json()).resolves.toMatchObject({ data: { ticketToken: "secret-ticket-token" } });
+    const rows = await prisma.mobileIdempotencyKey.findMany({ where: { userId } });
+    expect(JSON.stringify(rows)).not.toContain("secret");
+    const replayed = await idempotentWrite(request("/api/mobile/v1/test/k/act", "ticket-key-01"), userId, ROUTE, write);
+    await expect(replayed.json()).resolves.toEqual({ ok: true, data: { rsvpId: "r1", ticketToken: null, order: { tickets: [{ ticketToken: null }] } } });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays a multipart write whose retry picked a new boundary, and hands the route the body", async () => {
+    const form = (amount: string) => { const data = new FormData(); data.set("amount", amount); data.append("receipts", new File([new Uint8Array([1, 2, 3])], "r.jpg", { type: "image/jpeg" })); return data; };
+    const multipart = (amount: string) => new Request("https://events.example.test/api/mobile/v1/test/m/act", { method: "POST", headers: { "idempotency-key": "multipart-key-1" }, body: form(amount) });
+    const run = vi.fn(async (copy: Request) => mobileOk({ amount: (await copy.formData()).get("amount") }, 201));
+    expect((await idempotentRequest(multipart("12"), userId, ROUTE, run, 1024 * 1024)).status).toBe(201);
+    const replayed = await idempotentRequest(multipart("12"), userId, ROUTE, run, 1024 * 1024);
+    expect(replayed.headers.get("idempotent-replayed")).toBe("true");
+    await expect(replayed.json()).resolves.toEqual({ ok: true, data: { amount: "12" } });
+    expect((await idempotentRequest(multipart("13"), userId, ROUTE, run, 1024 * 1024)).status).toBe(409);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a definitive refusal and replays it", async () => {

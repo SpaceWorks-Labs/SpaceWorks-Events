@@ -11,4 +11,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   const result = await undoCheckInForUser(auth.userId, { organisationSlug: event.organisation.slug, eventId: event.event.id, rsvpId: body.data.rsvpId }, { source: "mobile-manual" });
   if (!result.ok) return mobileActionError(result);
   return mobileOk(null);
-});
+}, { idempotent: true });

@@ -13,4 +13,4 @@ export const POST = authedMobileRoute<{ orderId: string }>("POST /api/mobile/v1/
   if (!result.ok) return result.error === "Order not found." ? notFound() : mobileActionError(result);
   const order = await loadMyOrder(auth.userId, orderId);
   return order ? mobileOk(order) : notFound();
-});
+}, { idempotent: true });

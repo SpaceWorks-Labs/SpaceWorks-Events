@@ -11,4 +11,4 @@ export const POST = eventRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events
   if (!result.ok) return mobileActionError(result);
   const team = await loadTeamForMobile({ userId: auth.userId, organisationId: event.organisation.id, orgSlug: event.organisation.slug, eventId: event.event.id, eventSlug: event.event.slug }, teamId);
   return team ? mobileOk(team) : notFound();
-});
+}, { idempotent: true });

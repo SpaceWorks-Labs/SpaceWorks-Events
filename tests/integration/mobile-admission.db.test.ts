@@ -23,7 +23,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/outboxWorker", () => ({ startOutboxWorker: vi.fn() }));
 
 import { prisma } from "@/lib/db";
-import { appSession, get, keyed, params, post } from "../helpers/mobileApi";
+import { appSession, get, keyed, params, post, unkeyed } from "../helpers/mobileApi";
 import { apply, createAdmissionEvent, decide, grantReviewers, paid, people, setUpAdmission, tearDownAdmission } from "./helpers/admission";
 import { GET as myApplication } from "@/app/api/mobile/v1/me/registrations/[rsvpId]/application/route";
 import { POST as respond } from "@/app/api/mobile/v1/me/registrations/[rsvpId]/application/respond/route";
@@ -62,7 +62,7 @@ describe.sequential("applications through the mobile API", () => {
     await decide(ctx, [a.application.id], "ACCEPT");
     const offered = await json(await myApplication(get("/x", token), mine(a.rsvp.id)));
     expect(offered.body.data.application).toMatchObject({ status: "OFFERED", actions: ["accept", "decline", "withdraw"], respondBy: expect.any(String), answers: null });
-    expect((await respond(post("/x", { response: "accept" }, token), mine(a.rsvp.id))).status).toBe(400);
+    expect((await respond(unkeyed("/x", { response: "accept" }, token), mine(a.rsvp.id))).status).toBe(400);
     const accept = keyed("/x", { response: "accept" }, token, `accept-${paid.suffix}`);
     expect(await json(await respond(accept, mine(a.rsvp.id)))).toEqual({ status: 200, body: { ok: true, data: { status: "ACCEPTED", paying: false, checkoutUrl: null } } });
     const replay = await respond(keyed("/x", { response: "accept" }, token, `accept-${paid.suffix}`), mine(a.rsvp.id));

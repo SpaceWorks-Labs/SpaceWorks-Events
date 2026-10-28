@@ -19,4 +19,4 @@ export const POST = eventRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events
   const result = await checkInToListForUser(auth.userId, { organisationSlug: event.organisation.slug, eventId: event.event.id, listId, ...body.data }, { source: body.data.rawInput ? "mobile-scan" : "mobile-manual" });
   if (!result.ok) return mobileActionError(result);
   return result.data ? mobileOk(listCheckInResultSchema.parse(result.data)) : mobileError("INTERNAL_ERROR");
-});
+}, { idempotent: true });
