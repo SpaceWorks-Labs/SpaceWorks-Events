@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   webhookDeliveries: vi.fn(),
   mobileSessions: vi.fn(),
   idempotencyKeys: vi.fn(),
+  applicationEvents: vi.fn(),
   crewPhotos: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ vi.mock("@/lib/db", () => ({ prisma: {
   webhookDelivery: { deleteMany: mocks.webhookDeliveries },
   mobileSession: { deleteMany: mocks.mobileSessions },
   mobileIdempotencyKey: { deleteMany: mocks.idempotencyKeys },
+  admissionStatusEvent: { deleteMany: mocks.applicationEvents },
 } }));
 
 import { purgeExpiredOperationalData } from "@/lib/retention";
@@ -40,7 +42,7 @@ describe("operational retention", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OUTBOX_RETENTION_DAYS = "30";
-    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries, mocks.mobileSessions, mocks.idempotencyKeys]) {
+    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries, mocks.mobileSessions, mocks.idempotencyKeys, mocks.applicationEvents]) {
       mock.mockResolvedValue({ count: 1 });
     }
     mocks.crewPhotos.mockResolvedValue(2);
@@ -66,6 +68,7 @@ describe("operational retention", () => {
       webhookDeliveries: 1,
       mobileSessions: 1,
       idempotencyKeys: 1,
+      applicationStatusEvents: 1,
       unusedCrewPhotos: 2,
     });
     expect(mocks.crewPhotos).toHaveBeenCalledWith(now);
@@ -74,6 +77,7 @@ describe("operational retention", () => {
     expect(mocks.outbox).toHaveBeenNthCalledWith(1, { where: { status: OutboxStatus.SENT, sentAt: { lt: new Date("2030-01-30T00:00:00.000Z") } } });
     expect(mocks.outbox).toHaveBeenNthCalledWith(2, { where: { status: OutboxStatus.FAILED, createdAt: { lt: new Date("2030-01-30T00:00:00.000Z") } } });
     expect(mocks.webhooks).toHaveBeenCalledWith({ where: { processedAt: { lt: new Date("2029-12-01T00:00:00.000Z") } } });
+    expect(mocks.applicationEvents).toHaveBeenCalledWith({ where: { emittedAt: { not: null, lt: new Date("2030-01-30T00:00:00.000Z") } } });
     expect(mocks.webhookDeliveries).toHaveBeenCalledWith({ where: { createdAt: { lt: new Date("2030-01-30T00:00:00.000Z") }, status: { not: "PROCESSING" } } });
   });
 });

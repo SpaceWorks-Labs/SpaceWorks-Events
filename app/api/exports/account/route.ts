@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { recordAuditEvent } from "@/lib/audit";
 import { buildAccountDataExport, loadAccountExportSource } from "@/lib/accountDataExport";
+import { loadAccountApplications } from "@/lib/admission/accountExport";
 import { checkRateLimitById } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,8 @@ export async function GET() {
   });
 
   const generatedAt = new Date();
-  const body = JSON.stringify(buildAccountDataExport(source, generatedAt), null, 2);
+  // Applications (docs/ADMISSION.md): status, stage and the account's own answers; never reviews.
+  const body = JSON.stringify({ ...buildAccountDataExport(source, generatedAt), applications: await loadAccountApplications(userId) }, null, 2);
   return new Response(body, {
     headers: {
       ...privateHeaders,

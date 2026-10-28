@@ -1,4 +1,5 @@
 import "server-only";
+import { admissionJoinRefusal, admissionRegistrationRefusal } from "@/lib/admission/registration";
 
 import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import { EventPrivacyType, RegistrationMode, RsvpStatus } from "@prisma/client";
@@ -66,6 +67,9 @@ export async function addTeamMemberByLeader(
       if (!team) return fail(TEAM_NOT_FOUND);
       if (team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");
       if (team.status === RsvpStatus.PENDING_PAYMENT) return fail("Finish paying for your team before adding members.");
+      // Applications (docs/ADMISSION.md): a decided team takes nobody new, and each person applies once.
+      const closed = (await admissionJoinRefusal(tx, { teamId: team.id })) ?? (await admissionRegistrationRefusal(tx, event.id, `guest:${email}`, [email]));
+      if (closed) return fail(closed);
       // When everyone pays for themselves, members buy their own ticket.
       if (event.teamTicketMode === "PER_MEMBER" && (await sellsTickets({ eventId: event.id }))) return fail("Members buy their own ticket here: share your team's join link instead.");
       // Same rule as public guest registration (rsvpCore): an entered address

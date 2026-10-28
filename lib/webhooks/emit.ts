@@ -51,7 +51,7 @@ export type WebhookEmission =
   | { type: "checkin.undone"; rsvpId: string; undoneAt: Date }
   | { type: "event.published" | "event.cancelled"; eventId: string; previousStatus: EventStatus | null }
   | { type: "feedback.submitted"; feedbackResponseId: string }
-  | { type: "application.status_changed"; applicationId: string; status: AdmissionStatus; previousStatus: AdmissionStatus | null };
+  | { type: "application.status_changed"; applicationId: string; status: AdmissionStatus; previousStatus: AdmissionStatus | null; /** The stage at the change (AdmissionStatusEvent.stageId). */ stageId?: string | null };
 
 const PENDING_KEY = Symbol.for("spaceworks.webhooks.pendingEmits");
 
@@ -199,9 +199,13 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
     case "application.status_changed": {
       const application = await prisma.admissionApplication.findUnique({
         where: { id: emission.applicationId },
-        select: { id: true, rsvpId: true, teamId: true, team: { select: { leaderRsvpId: true } }, currentStage: { select: { id: true, position: true, name: true } }, event: { select: eventRefSelect } },
+        select: { id: true, eventId: true, rsvpId: true, teamId: true, team: { select: { leaderRsvpId: true } }, currentStage: { select: { id: true, position: true, name: true } }, event: { select: eventRefSelect } },
       });
       if (!application) return null;
+      // The stage recorded with the change, not wherever the application is now.
+      const stage = emission.stageId === undefined
+        ? application.currentStage
+        : emission.stageId ? await prisma.admissionStage.findFirst({ where: { id: emission.stageId, eventId: application.eventId }, select: { id: true, position: true, name: true } }) : null;
       return {
         organisation: application.event.organisation,
         data: {
@@ -212,7 +216,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
             teamId: application.teamId,
             // The committed transition, not a later re-read.
             status: emission.status,
-            stage: application.currentStage,
+            stage,
           },
           previousStatus: emission.previousStatus,
         },

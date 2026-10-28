@@ -16,8 +16,8 @@ export class PaymentOperationError extends Error {}
  */
 export class AdmissionManagedError extends PaymentOperationError {
   readonly code = "ADMISSION_MANAGED";
-  constructor() {
-    super("This order pays for an application. It's paid when the applicant accepts their offer, from the Applications tab or their ticket page.");
+  constructor(message = "This order pays for an application. It's paid when the applicant accepts their offer, from the Applications tab or their ticket page.") {
+    super(message);
   }
 }
 

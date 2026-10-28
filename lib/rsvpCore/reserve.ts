@@ -68,7 +68,7 @@ export async function reserveRsvp(params: {
       // A crew member already holds a free crew ticket (docs/CREW.md); a second registration would take a place.
       if (await hasCrewEmail(tx, params.target.eventId, [params.notification.to])) throw new TeamRegistrationError(CREW_EMAIL_REFUSED);
       // Applications (docs/ADMISSION.md): one per person per event.
-      const applied = await admissionRegistrationRefusal(tx, params.target.eventId, params.data.attendeeKey);
+      const applied = await admissionRegistrationRefusal(tx, params.target.eventId, params.data.attendeeKey, [params.notification.to]);
       if (applied) throw new TeamRegistrationError(applied);
     } else {
       // The series row, then the date: the same order every series path locks in.

@@ -13,7 +13,7 @@ import { submitReview } from "@/lib/admission/reviews";
 import { unassignReviewer } from "@/lib/admission/assignment";
 import { editApplicationAnswers } from "@/lib/admission/answers";
 import { updateStage } from "@/lib/admission/stages";
-import { ALREADY_APPLIED, TEAM_APPLICATION_DECIDED } from "@/lib/admission/registration";
+import { admissionKeyHash, ALREADY_APPLIED, TEAM_APPLICATION_DECIDED } from "@/lib/admission/registration";
 import { appOf, apply, createAdmissionEvent, decide, grantReviewers, paid, people, setUpAdmission, tearDownAdmission } from "./helpers/admission";
 
 /*
@@ -72,7 +72,7 @@ describe.sequential("application retention", () => {
     const { event, ctx } = await createAdmissionEvent({ team: true });
     const leader = await apply(event, "lead", { team: { mode: "create", name: `Closed ${paid.suffix.slice(0, 6)}` } });
     const team = await prisma.team.findUniqueOrThrow({ where: { id: leader.rsvp.teamId! } });
-    expect(leader.application.applicantKeys).toEqual([leader.rsvp.attendeeKey]);
+    expect(leader.application.applicantKeys).toEqual([admissionKeyHash(leader.rsvp.attendeeKey)]);
     await decide(ctx, [leader.application.id], "ACCEPT");
     const late = await submitRsvpCore({ orgSlug: paid.orgSlug, eventSlug: event.slug, guestEmail: `late-${paid.suffix}@example.test`, name: "Late", answers: {} }, { userId: null, team: { mode: "join", joinToken: team.joinToken } });
     expect(late).toMatchObject({ ok: false, error: TEAM_APPLICATION_DECIDED });
