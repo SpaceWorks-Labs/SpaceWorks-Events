@@ -40,6 +40,13 @@ This page contains only work that is not currently implemented. Current behavior
 - Hackathon events in the organisation webhook catalogue ([Organisation webhooks](WEBHOOKS.md)), for example `submission.submitted`, `submission.withdrawn`, and `results.published`. Each needs a new event type in `lib/webhooks/eventTypes.ts`, a minimal payload builder (project title and entrant display name only, never scores, judge comments, or the disqualification reason), commit-point emission from `lib/core/judging.ts`, the endpoint form's type list, and tests, so it was left out of the first judging release.
 - Extend the machine API only for concrete consumers: recurring series/instances, RSVP workflow data, separately scoped participant contact or registration answers, privacy-preserving feedback reads, and narrow idempotent writes.
 
+## Deferred from Yuyu sync 3
+
+- Paying per member on a team event taking applications ([Applications](ADMISSION.md)). Today paid team places with applications use PER_TEAM (the leader pays once); per-member payment needs an all-or-nothing gate (every member held until the last pays, the team confirmed at once, all refunded at the deadline).
+- Space Works' award and reservation reimbursement flow (offer, accept, reserve from a pool; [Finance](FINANCE.md)). Today reimbursements are policies people claim against.
+- The native Android and iOS apps. The [mobile API](MOBILE_API.md), its OpenAPI contract and the app links are ready for them.
+- A server nonce for mobile Google sign-in ([Mobile API](MOBILE_API.md)). Today the ID token's short life and the `azp` check bound replay.
+
 ## Scale and reliability
 
 - Load and soak testing with documented capacity targets.

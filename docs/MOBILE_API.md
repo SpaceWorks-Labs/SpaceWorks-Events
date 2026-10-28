@@ -2,8 +2,10 @@
 
 [Documentation index](README.md)
 
-`/api/mobile/v1` is the user-authenticated REST API used by the Space Works
-mobile apps (Android and iOS). It covers phone-first tasks: signing in, an
+`/api/mobile/v1` is the user-authenticated REST API for the Space Works
+mobile apps (Android and iOS). The native apps are not built yet: this API,
+its OpenAPI contract (`docs/mobile-api.openapi.yaml`) and the app links are
+ready for them (see [Future phases](FUTURE_PHASES.md)). It covers phone-first tasks: signing in, an
 attendee's own registrations, tickets, paid orders, expense claims, projects,
 entry fees, prizes and team, organiser day-of work (check-in and check-in
 lists, settling payments at the desk, guest and team approval, emails, live
