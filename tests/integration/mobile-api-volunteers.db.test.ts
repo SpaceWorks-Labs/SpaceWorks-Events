@@ -29,8 +29,8 @@ const email = (name: string) => `${name}-${suffix}@example.test`;
 const orgSlug = `mob-vol-${suffix}`;
 const ids = { org: "", otherOrg: "", event: "", owner: "", helper: "", volunteer: "", stranger: "", rsvp: "", soon: "", later: "" };
 const tokens = {} as Record<"owner" | "helper" | "volunteer" | "stranger", SignedIn>;
-const at = (extra: Record<string, string> = {}) => params({ orgSlug, eventId: ids.event, ...extra });
-const mine = (extra: Record<string, string> = {}) => params({ rsvpId: ids.rsvp, ...extra });
+const at = <E extends Record<string, string>>(extra?: E) => params({ orgSlug, eventId: ids.event, ...(extra as E) });
+const mine = <E extends Record<string, string>>(extra?: E) => params({ rsvpId: ids.rsvp, ...(extra as E) });
 const MINUTE = 60_000;
 
 beforeAll(async () => {
