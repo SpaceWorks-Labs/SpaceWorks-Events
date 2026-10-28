@@ -139,7 +139,7 @@ export async function syncOfflineCheckIns(
     } else if (committed.state === "already-checked-in") {
       alreadyCheckedInIds.push(rsvp.id);
     } else {
-      const currentGate = committed.state === "ineligible" ? gateCheckInForStatus(committed.status, checkIn.force) : null;
+      const currentGate = committed.state === "ineligible" ? gateCheckInForStatus(committed.status, checkIn.force, committed.applicant) : null;
       failed.push({
         rsvpId: rsvp.id,
         error: committed.state === "missing" ? "RSVP not found for this event." : currentGate?.ok ? "Check-in could not be completed." : currentGate!.reason,

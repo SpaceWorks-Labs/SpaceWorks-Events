@@ -124,7 +124,7 @@ export async function checkInByToken(
   if (committed.state !== "checked-in") {
     if (committed.state === "missing") return { ok: false, error: "RSVP not found." };
     if (committed.state === "ineligible") {
-      const currentGate = gateCheckInForStatus(committed.status, Boolean(force));
+      const currentGate = gateCheckInForStatus(committed.status, Boolean(force), committed.applicant);
       return { ok: false, error: currentGate.ok ? "Check-in could not be completed." : currentGate.reason };
     }
     return {

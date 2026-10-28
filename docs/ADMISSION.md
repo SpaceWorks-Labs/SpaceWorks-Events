@@ -270,7 +270,11 @@ offer or holds one.
 (`loadRsvpContext`), `approveTeam`/`rejectTeam`/`promoteTeam` and
 `offerNextWaitlisted` refuse application registrations, so review coverage
 and the offer capacity can't be bypassed; the database guard above backs
-this up.
+this up. The check-in desk's **Override** (forced check-in of a waitlisted
+guest) never admits an application that isn't ACCEPTED, solo or the team's:
+`commitCheckInProjection` and custom-list check-ins refuse it as
+`ineligible` with `applicant`, and `gateCheckInForStatus` explains why
+(`APPLICANT_NO_PLACE`).
 
 ## Emails
 

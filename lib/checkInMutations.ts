@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { RsvpStatus } from "@prisma/client";
+import { AdmissionStatus, type Prisma, type RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { publishTicketCheckedIn } from "@/lib/ticketCheckInEvents";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
@@ -17,7 +17,7 @@ export type CheckInSource = "online" | "offline-sync" | "venue-station" | "mobil
 export type CheckInCommitResult =
   | { state: "checked-in"; checkedInAt: Date }
   | { state: "already-checked-in"; checkedInAt: Date }
-  | { state: "ineligible"; status: RsvpStatus }
+  | { state: "ineligible"; status: RsvpStatus; applicant: boolean }
   | { state: "missing" };
 
 /**
@@ -29,7 +29,15 @@ export type CheckInCommitResult =
  * venue station) goes through here, so the realtime ticket notification is
  * published once, only for a real transition, and only after the transaction
  * has committed.
+ *
+ * An override (`force`) never admits an admission application that isn't
+ * ACCEPTED (its own, or its team's): such a registration has no place
+ * (docs/ADMISSION.md), so it is `ineligible` with `applicant`.
  */
+const notAccepted = { status: { not: AdmissionStatus.ACCEPTED } } satisfies Prisma.AdmissionApplicationWhereInput;
+/** A registration whose own (solo) or team's admission application isn't ACCEPTED. */
+export const unacceptedApplicant = { OR: [{ admissionApplication: { is: notAccepted } }, { team: { is: { admissionApplication: { is: notAccepted } } } }] } satisfies Prisma.RSVPWhereInput;
+
 export async function commitCheckInProjection(params: {
   rsvpId: string;
   actorUserId: string | null;
@@ -42,7 +50,7 @@ export async function commitCheckInProjection(params: {
       ? ["CONFIRMED", "WAITLISTED", "PENDING_APPROVAL"] as const
       : ["CONFIRMED"] as const;
     const updated = await tx.rSVP.updateMany({
-      where: { id: params.rsvpId, checkedInAt: null, status: { in: [...allowedStatuses] } },
+      where: { id: params.rsvpId, checkedInAt: null, status: { in: [...allowedStatuses] }, ...(params.force ? { NOT: unacceptedApplicant } : {}) },
       data: { checkedInAt: params.checkedInAt },
     });
     if (updated.count === 1) {
@@ -60,7 +68,8 @@ export async function commitCheckInProjection(params: {
     const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { checkedInAt: true, status: true } });
     if (!current) return { state: "missing" };
     if (current.checkedInAt) return { state: "already-checked-in", checkedInAt: current.checkedInAt };
-    return { state: "ineligible", status: current.status };
+    const applicant = current.status !== "CONFIRMED" && (await tx.rSVP.count({ where: { id: params.rsvpId, ...unacceptedApplicant } })) > 0;
+    return { state: "ineligible", status: current.status, applicant };
   });
   if (result.state === "checked-in") {
     publishTicketCheckedIn({ rsvpId: params.rsvpId, checkedInAt: result.checkedInAt });

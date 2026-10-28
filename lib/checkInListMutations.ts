@@ -4,6 +4,7 @@ import { OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { CheckInGate } from "@/lib/checkIn";
 import { gateListCheckIn, type CheckInListSource } from "@/lib/checkInLists";
+import { unacceptedApplicant } from "@/lib/checkInMutations";
 
 export type ListCheckInCommitResult =
   | { state: "checked-in"; checkedInAt: Date }
@@ -51,7 +52,8 @@ export async function commitListCheckIn(params: {
         return { state: "ineligible", gate: { ok: false, reason: "This list is archived and read-only.", needsForce: false, blocked: true } };
       }
       if (existing) return { state: "already-checked-in", checkedInAt: existing.checkedInAt };
-      const gate = gateListCheckIn({ status: rsvp.status, entryCheckedInAt: rsvp.checkedInAt, force: params.force, list });
+      const applicant = rsvp.status !== "CONFIRMED" && (await tx.rSVP.count({ where: { id: params.rsvpId, ...unacceptedApplicant } })) > 0;
+      const gate = gateListCheckIn({ status: rsvp.status, entryCheckedInAt: rsvp.checkedInAt, force: params.force, list, applicant });
       if (!gate.ok) return { state: "ineligible", gate };
       if (list.addOn) {
         const refused = await addOnAllowance(tx, list.addOn, params.listId, rsvp.orderId);
