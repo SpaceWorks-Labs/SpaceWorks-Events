@@ -5,6 +5,7 @@ import { loadJudgingSettingsCard } from "@/lib/eventDashboard/judging";
 import { minorToDecimalString } from "@/lib/payments/money";
 import { loadEventTicketDesigns } from "@/lib/ticketDesign/access";
 import { STARTER_DESIGNS } from "@/lib/ticketDesign/presets";
+import { admissionEnableState } from "@/lib/admission/settings";
 
 /** Ticket types are an organisation owner/admin concern, like the actions that change them. */
 async function loadTickets(ctx: EventDashboardContext) {
@@ -35,7 +36,9 @@ export async function loadSettingsPanel({ ctx, judgingInUse = false }: { ctx: Ev
     : null;
   // Ticket design: the same people as ticket prices (EDIT_DETAILS), on every event.
   const ticketDesign = tickets ? { ...(await loadEventTicketDesigns(event.id, organisation.id)), starters: STARTER_DESIGNS.map((starter) => ({ key: starter.key, label: starter.label })) } : null;
-  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign };
+  // Applications (docs/ADMISSION.md): owners and admins turn them on here; then they have their own tab.
+  const applicationsCard = permissions.isAdmin && !event.admissionEnabled ? await admissionEnableState(event.id) : null;
+  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign, applicationsCard };
 }
 
 import { loadEventDashboard } from "@/lib/eventDashboard/context";

@@ -24,8 +24,8 @@ const permissions = z
   .refine((values) => new Set(values).size === values.length, "Each permission can be granted once.");
 const targetFields = z.object({ organisationSlug: z.string().min(1), eventId: z.string().min(1).optional(), eventSeriesId: z.string().min(1).optional() });
 const target = targetFields.refine((v) => Boolean(v.eventId) !== Boolean(v.eventSeriesId));
-/** Judging is one-off-event only (docs/HACKATHON.md): a series grant can never carry JUDGE. */
-const judgeOnlyOnEvents = (v: { eventSeriesId?: string; permissions: EventPermission[] }) => !(v.eventSeriesId && v.permissions.includes(EventPermission.JUDGE));
+/** Judging and applications are one-off-event only (docs/HACKATHON.md, docs/ADMISSION.md): a series grant can never carry JUDGE or REVIEW_APPLICATIONS. */
+const judgeOnlyOnEvents = (v: { eventSeriesId?: string; permissions: EventPermission[] }) => !(v.eventSeriesId && (v.permissions.includes(EventPermission.JUDGE) || v.permissions.includes(EventPermission.REVIEW_APPLICATIONS)));
 const inviteSchema = targetFields
   .extend({ email: z.string().trim().email(), permissions })
   .refine((v) => Boolean(v.eventId) !== Boolean(v.eventSeriesId))

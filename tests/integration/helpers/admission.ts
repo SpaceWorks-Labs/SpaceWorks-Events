@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { AdmissionDecisionOutcome, EventPermission, EventPrivacyType, EventStatus, MembershipRole, RegistrationMode, SoloPolicy, TeamTicketMode, type Event } from "@prisma/client";
 import { expect } from "vitest";
 import { prisma } from "@/lib/db";

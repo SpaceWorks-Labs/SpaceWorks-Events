@@ -75,6 +75,15 @@ export type EventCapabilities = {
    * check-in, feedback, analytics, or settings.
    */
   isJudgeOnly: boolean;
+  /** Applications tab: stages, reviewers, decisions and offers (`MANAGE_REGISTRATIONS`, as app/actions/admission.ts re-checks; docs/ADMISSION.md). */
+  canManageApplications: boolean;
+  /** The application review workspace: org owner/admin or a REVIEW_APPLICATIONS collaborator. */
+  canReviewApplications: boolean;
+  /**
+   * A non-member collaborator whose grants are only REVIEW_APPLICATIONS (and
+   * possibly JUDGE): the page shows their workspaces and nothing else.
+   */
+  isReviewerOnly: boolean;
 };
 
 export type SeriesCapabilities = {
@@ -135,6 +144,9 @@ export function eventCapabilities(
     canDeleteEvent: isAdmin,
     canManageCollaborators: isAdmin,
     ...judgingPermissionsFor(isAdmin, role != null, grant ?? []),
+    canManageApplications: registrations,
+    canReviewApplications: has(EventPermission.REVIEW_APPLICATIONS),
+    isReviewerOnly: !isAdmin && role == null && Boolean(grant?.includes(EventPermission.REVIEW_APPLICATIONS)) && Boolean(grant?.every((permission) => permission === EventPermission.REVIEW_APPLICATIONS || permission === EventPermission.JUDGE)),
   };
 }
 

@@ -38,6 +38,15 @@ export async function perMemberRefusal(tx: Prisma.TransactionClient, event: { id
   return (await hasPaidTickets(tx, event.id)) ? PER_MEMBER_PAID_REFUSAL : null;
 }
 
+/** For the Settings card: whether applications can be turned on now, and why not. */
+export async function admissionEnableState(eventId: string): Promise<{ canEnable: boolean; reason: string | null }> {
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true, registrationMode: true, teamTicketMode: true } });
+  if (!event) return { canEnable: false, reason: null };
+  if ((await prisma.rSVP.count({ where: { eventId, isCrew: false } })) > 0) return { canEnable: false, reason: HAS_REGISTRATIONS_REFUSAL };
+  const refusal = await perMemberRefusal(prisma, event);
+  return refusal ? { canEnable: false, reason: refusal } : { canEnable: true, reason: null };
+}
+
 export async function setAdmissionEnabled(ctx: AdmissionContext, enabled: boolean): Promise<Result> {
   if (!ctx.isAdmin) return { ok: false, error: "Only organisation owners and admins can turn applications on or off." };
   const result = await prisma.$transaction(async (tx): Promise<Result> => {
