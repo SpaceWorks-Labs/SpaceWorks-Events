@@ -1,32 +1,25 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { CrewKind, Prisma } from "@prisma/client";
+import { Prisma, type CrewKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { certificateImagesAreOwned } from "@/lib/certificateAssets";
 import { certificateTemplateSchema, parseCertificateTemplate } from "@/lib/certificateTemplate";
 import { enqueueVolunteerNotice } from "@/lib/outbox/volunteer";
 import { revokeCertificatesLocked, verifiedMinutes } from "./hours";
+import { hasMentoringEvidence } from "./mentoring";
 import { CREW_KIND_LABELS, SECOND_PERSON, crewTicketLive, fail, isVolunteerSelf, lockCrewMember, type VolunteerResult, type VolunteerStaff } from "./shared";
 
 /*
  * Contributor certificates (docs/VOLUNTEERS.md), after the Space Works
  * contribution proof: an owner or admin who is not the crew member issues
  * one; it snapshots the role, the verified minutes and the design, and is
- * revoked when hours change. Volunteers need verified minutes above zero; a
- * role label alone proves nothing. The one exception is the hook below.
+ * revoked when hours change. It needs verified minutes above zero, or
+ * mentoring evidence from the Mentor Desk (./mentoring.ts), which revokes it
+ * when the MENTOR grant goes. A role or kind alone proves nothing.
  */
 
 const ADMIN_ONLY = "Only organisation owners and admins can issue certificates.";
-
-/**
- * Evidence other than shift hours. Mentors can be issued a certificate by an
- * organiser without hours; the Mentor Desk will replace this with its own
- * evidence (mentoring check-ins). Every other kind needs verified hours.
- */
-export function hasNonShiftEvidence(kind: CrewKind): boolean {
-  return kind === CrewKind.MENTOR;
-}
 
 export function generateCertificateToken() {
   return crypto.randomBytes(32).toString("base64url");
@@ -53,7 +46,8 @@ export async function issueContributorCertificate(staff: VolunteerStaff, crewMem
       if (await isVolunteerSelf(tx, staff.userId, member)) return fail("Another organiser must issue your certificate.");
       if (await tx.contributorCertificate.count({ where: { crewMemberId: member.id, revokedAt: null } })) return fail("This crew member already has a certificate.");
       const minutes = await verifiedMinutes(tx, member.id);
-      if (minutes <= 0 && !hasNonShiftEvidence(member.kind)) return fail("Verify this volunteer's hours before issuing a certificate.");
+      // Verified hours, or mentoring evidence from the Mentor Desk (./mentoring.ts); never the kind alone.
+      if (minutes <= 0 && !(await hasMentoringEvidence(tx, staff.eventId, member.userId))) return fail("Verify this volunteer's hours, or their mentoring, before issuing a certificate.");
       const template = parseCertificateTemplate(event.contributorCertificateTemplate);
       const certificate = await tx.contributorCertificate.create({
         data: {
@@ -107,12 +101,11 @@ export async function loadContributorCertificate(token: unknown) {
     where: { token },
     select: {
       role: true, minutes: true, template: true, issuedAt: true, revokedAt: true, kind: true,
-      crewMember: { select: { id: true, name: true, rsvp: { select: { status: true } }, event: { select: { title: true, startDateTime: true, timezone: true, organisationId: true, organisation: { select: { name: true } } } } } },
+      crewMember: { select: { id: true, name: true, userId: true, eventId: true, rsvp: { select: { status: true } }, event: { select: { title: true, startDateTime: true, timezone: true, organisationId: true, organisation: { select: { name: true } } } } } },
     },
   });
   if (!certificate || certificate.revokedAt || !crewTicketLive(certificate.crewMember)) return null;
-  if (!hasNonShiftEvidence(certificate.kind) || certificate.minutes > 0) {
-    if ((await verifiedMinutes(prisma, certificate.crewMember.id)) !== certificate.minutes) return null;
-  }
+  const member = certificate.crewMember;
+  if (certificate.minutes > 0 ? (await verifiedMinutes(prisma, member.id)) !== certificate.minutes : !(await hasMentoringEvidence(prisma, member.eventId, member.userId))) return null;
   return certificate;
 }

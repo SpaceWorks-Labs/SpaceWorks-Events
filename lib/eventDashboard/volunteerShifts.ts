@@ -5,7 +5,7 @@ import { CrewKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { parseCertificateTemplate, type CertificateTemplate } from "@/lib/certificateTemplate";
 import { formatDate } from "@/lib/format/datetime";
-import { hasNonShiftEvidence } from "@/lib/volunteer/certificates";
+import { mentoringEvidenceUserIds } from "@/lib/volunteer/mentoring";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 
 /*
@@ -63,6 +63,7 @@ export const loadVolunteerShifts = cache(async (ctx: EventDashboardContext): Pro
     prisma.expenseClaim.findMany({ where: { eventId, rsvp: { isCrew: true } }, select: { rsvpId: true, status: true } }),
   ]);
   const viewerEmail = viewer?.email?.trim().toLowerCase();
+  const mentored = await mentoringEvidenceUserIds(prisma, eventId, crew.flatMap((member) => (member.userId ? [member.userId] : [])));
   const byId = new Map(crew.map((member) => [member.id, member]));
   const isViewer = (member: { userId: string | null; email: string } | undefined) => Boolean(member && (member.userId === ctx.userId || member.email === viewerEmail));
   const verified = new Map<string, number>();
@@ -108,7 +109,7 @@ export const loadVolunteerShifts = cache(async (ctx: EventDashboardContext): Pro
       return {
         crewMemberId: member.id, name: member.name, kind: member.kind, role: member.role, verifiedMinutes: minutes, pendingHours: pending.get(member.id) ?? 0,
         certificate: issued.has(member.id) ? { issuedAt: issued.get(member.id)! } : null,
-        eligible: minutes > 0 || hasNonShiftEvidence(member.kind),
+        eligible: minutes > 0 || (member.userId != null && mentored.has(member.userId)),
         isViewer: isViewer(member),
         claims: claimCounts.get(member.rsvpId) ?? { open: 0, total: 0 },
       };

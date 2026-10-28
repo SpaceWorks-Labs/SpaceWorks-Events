@@ -13,6 +13,7 @@ import {
   fail,
   hasOverlappingDuty,
   lockCrewMember,
+  lockCrewMembers,
   lockShift,
   type VolunteerResult,
   type VolunteerSelf,
@@ -128,6 +129,8 @@ export async function withdrawSignup(by: Withdrawer, signupId: string, now = new
     });
     if (!row) return fail(SIGNUP_NOT_FOUND);
     const shift = await lockShift(tx, eventId, row.shiftId);
+    // The withdrawer and everyone a freed place may go to, in one id-ordered lock (see lockCrewMembers).
+    await lockCrewMembers(tx, eventId, [row.crewMemberId, ...(await waitlistedMemberIds(tx, row.shiftId))]);
     const member = await lockCrewMember(tx, eventId, row.crewMemberId);
     const signup = await tx.volunteerShiftSignup.findUnique({ where: { id: signupId } });
     if (!shift || !member || !signup) return fail(SIGNUP_NOT_FOUND);
@@ -144,6 +147,11 @@ export async function withdrawSignup(by: Withdrawer, signupId: string, now = new
   });
 }
 
+async function waitlistedMemberIds(tx: Prisma.TransactionClient, shiftId: string) {
+  const rows = await tx.volunteerShiftSignup.findMany({ where: { shiftId, status: "WAITLISTED" }, select: { crewMemberId: true } });
+  return rows.map((row) => row.crewMemberId);
+}
+
 /**
  * First in, first out: while places are left, approve waitlisted sign-ups by
  * `queuedAt`, skipping anyone whose crew ticket no longer works or who now has
@@ -153,6 +161,8 @@ export async function withdrawSignup(by: Withdrawer, signupId: string, now = new
 export async function promoteLocked(tx: Prisma.TransactionClient, shift: VolunteerShift, organisationId: string, now: Date) {
   if (!isOpen(shift, now)) return 0;
   const waiting = await tx.volunteerShiftSignup.findMany({ where: { shiftId: shift.id, status: "WAITLISTED" }, orderBy: [{ queuedAt: "asc" }, { id: "asc" }], select: { id: true, crewMemberId: true } });
+  // Everyone who may be promoted, locked up front in id order (never one by one in queue order).
+  await lockCrewMembers(tx, shift.eventId, waiting.map((row) => row.crewMemberId));
   let promoted = 0;
   for (const row of waiting) {
     if (placesLeft(shift.capacity, await approvedCount(tx, shift.id)) === 0) break;

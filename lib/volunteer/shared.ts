@@ -71,6 +71,19 @@ export async function lockCrewMember(tx: Prisma.TransactionClient, eventId: stri
   });
 }
 
+/**
+ * Locks several crew members of the event in id order, in one statement.
+ * Every path that may lock more than one crew member (a withdrawal that
+ * promotes the waitlist, a promotion) takes them this way after the shift
+ * lock, so two such transactions on different shifts wait for each other
+ * instead of deadlocking.
+ */
+export async function lockCrewMembers(tx: Prisma.TransactionClient, eventId: string, crewMemberIds: readonly string[]) {
+  const ids = [...new Set(crewMemberIds)].sort();
+  if (ids.length === 0) return;
+  await tx.$queryRaw`SELECT "id" FROM "EventCrewMember" WHERE "id" = ANY(${ids}::text[]) AND "eventId" = ${eventId} ORDER BY "id" FOR UPDATE`;
+}
+
 /** Whether the crew member holds an approved place on another shift that overlaps this one. */
 export async function hasOverlappingDuty(tx: Prisma.TransactionClient, crewMemberId: string, shift: { id: string; startsAt: Date; endsAt: Date }) {
   const clash = await tx.volunteerShiftSignup.findFirst({

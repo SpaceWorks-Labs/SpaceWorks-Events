@@ -3,8 +3,9 @@ import "server-only";
 /*
  * The Mentor Desk's crew hook (docs/MENTOR_DESK.md, docs/CREW.md). When the
  * event's `mentorsGetCrewTicket` is on, a new MENTOR grant adds the mentor to
- * the crew (role "Mentor", hidden from the public crew list) with a free crew
- * ticket, through the crew core. Removing the grant removes that crew place,
+ * the crew (kind MENTOR, role "Mentor", hidden from the public crew list,
+ * linked to the mentor's account) with a free crew ticket, through the crew
+ * core. Removing the grant removes that crew place,
  * and only a place this hook created (`MentorProfile.crewMemberId`). A mentor
  * who already has a registration or crew place on the event is left as is:
  * their own registration is never converted. Runs after the grant change
@@ -12,10 +13,10 @@ import "server-only";
  * Crew tickets are free: a mentor never pays and no order is created.
  */
 
-import { EventPermission } from "@prisma/client";
+import { CrewKind, EventPermission } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { addCrewMemberTx, afterCrewAdded, removeCrewMember } from "@/lib/core/crew/members";
-import { eventForCrewSelect, findRegistrationByEmail } from "@/lib/core/crew/shared";
+import { eventForCrewSelect, findRegistrationByEmail, linkCrewAccount } from "@/lib/core/crew/shared";
 
 export type MentorGrantChange = { eventId: string; userId: string; before: readonly EventPermission[]; after: readonly EventPermission[]; actorUserId: string };
 
@@ -38,9 +39,15 @@ export async function syncMentorCrewAfterGrant(change: MentorGrantChange): Promi
   ]);
   const email = user?.email?.trim().toLowerCase();
   if (!event?.mentorsGetCrewTicket || !email) return;
-  if (await findRegistrationByEmail(prisma, event.id, email)) return;
-  const result = await addCrewMemberTx(event, { name: user?.name?.trim() || email, email, foodPreference: "", role: "Mentor", bio: "" }, { showOnPage: false, joinedViaLink: false });
+  if (await findRegistrationByEmail(prisma, event.id, email)) {
+    // An existing crew place with this email is linked to the mentor's account (its kind stays the organiser's choice).
+    await linkCrewAccount(prisma, change.userId, email, event.id);
+    return;
+  }
+  const result = await addCrewMemberTx(event, { name: user?.name?.trim() || email, email, foodPreference: "", role: "Mentor", bio: "" }, { showOnPage: false, joinedViaLink: false, kind: CrewKind.MENTOR });
   if (!result.ok) return;
+  // The grant proves the account, verified email or not (docs/VOLUNTEERS.md).
+  await linkCrewAccount(prisma, change.userId, email, event.id);
   await prisma.mentorProfile.updateMany({ where: { id: profile.id, crewMemberId: null }, data: { crewMemberId: result.data.id } });
   await afterCrewAdded(event.id, result);
 }

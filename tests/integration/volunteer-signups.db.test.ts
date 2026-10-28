@@ -101,4 +101,25 @@ describe.sequential("volunteer shift sign-ups", () => {
     await expect(notices(b.member.id, "cancelled")).resolves.toBe(1);
     await expect(prisma.volunteerShift.count({ where: { id: shift.id } })).resolves.toBe(0);
   });
+
+  it("lets withdrawals on two shifts with crossed waitlists run at once without deadlocking", async () => {
+    for (let round = 0; round < 4; round += 1) {
+      const event = await shiftsEvent();
+      const a = await makeShift(event, { capacity: 1, title: "A" });
+      const b = await makeShift(event, { capacity: 1, startIn: 240, title: "B" });
+      const [x, y] = [await volunteer(event), await volunteer(event)];
+      await applyForShift(x.self, a.id);
+      await applyForShift(y.self, b.id);
+      await applyForShift(x.self, b.id);
+      await applyForShift(y.self, a.id);
+      // Each withdrawal locks its shift, then the withdrawer and the other person waiting on that shift.
+      const [left, right] = await Promise.all([
+        withdrawSignup({ kind: "self", self: x.self }, (await signupOf(a.id, x.member.id)).id),
+        withdrawSignup({ kind: "self", self: y.self }, (await signupOf(b.id, y.member.id)).id),
+      ]);
+      expect([left.ok, right.ok]).toEqual([true, true]);
+      await expect(signupOf(a.id, y.member.id)).resolves.toMatchObject({ status: "APPROVED" });
+      await expect(signupOf(b.id, x.member.id)).resolves.toMatchObject({ status: "APPROVED" });
+    }
+  });
 });

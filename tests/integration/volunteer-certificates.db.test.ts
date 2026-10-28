@@ -64,14 +64,11 @@ describe.sequential("contributor certificates", () => {
     await expect(revokeContributorCertificate(staff, member.id)).resolves.toMatchObject({ ok: false });
   });
 
-  it("lets organisers issue mentors a certificate without hours (the Mentor Desk hook), but never to themselves", async () => {
+  it("never treats the MENTOR kind alone as evidence, and never issues to oneself", async () => {
     const event = await shiftsEvent();
     const staff = staffFor(event);
     const { member: mentor } = await volunteer(event, { kind: "MENTOR" });
-    await expect(issueContributorCertificate(staff, mentor.id)).resolves.toMatchObject({ ok: true });
-    const certificate = await prisma.contributorCertificate.findFirstOrThrow({ where: { crewMemberId: mentor.id } });
-    expect(certificate).toMatchObject({ kind: "MENTOR", minutes: 0, role: "Mentor · Logistics" });
-    await expect(loadContributorCertificate(certificate.token)).resolves.toMatchObject({ kind: "MENTOR" });
+    await expect(issueContributorCertificate(staff, mentor.id)).resolves.toMatchObject({ ok: false, error: expect.stringContaining("mentoring") });
     const admin = await secondAdmin("certs");
     users.push(admin.id);
     const { member: self } = await volunteer(event, { email: admin.email, kind: "MENTOR" });
