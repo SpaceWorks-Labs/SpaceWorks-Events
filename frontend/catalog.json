@@ -1229,6 +1229,21 @@
     },
     {
       "module": "app/actions/finance",
+      "name": "saveReimbursementPolicyAction",
+      "id": "finance:saveReimbursementPolicyAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "setReimbursementPolicyActiveAction",
+      "id": "finance:setReimbursementPolicyActiveAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "deleteReimbursementPolicyAction",
+      "id": "finance:deleteReimbursementPolicyAction"
+    },
+    {
+      "module": "app/actions/finance",
       "name": "saveFinanceSettingsAction",
       "id": "finance:saveFinanceSettingsAction"
     },

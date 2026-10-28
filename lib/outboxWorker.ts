@@ -18,6 +18,7 @@ import { sendEventReminders } from "@/lib/eventReminders";
 import { logOpsError } from "@/lib/opsAlerts";
 import { deliverWebhookBatch } from "@/lib/webhooks/delivery";
 import { expireHelpRequests } from "@/lib/core/mentorDesk/helpExpiry";
+import { queueReimbursementNotices } from "@/lib/claims/policies/notices";
 
 /**
  * What this Node.js process does besides serving requests, from
@@ -65,6 +66,8 @@ export const SCHEDULED_JOBS: Job[] = [
   { name: "webhooks", everyMs: 15_000, run: () => deliverWebhookBatch() },
   // Mentor Desk: lapsed help claims go back to the queue, past-deadline requests expire (SKIP LOCKED, idempotent).
   { name: "help-queue-expiry", everyMs: 60_000, run: (now) => expireHelpRequests(now) },
+  // Reimbursement policies with the email on: queue "you can claim" once per person (row lock per policy, unique notice rows).
+  { name: "reimbursement-notices", everyMs: 5 * 60_000, run: (now) => queueReimbursementNotices(now) },
   { name: "backup-alerts", everyMs: 5 * 60_000, run: () => alertOnBackupProblems() },
   { name: "retention", everyMs: 60 * 60_000, run: () => purgeExpiredOperationalData() },
 ];

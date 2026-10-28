@@ -17,13 +17,22 @@ export function TicketClaims({ ticketToken, view }: { ticketToken: string; view:
         <h2 id="ticket-claims" className="text-h4 text-ink">Claim expenses</h2>
         <p className="text-body-ui text-ink-secondary">{view.crew ? "The organisers pay back what you spend for the event as crew." : `The organisers pay back costs such as travel${view.cap ? `, up to ${view.cap} per person` : ""}.`} Add photos of your receipts.</p>
       </div>
+      {view.policies.length > 0 ? (
+        <ul aria-label="Reimbursements open to you" className="flex flex-col gap-1">
+          {view.policies.map((policy) => (
+            <li key={policy.id} className="text-body-ui text-ink-secondary">
+              <span className="font-semibold text-ink">{policy.name}</span>: up to {policy.cap} each, {policy.left} left for you ({policy.categories.map((category) => category.label).join(", ")}).
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {withdraw.error ? <Callout tone="danger" role="alert">{withdraw.error}</Callout> : null}
       {view.claims.length > 0 ? (
         <ul aria-label="Your claims" className="flex flex-col divide-y divide-line">
           {view.claims.map((claim) => (
             <li key={claim.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
               <div className="min-w-0">
-                <p className="text-body-ui text-ink">{claim.approved && claim.approved !== claim.amount ? `${claim.approved} of ${claim.amount}` : claim.amount} · {claim.category}</p>
+                <p className="text-body-ui text-ink">{claim.approved && claim.approved !== claim.amount ? `${claim.approved} of ${claim.amount}` : claim.amount} · {claim.category}{claim.policy ? ` · ${claim.policy}` : ""}</p>
                 {claim.note ? <p className="text-caption text-ink-muted">{claim.note}</p> : null}
               </div>
               <div className="flex items-center gap-2">
@@ -36,7 +45,9 @@ export function TicketClaims({ ticketToken, view }: { ticketToken: string; view:
           ))}
         </ul>
       ) : null}
-      <ClaimForm kind="participant" hidden={{ ticketToken }} categories={view.categories} currency={view.currency} />
+      {view.general || view.policies.length > 0 ? (
+        <ClaimForm kind="participant" hidden={{ ticketToken }} categories={view.categories} currency={view.currency} policies={view.policies} general={view.general} />
+      ) : null}
     </section>
   );
 }

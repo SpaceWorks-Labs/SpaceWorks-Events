@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   reminders: vi.fn(),
   webhooks: vi.fn(),
   helpExpiry: vi.fn(),
+  reimbursementNotices: vi.fn(),
 }));
 vi.mock("@/lib/outbox", () => ({ deliverOutboxBatchWithCount: mocks.deliver }));
 vi.mock("@/lib/retention", () => ({ purgeExpiredOperationalData: mocks.purge }));
@@ -22,6 +23,7 @@ vi.mock("@/lib/eventReminders", () => ({ sendEventReminders: mocks.reminders }))
 vi.mock("@/lib/webhooks/delivery", () => ({ deliverWebhookBatch: mocks.webhooks }));
 vi.mock("@/lib/admission/maintenance", () => ({ runAdmissionMaintenance: async () => ({ expired: 0, reopened: 0, reminded: 0, promoted: 0 }) }));
 vi.mock("@/lib/core/mentorDesk/helpExpiry", () => ({ expireHelpRequests: mocks.helpExpiry }));
+vi.mock("@/lib/claims/policies/notices", () => ({ queueReimbursementNotices: mocks.reimbursementNotices }));
 vi.mock("@/lib/operationalHeartbeat", () => ({
   OUTBOX_SCHEDULER_HEARTBEAT_KEY: "outbox-scheduler",
   BEAT_HEARTBEAT_KEY: "beat",
@@ -138,7 +140,7 @@ describe("beat", () => {
     await runScheduledJobs({ now: new Date(start.getTime() + 61 * 60_000), lastRun });
     expect(mocks.purge).toHaveBeenCalledTimes(2);
     expect(mocks.reminders).toHaveBeenCalledTimes(2);
-    expect(SCHEDULED_JOBS.map((job) => job.name)).toEqual(["payments", "waitlists", "admission", "event-reminders", "webhooks", "help-queue-expiry", "backup-alerts", "retention"]);
+    expect(SCHEDULED_JOBS.map((job) => job.name)).toEqual(["payments", "waitlists", "admission", "event-reminders", "webhooks", "help-queue-expiry", "reimbursement-notices", "backup-alerts", "retention"]);
   });
 
   it("delivers organisation webhooks as a beat job that never stops the others", async () => {

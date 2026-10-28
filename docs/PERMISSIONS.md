@@ -89,7 +89,7 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Analytics: numbers and revenue | page render; `canViewAnalytics` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Analytics: report PDF | report route: admin | Yes | — | — | — | — | — | — | — | — |
 | Finance: file and withdraw your own expense claims | `app/actions/finance.ts`: `canViewEventDashboard` | Yes | Yes | Yes | Yes | Yes | Yes | Yes | — | Yes |
-| Finance: money summary, decide and pay claims, budget, refund requests, CSV | `app/actions/finance.ts`, finance export: admin (docs/FINANCE.md) | Yes | — | — | — | — | — | — | — | — |
+| Finance: money summary, decide and pay claims, budget, reimbursement policies, refund requests, CSV | `app/actions/finance.ts`, finance export: admin (docs/FINANCE.md) | Yes | — | — | — | — | — | — | — | — |
 | Judging → Prizes: award prizes and payouts | `app/actions/prizes.ts`: admin | Yes | — | — | — | — | — | — | — | — |
 | Settings: tickets and pricing (ticket types, add-ons, promo codes) | `app/actions/ticket-types`: `EDIT_DETAILS` (`canEditTickets`) | Yes | — | Yes | — | — | — | — | — | Yes |
 | Guests: order refunds, offline payments, waivers, amendments | `app/actions/payment-operations.ts`: `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |

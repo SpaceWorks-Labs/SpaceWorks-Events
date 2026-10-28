@@ -1007,6 +1007,11 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "level": 2
       },
       {
+        "id": "reimbursement-policies",
+        "title": "Reimbursement policies",
+        "level": 3
+      },
+      {
         "id": "what-happens-next",
         "title": "What happens next",
         "level": 2
@@ -1031,17 +1036,17 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Who can claim",
         "anchor": "who-can-claim",
-        "text": "You can claim when: the organisers have turned on expense claims for participants on this event your place is confirmed (not waitlisted, waiting for approval or declined) If both are true, your ticket page has a Claim expenses section. If you don't see it, the event doesn't take claims from participants: ask the organisers. If you registered while signed in, sign in to that account to claim. Recurring series don't take expense claims."
+        "text": "Your place must be confirmed (not waitlisted, waiting for approval or declined). Then you can claim when either: the organisers have turned on expense claims for participants on this event, or a reimbursement policy is open to you. Organisers set these up by stage, for example travel for the finalists of a judging round, for teams that were mentored in a round, or for crew. Some only open once finalists are published, only during a set window, or only for people who were checked in at the event. If so, your ticket page has a Claim expenses section. If you don't see it, nothing is open to you right now: ask the organisers. A policy can appear later, for example when you're announced as a finalist. If the organisers turned on the email, you're told once when a policy opens to you. If you registered while signed in, sign in to that account to claim. Recurring series don't take expense claims."
       },
       {
         "heading": "Send a claim",
         "anchor": "send-a-claim",
-        "text": "Open your ticket. See Your ticket if you can't find it. Under Claim expenses, choose what it was for in What for. Describe it in Details: where you went or what you bought, and why (up to 1,000 characters). Enter the Amount in the event's currency, for example 1200 or 1200.50. Add up to three Receipt photos. Choose Send claim. You see \"Claim sent. The organisers will email you when it's decided.\" The claim appears in the list above the form as Waiting. Categories What for has these choices: Travel, Accommodation, Food, Venue, Equipment, Printing, Marketing, Supplies and Other. Receipt photos Add photos of your tickets, bills or receipts so the organisers can check the amount. You can add up to three images (JPEG, PNG or WebP), under 5 MB in all. Photos are cleaned of hidden information, such as where they were taken, and stored privately. Only the organisers see them."
+        "text": "Open your ticket. See Your ticket if you can't find it. Under Claim expenses, if you see Claim under, choose the reimbursement policy (or General expenses). It shows how much is left for you. Choose what it was for in What for. Under a policy, only the categories it covers are listed. Describe it in Details: where you went or what you bought, and why (up to 1,000 characters). Enter the Amount in the event's currency, for example 1200 or 1200.50. Add up to three Receipt photos. Choose Send claim. You see \"Claim sent. The organisers will email you when it's decided.\" The claim appears in the list above the form as Waiting. Categories What for has these choices: Travel, Accommodation, Food, Venue, Equipment, Printing, Marketing, Supplies and Other. Receipt photos Add photos of your tickets, bills or receipts so the organisers can check the amount. You can add up to three images (JPEG, PNG or WebP), under 5 MB in all. Photos are cleaned of hidden information, such as where they were taken, and stored privately. Only the organisers see them."
       },
       {
         "heading": "The cap per person",
         "anchor": "the-cap-per-person",
-        "text": "The organisers can set the most they pay back to each person. If they have, the section says so (\"up to … per person\"). The cap covers all your claims together. Claims that are waiting count at the amount you asked for; decided ones count at the amount approved. Rejected and withdrawn claims don't count. If a new claim would go over, the form tells you how much is left (\"You can claim up to … in all; … is left.\")."
+        "text": "The organisers can set the most they pay back to each person. If they have, the section says so (\"up to … per person\"). The general cap covers all your claims without a policy together. Claims that are waiting count at the amount you asked for; decided ones count at the amount approved. Rejected and withdrawn claims don't count. If a new claim would go over, the form tells you how much is left (\"You can claim up to … in all; … is left.\"). Reimbursement policies Each policy open to you is listed above the form with its name, the most it pays each person, how much is left for you and what it covers. What's left is the smaller of your own remaining cap and the policy's remaining budget, so it can go down when others claim too. Claims under one policy don't use up another policy's cap or the general cap. Your claims show which policy they were sent under. When the organisers decide a claim, they check you still qualify: if, for example, your check-in was undone or your project was withdrawn, they can't approve it."
       },
       {
         "heading": "What happens next",
@@ -3607,6 +3612,77 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "heading": "Good to know",
         "anchor": "good-to-know",
         "text": "Refund requests are for paid orders only. Free registrations have nothing to refund. Refunds you give here count against Income on the Finance tab and appear in its Download CSV. See The Finance tab and budget. You don't have to wait for a request: you can refund any order yourself. See Refunds and cancellations. If you've connected a chat channel, new refund requests can be posted under Expense claims. See Chat notifications."
+      }
+    ]
+  },
+  "finance/reimbursement-policies": {
+    "headings": [
+      {
+        "id": "add-a-policy",
+        "title": "Add a policy",
+        "level": 2
+      },
+      {
+        "id": "what-people-see",
+        "title": "What people see",
+        "level": 2
+      },
+      {
+        "id": "approving-claims-under-a-policy",
+        "title": "Approving claims under a policy",
+        "level": 2
+      },
+      {
+        "id": "close-edit-or-delete-a-policy",
+        "title": "Close, edit or delete a policy",
+        "level": 2
+      },
+      {
+        "id": "the-email",
+        "title": "The email",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Reimbursement policies pay back people's costs, usually travel, by stage of your event: everyone confirmed, your crew, the finalists of a judging round, or the teams mentored in a mentoring round. Each policy has its own cap per person, categories, claim window and optional budget, and people only see the policies they qualify for. They work on free and paid events alike. Creating, editing, closing and deleting policies, and approving claims under them: organisation owners and admins only."
+      },
+      {
+        "heading": "Add a policy",
+        "anchor": "add-a-policy",
+        "text": "Open the event and choose the Finance tab. In Reimbursement policies, choose Add a policy. Give it a Name people will recognise, such as \"Finalist travel\". Choose Who can claim: Confirmed participants: everyone with a confirmed place who is not crew. Crew: your event crew. Tick roles under Which crew (for example Volunteer) to limit it to them; leave them all unticked for everyone on the crew. Projects in a judging round: people whose team's project (or their own, when solo) was advanced into the round you pick. Tick Only once this round's finalists are published to keep it closed until you announce them. Teams mentored in a round: members of teams that had a Mentor Desk check-in in the round you pick (an \"away\" check-in doesn't count). Applicants who reached a stage (only when the event takes applications): people whose application, or their team's, reached the admission stage you pick and is still in review, offered, waitlisted or accepted. Tick Only accepted applications to pay accepted applicants only. An application that is withdrawn, declined, expires or is rejected no longer qualifies. An admission stage a policy is for can't be deleted until you delete that policy. Enter Most each person gets back. Tick what it covers under What it covers, for example Travel and Accommodation. Optionally set Claims open and Claims close (in the event's time zone), a Budget for this policy, Only people checked in at the event and Email people when they can claim. Choose Add policy. The round pickers list judging rounds that take advanced projects and mentoring rounds that weren't skipped. Add the round first if it isn't there yet."
+      },
+      {
+        "heading": "What people see",
+        "anchor": "what-people-see",
+        "text": "On their ticket page, under Claim expenses, each person sees the policies open to them right now and how much is left for them: the smaller of what's left of their cap and of the policy's budget. When they send a claim, they choose which policy it is under, and the categories narrow to what that policy covers. A claim is refused when the policy is closed or outside its window, the category isn't covered, the person doesn't qualify, or the amount would go over their cap or the policy's budget. Waiting claims count at the amount asked and approved ones at the amount approved, so two people can't both use the last of a budget."
+      },
+      {
+        "heading": "Approving claims under a policy",
+        "anchor": "approving-claims-under-a-policy",
+        "text": "Claims under a policy appear in Expense claims with the policy's name. Use Policy above the list to show one policy's claims, or those without a policy. When you approve, Space Works checks again that the person still qualifies, that the approval keeps them within the cap they claimed under, and that the policy stays within its budget. If something changed since they filed, for example their check-in was undone or their project was disqualified, the claim shows Eligibility changed since submission with the reason, and approving is refused. You can reject it instead. Each claim keeps the policy terms it was filed under, so lowering the cap doesn't stop you approving claims filed under the higher one. When you approve, a person's total under the policy can reach the highest cap any of their approved claims was filed under, or the current cap if that is higher, whichever order you approve them in. Lowering the budget does stop approvals that would go over it."
+      },
+      {
+        "heading": "Close, edit or delete a policy",
+        "anchor": "close-edit-or-delete-a-policy",
+        "text": "Close to new claims stops new claims. Claims already filed can still be approved and paid. Open again reverses it. Edit… changes the name, cap, categories, window, budget and switches at any time. Who the policy is for is fixed once anyone has claimed under it: close it and add a new one instead. Delete appears only while nobody has claimed under the policy. A judging round a policy uses can't be deleted until you delete that policy."
+      },
+      {
+        "heading": "The email",
+        "anchor": "the-email",
+        "text": "With Email people when they can claim on, each person gets one email, \"You can claim expenses\", with a link to their ticket, when the policy opens to them: as soon as it is added, when its window opens, or later when they qualify, such as when you publish finalists. Nobody gets it twice for the same policy, and it isn't sent if the policy has closed or they no longer qualify by the time it goes out."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "Policies sit alongside the general Let confirmed participants claim expenses and Let crew claim expenses switches under Budget and participant claims. Those keep working as before, and the general cap only counts claims without a policy. Every policy change is recorded in the audit log. People claim from their ticket page or the mobile app. See Claiming expenses for what they see, and Expense claims and reimbursements for approving and paying."
       }
     ]
   },

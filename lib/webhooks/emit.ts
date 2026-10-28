@@ -2,7 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { outsideRequestActor } from "@/lib/requestActor";
-import type { AdmissionStatus, EventStatus, Prisma } from "@prisma/client";
+import type { AdmissionStatus, EventStatus, ExpenseClaimStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   buildWebhookEnvelope,
@@ -51,7 +51,9 @@ export type WebhookEmission =
   | { type: "checkin.undone"; rsvpId: string; undoneAt: Date }
   | { type: "event.published" | "event.cancelled"; eventId: string; previousStatus: EventStatus | null }
   | { type: "feedback.submitted"; feedbackResponseId: string }
-  | { type: "application.status_changed"; applicationId: string; status: AdmissionStatus; previousStatus: AdmissionStatus | null };
+  | { type: "application.status_changed"; applicationId: string; status: AdmissionStatus; previousStatus: AdmissionStatus | null }
+  /** The committed transition; the payload carries ids and amounts only. */
+  | { type: "expense_claim.status_changed"; claimId: string; status: ExpenseClaimStatus; previousStatus: ExpenseClaimStatus | null };
 
 const PENDING_KEY = Symbol.for("spaceworks.webhooks.pendingEmits");
 
@@ -228,6 +230,22 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
       return {
         organisation: event.organisation,
         data: { event: webhookEventRef({ kind: "event", event }), feedback: { id: response.id, submittedAt: response.submittedAt.toISOString() } },
+      };
+    }
+    case "expense_claim.status_changed": {
+      const claim = await prisma.expenseClaim.findUnique({
+        where: { id: emission.claimId },
+        select: { id: true, kind: true, category: true, amountMinor: true, approvedMinor: true, currency: true, rsvpId: true, policyId: true, event: { select: eventRefSelect } },
+      });
+      if (!claim?.event) return null;
+      const { event, amountMinor, approvedMinor, ...rest } = claim;
+      return {
+        organisation: event.organisation,
+        data: {
+          event: webhookEventRef({ kind: "event", event }),
+          claim: { id: rest.id, kind: rest.kind, status: emission.status, category: rest.category, amountMinor: Number(amountMinor), approvedMinor: approvedMinor == null ? null : Number(approvedMinor), currency: rest.currency, registrationId: rest.rsvpId, policyId: rest.policyId },
+          previousStatus: emission.previousStatus,
+        },
       };
     }
   }

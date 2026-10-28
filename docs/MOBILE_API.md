@@ -428,11 +428,19 @@ their orders by id, and anyone else's are `NOT_FOUND`.
 ### Expense claims, projects and prizes (auth)
 
 - `GET /me/registrations/:rsvpId/claims` → the registration's participant
-  claims (travel grants), cap and categories, or `null` when the event takes
-  none. `POST` the same path as `multipart/form-data` (`category`,
-  `description`, `amount`, up to three `receipts` photos) to file one;
+  claims (travel grants), `general` (whether general claims without a
+  `policyId` are open: show the general form only when true), cap and
+  categories, or `null` when nothing is open and nothing was claimed. `POST` the same path as `multipart/form-data` (`category`,
+  `description`, `amount`, an optional `policyId`, up to three `receipts`
+  photos) to file one;
   `POST …/claims/:claimId/withdraw` before it is decided. Receipt photos of the
-  caller's own claims: `GET /me/claims/:claimId/receipts/:receiptId`.
+  caller's own claims: `GET /me/claims/:claimId/receipts/:receiptId`. Each
+  claim carries `policy` (the reimbursement policy's name, or null).
+- `GET /me/registrations/:rsvpId/reimbursements` → the reimbursement policies
+  open to the registration now (docs/FINANCE.md), each with `cap`, `left`
+  (the smaller of the caller's cap and the policy's budget) and its
+  categories, and `general` when general claims are open; `null` when there
+  is nothing to claim. File under one with `policyId` on `POST …/claims`.
 - `GET /me/submissions` → each hackathon project the caller is an entrant of,
   with its window and entry fee; `POST /me/submissions/:eventId/entry-fee/checkout`
   → `{ "checkoutUrl" }` for an unpaid fee (`CONFLICT` once paid). Editing a
@@ -684,8 +692,10 @@ send call client-side.
   `{ "amount?", "note?" }`, `POST …/finance/claims/:claimId/reject`
   `{ "note?" }` and `POST …/finance/refund-requests/:requestId/decide`
   `{ "decision": "approve"|"decline", "amount?", "cancelTickets?", "note?" }`.
-  Decisions are held to the event in the path. Recording payouts, the budget
-  and participant-claim settings stay on the website.
+  `GET …/finance/policies` lists the event's reimbursement policies with what
+  each has used and has left. Decisions are held to the event in the path.
+  Recording payouts, the budget, participant-claim settings and editing
+  policies stay on the website.
 
 ### Event crew (`manageCrew`: MANAGE_REGISTRATIONS)
 

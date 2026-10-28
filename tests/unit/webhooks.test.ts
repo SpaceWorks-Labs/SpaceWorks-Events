@@ -247,8 +247,16 @@ describe("webhook payload DTOs", () => {
       "event.cancelled",
       "feedback.submitted",
       "application.status_changed",
+      "expense_claim.status_changed",
     ]);
     expect(isWebhookEventType("ping")).toBe(false);
+  });
+
+  it("keeps expense claim payloads to ids and amounts", () => {
+    const claim = { id: "c", kind: "PARTICIPANT", status: "APPROVED", category: "TRAVEL", amountMinor: 150000, approvedMinor: 120000, currency: "INR", registrationId: "r", policyId: "p" };
+    const envelope = buildWebhookEnvelope({ id: `evt_${"f".repeat(32)}`, type: "expense_claim.status_changed", createdAt: new Date(), organisation: { id: "o", slug: "s" }, data: { event: eventRef, claim, previousStatus: "SUBMITTED" } });
+    expect(envelope.data).toMatchObject({ claim, previousStatus: "SUBMITTED" });
+    expect(() => buildWebhookEnvelope({ id: `evt_${"f".repeat(32)}`, type: "expense_claim.status_changed", createdAt: new Date(), organisation: { id: "o", slug: "s" }, data: { event: eventRef, claim: { ...claim, payeeEmail: "a@example.test" }, previousStatus: null } })).toThrow();
   });
 });
 

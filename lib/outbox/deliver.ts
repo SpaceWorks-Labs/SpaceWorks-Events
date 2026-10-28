@@ -25,6 +25,7 @@ import { ATTENDANCE_CHECK_KIND, deliverAttendanceCheck } from "./attendance";
 import { deliverMentorMessage, isMentorMessageKind } from "./mentor";
 import { deliverCrewMessage, isCrewMessageKind } from "./crew";
 import { ADMISSION_NOTICE_KIND, deliverAdmissionNotice } from "./admission";
+import { deliverReimbursementAvailable, REIMBURSEMENT_AVAILABLE_KIND } from "./reimbursement";
 import { deliverVolunteerNotice, VOLUNTEER_NOTICE_KIND } from "./volunteer";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
@@ -219,9 +220,11 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           if (outcome === "expired") failed += 1;
           continue;
         }
-      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind) || message.kind === VOLUNTEER_NOTICE_KIND || message.kind === ADMISSION_NOTICE_KIND) {
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind) || message.kind === VOLUNTEER_NOTICE_KIND || message.kind === ADMISSION_NOTICE_KIND || message.kind === REIMBURSEMENT_AVAILABLE_KIND) {
         const outcome = message.kind === ADMISSION_NOTICE_KIND
           ? await deliverAdmissionNotice(message.payload, stableMessageId)
+          : message.kind === REIMBURSEMENT_AVAILABLE_KIND
+          ? await deliverReimbursementAvailable(message.payload, stableMessageId)
           : isTeamMessageKind(message.kind)
           ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
           : isCrewMessageKind(message.kind)

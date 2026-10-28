@@ -8,7 +8,10 @@ import { notifyChat } from "@/lib/chat/notify";
 import { noticeEach, noticeSubject, organiserEmails } from "@/lib/notices";
 import { formatMoney, parseMoneyToMinor } from "@/lib/payments/money";
 import { deleteReceipts } from "@/lib/storage/private";
-import { CATEGORY_LABELS, claimFieldsSchema, fail, financeCurrency, ok, staffClaimSchema, storeReceipts, type ClaimResult } from "./shared";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { loadClaimant } from "./policies/eligibility";
+import { checkPolicyClaim } from "./policies/claims";
+import { CATEGORY_LABELS, fail, financeCurrency, ok, participantClaimSchema, staffClaimSchema, storeReceipts, type ClaimResult } from "./shared";
 
 /** Filing and withdrawing expense claims (docs/FINANCE.md). */
 
@@ -26,6 +29,8 @@ type NewClaim = {
   description: string;
   amountMinor: bigint;
   currency: string;
+  /** A claim under a reimbursement policy, with its frozen snapshot. */
+  policy?: { id: string; name: string; snapshot: Prisma.InputJsonValue };
 };
 
 /** Store the claim and its receipts, tell the owners and admins, and audit it. */
@@ -35,12 +40,13 @@ async function createClaim(tx: Prisma.TransactionClient, claim: NewClaim, receip
       organisationId: claim.organisationId, eventId: claim.event.id, eventTitle: claim.event.title.slice(0, 200), kind: claim.kind,
       submittedByUserId: claim.submittedByUserId, rsvpId: claim.rsvpId, payeeName: claim.payee.name.slice(0, 120), payeeEmail: claim.payee.email,
       category: claim.category, description: claim.description, amountMinor: claim.amountMinor, currency: claim.currency,
+      policyId: claim.policy?.id ?? null, eligibilitySnapshot: claim.policy?.snapshot,
       receipts: { create: receipts.map((receipt) => ({ storageKey: receipt.key, byteSize: receipt.byteSize })) },
     },
     select: { id: true },
   });
-  const amount = formatMoney(claim.amountMinor, claim.currency);
-  await recordAuditEvent({ action: "EXPENSE_CLAIM_SUBMITTED", actorUserId: claim.submittedByUserId, organisationId: claim.organisationId, targetType: "ExpenseClaim", targetId: created.id, metadata: { eventId: claim.event.id, kind: claim.kind, amountMinor: claim.amountMinor.toString(), receipts: receipts.length }, client: tx });
+  const amount = formatMoney(claim.amountMinor, claim.currency) + (claim.policy ? ` under ${claim.policy.name}` : "");
+  await recordAuditEvent({ action: "EXPENSE_CLAIM_SUBMITTED", actorUserId: claim.submittedByUserId, organisationId: claim.organisationId, targetType: "ExpenseClaim", targetId: created.id, metadata: { eventId: claim.event.id, kind: claim.kind, amountMinor: claim.amountMinor.toString(), receipts: receipts.length, ...(claim.policy ? { policyId: claim.policy.id } : {}) }, client: tx });
   await notifyChat(tx, claim.organisationId, "claim", `${claim.payee.name} claimed ${amount} (${CATEGORY_LABELS[claim.category]}) for ${claim.event.title}.`);
   await noticeEach(tx, await organiserEmails(tx, claim.organisationId), {
     organisationId: claim.organisationId,
@@ -76,6 +82,7 @@ export async function submitStaffClaim(ctx: StaffClaimContext, input: unknown, f
       organisationId: ctx.organisationId, event, kind: ExpenseClaimKind.STAFF, submittedByUserId: ctx.userId, rsvpId: null, payee,
       category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
     }, stored.keys));
+    emitWebhookEvent({ type: "expense_claim.status_changed", claimId, status: ExpenseClaimStatus.SUBMITTED, previousStatus: null });
     return ok({ claimId });
   } catch (error) {
     await deleteReceipts(stored.keys.map((receipt) => receipt.key));
@@ -83,10 +90,10 @@ export async function submitStaffClaim(ctx: StaffClaimContext, input: unknown, f
   }
 }
 
-/** What a participant has claimed so far: asked for while open, approved once decided. */
+/** What a participant has claimed so far outside any policy: asked for while open, approved once decided. */
 async function claimedSoFar(tx: Prisma.TransactionClient, rsvpId: string) {
   const claims = await tx.expenseClaim.findMany({
-    where: { rsvpId, status: { in: [ExpenseClaimStatus.SUBMITTED, ExpenseClaimStatus.APPROVED, ExpenseClaimStatus.PAID] } },
+    where: { rsvpId, policyId: null, status: { in: [ExpenseClaimStatus.SUBMITTED, ExpenseClaimStatus.APPROVED, ExpenseClaimStatus.PAID] } },
     select: { status: true, amountMinor: true, approvedMinor: true },
   });
   return claims.reduce((sum, claim) => sum + (claim.status === ExpenseClaimStatus.SUBMITTED ? claim.amountMinor : claim.approvedMinor ?? BigInt(0)), BigInt(0));
@@ -97,11 +104,14 @@ async function claimedSoFar(tx: Prisma.TransactionClient, rsvpId: string) {
  * grants), when the event allows it, up to its cap per person. The ticket
  * token proves the registration; an account-owned one also needs that
  * account signed in. A crew ticket (docs/CREW.md) files a CREW claim instead,
- * when the event takes crew claims, with no cap.
+ * when the event takes crew claims, with no cap. With `policyId` the claim is
+ * filed under that reimbursement policy instead (its own eligibility, window,
+ * categories, cap and budget; the general switches don't apply).
  */
 export async function submitParticipantClaim(holder: { ticketToken: string; actorUserId: string | null; }, input: unknown, files: File[]): Promise<ClaimResult<{ claimId: string; }>> {
-  const parsed = claimFieldsSchema.safeParse(input);
+  const parsed = participantClaimSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the claim.");
+  const policyId = parsed.data.policyId;
   const rsvp = await prisma.rSVP.findUnique({
     where: { checkInToken: holder.ticketToken },
     select: { id: true, status: true, isCrew: true, userId: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } }, event: { select: { id: true, title: true, currency: true, organisationId: true, participantClaimsEnabled: true, crewClaimsEnabled: true } } },
@@ -111,7 +121,7 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
   if (rsvp.status !== RsvpStatus.CONFIRMED) return fail("Only confirmed participants can claim expenses.");
   const crew = rsvp.isCrew;
   const closed = crew ? "This event doesn't take expense claims from crew." : "This event doesn't take expense claims from participants.";
-  if (!(crew ? rsvp.event.crewClaimsEnabled : rsvp.event.participantClaimsEnabled)) return fail(closed);
+  if (!policyId && !(crew ? rsvp.event.crewClaimsEnabled : rsvp.event.participantClaimsEnabled)) return fail(closed);
   const event = rsvp.event;
   const email = rsvp.user?.email?.trim() || rsvp.guestEmail;
   if (!email) return fail("Your registration needs an email address to claim expenses.");
@@ -124,6 +134,19 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
     const result = await prisma.$transaction(async (tx): Promise<ClaimResult<{ claimId: string; }>> => {
       // The cap is checked under the event lock so two claims can't both slip under it.
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
+      const name = rsvp.user?.name?.trim() || rsvp.guestName?.trim() || email;
+      const claim = {
+        organisationId: event.organisationId, event, kind: crew ? ExpenseClaimKind.CREW : ExpenseClaimKind.PARTICIPANT, submittedByUserId: holder.actorUserId, rsvpId: rsvp.id,
+        payee: { name, email }, category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
+      };
+      if (policyId) {
+        // Read again under the lock: a check-in undone a moment ago counts.
+        const claimant = await loadClaimant(tx, rsvp.id, event.id);
+        if (!claimant) return fail("Registration not found.");
+        const checked = await checkPolicyClaim(tx, { claimant, policyId, category: parsed.data.category, amountMinor, currency });
+        if (!checked.ok) return checked;
+        return ok({ claimId: await createClaim(tx, { ...claim, policy: { id: checked.data.policyId, name: checked.data.policyName, snapshot: checked.data.snapshot } }, stored.keys) });
+      }
       const current = await tx.event.findUnique({ where: { id: event.id }, select: { participantClaimsEnabled: true, participantClaimCapMinor: true, crewClaimsEnabled: true } });
       if (!current || !(crew ? current.crewClaimsEnabled : current.participantClaimsEnabled)) return fail(closed);
       // Crew claims have no cap: owners and admins decide each one.
@@ -132,13 +155,10 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
         const left = cap - await claimedSoFar(tx, rsvp.id);
         if (amountMinor > left) return fail(left > BigInt(0) ? `You can claim up to ${formatMoney(cap, currency)} in all; ${formatMoney(left, currency)} is left.` : `You've already claimed the most this event pays back (${formatMoney(cap, currency)}).`);
       }
-      const name = rsvp.user?.name?.trim() || rsvp.guestName?.trim() || email;
-      return ok({ claimId: await createClaim(tx, {
-        organisationId: event.organisationId, event, kind: crew ? ExpenseClaimKind.CREW : ExpenseClaimKind.PARTICIPANT, submittedByUserId: holder.actorUserId, rsvpId: rsvp.id,
-        payee: { name, email }, category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
-      }, stored.keys) });
+      return ok({ claimId: await createClaim(tx, claim, stored.keys) });
     });
     if (!result.ok) await deleteReceipts(stored.keys.map((receipt) => receipt.key));
+    else emitWebhookEvent({ type: "expense_claim.status_changed", claimId: result.data.claimId, status: ExpenseClaimStatus.SUBMITTED, previousStatus: null });
     return result;
   } catch (error) {
     await deleteReceipts(stored.keys.map((receipt) => receipt.key));
@@ -149,7 +169,7 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
 /** The claimant takes back a claim nobody has decided yet. */
 export async function withdrawClaim(claimId: string, claimant: { userId: string | null; rsvpId?: string | null; }): Promise<ClaimResult<undefined>> {
   if (!claimant.userId && !claimant.rsvpId) return fail("Claim not found.");
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx): Promise<ClaimResult<undefined>> => {
     const claim = await tx.expenseClaim.findFirst({
       where: { id: claimId, OR: [...(claimant.userId ? [{ submittedByUserId: claimant.userId }] : []), ...(claimant.rsvpId ? [{ rsvpId: claimant.rsvpId }] : [])] },
       select: { id: true, organisationId: true },
@@ -160,4 +180,6 @@ export async function withdrawClaim(claimId: string, claimant: { userId: string 
     await recordAuditEvent({ action: "EXPENSE_CLAIM_WITHDRAWN", actorUserId: claimant.userId, organisationId: claim.organisationId, targetType: "ExpenseClaim", targetId: claim.id, client: tx });
     return ok(undefined);
   });
+  if (result.ok) emitWebhookEvent({ type: "expense_claim.status_changed", claimId, status: ExpenseClaimStatus.WITHDRAWN, previousStatus: ExpenseClaimStatus.SUBMITTED });
+  return result;
 }

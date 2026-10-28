@@ -1193,12 +1193,24 @@ paths:
                 category: { type: string }
                 description: { type: string }
                 amount: { type: string, description: Major units, for example 250. }
+                policyId: { type: string, description: File under this reimbursement policy (from GET …/reimbursements); blank for general claims. }
                 receipts: { type: array, maxItems: 3, items: { type: string, format: binary } }
       responses:
         "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantClaimsResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/registrations/{rsvpId}/reimbursements:
+    get:
+      tags: [Claims]
+      summary: Reimbursement policies open to this registration, with what is left (null when there is nothing to claim)
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyReimbursementsResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
   /api/mobile/v1/me/registrations/{rsvpId}/claims/{claimId}/withdraw:
@@ -1502,6 +1514,17 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/policies:
+    get:
+      tags: [Finance]
+      summary: The event's reimbursement policies with what each has used (owners and admins)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReimbursementPoliciesResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
   /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/refund-requests/{requestId}/decide:
@@ -3396,7 +3419,7 @@ components:
     Claim:
       type: object
       additionalProperties: false
-      required: [id, status, category, amount, approved, note]
+      required: [id, status, category, amount, approved, note, policy]
       properties:
         id: { type: string }
         status: { type: string }
@@ -3404,12 +3427,14 @@ components:
         amount: { type: string }
         approved: { type: [string, "null"] }
         note: { type: [string, "null"] }
+        policy: { type: [string, "null"], description: The reimbursement policy it was filed under. }
     ParticipantClaims:
       type: object
       additionalProperties: false
-      required: [currency, cap, categories, claims]
+      required: [currency, general, cap, categories, claims]
       properties:
         currency: { type: string }
+        general: { type: boolean, description: General claims (no policyId) are open to this registration. When false only the policies from GET …/reimbursements take claims. }
         cap: { type: [string, "null"] }
         categories: { type: array, items: { type: object, additionalProperties: false, required: [value, label], properties: { value: { type: string }, label: { type: string } } } }
         claims: { type: array, items: { $ref: "#/components/schemas/Claim" } }
@@ -3419,7 +3444,7 @@ components:
       unevaluatedProperties: false
     StaffClaimFields:
       type: object
-      required: [id, status, category, amount, approved, note, description, createdAt, receiptIds]
+      required: [id, status, category, amount, approved, note, policy, description, createdAt, receiptIds]
       properties:
         id: { type: string }
         status: { type: string }
@@ -3427,6 +3452,7 @@ components:
         amount: { type: string }
         approved: { type: [string, "null"] }
         note: { type: [string, "null"] }
+        policy: { type: [string, "null"], description: The reimbursement policy it was filed under (staff claims have none). }
         description: { type: string }
         createdAt: { $ref: "#/components/schemas/DateTime" }
         receiptIds: { type: array, items: { type: string } }
@@ -3588,6 +3614,61 @@ components:
     CheckInListsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CheckInLists" } } }
     ListCheckInResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ListCheckInResult" } } }
     ParticipantClaimsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/ParticipantClaims" }, { type: "null" }] } } }
+    MyReimbursementsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/MyReimbursements" }, { type: "null" }] } } }
+    ReimbursementPoliciesResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ReimbursementPolicies" } } }
+    MyReimbursements:
+      type: object
+      additionalProperties: false
+      required: [currency, general, policies]
+      properties:
+        currency: { type: string }
+        general:
+          description: The event's general claims (no policy), when open to this registration.
+          oneOf:
+            - { type: object, additionalProperties: false, required: [cap], properties: { cap: { type: [string, "null"] } } }
+            - { type: "null" }
+        policies:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, who, cap, left, categories, claimClosesAt]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              who: { type: string }
+              cap: { type: string }
+              left: { type: string, description: The smaller of what is left of the caller's cap and of the policy's budget. }
+              categories: { type: array, items: { type: object, additionalProperties: false, required: [value, label], properties: { value: { type: string }, label: { type: string } } } }
+              claimClosesAt: { type: [string, "null"], format: date-time }
+    ReimbursementPolicies:
+      type: object
+      additionalProperties: false
+      required: [currency, policies]
+      properties:
+        currency: { type: string }
+        policies:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, eligibility, who, cap, categories, budget, used, budgetLeft, claimOpensAt, claimClosesAt, window, attendanceRequired, active, claims]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              eligibility: { type: string, enum: [CONFIRMED_PARTICIPANT, CREW, JUDGING_ROUND_ENTRY, MENTORING_ROUND, ADMISSION_STAGE] }
+              who: { type: string }
+              cap: { type: string }
+              categories: { type: array, items: { type: string } }
+              budget: { type: [string, "null"] }
+              used: { type: string, description: Waiting claims at the amount asked plus approved and paid ones. }
+              budgetLeft: { type: [string, "null"] }
+              claimOpensAt: { type: [string, "null"], format: date-time }
+              claimClosesAt: { type: [string, "null"], format: date-time }
+              window: { type: string, enum: [upcoming, open, closed] }
+              attendanceRequired: { type: boolean }
+              active: { type: boolean }
+              claims: { type: integer }
     CrewMember:
       type: object
       additionalProperties: false

@@ -13,7 +13,8 @@ export const GET = authedMobileRoute<{ rsvpId: string }>("GET /api/mobile/v1/me/
 });
 
 /**
- * File a claim: multipart form with `category`, `description`, `amount` and
+ * File a claim: multipart form with `category`, `description`, `amount`, an
+ * optional `policyId` (a reimbursement policy from GET …/reimbursements) and
  * up to three `receipts` photos, exactly as the ticket page. Receipts are
  * re-encoded and stored privately.
  */
@@ -25,7 +26,7 @@ export const POST = authedMobileRoute<{ rsvpId: string }>("POST /api/mobile/v1/m
   const { form } = body;
   const fields = new FormData();
   fields.set("ticketToken", rsvp.checkInToken);
-  for (const name of ["category", "description", "amount"]) fields.set(name, String(form.get(name) ?? ""));
+  for (const name of ["category", "description", "amount", "policyId"]) fields.set(name, String(form.get(name) ?? ""));
   for (const file of form.getAll("receipts")) if (file instanceof File) fields.append("receipts", file);
   const result = await submitParticipantClaimAction(fields);
   if (!result.ok) return mobileActionError(result);

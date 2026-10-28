@@ -12,4 +12,5 @@ export { asTeamCreatedPayload, asTeamMemberAddedPayload, enqueueTeamCreated, enq
 export { ATTENDANCE_CHECK_KIND, asAttendanceCheckPayload, enqueueAttendanceChecks, type AttendanceCheckPayload } from "./outbox/attendance";
 export { asFinalistsAnnouncedPayload, FINALISTS_ANNOUNCED_KIND, type FinalistsAnnouncedPayload } from "./outbox/finalists";
 export { asCrewTicketPayload, CREW_TICKET_KIND, enqueueCrewTicket, type CrewTicketPayload } from "./outbox/crew";
+export { asReimbursementAvailablePayload, REIMBURSEMENT_AVAILABLE_KIND, type ReimbursementAvailablePayload } from "./outbox/reimbursement";
 export { asResultsPublishedPayload, asSubmissionLinkPayload, asSubmissionReceivedPayload, enqueueResultsPublished, enqueueSubmissionLink, enqueueSubmissionReceived, type ResultsPublishedPayload, type SubmissionLinkPayload, type SubmissionReceivedPayload } from "./outbox/judging";

@@ -8,7 +8,7 @@ import { loadEntrantSubmission } from "@/lib/core/judging/entrantSubmissions";
 import { entrantWhere } from "@/lib/core/judging/entrantAuth";
 import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/payments/money";
-import { myPrizesDtoSchema, mySubmissionsDtoSchema, participantClaimsDtoSchema, staffClaimsDtoSchema } from "@/lib/mobile/schemas";
+import { myPrizesDtoSchema, myReimbursementsDtoSchema, mySubmissionsDtoSchema, participantClaimsDtoSchema, staffClaimsDtoSchema } from "@/lib/mobile/schemas";
 
 /*
  * The signed-in attendee's own money and entries: participant expense
@@ -29,7 +29,20 @@ export async function loadMyParticipantClaims(userId: string, rsvpId: string) {
   const rsvp = await ownRegistration(userId, rsvpId);
   if (!rsvp) return undefined;
   const view = await loadTicketClaims(rsvp);
-  return view ? participantClaimsDtoSchema.parse(view) : null;
+  return view ? participantClaimsDtoSchema.parse({ currency: view.currency, general: view.general, cap: view.cap, categories: view.categories, claims: view.claims }) : null;
+}
+
+/** The reimbursement policies open to this registration now, with what is left under each; null when there is nothing to claim. */
+export async function loadMyReimbursements(userId: string, rsvpId: string) {
+  const rsvp = await ownRegistration(userId, rsvpId);
+  if (!rsvp) return undefined;
+  const view = await loadTicketClaims(rsvp);
+  if (!view || (!view.general && view.policies.length === 0)) return null;
+  return myReimbursementsDtoSchema.parse({
+    currency: view.currency,
+    general: view.general ? { cap: view.cap } : null,
+    policies: view.policies.map(({ id, name, who, cap, left, categories, claimClosesAt }) => ({ id, name, who, cap, left, categories, claimClosesAt })),
+  });
 }
 
 /** The caller's own staff claims on one event (any status). */
@@ -50,6 +63,7 @@ export async function loadMyStaffClaims(userId: string, eventId: string) {
       amount: formatMoney(claim.amountMinor, claim.currency),
       approved: claim.approvedMinor != null ? formatMoney(claim.approvedMinor, claim.currency) : null,
       note: claim.decisionNote || null,
+      policy: null,
       description: claim.description,
       createdAt: claim.createdAt.toISOString(),
       receiptIds: claim.receipts.map((receipt) => receipt.id),

@@ -968,6 +968,7 @@ model Event {
   contributorCertificateTemplate      Json?
   expenseClaims       ExpenseClaim[]
   claimPayouts        ClaimPayout[]
+  reimbursementPolicies ReimbursementPolicy[]
   /// The event's own ticket design (an event-owned TicketDesign), or null for the organisation default.
   ticketDesignId      String?          @unique
   ticketDesign        TicketDesign?    @relation("EventTicketDesign", fields: [ticketDesignId], references: [id], onDelete: SetNull)
@@ -1784,6 +1785,7 @@ model RSVP {
   /// A solo registrant's application on an admission event (docs/ADMISSION.md).
   admissionApplication AdmissionApplication?
   admissionAnswerRevisions AdmissionAnswerRevision[]
+  reimbursementNotices ReimbursementNotice[]
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
   @@index([userId, createdAt])
@@ -2800,6 +2802,7 @@ model JudgingRound {
   panel       JudgingRoundJudge[]
   assignmentRuns JudgingAssignmentRun[]
   finalistNotices JudgingFinalistNotice[]
+  reimbursementPolicies ReimbursementPolicy[]
 
   @@unique([eventId, position])
   @@index([eventId, status])
@@ -2972,11 +2975,19 @@ model ExpenseClaim {
   decisionNote      String             @default("")
   decidedByUserId   String?
   decidedAt         DateTime?
+  /// Claims under a reimbursement policy (docs/FINANCE.md "Reimbursement
+  /// policies"); null for general participant, crew and staff claims. A
+  /// policy with claims can only be closed, never deleted.
+  policyId          String?
+  /// The policy terms frozen when the claim was filed, and the eligibility
+  /// evaluated then and again at approval (lib/claims/policies/snapshot.ts).
+  eligibilitySnapshot Json?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
   organisation Organisation     @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   event        Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  policy       ReimbursementPolicy? @relation(fields: [policyId], references: [id], onDelete: NoAction)
   submittedBy  User?            @relation("ExpenseClaimSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: SetNull)
   decidedBy    User?            @relation("ExpenseClaimDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
   rsvp         RSVP?            @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
@@ -2987,6 +2998,8 @@ model ExpenseClaim {
   @@index([organisationId, createdAt])
   @@index([submittedByUserId])
   @@index([rsvpId])
+  @@index([policyId, status])
+  @@index([rsvpId, policyId])
 }
 
 /// A photo of a receipt, re-encoded as WebP and kept in private storage
@@ -3032,6 +3045,93 @@ model ClaimPayout {
   @@index([eventId, createdAt])
   @@index([organisationId, createdAt])
   @@index([claimId])
+}
+
+/// Who a reimbursement policy is for (docs/FINANCE.md "Reimbursement
+/// policies"). Each kind has one resolver in lib/claims/policies/eligibility/,
+/// and a CHECK keeps exactly its own stage id set.
+enum ReimbursementEligibility {
+  /// Every confirmed (non-crew) participant.
+  CONFIRMED_PARTICIPANT
+  /// Every confirmed crew member (docs/CREW.md).
+  CREW
+  /// Participants whose team's or own project has a JudgingRoundEntry in
+  /// `judgingRoundId` and is not withdrawn or disqualified.
+  JUDGING_ROUND_ENTRY
+  /// Participants whose team took part in `mentoringRoundId` (a submitted,
+  /// non-away Mentor Desk check-in).
+  MENTORING_ROUND
+  /// Participants whose application (their team's, or their own when solo)
+  /// reached `admissionStageId` and is still in play (in review, offered,
+  /// waitlisted or accepted), or only accepted with `requireAccepted`.
+  ADMISSION_STAGE
+}
+
+/// A per-stage reimbursement policy of one event: who may claim, the most
+/// each person gets back, which categories, when, whether they must have
+/// checked in, and an optional budget for the whole policy. Claims freeze
+/// these terms when filed (ExpenseClaim.eligibilitySnapshot). CHECKs keep the
+/// stage ids to their eligibility kind, positive amounts and the window
+/// order; a trigger keeps the stage in the policy's event.
+model ReimbursementPolicy {
+  id                        String                   @id @default(cuid())
+  eventId                   String
+  /// Up to 80 characters.
+  name                      String
+  eligibility               ReimbursementEligibility
+  judgingRoundId            String?
+  mentoringRoundId          String?
+  /// JUDGING_ROUND_ENTRY only: claims open once the round's finalists are published.
+  requireFinalistsPublished Boolean                  @default(false)
+  /// CREW only: limit to these crew kinds (docs/VOLUNTEERS.md); empty is every crew member.
+  crewKinds                 CrewKind[]               @default([])
+  admissionStageId          String?
+  /// ADMISSION_STAGE only: the application must also be accepted.
+  requireAccepted           Boolean                  @default(false)
+  capPerPersonMinor         BigInt
+  /// At least one.
+  categories                ExpenseCategory[]
+  claimOpensAt              DateTime?
+  claimClosesAt             DateTime?
+  attendanceRequired        Boolean                  @default(false)
+  /// The most the policy pays in all (waiting plus approved claims); null is no limit.
+  budgetMinor               BigInt?
+  /// Closed policies take no new claims; their claims are still decided.
+  active                    Boolean                  @default(true)
+  /// Email each person once when the policy becomes available to them.
+  notifyWhenAvailable       Boolean                  @default(false)
+  /// When the beat last looked for people to email under this policy; the
+  /// pass takes the longest-unchecked policies first so none starves.
+  noticesCheckedAt          DateTime?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  event          Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  judgingRound   JudgingRound?         @relation(fields: [judgingRoundId], references: [id], onDelete: NoAction)
+  mentoringRound MentoringRound?       @relation(fields: [mentoringRoundId], references: [id], onDelete: NoAction)
+  admissionStage AdmissionStage?       @relation(fields: [admissionStageId], references: [id], onDelete: NoAction)
+  claims         ExpenseClaim[]
+  notices        ReimbursementNotice[]
+
+  @@index([eventId, active])
+  @@index([judgingRoundId])
+  @@index([mentoringRoundId])
+  @@index([admissionStageId])
+}
+
+/// "A reimbursement is available to you" was queued for this registration
+/// under this policy: at most once each (the beat's dedupe).
+model ReimbursementNotice {
+  id        String   @id @default(cuid())
+  policyId  String
+  rsvpId    String
+  createdAt DateTime @default(now())
+
+  policy ReimbursementPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  rsvp   RSVP                @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, rsvpId])
+  @@index([rsvpId])
 }
 
 enum RefundRequestStatus {
@@ -3627,6 +3727,7 @@ model MentoringRound {
   assignments    MentorTeamAssignment[]
   assignmentRuns MentorAssignmentRun[]
   helpRequests   HelpRequest[]
+  reimbursementPolicies ReimbursementPolicy[]
 
   @@unique([eventId, position])
 }
@@ -3787,6 +3888,7 @@ model AdmissionStage {
   reviews     AdmissionReview[]
   runs        AdmissionAssignmentRun[]
   decisions   AdmissionDecision[]
+  reimbursementPolicies ReimbursementPolicy[]
 
   @@unique([eventId, position])
 }

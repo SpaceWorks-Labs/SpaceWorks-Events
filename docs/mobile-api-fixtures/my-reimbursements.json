@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "data": {
+    "currency": "INR",
+    "general": {
+      "cap": "₹2,000.00"
+    },
+    "policies": [
+      {
+        "id": "clpolicy000000000000001",
+        "name": "Finalist travel",
+        "who": "Projects in a judging round: Finals",
+        "cap": "₹5,000.00",
+        "left": "₹1,500.00",
+        "categories": [
+          {
+            "value": "TRAVEL",
+            "label": "Travel"
+          },
+          {
+            "value": "ACCOMMODATION",
+            "label": "Accommodation"
+          }
+        ],
+        "claimClosesAt": "2030-06-15T18:30:00.000Z"
+      }
+    ]
+  }
+}

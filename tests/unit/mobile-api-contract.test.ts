@@ -129,6 +129,8 @@ const fixtures: Array<[file: string, component: string, zod: z.ZodType]> = [
   ["my-attendance.json", "MyAttendanceResponse", dto.successEnvelope(dto.myAttendanceDtoSchema)],
   ["attendance-reply.json", "AttendanceReplyResponse", dto.successEnvelope(dto.attendanceReplyDtoSchema)],
   ["attendance-link.json", "AttendanceLinkResponse", dto.successEnvelope(dto.attendanceLinkDtoSchema)],
+  ["my-reimbursements.json", "MyReimbursementsResponse", dto.successEnvelope(dto.myReimbursementsDtoSchema.nullable())],
+  ["reimbursement-policies.json", "ReimbursementPoliciesResponse", dto.successEnvelope(dto.reimbursementPoliciesDtoSchema)],
 ];
 
 describe("mobile API contract", () => {
