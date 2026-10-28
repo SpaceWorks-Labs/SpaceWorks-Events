@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { CrewKind } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
@@ -81,9 +82,9 @@ export async function reorderCrewMember(input: unknown): Promise<ActionResult> {
 
 /** Create, replace or turn off the crew sign-up link. Returns the token (null once off). */
 export async function manageCrewJoinLink(input: unknown): Promise<ActionResult<{ token: string } | null>> {
-  const g = await gate(input, targetSchema.extend({ action: z.enum(["create", "rotate", "disable"]) }));
+  const g = await gate(input, targetSchema.extend({ action: z.enum(["create", "rotate", "disable"]), kind: z.nativeEnum(CrewKind).optional() }));
   if (!g.ok) return g;
-  const result = await setCrewJoinLink(g.crew, g.data.action);
+  const result = await setCrewJoinLink(g.crew, g.data.action, g.data.kind);
   if (!result.ok) return result;
   const action = g.data.action === "disable" ? "EVENT_CREW_LINK_DISABLED" : g.data.action === "rotate" ? "EVENT_CREW_LINK_ROTATED" : "EVENT_CREW_LINK_CREATED";
   await auditCrew(g.event, action, "Event", g.event.eventId);

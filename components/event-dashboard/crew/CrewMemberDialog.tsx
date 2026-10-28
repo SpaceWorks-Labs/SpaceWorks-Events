@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { SwitchRow } from "@/components/ui/choice";
 import { Callout } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
-import { Field, Input, Textarea } from "@/components/ui/field";
+import { Dropdown, Field, Input, Textarea } from "@/components/ui/field";
+import { CREW_KINDS, CREW_KIND_LABELS } from "@/lib/crewKind";
 import { CREW_FIELD_LIMITS } from "@/components/crew/CrewJoinForm";
 import type { OrganiserCrewMember } from "@/lib/core/crew";
 
@@ -44,6 +45,7 @@ export function CrewMemberDialog({
   const [bio, setBio] = useState(member?.bio ?? "");
   const [linkedinUrl, setLinkedinUrl] = useState(member?.linkedinUrl ?? "");
   const [showOnPage, setShowOnPage] = useState(member?.showOnPage ?? true);
+  const [kind, setKind] = useState(member?.kind ?? "VOLUNTEER");
   // The stored photo stays unless it is removed or replaced by a new file.
   const [photoUrl, setPhotoUrl] = useState(member?.photoUrl ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
@@ -71,7 +73,7 @@ export function CrewMemberDialog({
         setPhotoUrl(savedPhotoUrl);
         setPhoto(null);
       }
-      const values = { name, email, foodPreference, role, bio, photoUrl: savedPhotoUrl, linkedinUrl, showOnPage };
+      const values = { name, email, foodPreference, role, bio, photoUrl: savedPhotoUrl, linkedinUrl, showOnPage, kind };
       const result = member
         ? await updateCrewMember({ organisationSlug, eventId, memberId: member.id, member: values })
         : await addCrewMember({ organisationSlug, eventId, member: values });
@@ -110,6 +112,11 @@ export function CrewMemberDialog({
               </Field>
               <Field label="Role" optional helperText="For example: Volunteer, Registration desk">
                 <Input value={role} onChange={(e) => setRole(e.target.value)} maxLength={LIMITS.role} disabled={busy} />
+              </Field>
+              <Field label="Kind" helperText="For badges and filters. It gives no access.">
+                <Dropdown value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} disabled={busy}>
+                  {CREW_KINDS.map((value) => <option key={value} value={value}>{CREW_KIND_LABELS[value]}</option>)}
+                </Dropdown>
               </Field>
               <Field label="Food preference" optional helperText="Only organisers see this.">
                 <Input value={foodPreference} onChange={(e) => setFoodPreference(e.target.value)} maxLength={LIMITS.foodPreference} list={foodListId} autoComplete="off" disabled={busy} />

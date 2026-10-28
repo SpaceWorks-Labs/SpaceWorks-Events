@@ -109,7 +109,7 @@ export function isExpired(expiresAt: string | undefined, now = new Date()) {
 }
 
 export function containsCapability(kind: string, payload: Prisma.JsonValue) {
-  if (["rsvp-confirmation", "password-reset", "email-verification", "collaborator-invite", "sign-in-code", "team-created", "team-member-added", "submission-link", "crew-ticket", "attendance-check"].includes(kind)) return true;
+  if (["rsvp-confirmation", "password-reset", "email-verification", "collaborator-invite", "sign-in-code", "team-created", "team-member-added", "submission-link", "crew-ticket", "attendance-check", "volunteer-notice"].includes(kind)) return true;
   return kind === "rsvp-status" && Boolean(payload && typeof payload === "object" && !Array.isArray(payload) && typeof (payload as Record<string, unknown>).checkInToken === "string");
 }
 

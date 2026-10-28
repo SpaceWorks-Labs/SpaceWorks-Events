@@ -11,6 +11,7 @@ import "server-only";
 import { EventPermission, MentorAssignmentStatus, OfficeHourBookingStatus, Prisma } from "@prisma/client";
 import { OFFICE_HOUR_CANCELLED_KIND } from "@/lib/outbox/mentor";
 import { notifyBooking, scheduleOf } from "./officeHourMail";
+import { revokeMentoringCertificatesLocked } from "@/lib/volunteer/mentoring";
 
 /** Creates the profile for a MENTOR grant (on invite acceptance or a grant change). Idempotent. */
 export async function ensureMentorProfile(tx: Prisma.TransactionClient, eventId: string, userId: string) {
@@ -44,6 +45,8 @@ export async function endMentorRoleLocked(tx: Prisma.TransactionClient, eventId:
     await notifyBooking(tx, booked.map((b) => b.id), OFFICE_HOUR_CANCELLED_KIND);
   }
   await tx.mentoringVisit.updateMany({ where: { eventId, mentorUserId: userId, expiresAt: { gt: now } }, data: { expiresAt: now, version: { increment: 1 } } });
+  // The grant is part of the mentoring evidence: a contributor certificate resting on it alone is revoked (docs/VOLUNTEERS.md).
+  await revokeMentoringCertificatesLocked(tx, eventId, userId);
   const seats = await tx.mentoringRoundMentor.findMany({ where: { mentorUserId: userId, round: { eventId } }, select: { id: true, roundId: true } });
   for (const seat of seats) {
     if ((await tx.mentoringRoundMentor.count({ where: { roundId: seat.roundId, mentorUserId: { not: userId } } })) > 0) {

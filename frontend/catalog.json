@@ -1748,6 +1748,11 @@
       "id": "mfa-step-up:verifyStepUpMfa"
     },
     {
+      "module": "app/actions/my-shifts",
+      "name": "myShiftAction",
+      "id": "my-shifts:myShiftAction"
+    },
+    {
       "module": "app/actions/orders",
       "name": "updateOrderAttendee",
       "id": "orders:updateOrderAttendee"
@@ -2291,6 +2296,51 @@
       "module": "app/actions/ticket-types",
       "name": "saveTeamTicketMode",
       "id": "ticket-types:saveTeamTicketMode"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "setVolunteerShifts",
+      "id": "volunteer-shifts:setVolunteerShifts"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "saveVolunteerShift",
+      "id": "volunteer-shifts:saveVolunteerShift"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "closeVolunteerShift",
+      "id": "volunteer-shifts:closeVolunteerShift"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "deleteVolunteerShift",
+      "id": "volunteer-shifts:deleteVolunteerShift"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "decideVolunteerSignup",
+      "id": "volunteer-shifts:decideVolunteerSignup"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "recordVolunteerAttendance",
+      "id": "volunteer-shifts:recordVolunteerAttendance"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "reviewVolunteerHours",
+      "id": "volunteer-shifts:reviewVolunteerHours"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "manageContributorCertificate",
+      "id": "volunteer-shifts:manageContributorCertificate"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "saveContributorCertificateDesign",
+      "id": "volunteer-shifts:saveContributorCertificateDesign"
     },
     {
       "module": "app/actions/webhooks",

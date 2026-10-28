@@ -8,23 +8,26 @@ import { ConfirmationDialog } from "@/components/feedback/ConfirmationDialog";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/display";
-import { Field, Input } from "@/components/ui/field";
+import { Dropdown, Field, Input } from "@/components/ui/field";
+import { CREW_KINDS, CREW_KIND_LABELS } from "@/lib/crewKind";
+import type { CrewKind } from "@prisma/client";
 
 /**
  * The crew sign-up link. Anyone holding it can join the crew (and gets a
  * ticket), so replacing it stops the old one working and turning it off
  * removes it. The server re-checks MANAGE_REGISTRATIONS for every change.
  */
-export function CrewJoinLinkCard({ organisationSlug, eventId, joinUrl }: { organisationSlug: string; eventId: string; joinUrl: string | null }) {
+export function CrewJoinLinkCard({ organisationSlug, eventId, joinUrl, kind: linkKind }: { organisationSlug: string; eventId: string; joinUrl: string | null; kind: CrewKind }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
   const [confirm, setConfirm] = useState<"rotate" | "disable" | null>(null);
+  const [kind, setKind] = useState<CrewKind>(linkKind);
 
   function run(action: "create" | "rotate" | "disable", success: string) {
     setConfirm(null);
     startTransition(async () => {
-      const res = await manageCrewJoinLink({ organisationSlug, eventId, action });
+      const res = await manageCrewJoinLink({ organisationSlug, eventId, action, kind });
       if (!res.ok) {
         showToast(res.error, "error");
         return;
@@ -51,6 +54,24 @@ export function CrewJoinLinkCard({ organisationSlug, eventId, joinUrl }: { organ
         titleAs="h3"
         description="Share it with your team so they can add themselves. People who sign up get a ticket by email but stay hidden on the event page until you switch them on."
       />
+      <Field label="People who sign up join as" helperText={joinUrl ? "Changing it applies to people who sign up from now on." : "For badges and filters only. It gives no access."}>
+        <Dropdown
+          value={kind}
+          disabled={pending}
+          onChange={(event) => {
+            const next = event.target.value as CrewKind;
+            setKind(next);
+            if (!joinUrl) return;
+            startTransition(async () => {
+              const res = await manageCrewJoinLink({ organisationSlug, eventId, action: "create", kind: next });
+              showToast(res.ok ? `New sign-ups join as ${CREW_KIND_LABELS[next]}` : res.error, res.ok ? "success" : "error");
+              if (res.ok) router.refresh();
+            });
+          }}
+        >
+          {CREW_KINDS.map((value) => <option key={value} value={value}>{CREW_KIND_LABELS[value]}</option>)}
+        </Dropdown>
+      </Field>
       {joinUrl ? (
         <div className="flex flex-col gap-3">
           <Field label="Sign-up link" hideLabel>

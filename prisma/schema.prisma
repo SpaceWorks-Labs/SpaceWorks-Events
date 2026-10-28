@@ -387,6 +387,7 @@ model User {
   claimPayoutsRecorded         ClaimPayout[]  @relation("ClaimPayoutRecordedBy")
   ticketDesignsUpdated         TicketDesign[] @relation("TicketDesignUpdatedBy")
   refundRequestsDecided        RefundRequest[] @relation("RefundRequestDecidedBy")
+  crewMemberships              EventCrewMember[]
   mentorProfiles               MentorProfile[]
   helpRequestsRaised           HelpRequest[] @relation("HelpRequestRaisedBy")
   helpRequestsClaimed          HelpRequest[] @relation("HelpRequestClaimedBy")
@@ -827,6 +828,7 @@ model Event {
   attendanceChecks AttendanceCheck[]
   crewMembers      EventCrewMember[]
   crewJoinLink     EventCrewJoinLink?
+  volunteerShifts  VolunteerShift[]
 
   /// TEAM turns on team registration (one-off events only; series stay
   /// individual). Cannot change while the event has registrations.
@@ -894,6 +896,10 @@ model Event {
   participantClaimCapMinor            BigInt?
   /// Crew (docs/CREW.md) may claim expenses from their crew ticket page.
   crewClaimsEnabled                   Boolean          @default(false)
+  /// Volunteer shifts and contributor hours for the crew (docs/VOLUNTEERS.md). Off by default.
+  volunteerShiftsEnabled              Boolean          @default(false)
+  /// The contributor certificate design (lib/certificateTemplate.ts); null uses the standard one.
+  contributorCertificateTemplate      Json?
   expenseClaims       ExpenseClaim[]
   claimPayouts        ClaimPayout[]
   reimbursementPolicies ReimbursementPolicy[]
@@ -1736,16 +1742,34 @@ model EventCrewMember {
   /// True when the member signed up through the crew join link.
   joinedViaLink  Boolean  @default(false)
   sortOrder      Int      @default(0)
+  /// What the person does (display, badge and filter only). Never grants
+  /// authority: that comes from collaborator grants or shift sign-ups.
+  kind           CrewKind @default(VOLUNTEER)
+  /// The member's account, linked when the crew email matches a verified
+  /// account or on invitation acceptance. Optional: crew need no sign-in.
+  userId         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  rsvp  RSVP  @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  event        Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsvp         RSVP                     @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  user         User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shiftSignups VolunteerShiftSignup[]
+  certificates ContributorCertificate[]
   /// Set when the Mentor Desk added this place for a mentor (docs/MENTOR_DESK.md).
   mentorProfile MentorProfile?
 
   @@unique([eventId, email])
   @@index([eventId, sortOrder])
+  @@index([userId])
+}
+
+/// What a crew member does. Display, badges and filters only.
+enum CrewKind {
+  ORGANISER
+  VOLUNTEER
+  MENTOR
+  JUDGE
 }
 
 /// The shareable crew sign-up link for one event. Like a team join link the
@@ -1754,6 +1778,8 @@ model EventCrewMember {
 model EventCrewJoinLink {
   eventId   String   @id
   token     String   @unique
+  /// The crew kind people who join through this link get.
+  kind      CrewKind @default(VOLUNTEER)
   createdAt DateTime @default(now())
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -3068,6 +3094,168 @@ model TicketDesign {
 
   @@index([organisationId, eventId, updatedAt])
   @@index([eventId])
+}
+
+/// A volunteer shift (docs/VOLUNTEERS.md): a duty window with a zone, a task
+/// and a number of places. `capacity` 0 means no limit. CHECK constraints
+/// keep the window ordered, the sign-up deadline at or before the start and
+/// the check-in grace within an hour.
+model VolunteerShift {
+  id               String   @id @default(cuid())
+  eventId          String
+  title            String
+  zone             String   @default("")
+  task             String   @default("")
+  startsAt         DateTime
+  endsAt           DateTime
+  capacity         Int      @default(0)
+  signupDeadline   DateTime
+  waitlistEnabled  Boolean  @default(true)
+  requiresApproval Boolean  @default(true)
+  graceMinutes     Int      @default(15)
+  /// Closed shifts take no sign-ups, approvals or promotions.
+  closed           Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  event   Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  signups VolunteerShiftSignup[]
+
+  @@index([eventId, startsAt])
+}
+
+enum VolunteerSignupStatus {
+  APPLIED
+  WAITLISTED
+  APPROVED
+  WITHDRAWN
+  DECLINED
+}
+
+enum VolunteerAttendanceState {
+  SCHEDULED
+  CHECKED_IN
+  CHECKED_OUT
+  NO_SHOW
+}
+
+/// One crew member's place on one shift, and their shift attendance (never
+/// the event check-in). The waitlist is FIFO by `queuedAt`.
+model VolunteerShiftSignup {
+  id                String                   @id @default(cuid())
+  eventId           String
+  shiftId           String
+  crewMemberId      String
+  status            VolunteerSignupStatus    @default(APPLIED)
+  queuedAt          DateTime                 @default(now())
+  approvedAt        DateTime?
+  /// Who approved, or null for an automatic approval or promotion.
+  approvedByUserId  String?
+  attendance        VolunteerAttendanceState @default(SCHEDULED)
+  checkedInAt       DateTime?
+  checkedOutAt      DateTime?
+  breakMinutes      Int                      @default(0)
+  /// "self" or "desk".
+  attendanceSource  String?
+  attendanceActorId String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  shift       VolunteerShift                  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  crewMember  EventCrewMember                 @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  hours       VolunteerHours?
+  corrections VolunteerAttendanceCorrection[]
+
+  @@unique([shiftId, crewMemberId])
+  @@index([eventId, crewMemberId])
+  @@index([shiftId, status, queuedAt])
+}
+
+/// A desk-entered attendance time and its reason. Append-only (trigger).
+model VolunteerAttendanceCorrection {
+  id          String   @id @default(cuid())
+  eventId     String
+  signupId    String
+  actorUserId String?
+  /// "check-in" or "check-out".
+  action      String
+  occurredAt  DateTime
+  reason      String
+  createdAt   DateTime @default(now())
+
+  signup VolunteerShiftSignup @relation(fields: [signupId], references: [id], onDelete: Cascade)
+
+  @@index([signupId])
+}
+
+enum VolunteerHoursState {
+  PENDING
+  VERIFIED
+  ADJUSTED
+}
+
+/// Counted minutes for one checked-out sign-up. Leaves PENDING, or changes,
+/// only with a matching VolunteerHoursEntry (`volunteer_hours_guard` trigger).
+model VolunteerHours {
+  id        String              @id @default(cuid())
+  eventId   String
+  signupId  String              @unique
+  minutes   Int
+  state     VolunteerHoursState @default(PENDING)
+  version   Int                 @default(0)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  signup  VolunteerShiftSignup  @relation(fields: [signupId], references: [id], onDelete: Cascade)
+  entries VolunteerHoursEntry[]
+
+  @@index([eventId])
+}
+
+enum VolunteerHoursEntryKind {
+  VERIFIED
+  ADJUSTED
+}
+
+/// Append-only verification history (trigger). The actor is never the volunteer.
+model VolunteerHoursEntry {
+  id              String                  @id @default(cuid())
+  eventId         String
+  hoursId         String
+  actorUserId     String
+  previousVersion Int
+  minutes         Int
+  kind            VolunteerHoursEntryKind
+  reason          String                  @default("")
+  createdAt       DateTime                @default(now())
+
+  hours VolunteerHours @relation(fields: [hoursId], references: [id], onDelete: Cascade)
+
+  @@unique([hoursId, previousVersion])
+}
+
+/// A thank-you certificate for a crew member (docs/VOLUNTEERS.md). Snapshots
+/// the role, verified minutes and design at issue; revoked when hours change.
+/// At most one live certificate per crew member (partial unique index).
+model ContributorCertificate {
+  id             String    @id @default(cuid())
+  eventId        String
+  crewMemberId   String
+  /// Bearer capability for the download link.
+  token          String    @unique
+  role           String
+  kind           CrewKind
+  minutes        Int
+  template       Json?
+  issuedAt       DateTime  @default(now())
+  issuedByUserId String?
+  revokedAt      DateTime?
+  revokedReason  String?
+
+  crewMember EventCrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([crewMemberId])
 }
 
 // ---------------------------------------------------------------------------

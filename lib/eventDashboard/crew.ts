@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { EventPageSectionType } from "@prisma/client";
+import { CrewKind, EventPageSectionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   FOOD_PREFERENCE_SUGGESTIONS,
@@ -25,6 +25,8 @@ export type DashboardCrew = {
   food: Array<{ label: string; count: number }>;
   /** Site-relative sign-up path (`/crew/<token>`), or null when the link is off. */
   joinPath: string | null;
+  /** The crew kind link sign-ups get (display only). */
+  joinKind: CrewKind;
   /** Offered in the food preference field; any short text is accepted. */
   foodSuggestions: string[];
   /** Whether the public Crew section (Event page → Sections) is switched on. */
@@ -48,6 +50,7 @@ export const loadEventCrew = cache(async (ctx: EventDashboardContext): Promise<D
     members: list.members,
     food: list.food,
     joinPath: link ? crewJoinPath(link.token) : null,
+    joinKind: link?.kind ?? CrewKind.VOLUNTEER,
     foodSuggestions: [...FOOD_PREFERENCE_SUGGESTIONS],
     sectionOn: section?.isVisible ?? false,
     canEditPage: ctx.permissions.canEditPageContent,

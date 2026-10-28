@@ -7,6 +7,7 @@ import { Callout } from "@/components/ui/display";
 import { Field, Input } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
 import {
+  CONTRIBUTOR_MERGE_TAGS,
   certificateMergeTags,
   defaultNameElement,
   type CertificateElement,
@@ -41,6 +42,8 @@ type Props = {
   eventTitle?: string;
   eventDateLabel?: string;
   organisationName?: string;
+  /** A contributor certificate (docs/VOLUNTEERS.md): offers the role and hours tags. */
+  contributor?: boolean;
 };
 
 const isTyping = (target: EventTarget) => target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
@@ -167,7 +170,7 @@ export function CertificateBuilder(props: Props) {
   async function generatePreview() {
     if (!value) return;
     await run(async () => {
-      const result = await previewCertificate({ organisationSlug: props.organisationSlug, eventId: props.eventId, template: value, name });
+      const result = await previewCertificate({ organisationSlug: props.organisationSlug, eventId: props.eventId, template: value, name, contributor: props.contributor === true });
       if (result.ok) setPreview(result.data!.image); else setError(result.error);
     }, "Preview failed. Please try again.");
   }
@@ -242,7 +245,7 @@ export function CertificateBuilder(props: Props) {
             <Input value={name} maxLength={200} disabled={busyOrDisabled} onChange={(e) => { setName(e.target.value); setPreview(null); }} />
           </Field>
           <dl className="grid gap-x-4 gap-y-1.5 text-caption sm:grid-cols-2">
-            {(Object.keys(certificateMergeTags) as CertificateMergeTag[]).filter((tag) => tag !== "name").map((tag) => (
+            {(Object.keys(certificateMergeTags) as CertificateMergeTag[]).filter((tag) => tag !== "name" && (props.contributor || !CONTRIBUTOR_MERGE_TAGS.includes(tag))).map((tag) => (
               <div key={tag} className="flex min-w-0 gap-1.5">
                 <dt className="shrink-0 text-ink-muted">{certificateMergeTags[tag].label}:</dt>
                 <dd className="min-w-0 truncate text-ink">{values[tag]}</dd>
@@ -255,7 +258,7 @@ export function CertificateBuilder(props: Props) {
         <Button variant="secondary" className="self-start" disabled={busyOrDisabled || !name.trim()} onClick={() => void generatePreview()}>Generate exact preview</Button>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {preview && <img src={preview} alt="Generated certificate preview with the sample attendee name" className="w-full rounded-lg" />}
-        <Callout tone="info">Save feedback settings below to apply this design. It is used automatically after an eligible attendee completes feedback.</Callout>
+        <Callout tone="info">{props.contributor ? "Save to apply this design to contributor certificates you issue from now on." : "Save feedback settings below to apply this design. It is used automatically after an eligible attendee completes feedback."}</Callout>
       </>}
     </div>
   );
