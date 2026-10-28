@@ -5,6 +5,7 @@ import "server-only";
 import { OrderStatus, SubmissionStatus } from "@prisma/client";
 import { refundWholeOrderTx, submitRefunds } from "@/lib/payments/operations";
 import { recordAuditEvent } from "@/lib/audit";
+import { entryFeePaid } from "@/lib/payments/entryFees";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { disqualifySubmissionSchema } from "@/lib/validators";
 import { fail, invalid, isId, type JudgingResult, NOT_FOUND, okEmpty, withOrganiserLock } from "./shared";
@@ -43,10 +44,15 @@ export async function disqualifySubmission(ctx: JudgingOrganiserContext, input: 
   return result;
 }
 
-/** Undo a disqualification: back to SUBMITTED, reason cleared. Audited. */
+export const REFUNDED_FEE_REFUSAL = "This project's entry fee was refunded when it was disqualified, so it can't be reinstated: it would stand unpaid.";
+
+/** Undo a disqualification: back to SUBMITTED, reason cleared. Refused once its entry fee was refunded. Audited. */
 export async function reinstateSubmission(ctx: JudgingOrganiserContext, submissionId: string): Promise<JudgingResult> {
   if (!isId(submissionId)) return fail(NOT_FOUND);
   return withOrganiserLock(ctx, async (tx, event) => {
+    // A fee refunded on disqualification would leave the project submitted unpaid.
+    const feeOrders = await tx.order.count({ where: { submissionId, eventId: event.id, status: OrderStatus.CONFIRMED, totalMinor: { gt: 0 } } });
+    if (feeOrders > 0 && !(await entryFeePaid(tx, submissionId))) return fail(REFUNDED_FEE_REFUSAL);
     const updated = await tx.submission.updateMany({
       where: { id: submissionId, eventId: event.id, status: SubmissionStatus.DISQUALIFIED },
       data: { status: SubmissionStatus.SUBMITTED, disqualifiedReason: null },

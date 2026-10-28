@@ -554,7 +554,8 @@ audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
   again; once its fee is refunded in full, submitting asks for it again. A
   payment that lands after the fee was paid on another order is refunded in
   full. Disqualifying refunds a paid fee in full when the setting is on;
-  reinstating charges nothing. Cancelling the event refunds fees with the
+  reinstating charges nothing, so a project whose fee was refunded can't be
+  reinstated (it would stand submitted unpaid); a waived or kept fee can. Cancelling the event refunds fees with the
   tickets.
 
 ## Prize money
