@@ -3,12 +3,13 @@ import { prisma } from "@/lib/db";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { loadRsvpStatusCounts } from "@/lib/eventDashboard/data";
 import { loadEventBroadcastDraftForUser } from "@/app/actions/broadcasts/drafts";
+import { loadAttendanceCheckCard } from "@/lib/eventDashboard/attendanceCheckCard";
 export async function loadEmailsPanel({ ctx }: { ctx: EventDashboardContext; }) {
   ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
 
   const { event, permissions, organisation, now, userId } = ctx;
   if (!permissions.canSendEmails) notFound();
-  const [records, counts, branding, savedDraft] = await Promise.all([
+  const [records, counts, branding, savedDraft, attendanceCheck] = await Promise.all([
     prisma.eventBroadcast.findMany({
       where: { eventId: event.id },
       orderBy: { createdAt: "desc" },
@@ -19,6 +20,8 @@ export async function loadEmailsPanel({ ctx }: { ctx: EventDashboardContext; }) 
     prisma.event.findUnique({ where: { id: event.id }, select: { coverImageUrl: true, page: { select: { accentColor: true } } } }),
     // Only the signed-in organiser's own draft, through the composer's own access check.
     loadEventBroadcastDraftForUser(userId, { organisationSlug: organisation.slug, eventId: event.id }),
+    // Attendance confirmation card: same audience rule as broadcasts (`canSendEmails`, checked above). Counts only.
+    loadAttendanceCheckCard(event, now),
   ]);
   const draft = savedDraft.ok ? (savedDraft.data?.draft ?? null) : null;
   const brand = { accentColor: branding?.page?.accentColor ?? null, coverImageUrl: branding?.coverImageUrl ?? null };
@@ -51,7 +54,7 @@ export async function loadEmailsPanel({ ctx }: { ctx: EventDashboardContext; }) 
     return [row.id, { sent, waiting, failed, skipped: expired ? 0 : Math.max(0, row.recipientCount - sent - waiting - failed), expired }];
   }));
 
-  return { event, permissions, organisation, now, records, brand, statusCounts, delivery, draft };
+  return { event, permissions, organisation, now, records, brand, statusCounts, delivery, draft, attendanceCheck };
 }
 
 import { notFound } from "next/navigation";

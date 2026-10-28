@@ -10,7 +10,7 @@ import { helpCommand } from "@/lib/core/mentorDesk/helpCommands";
 import { expireHelpRequests } from "@/lib/core/mentorDesk/helpExpiry";
 import { loadMentorConsole } from "@/lib/core/mentorDesk/readsMentor";
 import { createTeam, setUpJudgingSuite, tearDownJudgingSuite } from "./helpers/judging";
-import { addCategory, addMentor, createDeskEvent, goLive, HOUR, organiserOf, requestVersion, teamParticipant } from "./helpers/mentorDesk";
+import { addCategory, addMentor, createDeskEvent, goLive, heldClaim, HOUR, organiserOf, requestVersion, teamParticipant } from "./helpers/mentorDesk";
 
 // docs/MENTOR_DESK.md "Tests": the help queue (help_workflow.py, help_expiry.py).
 describe.sequential("mentor desk help queue", () => {
@@ -72,6 +72,11 @@ describe.sequential("mentor desk help queue", () => {
     const claimed = await prisma.helpRequest.findUniqueOrThrow({ where: { id: requestId } });
     expect(await helpCommand(mentor, { requestId, action: "renew", expectedVersion: claimed.version, claimId: "wrong", claimGeneration: claimed.claimGeneration })).toEqual({ ok: false, error: "This help claim expired. Refresh the queue." });
     expect((await helpCommand(mentor, { requestId, action: "renew", expectedVersion: claimed.version, claimId: claimed.claimId!, claimGeneration: claimed.claimGeneration })).ok).toBe(true);
+    // Release and resolve are fenced the same way: a stale screen never acts on a later claim.
+    for (const action of ["release", "resolve"]) {
+      expect(await helpCommand(mentor, { requestId, action, ...(await heldClaim(requestId)), claimGeneration: claimed.claimGeneration + 1 })).toEqual({ ok: false, error: "This help claim expired. Refresh the queue." });
+      expect(await helpCommand(mentor, { requestId, action, expectedVersion: await requestVersion(requestId) })).toEqual({ ok: false, error: "This help claim expired. Refresh the queue." });
+    }
     await prisma.helpRequest.update({ where: { id: requestId }, data: { claimExpiresAt: new Date(Date.now() - 1000) } });
     const lapsed = await prisma.helpRequest.findUniqueOrThrow({ where: { id: requestId } });
     expect(await helpCommand(mentor, { requestId, action: "resolve", expectedVersion: lapsed.version })).toEqual({ ok: false, error: "This help claim expired. Refresh the queue." });
@@ -111,7 +116,7 @@ describe.sequential("mentor desk help queue", () => {
     expect((await commentAsParticipant(team, { requestId, expectedVersion: await requestVersion(requestId), body: "We are at table 4" })).ok).toBe(true);
     await helpCommand(mentor, { requestId, action: "claim", expectedVersion: await requestVersion(requestId) });
     expect((await commentAsMentor(mentor, { requestId, expectedVersion: await requestVersion(requestId), body: "On my way" })).ok).toBe(true);
-    expect((await helpCommand(mentor, { requestId, action: "resolve", expectedVersion: await requestVersion(requestId) })).ok).toBe(true);
+    expect((await helpCommand(mentor, { requestId, action: "resolve", ...(await heldClaim(requestId)) })).ok).toBe(true);
     expect(await commentAsParticipant(team, { requestId, expectedVersion: await requestVersion(requestId), body: "late" })).toEqual({ ok: false, error: "This request is closed." });
     expect(await helpCommand(organiser, { requestId, action: "reopen", expectedVersion: await requestVersion(requestId), note: " " })).toEqual({ ok: false, error: "Explain why the request is reopening." });
     expect((await helpCommand(organiser, { requestId, action: "reopen", expectedVersion: await requestVersion(requestId), note: "Still broken" })).ok).toBe(true);

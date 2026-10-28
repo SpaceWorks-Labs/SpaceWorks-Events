@@ -127,6 +127,9 @@ export async function addCrewMemberTx(
         // A seeker listing or join request would let teams invite a crew member.
         await tx.teamSeekerProfile.deleteMany({ where: { rsvpId: existing.id } });
         await tx.teamJoinRequest.deleteMany({ where: { rsvpId: existing.id } });
+        // Crew are never asked "Are you still coming?" (docs/ATTENDANCE.md): a pending
+        // question and its link go, so a later "No" can never release a crew ticket.
+        await tx.attendanceCheck.deleteMany({ where: { rsvpId: existing.id } });
         // Webhook receivers learn that the registration is now a crew ticket (`crew: true`), even when it was already confirmed.
         webhook = { type: "registration.status_changed", rsvpId: existing.id, status: RsvpStatus.CONFIRMED, previousStatus: existing.status };
       } else {

@@ -14,7 +14,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/actionRateLimit", () => ({ isActionRateLimited: async () => false }));
 
 import { appSession, get, keyed, params } from "../helpers/mobileApi";
-import { applyAdvancement, previewAdvancement } from "@/lib/core/judgingRounds";
+import { applyAdvancement, previewAdvancement, publishFinalists } from "@/lib/core/judgingRounds";
 import { must, openRound, orgSlug, otherOrgSlug, setUpRounds, tearDownRounds, twoRoundEvent, users } from "./helpers/judgingRounds";
 import { GET as rounds } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/judging/rounds/route";
 import { GET as summary } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/judging/rounds/summary/route";
@@ -65,10 +65,18 @@ describe.sequential("judging rounds through the mobile API", () => {
   });
 
   it("publishes no finalists before the organiser does, and hides other organisations' events", async () => {
-    const { event } = await twoRoundEvent([9]);
-    const page = await finalists(get("/x"), params({ orgSlug, eventSlug: event.slug }));
+    const { event, ctx, roundTwoId } = await twoRoundEvent([9]);
+    const at = params({ orgSlug, eventSlug: event.slug });
+    // Nothing published yet looks like a hidden event, as on the website.
+    expect((await finalists(get("/x"), at)).status).toBe(404);
+    const preview = must(await previewAdvancement(ctx, roundTwoId, { mode: "top", count: 1 }));
+    must(await applyAdvancement(ctx, roundTwoId, { mode: "top", count: 1, fingerprint: preview.fingerprint }));
+    must(await publishFinalists(ctx, roundTwoId));
+    const page = await finalists(get("/x"), at);
     expect(page.status).toBe(200);
-    await expect(page.json()).resolves.toEqual({ ok: true, data: { rounds: [] } });
+    const body = await page.json();
+    expect(body.data.rounds).toEqual([expect.objectContaining({ roundName: "Finals", finalists: [expect.objectContaining({ title: "Project 1" })] })]);
+    expect(JSON.stringify(body)).not.toMatch(/score|rank/i);
     expect((await finalists(get("/x"), params({ orgSlug: otherOrgSlug, eventSlug: event.slug }))).status).toBe(404);
   });
 });

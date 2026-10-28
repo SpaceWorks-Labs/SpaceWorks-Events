@@ -1,5 +1,6 @@
 import type { RsvpStatus } from "@prisma/client";
 import type { ManualRsvpField } from "@/components/attendees/ManualRsvpDialog";
+import type { AttendanceReleaseOutcome, AttendanceState } from "@/lib/attendanceCheck";
 
 /** One registration as the dashboard guest list and its dialogs receive it. */
 export type AttendeeRow = {
@@ -20,6 +21,8 @@ export type AttendeeRow = {
   order?: AttendeeOrder | null;
   /** TEAM events: the registration's team (null when solo; absent elsewhere). */
   team?: { id: string; name: string; isLeader: boolean } | null;
+  /** One-off events: the attendance confirmation badge (state null: no badge), the guest's note, and a paid "No" kept. */
+  attendance?: { state: AttendanceState | null; note: string | null; respondedAt: string | null; outcome: AttendanceReleaseOutcome | null };
   answers?: { label: string; value: string }[];
   rawAnswers?: Array<{
     fieldId: string;

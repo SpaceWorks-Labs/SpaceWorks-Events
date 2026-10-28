@@ -93,6 +93,8 @@ counts are shown) but never in *spots left* or *sold out*.
   photo when it is a crew upload of the same organisation (storage key only).
 - The attendee CSV marks crew in the *Ticket* column (and *Team role* on
   team events), so columns keep their positions.
+- Attendance confirmation ([ATTENDANCE.md](ATTENDANCE.md)) never asks crew;
+  adding an asked guest to the crew deletes their question and its link.
 - Removing a crew member deletes their ticket (and its check-in) with the
   crew row. Event cancellation notifies crew like everyone with a place.
 

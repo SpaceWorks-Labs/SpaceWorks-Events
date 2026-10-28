@@ -1,6 +1,6 @@
 import "server-only";
 
-import { OrderStatus, PaymentStatus, RefundRequestStatus } from "@prisma/client";
+import { OrderStatus, PaymentStatus, RefundRequestStatus, type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
@@ -29,33 +29,59 @@ export const decideRefundSchema = z.object({
   note: z.string().trim().max(500).default(""),
 }).strict();
 
+const ORDER_FOR_REQUEST = { id: true, organisationId: true, status: true, reference: true, buyerName: true, ...ORDER_SUBJECT_SELECT, payments: { where: { status: { in: [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE] } }, select: { id: true } } } satisfies Prisma.OrderSelect;
+
 /** The buyer asks, holding the order's bearer link. */
 export async function requestRefund(orderToken: string, reason: unknown): Promise<Result> {
   const parsedReason = reasonSchema.safeParse(reason);
   if (!parsedReason.success) return { ok: false, error: parsedReason.error.issues[0]?.message ?? "Say why." };
-  const order = await prisma.order.findUnique({
-    where: { accessToken: orderToken },
-    select: { id: true, organisationId: true, status: true, reference: true, buyerName: true, ...ORDER_SUBJECT_SELECT, payments: { where: { status: { in: [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE] } }, select: { id: true } } },
-  });
+  const order = await prisma.order.findUnique({ where: { accessToken: orderToken }, select: ORDER_FOR_REQUEST });
+  return openRefundRequest(order, parsedReason.data);
+}
+
+/**
+ * Open a refund request for an order without its bearer link: a guest who
+ * answered "No" to attendance confirmation after the refund policy closed
+ * (docs/ATTENDANCE.md). The caller has already authorised the guest (their
+ * attendance link) and checked they bought the order. Same rules as the
+ * buyer's own request: paid, confirmed orders only, one open request each.
+ * `onCreated` runs in the request's own transaction (the attendance check
+ * records which request it opened).
+ */
+export async function requestRefundForOrder(orderId: string, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>): Promise<Result> {
+  const parsedReason = reasonSchema.safeParse(reason);
+  if (!parsedReason.success) return { ok: false, error: parsedReason.error.issues[0]?.message ?? "Say why." };
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: ORDER_FOR_REQUEST });
+  return openRefundRequest(order, parsedReason.data, onCreated);
+}
+
+async function openRefundRequest(order: Prisma.OrderGetPayload<{ select: typeof ORDER_FOR_REQUEST; }> | null, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>): Promise<Result> {
   if (!order) return { ok: false, error: "Order not found." };
   if (order.status !== OrderStatus.CONFIRMED || order.payments.length === 0) return { ok: false, error: "Only paid orders can ask for a refund." };
   const title = orderSubject(order)?.title ?? "your event";
   try {
     await prisma.$transaction(async (tx) => {
-      const request = await tx.refundRequest.create({ data: { organisationId: order.organisationId, orderId: order.id, reason: parsedReason.data }, select: { id: true } });
+      const request = await tx.refundRequest.create({ data: { organisationId: order.organisationId, orderId: order.id, reason }, select: { id: true } });
       await recordAuditEvent({ action: "REFUND_REQUESTED", organisationId: order.organisationId, targetType: "RefundRequest", targetId: request.id, metadata: { orderId: order.id }, client: tx });
+      await onCreated?.(tx, request.id);
       await notifyChat(tx, order.organisationId, "claim", `${order.buyerName || "A buyer"} asked for a refund on order ${order.reference} (${title}).`);
       await noticeEach(tx, await organiserEmails(tx, order.organisationId), {
         organisationId: order.organisationId,
         subject: noticeSubject("Refund request", title),
-        lines: [`${order.buyerName || "A buyer"} asked for a refund on order ${order.reference}: ${parsedReason.data}`, "Approve or decline it from the event's Finance tab."],
+        lines: [`${order.buyerName || "A buyer"} asked for a refund on order ${order.reference}: ${reason}`, "Approve or decline it from the event's Finance tab."],
       });
     });
   } catch (error) {
-    if (typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002") return { ok: false, error: "You've already asked; the organisers will reply by email." };
+    if (isUniqueViolation(error)) return { ok: false, error: ALREADY_REQUESTED };
     throw error;
   }
   return { ok: true };
+}
+
+export const ALREADY_REQUESTED = "You've already asked; the organisers will reply by email.";
+
+function isUniqueViolation(error: unknown) {
+  return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
 }
 
 /** An owner or admin approves (running the refund) or declines a request. */

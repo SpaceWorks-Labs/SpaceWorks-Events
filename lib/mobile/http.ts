@@ -34,7 +34,8 @@ export type MobileErrorCode =
   | "PAID_ORDER"
   | "REGISTRATION_CLOSED"
   | "PAYMENT_UNAVAILABLE"
-  | "PAYLOAD_TOO_LARGE";
+  | "PAYLOAD_TOO_LARGE"
+  | "IDEMPOTENCY_STALE";
 
 export const MOBILE_ERROR_STATUS: Record<MobileErrorCode, number> = {
   INVALID_REQUEST: 400,
@@ -63,6 +64,7 @@ export const MOBILE_ERROR_STATUS: Record<MobileErrorCode, number> = {
   REGISTRATION_CLOSED: 409,
   PAYMENT_UNAVAILABLE: 503,
   PAYLOAD_TOO_LARGE: 413,
+  IDEMPOTENCY_STALE: 409,
 };
 
 const DEFAULT_MESSAGES: Record<MobileErrorCode, string> = {
@@ -92,6 +94,7 @@ const DEFAULT_MESSAGES: Record<MobileErrorCode, string> = {
   REGISTRATION_CLOSED: "Registration is closed.",
   PAYMENT_UNAVAILABLE: "Payments can't be taken right now. Try again in a moment.",
   PAYLOAD_TOO_LARGE: "Request is too large.",
+  IDEMPOTENCY_STALE: "An earlier try of this change never finished. Refresh to check whether it happened, then try again if it did not.",
 };
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;

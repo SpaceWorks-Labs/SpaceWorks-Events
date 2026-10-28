@@ -8,9 +8,10 @@ const COMMANDS: Record<string, string> = { claim: "claim", heartbeat: "heartbeat
 /**
  * A mentoring-round visit: claim the team (a lease), send `heartbeat` while
  * with them, `release` it, or `check-in` with `{ formVersion, answers, away?,
- * nominate? }`. Every command takes `expectedVersion`; heartbeat, release and
- * check-in also the `leaseId` and `generation` from the claim. Needs an
- * Idempotency-Key (heartbeats too: send a fresh key for each).
+ * nominate? }`. Every command sends the round's `expectedVersion`, but only
+ * claim checks it; heartbeat, release and check-in are fenced by the
+ * `leaseId` and `generation` from the claim instead. Needs an Idempotency-Key
+ * (heartbeats too: send a fresh key for each).
  */
 export const POST = mentorRoute<{ orgSlug: string; eventId: string; roundId: string; teamId: string; command: string }>("POST /api/mobile/v1/orgs/:orgSlug/events/:eventId/mentor/rounds/:roundId/teams/:teamId/:command", async (request, { orgSlug, eventId, roundId, teamId, command }, context) => {
   const action = COMMANDS[command];

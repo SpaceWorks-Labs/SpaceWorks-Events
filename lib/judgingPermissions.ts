@@ -32,8 +32,3 @@ export function judgingPermissionsFor(isAdmin: boolean, isMember: boolean, grant
     isJudgeOnly: !isAdmin && !isMember && hasJudge && grant.every((permission) => permission === EventPermission.JUDGE),
   };
 }
-
-/** Whether a grant carries anything besides JUDGE (organiser surfaces outside the judging workspace). */
-export function hasNonJudgePermission(grant: readonly EventPermission[]): boolean {
-  return grant.some((permission) => permission !== EventPermission.JUDGE);
-}

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   rsvps: vi.fn(),
   canAccess: vi.fn(),
   origin: vi.fn(),
+  attendanceAsked: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
@@ -14,6 +15,7 @@ vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
 vi.mock("@/lib/db", () => ({ prisma: {
   event: { findUnique: mocks.event },
   rSVP: { findMany: mocks.rsvps },
+  attendanceCheck: { findFirst: mocks.attendanceAsked },
 } }));
 vi.mock("@/lib/eventAccess", () => ({ canAccessEvent: mocks.canAccess }));
 vi.mock("@/lib/publicUrl", () => ({ getRequestOrigin: mocks.origin }));
@@ -35,6 +37,7 @@ describe("full attendee CSV export route", () => {
     });
     mocks.canAccess.mockResolvedValue(true);
     mocks.origin.mockResolvedValue("https://events.example.test");
+    mocks.attendanceAsked.mockResolvedValue({ id: "check_1" });
     mocks.rsvps
       .mockResolvedValueOnce([{
         id: "rsvp_1",
@@ -106,8 +109,8 @@ describe("full attendee CSV export route", () => {
     const response = await GET(new Request("https://events.example.test/api/exports/events/event_1/attendees"), routeContext);
     const [header, row] = (await response.text()).replace(/^\uFEFF/, "").split("\n");
 
-    expect(header).toBe("Name,Email,Status,Registration Date,Checked In At,Ticket URL,Ticket,Order,Order status,Order total,Company,Check-in: Swag,Check-in: Lunch,Check-in: =Old (archived)");
-    expect(row).toBe("Ada Lovelace,ada@example.test,CONFIRMED,2030-01-02T03:04:05.000Z,,https://events.example.test/ticket/secret-token,,,,,,,2030-01-03T12:00:00.000Z,");
+    expect(header).toBe("Name,Email,Status,Registration Date,Checked In At,Ticket URL,Ticket,Order,Order status,Order total,Company,Check-in: Swag,Check-in: Lunch,Check-in: =Old (archived),Attendance confirmation,Attendance note");
+    expect(row).toBe("Ada Lovelace,ada@example.test,CONFIRMED,2030-01-02T03:04:05.000Z,,https://events.example.test/ticket/secret-token,,,,,,,2030-01-03T12:00:00.000Z,,Not asked,");
   });
 
   it("narrows the export to the People list's filters with the same columns, auditing filter names only", async () => {
@@ -129,8 +132,51 @@ describe("full attendee CSV export route", () => {
     expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain("Ada");
   });
 
+  it("ends every row with the attendance reply and a formula-safe note, reading no token hash", async () => {
+    mocks.rsvps.mockReset();
+    const base = { guestEmail: null, createdAt: new Date("2030-01-02T03:04:05.000Z"), checkedInAt: null, checkInToken: "t", user: null, answers: [], checkInListRecords: [] };
+    mocks.rsvps
+      .mockResolvedValueOnce([
+        { ...base, id: "r1", status: "CONFIRMED", guestName: "Coming", attendanceCheck: { response: "ATTENDING", note: "" } },
+        { ...base, id: "r2", status: "CONFIRMED", guestName: "Declined", attendanceCheck: { response: "NOT_ATTENDING", note: "=HYPERLINK(\"http://x\")" } },
+        { ...base, id: "r3", status: "CONFIRMED", guestName: "Silent", attendanceCheck: { response: null, note: null } },
+        { ...base, id: "r4", status: "CONFIRMED", guestName: "Unasked", attendanceCheck: null },
+        { ...base, id: "r5", status: "WAITLISTED", guestName: "Waiting", attendanceCheck: null },
+        { ...base, id: "r6", status: "CONFIRMED", guestName: "Paid", attendanceCheck: { response: "NOT_ATTENDING", note: null, releaseOutcome: "multiTicket" } },
+      ])
+      .mockResolvedValueOnce([]);
+    const response = await GET(new Request("https://events.example.test/api/exports/events/event_1/attendees"), routeContext);
+    const lines = (await response.text()).replace(/^\uFEFF/, "").split("\n");
+    expect(lines[0]!.endsWith(",Attendance confirmation,Attendance note")).toBe(true);
+    expect(lines[1]!.endsWith(",Coming,")).toBe(true);
+    expect(lines[2]!.endsWith(`,Not coming,"'=HYPERLINK(""http://x"")"`)).toBe(true);
+    expect(lines[3]!.endsWith(",No reply,")).toBe(true);
+    expect(lines[4]!.endsWith(",Not asked,")).toBe(true);
+    expect(lines[5]!.endsWith(",,")).toBe(true);
+    expect(lines[6]!.endsWith(",Said No · paid,")).toBe(true);
+    expect(mocks.rsvps.mock.calls[0]![0].include.attendanceCheck).toEqual({ select: { response: true, note: true, releaseOutcome: true } });
+  });
+
+  it("leaves the reply blank for unasked guests while nobody at the event has been asked", async () => {
+    mocks.attendanceAsked.mockResolvedValue(null);
+    const response = await GET(new Request("https://events.example.test/api/exports/events/event_1/attendees"), routeContext);
+    const [, row] = (await response.text()).replace(/^\uFEFF/, "").split("\n");
+    expect(row!.endsWith(",Analytical Engines,,")).toBe(true);
+    expect(mocks.attendanceAsked).toHaveBeenCalledWith({ where: { eventId: "event_1" }, select: { id: true } });
+  });
+
+  it("filters the export by the attendance reply and audits the filter name", async () => {
+    mocks.rsvps.mockReset();
+    mocks.rsvps.mockResolvedValueOnce([]);
+    const response = await GET(new Request("https://events.example.test/api/exports/events/event_1/attendees?attendance=notComing"), routeContext);
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(JSON.stringify(mocks.rsvps.mock.calls[0]![0].where)).toContain('"attendanceCheck":{"is":{"response":"NOT_ATTENDING"}}');
+    expect(mocks.audit).toHaveBeenLastCalledWith(expect.objectContaining({ metadata: { surface: "people", filters: "attendance" } }));
+  });
+
   it("answers a malformed filter with the same empty 404, before reading the event", async () => {
-    for (const query of ["status=everyone", "kind=robots", `q=${"x".repeat(101)}`]) {
+    for (const query of ["status=everyone", "kind=robots", "attendance=maybe", `q=${"x".repeat(101)}`]) {
       const response = await GET(new Request(`https://events.example.test/api/exports/events/event_1/attendees?${query}`), routeContext);
       expect(response.status).toBe(404);
       expect(await response.text()).toBe("");

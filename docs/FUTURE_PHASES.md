@@ -12,6 +12,12 @@ This page contains only work that is not currently implemented. Current behavior
 - Commission an independent penetration test and threat-model review before handling sensitive or regulated data.
 - Add optional step-up authentication for especially destructive organiser and super-admin operations.
 
+## Attendance confirmation
+
+- Ask series dates and pass holders "Are you still coming?" (an instance-scoped check, a per-date Emails card and counts). Today only one-off events are asked.
+- Release one ticket of a paid order with several tickets (a partial cancellation with its share of the refund). Today such a No is left to the organisers.
+- Sending the attendance question and reminders from the mobile app (answering, counts and shared links are in the mobile API). Nothing sends the question automatically, and that stays a deliberate choice unless organisers ask for it.
+
 ## Privacy and account lifecycle
 
 - Self-service account deletion and correction beyond profile name/photo.

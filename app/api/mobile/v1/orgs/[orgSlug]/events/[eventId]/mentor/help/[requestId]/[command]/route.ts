@@ -6,8 +6,8 @@ const COMMANDS = new Set(["claim", "renew", "release", "resolve"]);
 
 /**
  * Claim, renew, release or resolve a help request: `{ expectedVersion }`, and
- * for renew, release and resolve the held `claimId` and `claimGeneration`
- * (resolve and release may add a `note`). A claim is a lease: renew it before
+ * for renew, release and resolve the held `claimId` and `claimGeneration`,
+ * which the core checks (resolve and release may add a `note`). A claim is a lease: renew it before
  * `claimExpiresAt`. Two mentors claiming at once: one wins, the other gets
  * CONFLICT. Needs an Idempotency-Key.
  */

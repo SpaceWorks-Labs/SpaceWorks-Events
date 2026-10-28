@@ -15,6 +15,8 @@ export type EventClientDto = Omit<Event,
   | "ticketDesignId"
   // Volunteer shifts have their own view (lib/eventDashboard/volunteerShifts.ts).
   | "volunteerShiftsEnabled" | "contributorCertificateTemplate"
+  // Attendance confirmation has its own status DTO (lib/eventDashboard/attendanceCheckCard.ts).
+  | "attendanceCheckReleaseOnDecline"
   // The mobile sign-up close snapshot only matters to lib/core/registrationWindow.ts.
   | "registrationManuallyClosedAt" | "registrationCutoffBeforeManualClose" | "registrationLeadBeforeManualClose"
   // Mentor Desk settings have their own view (lib/core/mentorDesk/).

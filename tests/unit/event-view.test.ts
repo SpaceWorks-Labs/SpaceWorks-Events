@@ -26,7 +26,7 @@ function teamEvent() {
     reviewsPerProject: 3, scoreNormalization: "ZSCORE", currentJudgingRoundId: "round_1",
     emailEntrantsOnResults: true, emailSubmissionReceipts: true,
     submissionFeeMinor: BigInt(500), submissionFeeRefundOnDisqualify: false,
-    budgetMinor: BigInt(100000), participantClaimsEnabled: true, participantClaimCapMinor: null, crewClaimsEnabled: false, volunteerShiftsEnabled: false, contributorCertificateTemplate: null,
+    budgetMinor: BigInt(100000), participantClaimsEnabled: true, participantClaimCapMinor: null, crewClaimsEnabled: false, volunteerShiftsEnabled: false, contributorCertificateTemplate: null, attendanceCheckReleaseOnDecline: true,
     mentorDeskEnabled: false, mentorHelpClaimedEmail: false, mentorsGetCrewTicket: false,
     ticketDesignId: "design_1", shortCode: "AB12CD3",
     checkInStationPinHash: "bcrypt-secret", checkInStationPinEncrypted: "encrypted-secret",
