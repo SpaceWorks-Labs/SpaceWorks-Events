@@ -96,19 +96,22 @@ async function claimedSoFar(tx: Prisma.TransactionClient, rsvpId: string) {
  * A confirmed participant claims expenses from their ticket page (travel
  * grants), when the event allows it, up to its cap per person. The ticket
  * token proves the registration; an account-owned one also needs that
- * account signed in.
+ * account signed in. A crew ticket (docs/CREW.md) files a CREW claim instead,
+ * when the event takes crew claims, with no cap.
  */
 export async function submitParticipantClaim(holder: { ticketToken: string; actorUserId: string | null; }, input: unknown, files: File[]): Promise<ClaimResult<{ claimId: string; }>> {
   const parsed = claimFieldsSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the claim.");
   const rsvp = await prisma.rSVP.findUnique({
     where: { checkInToken: holder.ticketToken },
-    select: { id: true, status: true, userId: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } }, event: { select: { id: true, title: true, currency: true, organisationId: true, participantClaimsEnabled: true } } },
+    select: { id: true, status: true, isCrew: true, userId: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } }, event: { select: { id: true, title: true, currency: true, organisationId: true, participantClaimsEnabled: true, crewClaimsEnabled: true } } },
   });
   if (!rsvp?.event) return fail("Registration not found.");
   if (rsvp.userId && rsvp.userId !== holder.actorUserId) return fail("Sign in with the account this ticket belongs to.");
   if (rsvp.status !== RsvpStatus.CONFIRMED) return fail("Only confirmed participants can claim expenses.");
-  if (!rsvp.event.participantClaimsEnabled) return fail("This event doesn't take expense claims from participants.");
+  const crew = rsvp.isCrew;
+  const closed = crew ? "This event doesn't take expense claims from crew." : "This event doesn't take expense claims from participants.";
+  if (!(crew ? rsvp.event.crewClaimsEnabled : rsvp.event.participantClaimsEnabled)) return fail(closed);
   const event = rsvp.event;
   const email = rsvp.user?.email?.trim() || rsvp.guestEmail;
   if (!email) return fail("Your registration needs an email address to claim expenses.");
@@ -121,16 +124,17 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
     const result = await prisma.$transaction(async (tx): Promise<ClaimResult<{ claimId: string; }>> => {
       // The cap is checked under the event lock so two claims can't both slip under it.
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
-      const current = await tx.event.findUnique({ where: { id: event.id }, select: { participantClaimsEnabled: true, participantClaimCapMinor: true } });
-      if (!current?.participantClaimsEnabled) return fail("This event doesn't take expense claims from participants.");
-      const cap = current.participantClaimCapMinor;
+      const current = await tx.event.findUnique({ where: { id: event.id }, select: { participantClaimsEnabled: true, participantClaimCapMinor: true, crewClaimsEnabled: true } });
+      if (!current || !(crew ? current.crewClaimsEnabled : current.participantClaimsEnabled)) return fail(closed);
+      // Crew claims have no cap: owners and admins decide each one.
+      const cap = crew ? null : current.participantClaimCapMinor;
       if (cap != null) {
         const left = cap - await claimedSoFar(tx, rsvp.id);
         if (amountMinor > left) return fail(left > BigInt(0) ? `You can claim up to ${formatMoney(cap, currency)} in all; ${formatMoney(left, currency)} is left.` : `You've already claimed the most this event pays back (${formatMoney(cap, currency)}).`);
       }
       const name = rsvp.user?.name?.trim() || rsvp.guestName?.trim() || email;
       return ok({ claimId: await createClaim(tx, {
-        organisationId: event.organisationId, event, kind: ExpenseClaimKind.PARTICIPANT, submittedByUserId: holder.actorUserId, rsvpId: rsvp.id,
+        organisationId: event.organisationId, event, kind: crew ? ExpenseClaimKind.CREW : ExpenseClaimKind.PARTICIPANT, submittedByUserId: holder.actorUserId, rsvpId: rsvp.id,
         payee: { name, email }, category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
       }, stored.keys) });
     });

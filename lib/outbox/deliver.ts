@@ -22,6 +22,7 @@ import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload,
 import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
 import { ATTENDANCE_CHECK_KIND, deliverAttendanceCheck } from "./attendance";
+import { deliverCrewMessage, isCrewMessageKind } from "./crew";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
 import { dueOutboxMessages } from "./due";
@@ -215,10 +216,12 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           if (outcome === "expired") failed += 1;
           continue;
         }
-      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind)) {
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind)) {
         const outcome = isTeamMessageKind(message.kind)
           ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
-          : await deliverJudgingMessage(message.kind, message.payload, stableMessageId);
+          : isCrewMessageKind(message.kind)
+            ? await deliverCrewMessage(message.payload, stableMessageId)
+            : await deliverJudgingMessage(message.kind, message.payload, stableMessageId);
         if (!outcome) throw new PermanentOutboxError();
         if (outcome === "dropped") {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });

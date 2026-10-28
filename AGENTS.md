@@ -138,6 +138,7 @@ scripts/seed-demo.mjs` seeds a demo organiser, organisation and event.
 | `scripts/` | Production checks, schema checks, storage migration, and standalone helpers |
 | `charts/spaceworks-events/` | Helm deployment chart: web, worker and beat Deployments and the migration job |
 | `deploy/cloudflare-cron/` | Cloudflare Worker that runs the outbox every minute on free hosting |
+| `content/help/` | The in-app guide at `/help` (MDX articles, section manifest, generated indexes; see its README) |
 | `docs/` | Product, security, development, and operational handbook |
 
 ## Design system
@@ -157,6 +158,11 @@ come from `components/brand/SpaceWorksLogo.tsx` (masters in
 
 ## Working conventions
 
+- When a change alters what people see or do, update the matching guide
+  article in `content/help` (British English, "Space Works") and run
+  `npm run help:index`; CI checks the generated index. A new feature gets an
+  article listed in `content/help/sections/*.ts`. Guide sections for owners/admins
+  or the super admin are a reading convenience, never authorization.
 - Inspect nearby code and existing tests before introducing a pattern. Keep
   changes small, typed, and consistent with the established UI: Tailwind CSS, Radix
   primitives and lucide icons via `components/ui/*` (see `docs/DESIGN.md`).

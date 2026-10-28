@@ -1,0 +1,85 @@
+Instance settings control the services every organisation on this server depends on: platform email, Google sign-in, paid events, alerts, backup posture and who may create an account. Changes apply on every server straight away, without a restart.
+
+<Callout kind="permission">
+
+The instance super admin only. See [The super admin area](/help/instance/super-admin-access).
+
+</Callout>
+
+## Saved settings and environment values
+
+Email, Google sign-in and backup posture can also come from environment variables, as the VPS installer and older deployments set them. **A value saved here wins**; the environment is only a fallback. Each section says which source is in use, and environment values appear as greyed placeholders.
+
+The SMTP password, the Google client secret and the alerts webhook address are **write-only**. They are encrypted with a key derived from `MFA_ENCRYPTION_KEY` and never shown again. To keep one, leave its field blank when you save; to change it, type the new value. Keep your own copy in your secrets manager.
+
+<Callout kind="warning">
+
+If a field says it's **Saved but unreadable with this instance's MFA_ENCRYPTION_KEY**, the server's key has changed since the value was saved. Type the secret again and save. Every server and job must use the same, unchanging key.
+
+</Callout>
+
+## Email (SMTP)
+
+This is the platform's own mail server. It sends account email (sign-up, verification, password resets, sign-in codes) and any organisation email for organisations that haven't connected their own server.
+
+<Steps>
+
+1. Open **Settings**.
+2. Under **SMTP**, enter the **Sender address**, either `events@example.org` or `Example Events <events@example.org>`. Use an address your mail provider allows you to send from.
+3. Enter either a **Service (optional)**, such as `gmail`, or a **Host (optional)** with its **Port**. Not both.
+4. Enter the **Username** and **Password**. Tick **Use implicit TLS** if your provider uses port 465.
+5. Choose **Save instance settings**.
+6. Choose **Send test email**. The app sends a short message to your own super admin address using the saved settings and waits up to 15 seconds for the mail server.
+
+</Steps>
+
+<Screenshot name="super-admin-settings" alt="The Instance settings page with the SMTP, Google SSO and Backup configuration sections" />
+
+SMTP is all or nothing. Once a service or host is saved here, every `SMTP_*` environment value is ignored, including the username and password. To go back to the environment, clear both **Service** and **Host** and save. The sender address falls back on its own: the saved value, then `EMAIL_FROM`, then a built-in default.
+
+Tick **Private unauthenticated relay** only for a relay on a private network that needs no login.
+
+If the test fails, the message says why. For what happens to email after it is queued, see [Email delivery](/help/instance/email-delivery).
+
+## Google sign-in
+
+Under **Google SSO**, enter the **OAuth client ID** and **OAuth client secret** from your Google Cloud project, then save. In Google, register `https://events.example.org/api/auth/callback/google` (with your own address) as an authorised redirect URI.
+
+- A saved client ID is only used with a saved secret. If the secret is missing or unreadable, Google sign-in is off and password sign-in keeps working.
+- To turn Google sign-in off, clear the client ID and save. If `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` are set in the environment, it falls back to those; remove them to switch it off completely.
+
+## Paid events
+
+Events are free by default. Under **Paid events**, turn the switch on to let organisations connect their own Razorpay or Stripe account and sell tickets. Money goes straight to each organisation; this installation never holds it.
+
+Turning it off stops new sales, but existing payments still settle and can be refunded. Before turning it on, make sure the worker and beat are running (see [Email delivery](/help/instance/email-delivery#how-sending-works)) and review your terms and privacy policy. See also [Turning on paid events](/help/payments/enable-paid-events).
+
+## Backup configuration
+
+These fields **only record** what your database provider does. They don't create, keep or restore backups. Enter the **Provider**, the **Last successful backup (UTC)** and the **Retention days** (1 to 3,650), then save. The **Operations** page shows them under **Database backups**, and flags the backup as stale when the last success is more than 26 hours old. Saving any backup field replaces all the `BACKUP_*` environment values.
+
+Installations made with the VPS installer also have real nightly backups, reported separately under **Server backups**. See [Updates, backups and status](/help/installation/updates-backups-status).
+
+## Alerts webhook
+
+The app can post problems to a Mattermost or Slack-compatible incoming webhook: server errors, browser crashes, sign-in failures and email delivery problems.
+
+<Steps>
+
+1. Under **Alerts webhook**, paste the incoming-webhook address into **Webhook URL**. In production it must start with `https://`.
+2. Tick **Send alerts**. Tick **Include warnings** as well if you want retried email failures and degraded dependencies, not just errors.
+3. Choose **Save alert settings**, then **Send test message**.
+
+</Steps>
+
+Once saved, only the host name is shown (**Currently sending to**), because the address works like a password. Choose **Remove webhook** to delete it. Alerts have email addresses, links and tokens removed, repeats are grouped, and each server sends at most 30 a minute.
+
+## New account creation
+
+This switch is on the **Auth** page. Turn off **New users can create accounts** to stop anyone new signing up, with a password or with Google. Existing users can still sign in, but nobody new can create an account, including people an organiser invites.
+
+## Good to know
+
+- Every change on these pages is recorded in the audit log, without the secret values.
+- To check from the command line that the saved secrets can still be read, without printing them, run `node scripts/check-instance-secrets.mjs` with the server's environment.
+- Organisations can send their own guests' email through their own mail server. Those settings live in each organisation's **Settings** → **Email** and aren't affected by this page.

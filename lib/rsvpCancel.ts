@@ -82,6 +82,8 @@ export async function cancelRegistrationByToken(
   if (!isOwner) {
     return { ok: false, error: "You can only cancel your own registration." };
   }
+  // A crew ticket belongs to the crew list (docs/CREW.md), which organisers manage.
+  if (rsvp.isCrew) return { ok: false, error: "You're on this event's crew. Ask an organiser to remove you from the crew." };
 
   let promotedId: string | null = null;
   const promotedWebhooks: RegistrationStatusWebhook[] = [];
@@ -94,6 +96,7 @@ export async function cancelRegistrationByToken(
     }
     const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, include: { user: { select: { email: true } }, order: { select: { id: true, status: true, buyerEmail: true, payments: { where: { status: { in: ["PAID_ONLINE", "PAID_OFFLINE"] } }, select: { id: true } } } } } });
     if (!current) return { error: "RSVP not found." };
+    if (current.isCrew) return { error: "You're on this event's crew. Ask an organiser to remove you from the crew." };
     if (current.checkedInAt) return { error: "Cannot cancel — you have already checked in." };
     // Money was taken: refunds follow the order's policy, from the order page.
     if (current.order && current.order.payments.length > 0) return { error: "Paid tickets are cancelled from the order page, under the event's refund policy." };

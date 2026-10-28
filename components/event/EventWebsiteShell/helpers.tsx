@@ -6,6 +6,7 @@ export const SECTION_LABELS: Record<string, string> = {
   VENUE: "Venue",
   FAQ: "FAQ",
   RESOURCES: "Resources",
+  CREW: "Crew",
 };
 
 export const TIER_LABELS: Record<string, string> = { PLATINUM: "Platinum", GOLD: "Gold", SILVER: "Silver", PARTNER: "Partner", COMMUNITY_PARTNER: "Community" };

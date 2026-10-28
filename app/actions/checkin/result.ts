@@ -1,15 +1,16 @@
 import type { AttendanceResponse } from "@prisma/client";
-import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { crewDoorSelect, doorExtras, getCheckInDetails, getRegistrationDetails, type CrewDoorInfo } from "@/lib/checkInDetails";
 import { deskAttendanceState } from "@/lib/attendanceCheck";
 import { attendeeLabel } from "./access";
 import type { CheckInResultData } from "../checkin";
 
 /**
- * The desk's view of a registration: name, door details, team, and the
- * attendance confirmation badge (docs/ATTENDANCE.md: the reply only, never
- * the guest's note). Add `DESK_ATTENDANCE_INCLUDE` to the RSVP query.
+ * The desk's view of a registration: name, door details, team, the crew
+ * badge and food preference (docs/CREW.md), and the attendance confirmation
+ * badge (docs/ATTENDANCE.md: the reply only, never the guest's note). Add
+ * `DESK_EXTRAS_INCLUDE` to the RSVP query.
  */
-export const DESK_ATTENDANCE_INCLUDE = { attendanceCheck: { select: { response: true } } } as const;
+export const DESK_EXTRAS_INCLUDE = { crewMember: crewDoorSelect, attendanceCheck: { select: { response: true } } } as const;
 
 type DeskRsvp = {
   id: string;
@@ -19,6 +20,8 @@ type DeskRsvp = {
   guestEmail: string | null;
   user: { name: string | null; email: string | null; } | null;
   team: { name: string; } | null;
+  isCrew?: boolean;
+  crewMember?: CrewDoorInfo;
   answers: Parameters<typeof getRegistrationDetails>[0];
   attendanceCheck: { response: AttendanceResponse | null; } | null;
 };
@@ -32,9 +35,9 @@ export function deskResult(rsvp: DeskRsvp, state: { alreadyCheckedIn: boolean; c
     alreadyCheckedIn: state.alreadyCheckedIn,
     checkedInAt: state.checkedInAt?.toISOString() ?? null,
     checkInQrToken: rsvp.checkInToken,
-    checkInDetails: getCheckInDetails(rsvp.answers),
+    checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember),
     registrationDetails: getRegistrationDetails(rsvp.answers),
-    teamName: rsvp.team?.name ?? null,
+    ...doorExtras(rsvp),
     attendance: deskAttendanceState(rsvp.attendanceCheck),
   };
 }

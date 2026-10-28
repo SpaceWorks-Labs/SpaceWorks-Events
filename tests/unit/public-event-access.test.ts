@@ -19,6 +19,7 @@ describe("public event access", () => {
     const base = { organisationId: "org_1", eventId: "event_1", privacyType: EventPrivacyType.PUBLIC };
     await expect(resolvePublicEventAccess({ ...base, status: EventStatus.DRAFT, websiteReleased: true })).resolves.toEqual({ allowed: false, preview: false });
     await expect(resolvePublicEventAccess({ ...base, status: EventStatus.HIDDEN, websiteReleased: true })).resolves.toEqual({ allowed: false, preview: false });
+    await expect(resolvePublicEventAccess({ ...base, status: EventStatus.CANCELLED, websiteReleased: true })).resolves.toEqual({ allowed: false, preview: false });
     await expect(resolvePublicEventAccess({ ...base, status: EventStatus.PUBLISHED, websiteReleased: false })).resolves.toEqual({ allowed: false, preview: false });
   });
 

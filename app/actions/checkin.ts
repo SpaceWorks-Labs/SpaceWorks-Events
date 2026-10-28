@@ -11,8 +11,9 @@ import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { commitCheckInProjection, commitUndoCheckInProjection } from "@/lib/checkInMutations";
 import type { CheckInDetail, RegistrationDetail } from "@/lib/checkInDetails";
+import { doorExtras } from "@/lib/checkInDetails";
 import { deskAttendanceState, type AttendanceState } from "@/lib/attendanceCheck";
-import { DESK_ATTENDANCE_INCLUDE, deskResult } from "./checkin/result";
+import { DESK_EXTRAS_INCLUDE, deskResult } from "./checkin/result";
 import { attendeeLabel, requireOrgMemberForEvent, resolveRsvpForToken, revalidateAfterCheckIn } from "./checkin/access";
 import {
   checkInByRsvpId as checkInByRsvpIdAction,
@@ -40,6 +41,8 @@ export type CheckInResultData = {
   teamName?: string | null;
   /** Attendance confirmation reply badge (docs/ATTENDANCE.md); null when never asked. Never the note. */
   attendance?: AttendanceState | null;
+  /** An event crew ticket (docs/CREW.md): a Crew badge at the desk. */
+  isCrew?: boolean;
 };
 
 export type CheckInPreviewData = CheckInResultData & {
@@ -199,6 +202,8 @@ export type LookupRow = {
   teamName?: string | null;
   /** Attendance confirmation reply badge; null when never asked. */
   attendance?: AttendanceState | null;
+  /** An event crew ticket (docs/CREW.md). */
+  isCrew?: boolean;
 };
 
 export type OfflineCheckInRosterRow = LookupRow & {
@@ -254,7 +259,7 @@ export async function lookupAttendeesForCheckIn(
       ],
     },
     take: 12,
-    include: { user: { select: { name: true, email: true } }, team: { select: { name: true } }, ...DESK_ATTENDANCE_INCLUDE },
+    include: { user: { select: { name: true, email: true } }, team: { select: { name: true } }, ...DESK_EXTRAS_INCLUDE },
     orderBy: { createdAt: "desc" },
   });
 
@@ -264,7 +269,7 @@ export async function lookupAttendeesForCheckIn(
     email: r.user?.email ?? r.guestEmail,
     status: r.status,
     checkedInAt: r.checkedInAt?.toISOString() ?? null,
-    teamName: r.team?.name ?? null,
+    ...doorExtras(r),
     attendance: deskAttendanceState(r.attendanceCheck),
   }));
 

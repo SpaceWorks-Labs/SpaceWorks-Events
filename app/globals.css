@@ -513,3 +513,35 @@
     animation: sw-wiggle 200ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
   }
 }
+
+/* ---- Guide procedures (components/help/mdx.tsx <Steps>) ----
+   Numbered Citron step circles beside each item of the wrapped ordered list. */
+.help-steps > ol {
+  list-style: none;
+  counter-reset: help-step;
+  padding-left: 0;
+  gap: 14px;
+}
+.help-steps > ol > li {
+  counter-increment: help-step;
+  position: relative;
+  padding-left: 44px;
+  min-height: 28px;
+}
+.help-steps > ol > li::before {
+  content: counter(help-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--yy-highlight-peach);
+  color: var(--yy-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+/* ---- End guide procedures ---- */

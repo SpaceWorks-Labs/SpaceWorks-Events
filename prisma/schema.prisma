@@ -46,6 +46,8 @@ enum EventPageSectionType {
   VENUE
   FAQ
   RESOURCES
+  /// The event's organising crew (docs/CREW.md). Off until an organiser turns it on.
+  CREW
 }
 
 enum ContentVisibility {
@@ -704,6 +706,8 @@ model Event {
   checkInLists     CheckInList[]
   savedViews       SavedView[]
   attendanceChecks AttendanceCheck[]
+  crewMembers      EventCrewMember[]
+  crewJoinLink     EventCrewJoinLink?
 
   /// TEAM turns on team registration (one-off events only; series stay
   /// individual). Cannot change while the event has registrations.
@@ -762,6 +766,8 @@ model Event {
   budgetMinor                         BigInt?
   participantClaimsEnabled            Boolean          @default(false)
   participantClaimCapMinor            BigInt?
+  /// Crew (docs/CREW.md) may claim expenses from their crew ticket page.
+  crewClaimsEnabled                   Boolean          @default(false)
   expenseClaims       ExpenseClaim[]
   claimPayouts        ClaimPayout[]
   /// The event's own ticket design (an event-owned TicketDesign), or null for the organisation default.
@@ -1511,6 +1517,10 @@ model RSVP {
   /// The beat emailed this guest's reminder (about a day before the start), once.
   reminderSentAt  DateTime?
   promotedAt      DateTime?
+  /// The free ticket of an event crew member (EventCrewMember). Always
+  /// CONFIRMED, on a one-off event, with no team, order or ticket type, and
+  /// never counted against Event.capacity (CHECK RSVP_crew_shape, docs/CREW.md).
+  isCrew          Boolean    @default(false)
 
   event             Event?                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   /// Orders are only deleted with their organisation; their tickets go with them.
@@ -1536,6 +1546,7 @@ model RSVP {
   submissionLink    SubmissionLink?
   expenseClaims     ExpenseClaim[]
   attendanceCheck   AttendanceCheck?
+  crewMember        EventCrewMember?
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
   @@index([userId, createdAt])
@@ -1551,6 +1562,53 @@ model RSVP {
   @@index([ticketTypeId, status])
   @@index([status, holdExpiresAt])
   @@index([teamId])
+}
+
+/// A member of an event's organising crew (docs/CREW.md). Each member owns
+/// one CONFIRMED `RSVP` with `isCrew` for their free ticket and check-in; crew
+/// are counted in headcounts but never against `Event.capacity`. A crew member
+/// is a person, not an account. Later kinds (volunteers, mentors) may add a
+/// kind and an optional account link without changing the ticket rules.
+model EventCrewMember {
+  id             String   @id @default(cuid())
+  eventId        String
+  rsvpId         String   @unique
+  name           String
+  /// Normalised (trimmed, lowercase); one crew place per email per event.
+  email          String
+  foodPreference String   @default("")
+  /// Public role, such as "Logistics lead".
+  role           String   @default("")
+  /// Short plain-text bio for the public crew card.
+  bio            String   @default("")
+  /// An application upload in the organisation's `event-crew` category.
+  photoUrl       String?
+  linkedinUrl    String?
+  /// Listed in the public Crew section. People who join through the crew link
+  /// start hidden until an organiser reviews them.
+  showOnPage     Boolean  @default(true)
+  /// True when the member signed up through the crew join link.
+  joinedViaLink  Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsvp  RSVP  @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, email])
+  @@index([eventId, sortOrder])
+}
+
+/// The shareable crew sign-up link for one event. Like a team join link the
+/// token is stored as-is so organisers can copy it again; it reveals only the
+/// event title, and replacing or deleting the row revokes the old link.
+model EventCrewJoinLink {
+  eventId   String   @id
+  token     String   @unique
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 /// Short-lived, server-created snapshots used to undo an organiser deletion.
@@ -2484,6 +2542,9 @@ enum ExpenseClaimKind {
   STAFF
   /// A registered participant, from their ticket page (travel grants).
   PARTICIPANT
+  /// An event crew member, from their crew ticket page (docs/CREW.md), when
+  /// Event.crewClaimsEnabled is on. No cap; owners and admins approve.
+  CREW
 }
 
 enum ExpenseClaimStatus {

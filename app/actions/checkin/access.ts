@@ -3,6 +3,7 @@ import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { auth } from "@/lib/auth";
 import { parseCheckInPayload } from "@/lib/checkIn";
 import { prisma } from "@/lib/db";
+import { crewDoorSelect } from "@/lib/checkInDetails";
 import { EventPermission } from "@prisma/client";
 import { canAccessEvent } from "@/lib/eventAccess";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
@@ -92,7 +93,7 @@ export async function resolveRsvpForToken(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
-      team: { select: { name: true } },
+      team: { select: { name: true } }, crewMember: crewDoorSelect,
       // The attendance reply only (docs/ATTENDANCE.md); never the note or the link digest.
       attendanceCheck: { select: { response: true } },
       event: { select: { id: true, organisationId: true, slug: true } },

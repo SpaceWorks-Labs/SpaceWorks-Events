@@ -34,11 +34,13 @@ function dayTimeWithZone(value: Date, timeZone: string) {
  * emails (`permissions.canSendEmails`, organisation OWNER/ADMIN).
  */
 export async function loadAttendanceCheckCard(
-  event: { id: string; organisationId: string; status: EventStatus; startDateTime: Date; timezone: string; attendanceCheckReleaseOnDecline: boolean },
+  event: { id: string; organisationId: string; status: EventStatus; startDateTime: Date; timezone: string },
   now: Date = new Date(),
 ): Promise<AttendanceCheckCardData> {
+  // The switch stays on the backend (the dashboard's event view leaves it out).
+  const { attendanceCheckReleaseOnDecline } = await prisma.event.findUniqueOrThrow({ where: { id: event.id }, select: { attendanceCheckReleaseOnDecline: true } });
   const [status, oldestUnanswered] = await Promise.all([
-    loadAttendanceCheckStatus(event, now),
+    loadAttendanceCheckStatus({ ...event, attendanceCheckReleaseOnDecline }, now),
     prisma.attendanceCheck.aggregate({
       where: noReplyWhere(event.id),
       _min: { sentAt: true },

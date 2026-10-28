@@ -333,6 +333,7 @@ Rebuild the README artwork with `npm run readme:art`.
 
 | Read this | When you want to |
 | --- | --- |
+| The in-app guide at `/help` ([sources](content/help)) | Learn how to use the app as a guest, organiser or server admin |
 | [Features](docs/FEATURES.md) | See everything the app does today |
 | [Architecture](docs/ARCHITECTURE.md) | Understand request flows, data and background work |
 | [Local development](docs/DEVELOPMENT.md) | Set up, migrate and work day to day |

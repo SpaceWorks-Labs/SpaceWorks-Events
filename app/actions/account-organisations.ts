@@ -17,7 +17,8 @@ const leaveOrganisationSchema = z.object({
 });
 
 const NOT_A_MEMBER = "You are not a member of this organisation.";
-const SOLE_OWNER_ERROR = "You are the only owner. Transfer ownership or delete the organisation first.";
+// Ownership cannot be handed over (roles stop at admin), so the only owner can delete the organisation instead.
+const SOLE_OWNER_ERROR = "You are the only owner, so you can't leave. Delete the organisation from its settings instead.";
 
 /**
  * The signed-in person leaves an organisation. Only their own membership is

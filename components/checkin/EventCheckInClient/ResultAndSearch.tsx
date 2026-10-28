@@ -1,13 +1,13 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import { Check, Info, Users } from "lucide-react";
+import { BadgeCheck, Check, Info, Users } from "lucide-react";
 import type { CheckInResultData, LookupRow } from "@/app/actions/checkin";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/display";
 import { Input } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
-import { CheckInDetailsList, CheckInTimestamp, StatusChip } from "./parts";
+import { CheckInDetailsList, CheckInTimestamp, CrewChip, StatusChip } from "./parts";
 import { AttendanceChip } from "@/components/attendance/AttendanceChip";
 import type { LastResult } from "./types";
 
@@ -41,6 +41,7 @@ export function LastResultCard({
         <p className="text-[15px] font-semibold">{lastResult.kind === "already" ? "Already checked in" : "Checked in"}</p>
         <p className="break-words font-display text-[34px] font-semibold leading-none tracking-[-0.02em]">{lastResult.displayName}</p>
         {lastResult.teamName ? <p className="mt-1.5 flex items-center gap-1.5 text-[15px] font-semibold"><Users aria-hidden className="size-4 shrink-0" /><span className="sr-only">Team: </span>{lastResult.teamName}</p> : null}
+        {lastResult.isCrew ? <p className="mt-1.5 flex items-center gap-1.5 text-[15px] font-semibold"><BadgeCheck aria-hidden className="size-4 shrink-0" />Event crew</p> : null}
         <p className="mt-2 text-sm opacity-90">
           {lastResult.email ?? ""}
           {lastResult.email && lastResult.checkedInAt ? " · " : ""}
@@ -122,6 +123,7 @@ export function AttendeeSearch({
               {row.teamName ? <p className="truncate text-sm text-ink-secondary"><span className="sr-only">Team: </span>{row.teamName}</p> : null}
               <div className="mt-1 flex flex-wrap gap-1">
                 <StatusChip status={row.status} />
+                <CrewChip data={row} />
                 <AttendanceChip state={row.attendance} />
                 {row.checkedInAt ? <Chip size="sm" tone="success" icon={<Check />}>Checked in</Chip> : null}
               </div>

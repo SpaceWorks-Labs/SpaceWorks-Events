@@ -1,5 +1,6 @@
 "use server";
 
+import { CREW_EMAIL_REFUSED, lockedHasCrewEmail } from "@/lib/core/crew/shared";
 import { z } from "zod";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import type { ActionResult } from "@/app/actions/org";
@@ -59,7 +60,9 @@ export async function updateOrderAttendee(input: unknown): Promise<ActionResult>
 
   const newEmail = !rsvp.userId && !rsvp.guestEmail && email ? email : null;
   try {
-    await prisma.$transaction(async (tx) => {
+    const refused = await prisma.$transaction(async (tx) => {
+      // A crew member already holds a free crew ticket (docs/CREW.md); checked under the Event lock.
+      if (newEmail && order.eventId && (await lockedHasCrewEmail(tx, order.eventId, [newEmail]))) return CREW_EMAIL_REFUSED;
       // The same person on every date of a pass.
       if (!rsvp.userId) {
         await tx.rSVP.updateMany({
@@ -78,7 +81,9 @@ export async function updateOrderAttendee(input: unknown): Promise<ActionResult>
         await enqueueRsvpConfirmation(tx, { to: newEmail, eventTitle: orderSubject(order)?.title ?? "Your event", status: "CONFIRMED", checkInToken: rsvp.checkInToken });
       }
       await recordAuditEvent({ action: "ORDER_ATTENDEE_UPDATED", organisationId: order.organisationId, targetType: "RSVP", targetId: rsvp.id, metadata: { emailAdded: Boolean(newEmail) }, client: tx });
+      return null;
     });
+    if (refused) return { ok: false, error: refused };
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "P2002") {
       return { ok: false, error: "That person is already registered for this event." };

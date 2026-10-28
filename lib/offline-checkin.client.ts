@@ -14,6 +14,8 @@ export type OfflineAttendee = {
   teamName?: string | null;
   /** Attendance confirmation reply badge; null when never asked (docs/ATTENDANCE.md). */
   attendance?: AttendanceState | null;
+  /** An event crew ticket (docs/CREW.md); absent on older rosters. */
+  isCrew?: boolean;
 };
 
 export type OfflineRoster = {

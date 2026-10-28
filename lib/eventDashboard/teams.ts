@@ -11,6 +11,7 @@ import {
   type OrganiserTeamFilter,
 } from "@/lib/core/teams";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
+import { takesCapacity } from "@/lib/payments/holds";
 
 /*
  * Team registration data for the event dashboard (docs/TEAMS.md). Callers
@@ -83,7 +84,8 @@ export const loadEventTeams = cache(async (ctx: EventDashboardContext): Promise<
  */
 export const loadRegistrationLock = cache(async (eventId: string): Promise<{ total: number; largestTeam: number }> => {
   const [total, largest] = await Promise.all([
-    prisma.rSVP.count({ where: { eventId } }),
+    // Crew tickets don't lock the mode (app/actions/event/update.ts leaves them out too).
+    prisma.rSVP.count({ where: { eventId, ...takesCapacity } }),
     prisma.rSVP.groupBy({
       by: ["teamId"],
       where: { eventId, teamId: { not: null } },

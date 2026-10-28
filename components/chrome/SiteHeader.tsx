@@ -17,6 +17,7 @@ const primaryLinks = [
   { href: "/features", label: "Features", guestOnly: true },
   { href: "/#self-host", label: "Self-host", guestOnly: false },
   { href: "/about", label: "About", guestOnly: false },
+  { href: "/help", label: "Help", guestOnly: false },
 ];
 
 /**

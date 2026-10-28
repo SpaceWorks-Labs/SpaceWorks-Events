@@ -1,5 +1,9 @@
 # Plan: paid events (draft for approval)
 
+> **Current status (2026-10-28):** paid events are built. This plan is kept as
+> the record of what was decided before the work; [Payments](../PAYMENTS.md)
+> describes how paid events work now and wins wherever the two differ.
+
 Status: **draft, not approved**. Nothing below is built yet.
 
 Decisions already made by the owner (2026-10-20):

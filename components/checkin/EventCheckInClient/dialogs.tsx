@@ -6,7 +6,7 @@ import type { CheckInPreviewData } from "@/app/actions/checkin";
 import { Button } from "@/components/ui/button";
 import { Callout, Chip } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
-import { CheckInDetailsList, CheckInTimestamp, RegistrationDetailsList, StatusChip } from "./parts";
+import { CheckInDetailsList, CheckInTimestamp, CrewChip, RegistrationDetailsList, StatusChip } from "./parts";
 import { AttendanceChip } from "@/components/attendance/AttendanceChip";
 
 /** Confirms a scanned or searched attendee before checking them in; Enter confirms. */
@@ -48,6 +48,7 @@ export function ConfirmScanDialog({
               {scanPreview.teamName ? <p className="flex items-center gap-1.5 text-sm font-semibold text-ink"><Users aria-hidden className="size-4 shrink-0" />Team: {scanPreview.teamName}</p> : null}
               <div className="flex flex-wrap gap-1.5 pt-1">
                 <StatusChip status={scanPreview.status} />
+                <CrewChip data={scanPreview} />
                 <AttendanceChip state={scanPreview.attendance} />
                 {scanPreview.alreadyCheckedIn ? <Chip size="sm" tone="neutral">Already checked in</Chip> : null}
               </div>
@@ -97,6 +98,7 @@ export function AttendeeDetailsDialog({
               {detailsAttendee.teamName ? <p className="text-sm">Team: <span className="font-semibold">{detailsAttendee.teamName}</span></p> : null}
               <div className="flex flex-wrap gap-1.5">
                 <StatusChip status={detailsAttendee.status} />
+                <CrewChip data={detailsAttendee} />
                 <AttendanceChip state={detailsAttendee.attendance} />
                 {detailsAttendee.alreadyCheckedIn ? <Chip size="sm" tone="success">Already checked in</Chip> : null}
               </div>

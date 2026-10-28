@@ -13,6 +13,7 @@ import { Dropdown, Field, Input, Textarea } from "@/components/ui/field";
 import type { TicketTarget } from "@/components/event-dashboard/settings/TicketTypesManager";
 import { formatMoney } from "@/lib/payments/money";
 import { describeRefundPolicy, type RefundPolicySnapshot } from "@/lib/payments/refundPolicy";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export type ManagedPromoCode = {
   id: string;
@@ -231,6 +232,7 @@ export function RefundPolicyControl({ organisationSlug, target, policy, sold }: 
     <Card as="section" className="rounded-xl" aria-labelledby="refund-policy-title">
       <CardHeader
         title={<span id="refund-policy-title">Refund policy</span>}
+        action={<HelpLink article="payments/refunds" />}
         description={`For paid tickets. You can always refund a guest yourself from the guest list, in full or in part.${sold ? " Tickets have been sold, so the policy can only become more generous; each order keeps the policy it was bought under." : ""}`}
       />
       <form

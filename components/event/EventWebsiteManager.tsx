@@ -46,6 +46,7 @@ export type EventPagePreviewData = {
   sessionLines: Array<{ lead: string; text: string }>;
   /** Link to the schedule workspace, only when the viewer may manage it. */
   scheduleHref: string | null;
+  crewShown?: number; // Crew members marked to show on the page (docs/CREW.md).
 };
 
 type Props = {
@@ -183,7 +184,7 @@ export function EventWebsiteManager(props: Props) {
     faqs: props.faqs,
     sessionCount: preview?.sessionCount ?? 0,
     location: preview?.location ?? "",
-    isOnline: preview?.isOnline ?? false,
+    isOnline: preview?.isOnline ?? false, crewShown: preview?.crewShown ?? 0,
   };
   const rowsFor: Record<ContentKind, ContentRow[]> = {
     highlight: props.highlights,
@@ -222,6 +223,8 @@ export function EventWebsiteManager(props: Props) {
         </button>
       );
     }
+    // Crew profiles are managed with the guest list (Guests → Crew), not inline.
+    if (type === "CREW") return <button type="button" className={linkClass} onClick={() => openTab("guests", "crew")}>Manage in Guests<span className="sr-only"> ({label})</span></button>;
     if (type === "SCHEDULE" && preview?.scheduleHref) {
       return (
         <Link href={preview.scheduleHref} className={linkClass}>

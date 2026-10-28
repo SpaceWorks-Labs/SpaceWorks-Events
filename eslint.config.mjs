@@ -8,7 +8,7 @@ const eslintConfig = defineConfig([
   // The 300-line rule (AGENTS.md): split long modules behind their import path.
   {
     files: ["**/*.{ts,tsx,mjs,js}"],
-    ignores: ["lib/frontend/registry.ts"],
+    ignores: ["lib/frontend/registry.ts", "content/help/*.generated.ts"],
     rules: { "max-lines": ["error", { max: 300, skipBlankLines: true, skipComments: true }] },
   },
   // Override default ignores of eslint-config-next.
@@ -27,6 +27,9 @@ const eslintConfig = defineConfig([
     "frontend/components/**",
     "frontend/lib/**",
     "frontend/public/**",
+    "frontend/content/**",
+    "frontend/mdx-components.tsx",
+    "frontend/scripts/**",
     "frontend/.next/**",
     // Local Claude Code state, including agent worktrees (full repo copies).
     ".claude/**",

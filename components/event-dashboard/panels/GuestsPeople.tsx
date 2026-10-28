@@ -31,8 +31,10 @@ import { showingLabel } from "@/lib/keysetCursor";
 import type { AttendeesPage } from "@/lib/eventDashboard/attendees";
 import { viewParam, type SavedViewDto, type ViewParams } from "@/lib/savedViews";
 import { useInitialViewParams, useSyncViewToUrl } from "@/components/event-dashboard/views/useViewUrl";
-import { NO_COUNTS, SEARCH_DELAY_MS, type ActionResult, type GuestListTarget, type Meta, type View } from "./GuestsPeople/constants";
+import { SEARCH_DELAY_MS, type ActionResult, type GuestListTarget, type Meta, type View } from "./GuestsPeople/constants";
 import { GuestFilters, GuestsHeaderActions } from "./GuestsPeople/Toolbar";
+import { initialGuestList, reacceptMessage, toGuestPage } from "./GuestsPeople/paging";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export type { GuestListTarget } from "./GuestsPeople/constants";
 
@@ -116,18 +118,10 @@ export function GuestsPeople({
   const view: View = useMemo(() => ({ status, kind, team: teamMode ? team : "all", attendance: attendanceFilter, query: searchedQuery }), [status, kind, team, teamMode, attendanceFilter, searchedQuery]);
   const viewKey = JSON.stringify(view);
   const isDefaultView = view.status === "all" && view.kind === "all" && view.team === "all" && view.attendance === "all" && !view.query;
-  const initial = useMemo(
-    () => ({ rows: initialPage.rows as AttendeeRow[], nextCursor: initialPage.nextCursor, meta: { counts: initialPage.counts ?? NO_COUNTS, total: initialPage.total ?? 0, matching: initialPage.matching ?? 0, attendanceCounts: initialPage.attendanceCounts ?? null } as Meta }),
-    [initialPage],
-  );
+  const initial = useMemo(() => initialGuestList(initialPage), [initialPage]);
   const scopeIds = useMemo(() => (target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId }), [target]);
   const fetchPage = useCallback(
-    async (current: View, cursor: string | null): Promise<ServerPageResult<AttendeeRow, Meta>> => {
-      const res = await loadAttendeesPage({ organisationSlug, ...scopeIds, ...current, cursor });
-      if (!res.ok || !res.data) return { ok: false, error: res.ok ? "Could not load guests." : res.error };
-      const { rows, nextCursor, counts, total, matching, attendanceCounts } = res.data;
-      return { ok: true, page: { rows, nextCursor, meta: counts && total != null && matching != null ? { counts, total, matching, attendanceCounts } : null } };
-    },
+    async (current: View, cursor: string | null): Promise<ServerPageResult<AttendeeRow, Meta>> => toGuestPage(await loadAttendeesPage({ organisationSlug, ...scopeIds, ...current, cursor })),
     [organisationSlug, scopeIds],
   );
   const list = useServerPages<AttendeeRow, View, Meta>({ initial, view, viewKey, isDefaultView, delayMs: 0, fetchPage, keyOf: (row) => row.id });
@@ -160,11 +154,7 @@ export function GuestsPeople({
     approve: (guest) => run(guest, () => approveRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), "Approved"),
     decline: (guest) => run(guest, () => rejectRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), "Declined"),
     promote: (guest) => run(guest, () => promoteFromWaitlist({ organisationSlug, rsvpId: guest.id, ...scope }), "Spot given"),
-    reaccept: (guest) => run(guest, () => reacceptRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), (res) => {
-      const status = "data" in res ? res.data?.status : undefined;
-      if (status === "PAYMENT_REQUESTED") return "Re-accepted. They've been sent a payment link; their ticket confirms once they pay.";
-      return status === "WAITLISTED" ? "Re-accepted. The event is full, so they're on the waitlist." : "Re-accepted";
-    }),
+    reaccept: (guest) => run(guest, () => reacceptRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), (res) => reacceptMessage("data" in res ? res.data?.status : undefined)),
     copyTicket: async (guest) => {
       try {
         await navigator.clipboard.writeText(guest.ticketUrl);
@@ -187,7 +177,10 @@ export function GuestsPeople({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-h4 text-ink">{title}</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-h4 text-ink">{title}</h2>
+          <HelpLink article="guests/guest-list" />
+        </div>
         {target.kind === "event" ? (
           <GuestsHeaderActions
             organisationSlug={organisationSlug}

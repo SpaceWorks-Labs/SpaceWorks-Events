@@ -5,7 +5,7 @@ import type { ActionResult } from "../org";
 import { flattenZodErrors } from "../utils";
 import { commitCheckInProjection } from "@/lib/checkInMutations";
 import { requireOrgMemberForEvent, revalidateAfterCheckIn } from "./access";
-import { DESK_ATTENDANCE_INCLUDE, deskResult } from "./result";
+import { DESK_EXTRAS_INCLUDE, deskResult } from "./result";
 import type { CheckInPreviewData, CheckInResultData } from "../checkin";
 
 /**
@@ -34,7 +34,7 @@ export async function previewCheckInByRsvpId(
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
       team: { select: { name: true } },
-      ...DESK_ATTENDANCE_INCLUDE,
+      ...DESK_EXTRAS_INCLUDE,
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
@@ -68,7 +68,7 @@ export async function checkInByRsvpId(
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
       team: { select: { name: true } },
-      ...DESK_ATTENDANCE_INCLUDE,
+      ...DESK_EXTRAS_INCLUDE,
       event: { select: { slug: true } },
       eventInstance: { select: { id: true } },
     },

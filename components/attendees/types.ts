@@ -11,6 +11,8 @@ export type AttendeeRow = {
   guestName?: string | null;
   user: { id: string; name: string | null; email: string | null } | null;
   checkedInAt: string | null;
+  /** An event crew ticket (docs/CREW.md): free, outside capacity, managed in Guests → Crew. */
+  isCrew?: boolean;
   /** Custom check-in lists ("Swag", "Lunch") this guest has been checked into. */
   listCheckIns?: { listName: string; checkedInAt: string }[];
   ticketUrl: string;

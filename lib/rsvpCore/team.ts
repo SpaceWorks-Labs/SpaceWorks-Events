@@ -6,7 +6,7 @@ import { decideRsvpStatus } from "./reserve";
 
 export const LEADER_STILL_PAYING = "This team's leader is still paying for it. Try the link again in a few minutes.";
 
-/** A team rule refused the registration; the message is safe to show. */
+/** A team rule (or the crew-email rule, docs/CREW.md) refused the registration; the message is safe to show. */
 export class TeamRegistrationError extends Error {
   constructor(message: string, readonly code?: "TEAM_REQUIRED") {
     super(message);

@@ -8,7 +8,7 @@ import { ConfirmationDialog } from "@/components/feedback/ConfirmationDialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/menu";
 
-const SOLE_OWNER_HINT = "Transfer ownership or delete the organisation first.";
+const SOLE_OWNER_HINT = "As the only owner you can't leave. Delete the organisation from its settings instead.";
 
 export function LeaveOrganisationButton({
   organisationSlug,
