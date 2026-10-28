@@ -117,6 +117,9 @@ const fixtures: Array<[file: string, component: string, zod: z.ZodType]> = [
   ["check-in-lists.json", "CheckInListsResponse", dto.successEnvelope(dto.checkInListsDtoSchema)],
   ["error-staff-mfa.json", "ErrorEnvelope", dto.errorEnvelopeSchema],
   ["crew.json", "CrewListResponse", dto.successEnvelope(dto.crewListDtoSchema)],
+  // Volunteer shifts (docs/VOLUNTEERS.md).
+  ["my-shifts.json", "MyShiftsResponse", dto.successEnvelope(dto.myShiftsDtoSchema.nullable())],
+  ["volunteer-roster.json", "VolunteerRosterResponse", dto.successEnvelope(dto.volunteerRosterDtoSchema)],
 ];
 
 describe("mobile API contract", () => {
@@ -256,6 +259,12 @@ describe("mobile API contract", () => {
     ["ListCheckInResult", dto.listCheckInResultSchema],
     ["CrewMember", dto.crewMemberSchema],
     ["CrewList", dto.crewListDtoSchema],
+    ["MyShift", dto.myShiftSchema],
+    ["MyShifts", dto.myShiftsDtoSchema],
+    ["RosterSignup", dto.rosterSignupSchema],
+    ["RosterShift", dto.rosterShiftSchema],
+    ["Contributor", dto.contributorSchema],
+    ["VolunteerRoster", dto.volunteerRosterDtoSchema],
     ["FeedbackForm", dto.feedbackFormDtoSchema],
     ["EventPermissions", dto.eventPermissionsSchema],
     ["EventCounts", dto.eventCountsSchema],

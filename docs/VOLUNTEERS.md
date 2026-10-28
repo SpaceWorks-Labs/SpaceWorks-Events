@@ -71,7 +71,12 @@ Cores: `lib/volunteer/shifts.ts`, `lib/volunteer/signups.ts`.
 
 - **Locks.** Every place decision locks the shift row, then the crew member
   row (`lockShift`, `lockCrewMember`), so places are counted and overlaps
-  checked under the lock. Concurrent sign-ups never exceed `capacity`.
+  checked under the lock. Concurrent sign-ups never exceed `capacity`. A
+  withdrawal locks the withdrawer and everyone waiting on the shift, and a
+  promotion everyone waiting, in one id-ordered statement
+  (`lockCrewMembers`), so withdrawals on two shifts with crossed waitlists
+  wait for each other instead of deadlocking. No path locks a crew member
+  before a shift.
 - **Apply** (volunteer, from their crew ticket): shifts on, event not
   cancelled, shift open and not closed, before `signupDeadline`, crew ticket
   confirmed. One sign-up per shift; someone who withdrew may sign up again
@@ -135,10 +140,14 @@ Core: `lib/volunteer/hours.ts`.
 Core: `lib/volunteer/certificates.ts`; image: `lib/volunteer/certificateImage.ts`.
 
 - Owner/admin only, never for themself. The crew ticket must be confirmed.
-- Volunteers need verified minutes above zero. `hasNonShiftEvidence(kind)`
-  is the hook for other evidence: today it lets organisers issue a `MENTOR`
-  a certificate without hours; the Mentor Desk will replace it with mentoring
-  evidence. A role or kind alone never proves work.
+- A certificate needs verified minutes above zero, or **mentoring evidence**
+  (`lib/volunteer/mentoring.ts`): the crew record is linked to an account
+  that holds the event's `MENTOR` grant and has an assignment that was ever
+  active (`activatedAt`), a help request it resolved, or a non-away
+  mentoring-round check-in. A role or kind alone never proves work. Ending
+  the `MENTOR` grant (`endMentorRoleLocked`) revokes a mentoring-only
+  certificate (`mentoring_evidence_removed`), and the download re-checks the
+  evidence.
 - One live certificate per member (the partial unique index decides races).
   The certificate snapshots `role` (`"<Kind> · <role>"`, or the kind), the
   verified minutes and the design.
@@ -264,18 +273,16 @@ Deliberate differences:
 
 ## Notes for other branches
 
-- **Mobile**: add endpoints over the same cores, each resolving the crew
-  member from the crew ticket or the signed-in account: crew `GET` my shifts
-  (`loadMyShifts`), `POST` apply/withdraw/check-in/check-out (`myShiftAction`
-  semantics); organiser (staff MFA, `canManageCrew`) shift roster
-  (`loadVolunteerShifts`), sign-up approve/decline/cancel, desk check-in/out
-  with optional time and reason, no-show; owner/admin hours verify/adjust.
-- **Mentor Desk**: set `kind: MENTOR` on the mentor's crew row when a MENTOR
-  invite is accepted and the event gives contributors crew tickets;
-  `linkCrewAccount` already links the account on invitation acceptance.
-  Replace `hasNonShiftEvidence` with real mentoring evidence and call
-  `revokeCertificatesLocked` when it changes. Mentors never gain authority
-  from `kind`; their console access comes from the `MENTOR` grant.
+- **Mobile** ([Mobile API](MOBILE_API.md#volunteer-shifts-volunteersmd)):
+  crew `GET /me/registrations/:rsvpId/shifts` and
+  `POST …/shifts/:id/:action`; organiser `GET …/volunteer-shifts`,
+  `POST …/volunteer-shifts/signups/:signupId/:action` and (owner/admin)
+  `POST …/volunteer-shifts/hours/:hoursId/:action`, over the same actions.
+- **Mentor Desk**: `syncMentorCrewAfterGrant` gives the mentor's crew place
+  kind `MENTOR` and links it to the mentor's account (`linkCrewAccount`, also
+  on invitation acceptance and for an existing crew place). Mentors never
+  gain authority from `kind`; their console access comes from the `MENTOR`
+  grant.
 
 ## Code and tests
 

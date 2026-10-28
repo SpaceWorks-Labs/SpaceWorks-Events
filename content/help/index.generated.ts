@@ -7262,7 +7262,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Who can get one",
         "anchor": "who-can-get-one",
-        "text": "A volunteer needs verified hours above zero: pending hours don't count, and neither does a role on its own. Mentors on the crew can be issued a certificate without shift hours. See Volunteer shifts and hours for verifying hours."
+        "text": "A volunteer needs verified hours above zero: pending hours don't count, and neither does a role on its own. Mentors can be issued a certificate without shift hours once they have mentored on the Mentor Desk: worked with a team they were assigned to, resolved a help request, or visited a team in a mentoring round. Being called a mentor on the crew isn't enough, and removing someone's mentor access revokes a certificate that rested on their mentoring. See Volunteer shifts and hours for verifying hours."
       },
       {
         "heading": "Issue a certificate",

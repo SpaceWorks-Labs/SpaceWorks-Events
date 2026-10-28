@@ -46,7 +46,10 @@ export type DashboardVolunteerShifts = {
   organisationName: string;
 };
 
-export const loadVolunteerShifts = cache(async (ctx: EventDashboardContext): Promise<DashboardVolunteerShifts> => {
+/** What the loader needs: the dashboard context, or the mobile organiser context mapped onto it. */
+export type VolunteerShiftsScope = Pick<EventDashboardContext, "userId"> & { event: { id: string }; organisation: { id: string; name: string }; permissions: { isAdmin: boolean } };
+
+export const loadVolunteerShifts = cache(async (ctx: VolunteerShiftsScope): Promise<DashboardVolunteerShifts> => {
   const eventId = ctx.event.id;
   const [event, viewer, shifts, crew, hours, certificates, claims] = await Promise.all([
     prisma.event.findFirstOrThrow({ where: { id: eventId, organisationId: ctx.organisation.id }, select: { volunteerShiftsEnabled: true, contributorCertificateTemplate: true, timezone: true, title: true, startDateTime: true } }),
