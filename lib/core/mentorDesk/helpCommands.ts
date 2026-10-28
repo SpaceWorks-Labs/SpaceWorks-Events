@@ -5,6 +5,8 @@ import "server-only";
  * release, resolve (mentors on shift; release and resolve also organisers),
  * assign and reopen (organisers). Claims are leases: claimId + generation +
  * expiry, one live claim per mentor (partial unique index as the last word).
+ * A mentor's renew, release and resolve are fenced by the held claimId and
+ * generation; organisers act on the version alone.
  */
 
 import { HelpRequestStatus, Prisma } from "@prisma/client";
@@ -42,6 +44,11 @@ async function claimedRecipient(tx: Prisma.TransactionClient, row: HelpRow): Pro
     ? (await tx.team.findUnique({ where: { id: row.teamId }, select: { leaderRsvp: { select: { guestEmail: true, user: { select: { email: true } } } } } }))?.leaderRsvp
     : await tx.rSVP.findUnique({ where: { id: row.rsvpId! }, select: { guestEmail: true, user: { select: { email: true } } } });
   return rsvp?.user?.email ?? rsvp?.guestEmail ?? null;
+}
+
+/** A mentor's renew, release and resolve name the lease they hold (claim id and generation), so a stale screen never acts on a later claim. */
+function requireHeldLease(row: HelpRow, userId: string, input: Input) {
+  if (row.claimedByUserId !== userId || row.claimId !== input.claimId || row.claimGeneration !== input.claimGeneration) refuse(COPY.leaseLost);
 }
 
 /** Takes the claim for `mentorUserId` (claim, or an organiser's assign). */
@@ -92,16 +99,18 @@ async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): 
     }
     case "renew": {
       requireStatus(row, HelpRequestStatus.CLAIMED);
-      if (row.claimedByUserId !== actor.userId || row.claimId !== input.claimId || row.claimGeneration !== input.claimGeneration) refuse(COPY.leaseLost);
+      requireHeldLease(row, actor.userId, input);
       if (!(await visitEligible(tx, { eventId: event.id, mentor: self!, scope: row, skillTags: row.category.skillTags, now }))) refuse(COPY.notEligible);
       const claimExpiresAt = claimLeaseExpiry(now, row.category.claimMinutes, helpDeadline(row.expiresAt, event.endDateTime));
       return changeHelp(tx, row, { claimExpiresAt }, { actorUserId: actor.userId, kind: "renew" });
     }
     case "release":
       requireStatus(row, HelpRequestStatus.CLAIMED);
+      if (!isOrganiser) requireHeldLease(row, actor.userId, input);
       return changeHelp(tx, row, { status: HelpRequestStatus.OPEN, ...CLEARED_CLAIM, lastOpenedAt: now, openGeneration: row.openGeneration + 1 }, { actorUserId: actor.userId, kind: "release", note: input.note });
     case "resolve":
       requireStatus(row, HelpRequestStatus.CLAIMED);
+      if (!isOrganiser) requireHeldLease(row, actor.userId, input);
       return changeHelp(tx, row, { status: HelpRequestStatus.RESOLVED, ...CLEARED_CLAIM, resolvedAt: now }, { actorUserId: actor.userId, kind: "resolve", note: input.note });
     case "reopen": {
       requireStatus(row, HelpRequestStatus.RESOLVED);

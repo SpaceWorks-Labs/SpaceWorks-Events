@@ -90,3 +90,9 @@ export function local(date: Date) {
 export async function requestVersion(id: string) {
   return (await prisma.helpRequest.findUniqueOrThrow({ where: { id }, select: { version: true } })).version;
 }
+
+/** The version and lease a mentor's renew, release and resolve send. */
+export async function heldClaim(id: string) {
+  const row = await prisma.helpRequest.findUniqueOrThrow({ where: { id }, select: { version: true, claimId: true, claimGeneration: true } });
+  return { expectedVersion: row.version, claimId: row.claimId ?? undefined, claimGeneration: row.claimGeneration };
+}
