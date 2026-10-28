@@ -182,6 +182,30 @@ enum ScoreNormalization {
   ZSCORE
 }
 
+/// A judging round's lifecycle (docs/HACKATHON.md "Rounds"). At most one
+/// round of an event is OPEN (partial unique index). DRAFT rounds can still
+/// change their rubric and entries; CLOSED freezes scores.
+enum JudgingRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+/// Which projects a round judges: every SUBMITTED project, or only those
+/// advanced into it from the previous round (JudgingRoundEntry).
+enum JudgingRoundEntrySource {
+  ALL_SUBMITTED
+  ADVANCED
+}
+
+/// How an automatic assignment run picks judges: BALANCED breaks ties with a
+/// fixed hash; RANDOM with a crypto-random seed stored on the run, so the
+/// same seed and inputs always give the same plan.
+enum JudgeAssignmentStrategy {
+  BALANCED
+  RANDOM
+}
+
 /// Which paged event-dashboard list a saved view filters (Saved views in
 /// docs/FEATURES.md). Each surface has its own allow-list in lib/savedViews.ts.
 enum SavedViewSurface {
@@ -345,6 +369,9 @@ model User {
   judgeAssignments             JudgeAssignment[]
   judgeScores                  JudgeScore[]
   judgeReviews                 JudgeReview[]
+  judgingRoundPanels           JudgingRoundJudge[]
+  judgingRoundEntriesAdvanced  JudgingRoundEntry[] @relation("JudgingRoundEntryAdvancedBy")
+  judgingAssignmentRuns        JudgingAssignmentRun[] @relation("JudgingAssignmentRunBy")
   savedViews                   SavedView[]
   prizePayoutsRecorded         PrizePayout[] @relation("PrizePayoutRecordedBy")
   expenseClaimsSubmitted       ExpenseClaim[] @relation("ExpenseClaimSubmittedBy")
@@ -756,6 +783,13 @@ model Event {
   reviewsPerProject                   Int?
   /// How result scores are combined across judges.
   scoreNormalization                  ScoreNormalization @default(RAW)
+  /// The round judges work on now: the latest round that has opened, else
+  /// the first. judgingStatus, judgesSeeAll, reviewsPerProject and
+  /// scoreNormalization mirror this round for this release (a trigger copies
+  /// Event changes onto it); null means the event's first round, if any.
+  currentJudgingRoundId               String?          @unique
+  currentJudgingRound                 JudgingRound?    @relation("EventCurrentJudgingRound", fields: [currentJudgingRoundId], references: [id], onDelete: SetNull)
+  judgingRounds                       JudgingRound[]   @relation("EventJudgingRounds")
   /// Hackathon emails the organiser opts into (off by default). When false,
   /// publishing results queues no `results-published` email (an organiser can
   /// send it later with sendResultsAnnouncement) and a project becoming
@@ -2365,6 +2399,7 @@ model Submission {
   scores      JudgeScore[]
   reviews     JudgeReview[]
   awardWins   EventAwardWinner[]
+  roundEntries JudgingRoundEntry[]
   entryFeeOrders Order[]
   prizePayouts PrizePayout[]
 
@@ -2393,6 +2428,9 @@ model SubmissionLink {
 model JudgingCriterion {
   id          String   @id @default(cuid())
   eventId     String
+  /// The round this line belongs to. Always set (CHECK constraint); a
+  /// trigger fills it with the event's current round when an insert omits it.
+  roundId     String?
   /// Up to 80 characters.
   name        String
   /// Up to 500 characters.
@@ -2403,9 +2441,11 @@ model JudgingCriterion {
   createdAt   DateTime @default(now())
 
   event  Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round  JudgingRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
   scores JudgeScore[]
 
   @@index([eventId, position])
+  @@index([roundId, position])
 }
 
 /// Used when `Event.judgesSeeAll` is false: the judge sees only assigned
@@ -2413,15 +2453,18 @@ model JudgingCriterion {
 model JudgeAssignment {
   id           String   @id @default(cuid())
   eventId      String
+  /// Always set (CHECK constraint); filled with the current round when omitted.
+  roundId      String?
   judgeUserId  String
   submissionId String
   createdAt    DateTime @default(now())
 
   event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round      JudgingRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
   judge      User       @relation(fields: [judgeUserId], references: [id], onDelete: Cascade)
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  @@unique([judgeUserId, submissionId])
+  @@unique([roundId, judgeUserId, submissionId])
   @@index([eventId, judgeUserId])
   @@index([submissionId])
 }
@@ -2450,6 +2493,8 @@ model JudgeScore {
 /// count towards the result score. The comment is visible to organisers only.
 model JudgeReview {
   id           String    @id @default(cuid())
+  /// Always set (CHECK constraint); filled with the current round when omitted.
+  roundId      String?
   submissionId String
   judgeUserId  String
   /// Up to 2000 characters, organisers only.
@@ -2458,11 +2503,96 @@ model JudgeReview {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  round      JudgingRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
   submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   judge      User       @relation(fields: [judgeUserId], references: [id], onDelete: Cascade)
 
-  @@unique([submissionId, judgeUserId])
+  @@unique([roundId, submissionId, judgeUserId])
   @@index([judgeUserId])
+  @@index([submissionId])
+}
+
+/// One judging round of a hackathon (docs/HACKATHON.md "Rounds"). Rounds run
+/// in `position` order (unique per event); at most one is OPEN (partial
+/// unique index). Criteria, assignments and reviews belong to a round, and
+/// scores follow their criterion. A round with `entrySource = ADVANCED`
+/// judges only its JudgingRoundEntry rows; results and awards come from the
+/// event's final round. CHECK constraints keep the name non-empty,
+/// reviewsPerProject in 1..20 and closesAt after opensAt.
+model JudgingRound {
+  id                   String                  @id @default(cuid())
+  eventId              String
+  /// Up to 80 characters.
+  name                 String
+  position             Int
+  status               JudgingRoundStatus      @default(DRAFT)
+  reviewsPerProject    Int?
+  scoreNormalization   ScoreNormalization      @default(RAW)
+  judgesSeeAll         Boolean                 @default(true)
+  /// "Fresh eyes": a judge never gets a project they reviewed in an earlier round.
+  freshEyes            Boolean                 @default(false)
+  entrySource          JudgingRoundEntrySource @default(ALL_SUBMITTED)
+  /// Planned times, shown to organisers and judges; opening and closing stay manual.
+  opensAt              DateTime?
+  closesAt             DateTime?
+  /// Set when the organiser publishes this round's finalists (separate from results).
+  finalistsPublishedAt DateTime?
+  /// Set when the organiser finalises a CLOSED round (it can no longer reopen);
+  /// finalists advance only from a finalised round. Finalising a round whose
+  /// projects are short of the review target needs `finalizeExceptionReason`
+  /// (organiser-only, up to 500 characters; CHECK keeps it with finalizedAt).
+  finalizedAt          DateTime?
+  finalizeExceptionReason String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  event       Event               @relation("EventJudgingRounds", fields: [eventId], references: [id], onDelete: Cascade)
+  currentFor  Event?              @relation("EventCurrentJudgingRound")
+  criteria    JudgingCriterion[]
+  assignments JudgeAssignment[]
+  reviews     JudgeReview[]
+  entries     JudgingRoundEntry[]
+  panel       JudgingRoundJudge[]
+  assignmentRuns JudgingAssignmentRun[]
+  finalistNotices JudgingFinalistNotice[]
+
+  @@unique([eventId, position])
+  @@index([eventId, status])
+}
+
+/// A project advanced into an ADVANCED round. Written only while the round is
+/// DRAFT (frozen once it opens); the submission must belong to the round's
+/// event (trigger). `sourceRank` is its rank in the previous round, if any.
+model JudgingRoundEntry {
+  id               String   @id @default(cuid())
+  roundId          String
+  submissionId     String
+  advancedByUserId String?
+  advancedAt       DateTime @default(now())
+  sourceRank       Int?
+
+  round      JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  submission Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  advancedBy User?        @relation("JudgingRoundEntryAdvancedBy", fields: [advancedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([roundId, submissionId])
+  @@index([submissionId])
+}
+
+/// An optional per-round judging panel. A round with no rows is judged by
+/// everyone who can judge the event; with rows, only these people (who must
+/// still hold a JUDGE grant or be an organisation owner/admin) judge it.
+model JudgingRoundJudge {
+  id        String   @id @default(cuid())
+  roundId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, userId])
+  @@index([userId])
 }
 
 /// An award category (e.g. "Overall winner"). Winners are assigned manually.
@@ -3167,4 +3297,50 @@ model MentorNomination {
 
   @@unique([roundId, mentorUserId, teamId])
   @@index([eventId])
+}
+
+/// One applied automatic assignment of a round (docs/HACKATHON.md "Rounds"):
+/// the strategy, the RANDOM seed, the target, and fingerprints of the inputs
+/// and of the plan, so a run can be explained and reproduced. CHECK
+/// constraints keep `mode` to keep/replace, a seed exactly for RANDOM runs
+/// (32 hex characters) and the counts non-negative.
+model JudgingAssignmentRun {
+  id               String                  @id @default(cuid())
+  roundId          String
+  strategy         JudgeAssignmentStrategy
+  /// "keep" or "replace".
+  mode             String
+  seed             String?
+  perProject       Int
+  judges           Int
+  added            Int
+  removed          Int
+  adopted          Int
+  inputFingerprint String
+  planFingerprint  String
+  createdByUserId  String?
+  createdAt        DateTime                @default(now())
+
+  round     JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("JudgingAssignmentRunBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([roundId, createdAt])
+}
+
+/// Who has been told about a round's finalists (docs/HACKATHON.md "Rounds"):
+/// one row per round and recipient, kept after the outbox row is delivered and
+/// cleaned up, so republishing never emails anyone twice. Only a SHA-256 of
+/// the lowercased address is stored (64 hex characters, CHECK).
+/// `outboxMessageId` names the queued email, so an unpublish that withdraws it
+/// undelivered can forget the recipient again.
+model JudgingFinalistNotice {
+  id              String   @id @default(cuid())
+  roundId         String
+  emailHash       String
+  outboxMessageId String?
+  createdAt       DateTime @default(now())
+
+  round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, emailHash])
 }

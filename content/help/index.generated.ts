@@ -4118,6 +4118,57 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "hackathons/finalists": {
+    "headings": [
+      {
+        "id": "before-you-start",
+        "title": "Before you start",
+        "level": 2
+      },
+      {
+        "id": "advancing-finalists",
+        "title": "Advancing finalists",
+        "level": 2
+      },
+      {
+        "id": "announcing-finalists",
+        "title": "Announcing finalists",
+        "level": 2
+      },
+      {
+        "id": "winners-come-from-the-final-round",
+        "title": "Winners come from the final round",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Finalists are the projects that move on from one judging round to the next. You choose them from the previous round's ranking, then announce them on the results page, and by email if you want, before the winners are known. Advancing and publishing finalists: owners and admins of the organisation."
+      },
+      {
+        "heading": "Before you start",
+        "anchor": "before-you-start",
+        "text": "You need a round that takes Finalists advanced from the previous round, and the round before it must be closed and finalised. See Judging in rounds."
+      },
+      {
+        "heading": "Advancing finalists",
+        "anchor": "advancing-finalists",
+        "text": "Open Judging → Rounds and select the round that takes finalists. Choose Advance finalists. Choose Top of the ranking and enter the Number of finalists, or choose Pick by hand. Choose Preview. Nothing changes yet: you see which projects would go through and their rank in the previous round. For Pick by hand, tick or untick projects in the list the preview loaded, then preview again. Choose Advance finalists. Top of the ranking takes the highest-ranked projects that have a score. If the next project below the cut has the same score as your last finalist, the preview warns you, so you can pick by hand and decide what to do about the tie. Disqualified and withdrawn projects never advance. If a finalist is disqualified later, it simply drops out of the round. If someone changes scores or projects between your preview and your choice, the app asks you to preview again rather than advance a list you haven't seen. You can advance again to change the list as often as you like until the round opens. Once it opens, its finalists are fixed and judges in that round see only them."
+      },
+      {
+        "heading": "Announcing finalists",
+        "anchor": "announcing-finalists",
+        "text": "When you're happy with the list, choose Publish finalists on the round. This is separate from publishing results: The event's results page shows a Finalists block with each finalist's project title, team or entrant name and links. It never shows scores or ranks. The page appears as soon as finalists are published, even before the results. If Email entrants when results are published is on in Judging → Setup, each finalist's confirmed team members (or the solo entrant) get one email saying they're through. Someone behind more than one finalist project gets a single email listing them all. With that switch off, nobody is emailed. Nobody gets the same round's announcement twice. To change the finalists after publishing, choose Unpublish finalists, advance again, then publish. Emails that hadn't gone out yet are withdrawn when you unpublish, and only those people are emailed when you publish again."
+      },
+      {
+        "heading": "Winners come from the final round",
+        "anchor": "winners-come-from-the-final-round",
+        "text": "Once a final round of finalists has been judged, the Results ranking, the award picker and the export all use that round, and only its finalists can win an award. Publishing results waits until every round has been judged, or you delete the rounds you won't use. See Awards and results."
+      }
+    ]
+  },
   "hackathons/judging": {
     "headings": [
       {
@@ -4480,6 +4531,97 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "heading": "Good to know",
         "anchor": "good-to-know",
         "text": "How the raw score is worked out is in Judges, rubric and scoring. If results look thin, check Assigning judges and tracking progress for projects below target before closing judging."
+      }
+    ]
+  },
+  "hackathons/rounds": {
+    "headings": [
+      {
+        "id": "one-round-to-start-with",
+        "title": "One round to start with",
+        "level": 2
+      },
+      {
+        "id": "adding-a-round",
+        "title": "Adding a round",
+        "level": 2
+      },
+      {
+        "id": "choosing-a-round-s-judges",
+        "title": "Choosing a round's judges",
+        "level": 2
+      },
+      {
+        "id": "opening-and-closing-rounds",
+        "title": "Opening and closing rounds",
+        "level": 2
+      },
+      {
+        "id": "finalising-a-round",
+        "title": "Finalising a round",
+        "level": 2
+      },
+      {
+        "id": "looking-at-earlier-rounds",
+        "title": "Looking at earlier rounds",
+        "level": 2
+      },
+      {
+        "id": "assigning-judges-at-random",
+        "title": "Assigning judges at random",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Big hackathons often judge in stages: a first round where every project gets a few reviews, then a final round where a smaller panel looks again at the best ones. Rounds let you run judging that way. Each round has its own rubric, its own judges and its own assignments, and finalists move from one round to the next. Adding, changing, opening and closing rounds, and choosing a round's judges: owners and admins of the organisation."
+      },
+      {
+        "heading": "One round to start with",
+        "anchor": "one-round-to-start-with",
+        "text": "Every event starts with a single round called Main. If you never add another, judging works exactly as described in Judges, rubric and scoring: nothing about rounds gets in your way. Open the Judging tab and choose Rounds to see your rounds in order. The round judges are working on now is marked Current, and each round shows a status: Draft (not opened yet), Open, Closed or Finalised."
+      },
+      {
+        "heading": "Adding a round",
+        "anchor": "adding-a-round",
+        "text": "In Judging → Rounds, choose Add round. Give it a Name, for example \"Finals\". Under Projects judged, choose Finalists advanced from the previous round for a stage that only looks at the best projects, or Every submitted project to judge everyone again. Set the Target judges per project, and whether All judges see all projects or only the projects assigned to them. Turn on Fresh eyes if judges shouldn't see a project they already reviewed in an earlier round. Optionally set a Planned start and Planned end. They're shown to help you plan; rounds still open and close only when you say so. Choose Add round. Then select the round in the list and build its rubric in the Rubric card, just like the first round's. A round's rubric is locked once the round opens. You can reorder rounds with the arrows while they're still drafts, and Delete round removes a draft round (never the first one). The first round always judges every submitted project. A later round that takes finalists can only open once finalists have been advanced into it. See Finalists."
+      },
+      {
+        "heading": "Choosing a round's judges",
+        "anchor": "choosing-a-round-s-judges",
+        "text": "Each round can have its own panel. Select the round and choose Choose judges, then tick the people who should judge it and choose Save panel. If you leave everyone unticked, the round has no panel and every invited judge judges it, the same as the first round by default. With a panel, only the people you ticked see that round's projects and their reviews count. Judges who aren't on the panel see a note saying so."
+      },
+      {
+        "heading": "Opening and closing rounds",
+        "anchor": "opening-and-closing-rounds",
+        "text": "Rounds run one at a time, in order. Select a round and use Open round, Close round or Reopen round. A round can only open once every earlier round is closed, and an earlier round can't reopen after a later one has opened. Closing a round freezes its scores. Results, awards and the Results table always follow the latest round that has opened, so the winners come from your final round."
+      },
+      {
+        "heading": "Finalising a round",
+        "anchor": "finalising-a-round",
+        "text": "Before finalists can move on, finalise the round you're advancing from: select it and choose Finalise round. Finalising checks that every project in the round has the target number of submitted reviews. If some are short, the app tells you how many and asks for a reason before it finalises anyway. Missing reviews never count as a zero; a project with fewer reviews simply has fewer judges behind its score. A finalised round can't reopen, and its target and score method stay as they were. If you need to change something, Undo finalise works until finalists have been advanced from the round."
+      },
+      {
+        "heading": "Looking at earlier rounds",
+        "anchor": "looking-at-earlier-rounds",
+        "text": "Score, Progress and Results show a Round picker once there's more than one round. Pick an earlier round to see its projects, progress and ranking as they were; they're read-only. Exporting from Results downloads the round you're looking at."
+      },
+      {
+        "heading": "Assigning judges at random",
+        "anchor": "assigning-judges-at-random",
+        "text": "Assign judges automatically on the Progress tab works on the current round. Under How judges are picked, Balanced always gives the same plan for the same projects and judges. Random shuffles who gets what while still keeping loads even, respecting the target and never giving a judge a project they're registered on or (with fresh eyes) already reviewed. The preview shows the random seed; choose Re-roll for a different draw. The seed is stored with the assignment, so the same draw can be reproduced later."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "Judges can only score in the current round. Earlier rounds stay visible to them read-only. Fresh eyes can only be changed before the round opens. See Finalists for moving projects between rounds and announcing them."
       }
     ]
   },

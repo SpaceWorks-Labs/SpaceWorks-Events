@@ -25,7 +25,7 @@ const base = { submissionsEnabled: true, submissionsOpenAt: open, submissionsClo
 describe("hackathon email switches", () => {
   it("are off by default and gate only the two hackathon emails", () => {
     expect(HACKATHON_EMAIL_DEFAULTS).toEqual({ emailEntrantsOnResults: false, emailSubmissionReceipts: false });
-    expect(GATED_HACKATHON_EMAIL_KINDS).toEqual(["results-published", "submission-received"]);
+    expect(GATED_HACKATHON_EMAIL_KINDS).toEqual(["results-published", "submission-received", "finalists-announced"]);
     for (const kind of ["rsvp-confirmation", "rsvp-status", "team-created", "team-member-added", "submission-link", "email-verification", "password-reset", "payment-notice"]) {
       expect(ALWAYS_SENT_EMAIL_KINDS).toContain(kind);
       expect(GATED_HACKATHON_EMAIL_KINDS as readonly string[]).not.toContain(kind);

@@ -1,4 +1,4 @@
-import type { AutoAssignMode } from "@/lib/judgingProgress";
+import type { AutoAssignMode, AutoAssignStrategy } from "@/lib/judgingProgress";
 
 /*
  * Copy for Judging → Progress and automatic assignment that depends on
@@ -55,3 +55,14 @@ export const AUTO_ASSIGN_MODE_COPY: Record<AutoAssignMode, { label: string; desc
 
 /** The warning shown before applying while judges still see every project. */
 export const SEE_ALL_SWITCH_WARNING = "Judges will then see only the projects assigned to them, not every project.";
+
+/** How an automatic assignment picks among equally loaded judges (docs/HACKATHON.md "Rounds"). */
+export const AUTO_ASSIGN_STRATEGY_COPY: Record<AutoAssignStrategy, { label: string; description: string }> = {
+  balanced: { label: "Balanced", description: "The same inputs always give the same plan." },
+  random: { label: "Random", description: "Shuffles who gets what with a recorded seed. Loads stay even and conflicts are still respected." },
+};
+
+/** The seed line of a random preview. */
+export function autoAssignSeedLine(seed: string): string {
+  return `Random seed ${seed}. It is stored with the assignment, so the same draw can be reproduced.`;
+}

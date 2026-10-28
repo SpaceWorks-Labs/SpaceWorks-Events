@@ -43,6 +43,11 @@ async function organiserGate(input: unknown, bucket: "action" | "search"): Promi
   return { ok: true, ctx, input: fields };
 }
 
+/** The optional judging round a call is about (docs/HACKATHON.md "Rounds"), as trailing arguments: none for the current round, so single-round calls are unchanged. */
+function roundArgs(fields: Record<string, unknown>): [] | [{ roundId: string }] {
+  return typeof fields.roundId === "string" && fields.roundId ? [{ roundId: fields.roundId }] : [];
+}
+
 function revalidateJudging(ctx: JudgingOrganiserContext) {
   revalidatePath(`/dashboard/${ctx.orgSlug}/event/${ctx.eventId}`);
 }
@@ -53,6 +58,8 @@ function autoAssignInput(fields: Record<string, unknown>, withFingerprint: boole
     perProject: options.perProject,
     mode: options.mode,
     judgeUserIds: options.judgeUserIds,
+    ...(options.strategy !== undefined ? { strategy: options.strategy } : {}),
+    ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(withFingerprint ? { fingerprint: options.fingerprint } : {}),
   };
 }
@@ -86,7 +93,19 @@ export async function saveReviewsPerProject(input: unknown): Promise<ActionResul
 export async function loadJudgingProgressPage(input: unknown): Promise<ActionResult<ops.JudgingProgressSectionDto>> {
   const gate = await organiserGate(input, "search");
   if (!gate.ok) return gate;
-  const page = await ops.loadJudgingProgressPage(gate.ctx, { section: gate.input.section, page: gate.input.page ?? 1 });
+  const query = { section: gate.input.section, page: gate.input.page ?? 1 };
+  const [round] = roundArgs(gate.input);
+  const page = round ? await ops.loadJudgingProgressPage(gate.ctx, query, new Date(), round) : await ops.loadJudgingProgressPage(gate.ctx, query);
   if (!page) return { ok: false, error: "Invalid input." };
   return { ok: true, data: page };
+}
+
+/** The whole Progress model (summary and first pages) for one judging round, for the round switcher. */
+export async function loadJudgingProgressRound(input: unknown): Promise<ActionResult<ops.JudgingProgressDto>> {
+  const gate = await organiserGate(input, "search");
+  if (!gate.ok) return gate;
+  const [round] = roundArgs(gate.input);
+  const progress = round ? await ops.loadJudgingProgress(gate.ctx, new Date(), round) : await ops.loadJudgingProgress(gate.ctx);
+  if (!progress) return { ok: false, error: "Judging round not found." };
+  return { ok: true, data: progress };
 }

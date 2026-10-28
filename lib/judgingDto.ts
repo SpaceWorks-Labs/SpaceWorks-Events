@@ -151,9 +151,18 @@ export type JudgeSubmissionsPageDto = {
   counts: JudgeSubmissionCounts;
 };
 
+/** A judging round as the judge workspace names it (docs/HACKATHON.md "Rounds"). */
+export type JudgeRoundDto = { id: string; name: string; position: number; judgingStatus: JudgingStatus; isCurrent: boolean };
+
 export type JudgeWorkspaceDto = JudgeSubmissionsPageDto & {
   judgingStatus: JudgingStatus;
   criteria: JudgingCriterionDto[];
+  /** The round shown (null before the event has any round). */
+  round: JudgeRoundDto | null;
+  /** Every round of the event, in order, for the round switcher (empty or one: no switcher). */
+  rounds: JudgeRoundDto[];
+  /** False when the round has its own panel and this judge is not on it. */
+  onPanel: boolean;
 };
 
 export type JudgeSubmissionDetailDto = {

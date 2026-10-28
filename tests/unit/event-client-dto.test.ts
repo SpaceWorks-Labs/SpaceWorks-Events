@@ -54,6 +54,7 @@ describe("event browser DTO", () => {
       resultsAnnouncedAt: new Date("2034-01-03T00:00:00Z"),
       reviewsPerProject: 3,
       scoreNormalization: "ZSCORE",
+      currentJudgingRoundId: "round-secret",
       emailEntrantsOnResults: true,
       emailSubmissionReceipts: true,
       mentorDeskEnabled: true,
@@ -80,6 +81,7 @@ describe("event browser DTO", () => {
     expect(serialized).not.toContain("mentorDesk");
     expect(serialized).not.toContain("reviewsPerProject");
     expect(serialized).not.toContain("scoreNormalization");
+    expect(serialized).not.toContain("currentJudgingRoundId");
     expect(serialized).not.toContain("submissionFee");
     expect(serialized).not.toContain("budgetMinor");
   });

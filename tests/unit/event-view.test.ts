@@ -23,7 +23,7 @@ function teamEvent() {
     submissionsEnabled: true, submissionsOpenAt: null, submissionsCloseAt: null,
     judgingStatus: JudgingStatus.OPEN, judgesSeeAll: false, projectGalleryPublic: false,
     resultsPublishedAt: new Date("2035-01-02T00:00:00Z"), resultsAnnouncedAt: null,
-    reviewsPerProject: 3, scoreNormalization: "ZSCORE",
+    reviewsPerProject: 3, scoreNormalization: "ZSCORE", currentJudgingRoundId: "round_1",
     emailEntrantsOnResults: true, emailSubmissionReceipts: true,
     submissionFeeMinor: BigInt(500), submissionFeeRefundOnDisqualify: false,
     budgetMinor: BigInt(100000), participantClaimsEnabled: true, participantClaimCapMinor: null, crewClaimsEnabled: false,
@@ -58,7 +58,7 @@ describe("eventForView", () => {
     expect(() => assertSafeView(view)).not.toThrow();
     const serialized = JSON.stringify(view, (_key, value) => (typeof value === "bigint" ? String(value) : value));
     for (const hidden of ["bcrypt-secret", "encrypted-secret", "ticket-secret", "checkInStation", "budgetMinor",
-      "participantClaim", "ticketDesignId", "emailEntrantsOnResults", "reviewsPerProject", "resultsAnnouncedAt"]) {
+      "participantClaim", "ticketDesignId", "emailEntrantsOnResults", "reviewsPerProject", "resultsAnnouncedAt", "currentJudgingRoundId"]) {
       expect(serialized).not.toContain(hidden);
     }
   });

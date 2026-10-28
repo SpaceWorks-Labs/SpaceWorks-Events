@@ -101,6 +101,9 @@ export const judgingEventSelect = {
   submissionsCloseAt: true,
   judgingStatus: true,
   judgesSeeAll: true,
+  reviewsPerProject: true,
+  scoreNormalization: true,
+  currentJudgingRoundId: true,
   projectGalleryPublic: true,
   resultsPublishedAt: true,
   resultsAnnouncedAt: true,
@@ -156,9 +159,11 @@ export async function withOrganiserLock<T>(ctx: JudgingOrganiserContext, run: (t
   });
 }
 
-export async function criteriaFor(client: Prisma.TransactionClient, eventId: string): Promise<JudgingCriterionDto[]> {
+/** A round's rubric, in order (none for an event with no round yet). */
+export async function criteriaFor(client: Prisma.TransactionClient, round: { id: string | null; eventId: string }): Promise<JudgingCriterionDto[]> {
+  if (!round.id) return [];
   const rows = await client.judgingCriterion.findMany({
-    where: { eventId },
+    where: { roundId: round.id, eventId: round.eventId },
     select: { id: true, name: true, description: true, weight: true, maxScore: true },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   });

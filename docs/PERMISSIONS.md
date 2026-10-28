@@ -104,6 +104,8 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Judging: disqualify, reinstate, awards, Adjust for harsh/generous judges, publish and unpublish results | `resolveJudgingOrganiser`: admin | Yes | — | — | — | — | — | — | — | — |
 | Judging: Send results email now (`sendResultsAnnouncement`) | `resolveJudgingOrganiser`: admin (same as publishing results); broadcast rate-limit bucket | Yes | — | — | — | — | — | — | — | — |
 | Judging: Progress, review target, automatic assignment (preview and apply) | `resolveJudgingOrganiser` (`app/actions/judging-ops.ts`, `lib/core/judgingOps.ts`): admin | Yes | — | — | — | — | — | — | — | — |
+| Judging → Rounds: rounds, panels, open/close, finalise, advance and publish finalists | `resolveJudgingOrganiser` (`app/actions/judging-rounds.ts`, `lib/core/judgingRounds.ts`): admin | Yes | — | — | — | — | — | — | — | — |
+| Judging: score in a round with its own panel | `resolveJudgeContext` plus the round's panel (`onRoundPanel`): admin or `JUDGE` on the panel | Panel only | — | — | — | — | — | — | Panel only | Panel only |
 | Judging: Submissions and Results Export CSV (current filters) | `GET /api/exports/events/:id/judging`: admin | Yes | — | — | — | — | — | — | — | — |
 | Saved views on Guests · People and Teams: apply, save, rename, share, delete own; the URL filters | `app/actions/saved-views.ts` via `resolveSavedViewAccess` (`lib/core/savedViews.ts`): `canManageRegistrationsFor` (Teams: TEAM events) | Yes | — | — | Yes | — | — | — | — | Yes |
 | Saved views on Judging · Submissions, Results, Progress | `resolveSavedViewAccess`: admin | Yes | — | — | — | — | — | — | — | — |

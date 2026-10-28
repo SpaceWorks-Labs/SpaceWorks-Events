@@ -19,7 +19,9 @@ export const runtime = "nodejs";
  *   emails, or ticket links. `q` keeps the ranked rows matching the Results
  *   search (ranks stay those of the whole ranking); `method` (RAW or ZSCORE)
  *   is the score method the table is showing, the saved one when omitted;
- *   `scored` is the score chip (unscored, underTwo).
+ *   `scored` is the score chip (unscored, underTwo); `round` is the judging
+ *   round the table shows (the current round when omitted; another event's
+ *   round is the same empty 404).
  * - Submissions (`view=submissions`): one row per project matching the
  *   Submissions view's `status` filter and `q` search; `status=notSubmitted`
  *   lists the entrants without a submitted project instead.
@@ -65,7 +67,7 @@ export async function GET(request: Request, context: RouteContext) {
     return csvStreamResponse({ header: plan.header, batches: plan.batches, filename: exportFilename("submissions", event.title), errorMessage: "Unable to export submissions." });
   }
 
-  const plan = await planJudgingResultsExport(ctx, { query: view.query, scored: view.scored, method: view.method ?? undefined });
+  const plan = await planJudgingResultsExport(ctx, { query: view.query, scored: view.scored, method: view.method ?? undefined, roundId: view.round });
   if (!plan) return exportNotFound();
   await recordAuditEvent({
     action: "JUDGING_SCORES_EXPORTED",

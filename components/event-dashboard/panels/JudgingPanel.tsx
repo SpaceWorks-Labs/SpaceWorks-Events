@@ -11,12 +11,16 @@ import {
   JUDGING_TEXT_DESCRIPTION_MAX_LENGTH,
   JUDGING_WEIGHT_MAX,
 } from "@/lib/validators";
+import { JUDGING_ROUND_NAME_MAX_LENGTH, JUDGING_ROUNDS_LIMIT } from "@/lib/validators/judgingRounds";
+import { FINALIZE_REASON_MAX_LENGTH } from "@/lib/core/judgingRounds";
 import { JudgeWorkspace } from "@/components/event-dashboard/judging/JudgeWorkspace";
 import { SubTabs, type SubTab } from "../SubTabs";
 import { JudgingPanelAwards } from "./JudgingPanelAwards";
 import { PrizePayoutsPanel } from "./PrizePayoutsPanel";
-import { JudgingPanelResults, JudgingPanelJudges } from "./JudgingPanelResults";
-import { JudgingPanelProgress } from "./JudgingPanelProgress";
+import { JudgingPanelJudges } from "./JudgingPanelResults";
+import { JudgingProgressByRound, JudgingResultsByRound } from "./JudgingRoundViews";
+import { JudgingPanelRounds } from "./JudgingPanelRounds";
+import { roundOptions } from "./judgingRoundsCopy";
 import { JudgingPanelRubric } from "./JudgingPanelRubric";
 import { JudgingPanelSetup } from "./JudgingPanelSetup";
 import type { JudgingLimits } from "./JudgingPanelShared";
@@ -34,6 +38,7 @@ const LIMITS: JudgingLimits = {
   awardPlace: EVENT_AWARD_PLACE_MAX,
   disqualifyReason: DISQUALIFY_REASON_MAX_LENGTH,
 };
+const ROUND_LIMITS = { ...LIMITS, roundName: JUDGING_ROUND_NAME_MAX_LENGTH, finalizeReason: FINALIZE_REASON_MAX_LENGTH, rounds: JUDGING_ROUNDS_LIMIT };
 
 /**
  * The event dashboard's Judging tab (docs/HACKATHON.md). Organisation owners
@@ -50,8 +55,13 @@ export async function JudgingPanel({ ctx }: { ctx: EventDashboardContext }) {
 
   const data = await loadJudgingPanel({ ctx });
   if (!data) return <NoPermission>You do not have permission to manage judging for this event.</NoPermission>;
-  const { scope, settings, progress, savedViews } = data;
+  const { scope, settings, progress, savedViews, rounds } = data;
   const frozen = settings.judgingStatus !== "NOT_STARTED";
+  // Rounds (docs/HACKATHON.md "Rounds"): the switchers, and the automatic-assignment pool narrowed to the current round's panel.
+  const switcher = roundOptions(rounds);
+  const currentPanel = rounds.find((round) => round.isCurrent)?.panelUserIds ?? [];
+  const eventJudges = progress?.judges ?? [];
+  const poolJudges = currentPanel.length ? eventJudges.filter((judge) => currentPanel.includes(judge.userId)) : eventJudges;
 
   const setup: SubTab = {
     value: "judging-setup",
@@ -73,6 +83,12 @@ export async function JudgingPanel({ ctx }: { ctx: EventDashboardContext }) {
       label="Judging sections"
       items={[
         setup,
+        {
+          value: "judging-rounds",
+          label: "Rounds",
+          count: rounds.length > 1 ? rounds.length : undefined,
+          content: <JudgingPanelRounds scope={scope} rounds={rounds} judges={eventJudges} timezone={settings.timezone} limits={ROUND_LIMITS} />,
+        },
         {
           value: "judging-submissions",
           label: "Submissions",
@@ -106,10 +122,11 @@ export async function JudgingPanel({ ctx }: { ctx: EventDashboardContext }) {
           value: "judging-progress",
           label: "Progress",
           content: progress ? (
-            <JudgingPanelProgress
+            <JudgingProgressByRound
+              rounds={switcher}
               scope={scope}
               initial={progress.data}
-              judges={progress.judges}
+              judges={poolJudges}
               timezone={settings.timezone}
               now={ctx.now.toISOString()}
               savedViews={savedViews.JUDGING_PROGRESS ?? []}
@@ -127,7 +144,8 @@ export async function JudgingPanel({ ctx }: { ctx: EventDashboardContext }) {
           value: "judging-results",
           label: "Results",
           content: (
-            <JudgingPanelResults
+            <JudgingResultsByRound
+              rounds={switcher}
               scope={scope}
               initialPage={data.results}
               criteria={data.criteria}

@@ -25,6 +25,8 @@ import { roundToOneDecimal } from "@/lib/judgingScore";
 /** "keep" adds to existing assignments; "replace" starts over (keeping any a judge has started). */
 export const AUTO_ASSIGN_MODES = ["keep", "replace"] as const;
 export type AutoAssignMode = (typeof AUTO_ASSIGN_MODES)[number];
+export const AUTO_ASSIGN_STRATEGIES = ["balanced", "random"] as const;
+export type AutoAssignStrategy = (typeof AUTO_ASSIGN_STRATEGIES)[number];
 
 /** Target judges per project when the organiser hasn't set one. */
 export const DEFAULT_REVIEWS_PER_PROJECT = 3;
@@ -60,6 +62,10 @@ export const autoAssignInputSchema = z
     judgeUserIds: z.array(z.string().trim().min(1).max(128)).min(1, "Pick at least one judge.").max(AUTO_ASSIGN_POOL_MAX),
     /** Only on apply: the preview's fingerprint. */
     fingerprint: z.string().trim().min(1).max(64).optional(),
+    /** "balanced" (fixed tie-breaks) or "random" (seeded tie-breaks; docs/HACKATHON.md "Rounds"). */
+    strategy: z.enum(AUTO_ASSIGN_STRATEGIES).optional().default("balanced"),
+    /** "random" only: the preview's seed (a preview without one draws a new seed, which is how "Re-roll" works). */
+    seed: z.string().regex(/^[0-9a-f]{32}$/).optional(),
   })
   .strict();
 
