@@ -34,8 +34,8 @@ describe("Guests · People attendance filter", () => {
     expect(attendeeAttendanceWhere("notComing")).toEqual({ attendanceCheck: { is: { response: "NOT_ATTENDING" } } });
     // Waiting for a reply and never asked only describe going guests, like the Emails card.
     // The eligibility rule (lib/attendanceEligibility.ts) is shared with sending.
-    expect(attendeeAttendanceWhere("noReply")).toEqual({ AND: [{ status: "CONFIRMED", eventId: { not: null } }, { attendanceCheck: { is: { response: null } } }] });
-    expect(attendeeAttendanceWhere("notAsked")).toEqual({ AND: [{ status: "CONFIRMED", eventId: { not: null } }, { attendanceCheck: { is: null } }] });
+    expect(attendeeAttendanceWhere("noReply")).toEqual({ AND: [{ status: "CONFIRMED", isCrew: false, eventId: { not: null } }, { attendanceCheck: { is: { response: null } } }] });
+    expect(attendeeAttendanceWhere("notAsked")).toEqual({ AND: [{ status: "CONFIRMED", isCrew: false, eventId: { not: null } }, { attendanceCheck: { is: null } }] });
   });
 
   it("adds the filter to a one-off event's base condition, inside the scope", () => {
@@ -77,6 +77,8 @@ describe("attendance badge and CSV cells", () => {
   it("says Not asked only for going guests, and only when asked to", () => {
     expect(attendanceBadgeState({ status: "CONFIRMED", attendanceCheck: null })).toBe("notAsked");
     expect(attendanceBadgeState({ status: "CONFIRMED", attendanceCheck: null }, { showNotAsked: false })).toBeNull();
+    // Crew are never asked, so they never read "Not asked".
+    expect(attendanceBadgeState({ status: "CONFIRMED", isCrew: true, attendanceCheck: null })).toBeNull();
     for (const status of ["WAITLISTED", "PENDING_APPROVAL", "REJECTED"]) {
       expect(attendanceBadgeState({ status, attendanceCheck: null })).toBeNull();
     }

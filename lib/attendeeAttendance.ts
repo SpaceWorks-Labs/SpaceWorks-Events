@@ -31,15 +31,17 @@ export function attendeeAttendanceWhere(attendance: AttendeeAttendanceFilter): P
   }
 }
 
-type BadgeInput = { status: string; attendanceCheck: { response: AttendanceResponseValue | null; releaseOutcome?: string | null; } | null | undefined; };
+type BadgeInput = { status: string; isCrew?: boolean; attendanceCheck: { response: AttendanceResponseValue | null; releaseOutcome?: string | null; } | null | undefined; };
 
 /**
  * The attendance badge for one registration, or null when there is nothing
  * to say: a guest who was never asked shows "Not asked" only while going
  * (CONFIRMED), and only when `showNotAsked` (someone at the event has been
- * asked; before the first send every going guest would carry it).
+ * asked; before the first send every going guest would carry it). Crew are
+ * never asked, so they carry no badge.
  */
 export function attendanceBadgeState(rsvp: BadgeInput, options: { showNotAsked?: boolean; } = {}): AttendanceState | null {
+  if (rsvp.isCrew) return null;
   if (rsvp.attendanceCheck) return attendanceStateOf(rsvp.attendanceCheck);
   return rsvp.status === "CONFIRMED" && options.showNotAsked !== false ? "notAsked" : null;
 }

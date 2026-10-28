@@ -56,10 +56,10 @@ describe("attendance link token", () => {
 });
 
 describe("attendance rules", () => {
-  it("asks only CONFIRMED registrations of one-off events, from one condition", () => {
-    expect(attendanceEligibleRsvpWhere("evt_1")).toEqual({ status: "CONFIRMED", eventId: "evt_1" });
+  it("asks only CONFIRMED, non-crew registrations of one-off events, from one condition", () => {
+    expect(attendanceEligibleRsvpWhere("evt_1")).toEqual({ status: "CONFIRMED", isCrew: false, eventId: "evt_1" });
     // Without an event: any one-off event, never a series date (eventId null).
-    expect(attendanceEligibleRsvpWhere()).toEqual({ status: "CONFIRMED", eventId: { not: null } });
+    expect(attendanceEligibleRsvpWhere()).toEqual({ status: "CONFIRMED", isCrew: false, eventId: { not: null } });
   });
 
   it("maps a check to the guest's badge state", () => {
