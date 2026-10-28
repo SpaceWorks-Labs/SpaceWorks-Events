@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { EventPermission, EventPrivacyType, EventStatus, MembershipRole, PrismaClient, RsvpStatus } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 /*
  * Custom check-in lists: an admin creates "Swag", checks a confirmed guest in
@@ -64,7 +65,7 @@ test.afterAll(async () => {
 });
 
 async function signIn(page: Page, email: string) {
-  await page.context().setExtraHTTPHeaders({ "cf-connecting-ip": randomIp() });
+  await page.context().setExtraHTTPHeaders({ [ipHeader]: randomIp() });
   await page.request.get("/api/auth/csrf");
   await page.goto("/login?callbackUrl=%2Fdashboard");
   await page.getByRole("textbox", { name: /^Email/ }).fill(email);

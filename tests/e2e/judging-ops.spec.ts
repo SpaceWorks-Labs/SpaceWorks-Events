@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { EventPermission, EventPrivacyType, EventStatus, JudgingStatus, MembershipRole, PrismaClient, RegistrationMode, RsvpStatus, SubmissionStatus } from "@prisma/client";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 // Judging → Progress and automatic judge assignment (docs/HACKATHON.md): the
 // organiser previews and applies an even assignment that skips a judge's own
@@ -27,7 +28,7 @@ const dashboard = () => `/dashboard/${orgSlug}/event/${eventId}`;
 async function newPage(browser: Browser) {
   const context = await browser.newContext();
   // Its own TEST-NET-2 range, apart from the other judging specs.
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.51.100.${(ipCounter++ % 40) + 200}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.51.100.${(ipCounter++ % 40) + 200}` });
   return { context, page: await context.newPage() };
 }
 

@@ -13,6 +13,7 @@ import {
   SubmissionStatus,
 } from "@prisma/client";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 // Large-event paging (docs/TEAMS.md, docs/HACKATHON.md). The data is seeded
 // straight into the database so each list runs past its first page: 60 teams
@@ -46,7 +47,7 @@ async function newContext(browser: Browser, options: Parameters<Browser["newCont
   // Its own TEST-NET-2 block (198.18.0.0/15 is benchmarking space): the other
   // specs count up through 198.51.100.x and 203.0.113.x, and a shared IP
   // shares the per-IP action and search limits.
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.18.7.${(ipCounter++ % 240) + 10}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.18.7.${(ipCounter++ % 240) + 10}` });
   return context;
 }
 

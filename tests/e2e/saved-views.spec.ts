@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { EventPrivacyType, EventStatus, JudgingStatus, MembershipRole, PrismaClient, RegistrationMode, RsvpStatus, SoloPolicy, SubmissionStatus } from "@prisma/client";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 // Saved views (docs/FEATURES.md, "Saved views"): list filters live in the
 // address bar, the Views menu applies presets and saved views, and a saved
@@ -31,7 +32,7 @@ let ipCounter = 10;
 async function newContext(browser: Browser, options: Parameters<Browser["newContext"]>[0] = {}) {
   const context = await browser.newContext(options);
   // Its own address block (198.18.9.x), so per-IP limits aren't shared with other specs.
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.18.9.${(ipCounter++ % 240) + 10}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.18.9.${(ipCounter++ % 240) + 10}` });
   return context;
 }
 

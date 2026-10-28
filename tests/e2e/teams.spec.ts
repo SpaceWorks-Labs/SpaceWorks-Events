@@ -1,5 +1,6 @@
 import { EventPrivacyType, EventStatus, RegistrationMode } from "@prisma/client";
 import { expect, test } from "@playwright/test";
+import { appOrigin } from "./helpers/client";
 import {
   collectPageErrors,
   discardQueuedTestEmail,
@@ -203,6 +204,7 @@ test("the join link 404s for hidden, invite-only and unreleased events", async (
 test("a solo registrant joins the team by pasting its link on their ticket page", async ({ browser }) => {
   const context = await newContext(browser);
   const created = await context.request.post("/api/rsvp", {
+    headers: { origin: appOrigin },
     data: { orgSlug, eventSlug, guestEmail: soloEntrant.email, name: soloEntrant.name, answers: {}, team: { mode: "solo" } },
   });
   expect(created.status(), await created.text()).toBe(200);

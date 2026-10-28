@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { EventPermission, EventPrivacyType, EventStatus, MembershipRole, PrismaClient, RegistrationMode } from "@prisma/client";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { ipHeader } from "./client";
 
 export const prisma = new PrismaClient();
 export const suffix = randomUUID().replace(/-/g, "").slice(0, 10);
@@ -31,7 +32,7 @@ export async function newContext(browser: Browser, options: Parameters<Browser["
   const context = await browser.newContext(options);
   // Its own TEST-NET-3 range: teams.spec.ts counts up through 198.51.100.x
   // in a parallel worker, and a shared IP shares the per-IP action limit.
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `203.0.113.${(ipCounter++ % 240) + 10}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `203.0.113.${(ipCounter++ % 240) + 10}` });
   return context;
 }
 

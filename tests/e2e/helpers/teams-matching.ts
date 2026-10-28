@@ -1,5 +1,6 @@
 import { EventPrivacyType, RegistrationMode, RsvpStatus, SoloPolicy } from "@prisma/client";
 import { expect, test } from "@playwright/test";
+import { appOrigin } from "./client";
 import {
   collectPageErrors,
   createTeamEvent,
@@ -25,7 +26,7 @@ export function teamsMatchingTests() {
     // One client address per registration, so the per-IP registration limit never couples them.
     const register = async (data: Record<string, unknown>) => {
       const registrant = await newContext(browser);
-      const response = await registrant.request.post("/api/rsvp", { data });
+      const response = await registrant.request.post("/api/rsvp", { headers: { origin: appOrigin }, data });
       const result = { status: response.status(), text: await response.text() };
       await registrant.close();
       return result;

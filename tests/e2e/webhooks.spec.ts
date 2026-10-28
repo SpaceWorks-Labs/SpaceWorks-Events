@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import bcrypt from "bcryptjs";
 import { MembershipRole, PrismaClient } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 /**
  * Organisation webhooks in the browser. The server must run with
@@ -61,7 +62,7 @@ test.afterAll(async () => {
 });
 
 async function signIn(page: Page, email: string, ip: string) {
-  await page.context().setExtraHTTPHeaders({ "cf-connecting-ip": ip });
+  await page.context().setExtraHTTPHeaders({ [ipHeader]: ip });
   await page.request.get("/api/auth/csrf");
   await page.goto("/login?callbackUrl=%2Fdashboard");
   await page.getByRole("textbox", { name: /^Email/ }).fill(email);

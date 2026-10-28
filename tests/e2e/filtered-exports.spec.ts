@@ -12,6 +12,7 @@ import {
   SubmissionStatus,
 } from "@prisma/client";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 // Filtered CSV exports, the paged feedback responses, and the dashboard's
 // streamed panels (docs/TEAMS.md, docs/HACKATHON.md). Each "Export CSV" link
@@ -39,7 +40,7 @@ let ipCounter = 10;
 async function newContext(browser: Browser, options: Parameters<Browser["newContext"]>[0] = {}) {
   const context = await browser.newContext(options);
   // Its own TEST-NET-2 block so per-IP limits are not shared with other specs.
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.18.9.${(ipCounter++ % 240) + 10}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.18.9.${(ipCounter++ % 240) + 10}` });
   return context;
 }
 
