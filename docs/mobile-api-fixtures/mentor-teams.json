@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "data": {
+    "myTeams": [
+      { "teamId": "cteam000000000000000001", "teamName": "Byte Club", "roundId": null }
+    ],
+    "conflicts": [
+      { "teamId": "cteam000000000000000002", "teamName": "Night Owls", "kind": "DECLARED", "version": 1, "mine": true }
+    ]
+  }
+}

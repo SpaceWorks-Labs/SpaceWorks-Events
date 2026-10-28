@@ -1785,6 +1785,42 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/teams/{teamId}/conflict:
+    post:
+      tags: [Mentor console]
+      summary: "Declare or clear this mentor's own conflict with a team"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: teamId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "{ active, expectedVersion, reason? } (see docs/MOBILE_API.md); the event, the team and the kind (DECLARED) come from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/teams/{teamId}/help:
+    post:
+      tags: [Mentor console]
+      summary: "Raise help on a team's behalf"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: teamId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "{ categoryKey, summary, location? } (see docs/MOBILE_API.md); the event and the team come from the path." }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
   /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/slots:
     get:
       tags: [Mentor console]
