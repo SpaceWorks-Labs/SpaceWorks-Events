@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
+import { linkCrewAccount } from "@/lib/core/crew/shared";
 
 export type InviteAcceptance =
   | { ok: true; href: string }
@@ -55,6 +56,8 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
         create: { eventId: invite.eventId, userId: user.id, permissions: invite.permissions },
         update: { permissions: invite.permissions },
       });
+      // The invited email may also be on the event crew: link that crew record to this account (docs/VOLUNTEERS.md).
+      await linkCrewAccount(tx, user.id, invite.email, invite.eventId);
     } else if (invite.eventSeriesId) {
       await tx.eventCollaborator.upsert({
         where: { eventSeriesId_userId: { eventSeriesId: invite.eventSeriesId, userId: user.id } },

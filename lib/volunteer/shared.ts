@@ -1,6 +1,6 @@
 import "server-only";
 
-import { CrewKind, Prisma, RsvpStatus } from "@prisma/client";
+import { Prisma, RsvpStatus } from "@prisma/client";
 import { z } from "zod";
 import { MAX_GRACE_MINUTES, MAX_SHIFT_MINUTES } from "./math";
 
@@ -21,14 +21,7 @@ export type VolunteerStaff = { organisationId: string; eventId: string; userId: 
 /** A crew member acting on their own sign-ups, resolved from their crew ticket. */
 export type VolunteerSelf = { eventId: string; crewMemberId: string };
 
-export const CREW_KIND_LABELS: Record<CrewKind, string> = {
-  ORGANISER: "Organiser",
-  VOLUNTEER: "Volunteer",
-  MENTOR: "Mentor",
-  JUDGE: "Judge",
-};
-
-export const crewKindSchema = z.nativeEnum(CrewKind);
+export { CREW_KIND_LABELS } from "@/lib/crewKind";
 
 export const NOT_FOUND = "Shift not found.";
 export const SIGNUP_NOT_FOUND = "Sign-up not found.";

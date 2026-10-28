@@ -1,6 +1,6 @@
 import "server-only";
 
-import { EventStatus, Prisma } from "@prisma/client";
+import { CrewKind, EventStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { isUploadedImageUrl } from "@/lib/uploadUrl";
 
@@ -44,7 +44,8 @@ export const crewProfileSchema = z
   })
   .strict();
 
-export const organiserCrewSchema = crewProfileSchema.extend({ showOnPage: z.boolean().default(true) }).strict();
+/** Organisers also choose the crew kind (display, badges and filters only; never authority). */
+export const organiserCrewSchema = crewProfileSchema.extend({ showOnPage: z.boolean().default(true), kind: z.nativeEnum(CrewKind).default(CrewKind.VOLUNTEER) }).strict();
 
 export type CrewProfileInput = z.infer<typeof crewProfileSchema>;
 
@@ -114,6 +115,28 @@ export function findRegistrationByEmail(tx: Prisma.TransactionClient, eventId: s
 export async function lockedHasCrewEmail(tx: Prisma.TransactionClient, eventId: string, emails: readonly (string | null | undefined)[]) {
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
   return hasCrewEmail(tx, eventId, emails);
+}
+
+/**
+ * The account a crew email belongs to, for `EventCrewMember.userId`: only a
+ * verified account with exactly that email. The link lets that person find
+ * their crew record and stops them verifying their own hours; it never
+ * grants anything.
+ */
+export async function verifiedAccountFor(client: Prisma.TransactionClient, email: string): Promise<string | null> {
+  const user = await client.user.findFirst({ where: { email: { equals: email, mode: "insensitive" }, emailVerified: { not: null } }, select: { id: true } });
+  return user?.id ?? null;
+}
+
+/**
+ * Links an account to its crew records by verified email, for example when it
+ * accepts an event invitation. Only unlinked rows change. Safe to run twice.
+ */
+export async function linkCrewAccount(client: Prisma.TransactionClient, userId: string, email: string | null | undefined, eventId?: string) {
+  const normalised = email?.trim().toLowerCase();
+  if (!normalised) return 0;
+  const linked = await client.eventCrewMember.updateMany({ where: { email: normalised, userId: null, ...(eventId ? { eventId } : {}) }, data: { userId } });
+  return linked.count;
 }
 
 /**

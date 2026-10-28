@@ -4,6 +4,7 @@ import { Prisma, RsvpStatus } from "@prisma/client";
 import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
 import { prisma } from "@/lib/db";
 import { SPONSOR_LIMIT_MAX, type IdCardPrintSettings } from "@/lib/idCardPrint";
+import { crewKindLabel } from "@/lib/crewKind";
 import { attendeePhotoUrl, managedImageUrl } from "./imageUrl";
 import type { BadgeStatusFilter } from "./filters";
 import type { IdCardAttendee } from "./types";
@@ -51,7 +52,7 @@ export const badgeRsvpInclude = {
   user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } },
   answers: { include: { field: { select: { key: true, label: true } } } },
   team: { select: { name: true } },
-  crewMember: { select: { role: true, photoUrl: true, foodPreference: true } },
+  crewMember: { select: { role: true, photoUrl: true, foodPreference: true, kind: true } },
 } satisfies Prisma.RSVPInclude;
 
 type BadgeRsvp = Prisma.RSVPGetPayload<{ include: typeof badgeRsvpInclude; }>;
@@ -72,7 +73,8 @@ export function badgeAttendeeFor(rsvp: BadgeRsvp, organisationId?: string): IdCa
     checkInDetails: getCheckInDetails(rsvp.answers, crew),
     registrationDetails: getRegistrationDetails(rsvp.answers),
     photoUrl: crewPhoto ?? attendeePhotoUrl(rsvp.user),
-    teamName: rsvp.isCrew ? (crew?.role.trim() ? `Crew · ${crew.role.trim()}` : "Crew") : (rsvp.team?.name ?? null),
+    // The crew kind is printed for display only (docs/VOLUNTEERS.md).
+    teamName: rsvp.isCrew ? (crew?.role.trim() ? `${crewKindLabel(crew.kind)} · ${crew.role.trim()}` : crewKindLabel(crew?.kind)) : (rsvp.team?.name ?? null),
   };
 }
 
