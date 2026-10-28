@@ -21,6 +21,7 @@ export const reservedOrganisationSlugs = Object.freeze([
   "login",
   "members",
   "new",
+  "order",
   "org",
   "privacy",
   "public",
@@ -37,6 +38,7 @@ export const reservedOrganisationSlugs = Object.freeze([
   "ticket",
   "verify",
   "verify-email",
+  "verify-mfa",
 ]);
 
 /** Existing organisation slugs that a reserved route now shadows, in input order. */

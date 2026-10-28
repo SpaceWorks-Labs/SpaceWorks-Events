@@ -28,6 +28,8 @@ jobs:
       - run: npm run lint
       # The guide's generated index must match content/help (npm run help:index).
       - run: node scripts/generate-help-index.mjs --check
+      # The frontend catalog must match the view readers and actions (npm run frontend:catalog).
+      - run: node scripts/generate-frontend-catalog.mjs --check
       # Route types (RouteContext, typed routes) are generated, not committed.
       - run: npx next typegen
       - run: npx tsc --noEmit

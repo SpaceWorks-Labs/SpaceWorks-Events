@@ -41,12 +41,34 @@ production topology. Kubernetes operators should use the
 
 ### Reserved organisation addresses
 
-A release can reserve a new top-level address, such as `/help` for the in-app
-guide. An organisation that already uses that slug would have its public page
-hidden behind the built-in route, so `npm run db:verify` (CI, the VPS update
-and `docker/vps/check.mjs`) fails and names each affected organisation. The
-reserved list is `scripts/reserved-slugs.mjs`; `lib/slug.ts` refuses those
-slugs for new and renamed organisations.
+A release can reserve new top-level addresses. Release 0.11.0 reserves five new
+ones: `/attend` (attendance confirmation), `/crew` (crew sign-up), `/help`
+(the in-app guide), `/submit` (project submission links) and `/team` (team
+management links). It also reserves `/order` (order links) and `/verify-mfa`
+(the staff authenticator check), which 0.10.0 already served without
+reserving them.
+An organisation that already uses one of those slugs would have its public page
+hidden behind the built-in route. The reserved list is
+`scripts/reserved-slugs.mjs`; `lib/slug.ts` refuses those slugs for new and
+renamed organisations. Slugs match case-insensitively (`Help` counts).
+
+Two checks name each affected organisation:
+
+- `node scripts/check-reserved-slugs.mjs` runs **before migrating** (read-only,
+  one `SELECT`): the VPS updater (`scripts/update-vps.sh`) stops there and
+  keeps the previous release serving, and the Helm migration Job fails the
+  release with nothing migrated.
+- `npm run db:verify` (CI, the VPS update and `docker/vps/check.mjs`) repeats
+  it after migrating.
+
+**Render** has no pre-deploy command on the free plan (the container migrates
+on start), so check before merging or deploying a release that reserves an
+address: run `node scripts/check-reserved-slugs.mjs` with the service's
+`DATABASE_URL`, or this in the Supabase SQL editor (it must return no rows):
+
+```sql
+SELECT slug FROM "Organisation" WHERE lower(slug) IN ('attend', 'crew', 'help', 'submit', 'team', 'order', 'verify-mfa');
+```
 
 To fix it before deploying: pick a free slug, rename the organisation in a
 transaction, and tell its owner that the public address changed (old shared
@@ -56,12 +78,12 @@ links to `/<old-slug>` will open the built-in page instead):
 UPDATE "Organisation" SET slug = 'help-centre-org' WHERE slug = 'help';
 ```
 
-Check the new slug is unused first (`SELECT 1 FROM "Organisation" WHERE slug = '…'`),
-then re-run `npm run db:verify`.
+Check the new slug is unused first (`SELECT 1 FROM "Organisation" WHERE lower(slug) = lower('…')`),
+then re-run the check.
 
 ### Recent schema migrations
 
-Apply these with `npm run db:deploy` before rolling out the matching application version. Release 0.10.0 ends at `20261102000000_event_broadcast_drafts`; the next release adds everything from `20261103000000_check_in_lists` on. The **Rolling deploy** column says whether instances of the previous release keep working while the migration has run and they have not yet been replaced, and what to do before or after upgrading.
+Apply these with `npm run db:deploy` before rolling out the matching application version. Release 0.10.0 ends at `20261102000000_event_broadcast_drafts`; release 0.11.0 adds everything from `20261103000000_check_in_lists` to `20261119030000_admission_audit_fixes`. The **Rolling deploy** column says whether instances of the previous release keep working while the migration has run and they have not yet been replaced, and what to do before or after upgrading.
 
 How to read the lock notes. Prisma runs each migration in one transaction without a lock timeout, and every lock is held until that transaction commits, so a table altered early in a migration stays locked through the migration's later steps:
 
@@ -107,13 +129,13 @@ How to read the lock notes. Prisma runs each migration in one transaction withou
 | `20261104020000_judging_results_announced` | Nullable `Event.resultsAnnouncedAt` | Safe |
 | `20261104030000_judging_ops` | `Event.reviewsPerProject` and `Event.scoreNormalization` (default `RAW`) with a range CHECK (a scan of `Event`) | Safe |
 | `20261104040000_saved_views` | New `SavedView` table and `SavedViewSurface` enum, cascading on `Event`, `User` and `Organisation` | Safe |
-| `20261105000000_paid_options` | Who pays on a team event (`Event.teamTicketMode`, default `PER_MEMBER`), project entry fees, the team or entry fee an `Order` is for (with CHECKs), `CheckInList.addOnId`, `EventAward.prizeMinor`, the append-only `PrizePayout` ledger with guard triggers; `ChatChannel_shape` is replaced to allow `payout` (a scan of `ChatChannel`) | Safe |
+| `20261105000000_paid_options` | Who pays on a team event (`Event.teamTicketMode`, default `PER_MEMBER`), project entry fees, the team or entry fee an `Order` is for (with CHECKs), `CheckInList.addOnId`, `EventAward.prizeMinor`, the append-only `PrizePayout` ledger with guard triggers; `ChatChannel_shape` is replaced to allow `payout` (a scan of `ChatChannel`). `Order` stays ACCESS EXCLUSIVE (reads and writes of orders wait, so checkout and payment webhooks queue) through its CHECK scans, index builds and foreign key validations | Safe. Quiet window on large paid installations |
 | `20261106000000_event_finance` | Event finance: `ExpenseClaim`, `ExpenseReceipt`, the append-only `ClaimPayout` ledger and `RefundRequest` (one open request per order), four enums; budget and participant-claim columns on `Event` with a CHECK (participant claims off); `ChatChannel_shape` allows `claim` | Safe |
 | `20261107000000_ticket_designs` | New `TicketDesign` table; nullable design ids on `Organisation`, `Event` (both with unique indexes) and `TicketType`, with triggers keeping each design in its owner's organisation or event | Safe |
 | `20261107010000_ledger_guards` | `Order.teamJoin` (default `false`); triggers refuse deleting prize and claim payout rows except through their organisation's deletion | Safe |
 | `20261107020000_drop_orphan_event_session_type` | Drops the unused `EventSessionType` enum (no column has used it since `20260915010000_simplify_event_session_fields`). No table changes or locks; `prisma migrate diff` against `schema.prisma` is then empty | Safe |
 | `20261108000000_large_event_indexes` | Six composite indexes for keyset-paged lists ([PERFORMANCE.md](PERFORMANCE.md)): `RSVP_eventId_createdAt_id_idx`, `RSVP_eventId_checkedInAt_id_idx`, `Team_eventId_createdAt_id_idx`, `Submission_eventId_createdAt_id_idx`, `Submission_eventId_status_submittedAt_id_idx`, `EventInvite_eventId_createdAt_id_idx`. Plain `CREATE INDEX IF NOT EXISTS`: each build blocks writes to its table (registrations, check-ins, submissions, invites) until it finishes | Safe. On a large installation pre-build the `RSVP` and `EventInvite` indexes `CONCURRENTLY` (checklist below); upgrading from 0.10.0, `Team` and `Submission` arrive empty in the same release |
-| `20261109000000_hackathon_email_toggles` | `Event.emailEntrantsOnResults` and `Event.emailSubmissionReceipts`, both `NOT NULL DEFAULT false` (no rewrite; a brief ACCESS EXCLUSIVE lock on `Event`). `db:verify` checks both columns | Safe. **Behaviour change for existing events:** both switches start off, so publishing results and submitting a project (including one submitted once its entry fee is paid) send no email until an organiser turns the switch on in Judging → Setup ([HACKATHON.md](HACKATHON.md) → Hackathon emails). Payment emails are unaffected. Tell organisers who rely on those emails before upgrading |
+| `20261109000000_hackathon_email_toggles` | `Event.emailEntrantsOnResults` and `Event.emailSubmissionReceipts`, both `NOT NULL DEFAULT false` (no rewrite; a brief ACCESS EXCLUSIVE lock on `Event`). `db:verify` checks both columns | Safe. **Behaviour change for existing events:** both switches start off, so publishing results and submitting a project (including one submitted once its entry fee is paid) send no email until an organiser turns the switch on in Judging → Setup ([HACKATHON.md](HACKATHON.md) → Hackathon emails). Payment emails are unaffected. This only affects an instance that already ran a build with judging (`20261104010000_hackathon_judging`); upgrading from 0.10.0, which has no judging, changes nothing. Tell organisers who rely on those emails before upgrading |
 | `20261110000000_event_crew` | Event crew ([CREW.md](CREW.md)): adds `CREW` to `EventPageSectionType` and `ExpenseClaimKind`; `Event.crewClaimsEnabled` and `RSVP.isCrew` (both default `false`, no rewrite); `EventCrewMember` and `EventCrewJoinLink` tables; the `RSVP_crew_shape` CHECK is added `NOT VALID` and validated in the same transaction, so `RSVP` stays ACCESS EXCLUSIVE during the validation scan | Add crew and the Crew page section only after the rollout: an older release counts crew tickets as attendees and cannot read a page with a Crew section |
 | `20261111000000_attendance_confirmation` | Attendance confirmation ([ATTENDANCE.md](ATTENDANCE.md)): `AttendanceResponse` enum, `AttendanceCheck` table (one per registration, link token stored as a SHA-256 digest only), `Event.attendanceCheckReleaseOnDecline` (default `false`). Its foreign keys briefly block writes to `RSVP` and `Event` | Safe. Nothing is sent until an organiser sends it |
 | `20261111000100_attendance_followups` | `AttendanceCheck.organisersNotifiedAt`, `refundRequestOpenedAt` and `refundRequestId` (foreign key to `RefundRequest`) with an index | Safe |
@@ -140,7 +162,7 @@ How to read the lock notes. Prisma runs each migration in one transaction withou
 | `20261119000000_judging_counted_reviews_recusal` | Nullable `JudgeAssignment.recusedAt` (judge self-recusal); nullable `JudgingRound.countedFrozenAt` with a CHECK that it is set only on a finalised round (a scan of `JudgingRound`); new `JudgingRoundCountedReview` table (the reviews a finalised round counted) cascading on `JudgingRound`. No backfill: rounds finalised earlier keep counting live | Safe |
 | `20261119030000_admission_audit_fixes` | `rsvp_admission_crew_detached` trigger (`BEFORE UPDATE OF "isCrew" ON "RSVP"`, a brief SHARE ROW EXCLUSIVE lock, no scan): a registration becomes crew only once its application is detached; drops `ReimbursementPolicy.requireAccepted` (ADMISSION_STAGE policies always need an accepted application) and re-adds the stage-shape CHECK without it (a scan of the small `ReimbursementPolicy` table); `AdmissionStage.freshEyes` (default `false`) | Safe from 0.10.0: `requireAccepted` arrived in the same release, so no released build reads it |
 
-The release that adds `/help` also reserves that organisation address: `npm run db:verify` fails if an organisation already uses it (see [Reserved organisation addresses](#reserved-organisation-addresses)). Rename it before upgrading.
+Release 0.11.0 reserves the organisation addresses `/attend`, `/crew`, `/help`, `/submit` and `/team` (and `/order` and `/verify-mfa`, which 0.10.0 already served): the pre-migration check and `npm run db:verify` fail if an organisation already uses one (see [Reserved organisation addresses](#reserved-organisation-addresses)). Rename it before upgrading.
 
 **Upgrade note (judging rounds, `20261112000000_judging_rounds`):** the migration replaces the judge review and assignment unique keys with round-scoped ones, so an instance of the previous release that is still running after the migration fails to save judge reviews (its `ON CONFLICT ("submissionId", "judgeUserId")` no longer matches an index) until the rollout completes. This only matters when the running build already has judging (`20261104010000_hackathon_judging`); release 0.10.0 has none. Close judging on events that are being judged while you upgrade, or replace instances without overlap: on Helm set `updateStrategy: {type: Recreate, rollingUpdate: null}` for this one release (the chart's default rolling update runs both releases side by side for a moment). The one-line VPS updater (`scripts/update-vps.sh`) runs the migration while the old containers still serve, then replaces them (`compose up -d --wait`), so review saves can fail only in that short window between the two steps.
 

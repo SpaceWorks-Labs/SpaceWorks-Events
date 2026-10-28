@@ -172,6 +172,11 @@ It must print `Production environment preflight passed.`
    version keeps serving. Migrations also run on every wake from sleep (a
    no-op when nothing is pending, a few seconds on the free CPU), and if
    Supabase is paused or unreachable the container cannot start at all.
+   Render's free plan has no pre-deploy command, so before deploying a release
+   that reserves new organisation addresses (0.11.0 does), run the read-only
+   check in the Supabase SQL editor or with
+   `node scripts/check-reserved-slugs.mjs` and rename any organisation it
+   names ([Reserved organisation addresses](production-operations.md#reserved-organisation-addresses)).
 
 How the Blueprint fits the free plan:
 

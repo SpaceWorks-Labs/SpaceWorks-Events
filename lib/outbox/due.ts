@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { RESULTS_PUBLISHED_KIND } from "./judging";
 import { FINALISTS_ANNOUNCED_KIND } from "./finalists";
 import { EVENT_REMINDER_KIND } from "./payloads";
+import { REIMBURSEMENT_AVAILABLE_KIND } from "./reimbursement";
 
 /**
  * Kinds an organiser sends to a whole audience at once (thousands of rows in
@@ -12,10 +13,14 @@ import { EVENT_REMINDER_KIND } from "./payloads";
  * a password reset, sign-in code, ticket, payment receipt or team email
  * queued after it. Event reminders (one per guest, queued by the beat) wait
  * too, and so do attendance confirmation questions (one per guest, sent by
- * an organiser to the whole event). Operator notices stay urgent: sign-in alerts and password notices use
- * that kind.
+ * an organiser to the whole event), and "you can claim expenses" notices (one
+ * per eligible person when a reimbursement policy opens). Operator notices
+ * stay urgent: sign-in alerts and password notices use that kind. Admission
+ * notices stay urgent too, although a decision batch sends many at once: they
+ * carry offers with a deadline to accept, and a long bulk queue would eat
+ * into that window.
  */
-export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND, FINALISTS_ANNOUNCED_KIND, EVENT_REMINDER_KIND, "attendance-check"];
+export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND, FINALISTS_ANNOUNCED_KIND, EVENT_REMINDER_KIND, "attendance-check", REIMBURSEMENT_AVAILABLE_KIND];
 
 /** Due messages, oldest first: transactional kinds before bulk ones. */
 export async function dueOutboxMessages(take: number) {
