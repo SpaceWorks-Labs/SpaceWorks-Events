@@ -35,6 +35,7 @@ function StageEditor({ scope, stage, data, last }: { scope: AdmissionScope; stag
   const [status, setStatus] = useState(stage.status);
   const [target, setTarget] = useState(String(stage.reviewsPerApplication));
   const [blind, setBlind] = useState(stage.blindReview);
+  const [freshEyes, setFreshEyes] = useState(stage.freshEyes);
   const [criteria, setCriteria] = useState(stage.criteria.join("\n"));
   const [guidance, setGuidance] = useState(stage.guidance);
   const [panel, setPanel] = useState<string[]>(stage.panelUserIds);
@@ -53,7 +54,7 @@ function StageEditor({ scope, stage, data, last }: { scope: AdmissionScope; stag
         onSubmit={(event) => {
           event.preventDefault();
           const list = criteria.split("\n").map((line) => line.trim()).filter(Boolean);
-          run(key("save"), () => updateApplicationStage({ ...scope, stageId: stage.id, status, stage: { name, reviewsPerApplication: Number(target), blindReview: blind, criteria: list, guidance, opensAt: null, closesAt: null } }), "Stage saved.");
+          run(key("save"), () => updateApplicationStage({ ...scope, stageId: stage.id, status, stage: { name, reviewsPerApplication: Number(target), blindReview: blind, freshEyes, criteria: list, guidance, opensAt: null, closesAt: null } }), "Stage saved.");
         }}
       >
         <div className="grid gap-4 md:grid-cols-3">
@@ -70,6 +71,15 @@ function StageEditor({ scope, stage, data, last }: { scope: AdmissionScope; stag
           </Field>
         </div>
         <SwitchRow label="Blind review" description="Reviewers don't see names, email addresses, phone numbers or team names." checked={blind} onCheckedChange={setBlind} />
+        {stage.position > 1 ? (
+          <SwitchRow
+            label="Fresh eyes"
+            description={stage.status === "DRAFT" ? "Nobody reviews an application here that they reviewed in an earlier stage. Fixed once the stage opens." : "Nobody reviews an application here that they reviewed in an earlier stage. Fixed now the stage has opened."}
+            checked={freshEyes}
+            onCheckedChange={setFreshEyes}
+            disabled={stage.status !== "DRAFT"}
+          />
+        ) : null}
         <Field label="Criteria" optional helperText="One per line, up to 10. Each is scored 1 to 5. Leave empty for one overall score.">
           <Textarea rows={3} value={criteria} onChange={(event) => setCriteria(event.target.value)} />
         </Field>

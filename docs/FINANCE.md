@@ -100,12 +100,11 @@ create, edit, close (**Close to new claims**) and delete them
     `tookPartInRound`). Solo participants never qualify.
   - `ADMISSION_STAGE` (`admissionStageId`, on an event taking applications,
     [Applications](ADMISSION.md)): the person's application (their team's for
-    a team member, their own when solo) reached the stage and is still in
-    review, offered, waitlisted or accepted, by Admission's own
-    `applicationReachedStage`; with `requireAccepted`, only accepted
-    applications. A withdrawn, declined, expired or rejected application no
-    longer qualifies, also at approval. An admission stage a policy is for
-    can't be deleted.
+    a team member, their own when solo) reached the stage, by Admission's
+    own `applicationReachedStage`, and is ACCEPTED. Applicants in review,
+    waitlisted or offered never qualify; a withdrawn, declined, expired or
+    rejected application no longer qualifies, also at approval. An admission
+    stage a policy is for can't be deleted.
   Every kind needs a confirmed registration, and a check-in when the policy
   asks for attendance. A CHECK keeps exactly the kind's stage id set and a
   trigger keeps the stage in the policy's event. Who a policy is for is fixed

@@ -74,6 +74,8 @@ export type CheckInListGateInput = {
   entryCheckedInAt: Date | string | null;
   force: boolean;
   list: { name: string; archived: boolean; requiresEntryCheckIn: boolean };
+  /** An admission application that isn't ACCEPTED (no override admits it). */
+  applicant?: boolean;
 };
 
 /**
@@ -87,7 +89,7 @@ export function gateListCheckIn(input: CheckInListGateInput): CheckInGate {
   if (input.list.archived) {
     return { ok: false, reason: "This list is archived and read-only.", needsForce: false, blocked: true };
   }
-  const statusGate = gateCheckInForStatus(input.status, input.force);
+  const statusGate = gateCheckInForStatus(input.status, input.force, input.applicant);
   if (!statusGate.ok) return statusGate;
   if (input.list.requiresEntryCheckIn && !input.entryCheckedInAt) {
     return {

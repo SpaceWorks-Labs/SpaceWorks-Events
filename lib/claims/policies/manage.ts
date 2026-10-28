@@ -28,7 +28,6 @@ const saveSchema = z.object({
   judgingRoundId: optionalId,
   mentoringRoundId: optionalId,
   admissionStageId: optionalId,
-  requireAccepted: z.boolean().default(false),
   requireFinalistsPublished: z.boolean().default(false),
   crewKinds: z.array(z.nativeEnum(CrewKind)).max(4).default([]),
   cap: z.string().trim().min(1, "Enter the most each person gets back.").max(20),
@@ -105,7 +104,6 @@ export async function savePolicy(ctx: PolicyAdminContext, input: unknown): Promi
       name: data.name, eligibility: data.eligibility, ...stage, capPerPersonMinor: cap, budgetMinor: budget, categories: [...new Set(data.categories)], ...window,
       requireFinalistsPublished: data.eligibility === ReimbursementEligibility.JUDGING_ROUND_ENTRY && data.requireFinalistsPublished,
       crewKinds: data.eligibility === ReimbursementEligibility.CREW ? [...new Set(data.crewKinds)] : [],
-      requireAccepted: data.eligibility === ReimbursementEligibility.ADMISSION_STAGE && data.requireAccepted,
       attendanceRequired: data.attendanceRequired, active: data.active, notifyWhenAvailable: data.notifyWhenAvailable,
     };
     let policyId = data.policyId;

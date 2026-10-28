@@ -1601,7 +1601,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: false, required: [name, email], properties: { name: { type: string, maxLength: 200 }, email: { type: string, maxLength: 320 }, role: { type: string, maxLength: 80 }, foodPreference: { type: string, maxLength: 80 } } }
+            schema: { type: object, additionalProperties: false, required: [name, email], properties: { name: { type: string, maxLength: 200 }, email: { type: string, maxLength: 320 }, role: { type: string, maxLength: 80 }, foodPreference: { type: string, maxLength: 80 }, withdrawApplication: { type: boolean, description: "Confirms withdrawing the person's open application; without it such a person is refused with 409 ADMISSION_MANAGED." } } }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CrewListResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }

@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     else {
       if (updated.state === "missing") return failure("RSVP not found.", 404);
       if (updated.state === "ineligible") {
-        const currentGate = gateCheckInForStatus(updated.status, Boolean(input.force));
+        const currentGate = gateCheckInForStatus(updated.status, Boolean(input.force), updated.applicant);
         return failure(currentGate.ok ? "Check-in could not be completed." : currentGate.reason, 409);
       }
       data.checkedInAt = updated.checkedInAt.toISOString(); data.alreadyCheckedIn = true;

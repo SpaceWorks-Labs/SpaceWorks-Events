@@ -25,7 +25,7 @@ export type PolicyOptions = {
 type PolicyInput = PolicyAdminRow["input"];
 
 const EMPTY: PolicyInput = {
-  policyId: "", name: "", eligibility: "CONFIRMED_PARTICIPANT", judgingRoundId: "", mentoringRoundId: "", admissionStageId: "", requireAccepted: false, requireFinalistsPublished: false, crewKinds: [],
+  policyId: "", name: "", eligibility: "CONFIRMED_PARTICIPANT", judgingRoundId: "", mentoringRoundId: "", admissionStageId: "", requireFinalistsPublished: false, crewKinds: [],
   cap: "", categories: ["TRAVEL", "ACCOMMODATION"], claimOpensAt: "", claimClosesAt: "", attendanceRequired: false, budget: "", active: true, notifyWhenAvailable: false,
 };
 
@@ -59,15 +59,12 @@ export function PolicyDialog({ scope, initial, options, currency, onClose }: { s
               </Dropdown>
             </Field>
             {stage ? (
-              <Field label={stage === "judging" ? "Judging round" : stage === "mentoring" ? "Mentoring round" : "Admission stage"} helperText={rounds.length === 0 ? (stage === "judging" ? "Add a judging round that takes advanced projects first." : stage === "mentoring" ? "Add a mentoring round on the Mentor Desk first." : "Turn on applications and add a stage first.") : undefined}>
+              <Field label={stage === "judging" ? "Judging round" : stage === "mentoring" ? "Mentoring round" : "Admission stage"} helperText={rounds.length === 0 ? (stage === "judging" ? "Add a judging round that takes advanced projects first." : stage === "mentoring" ? "Add a mentoring round on the Mentor Desk first." : "Turn on applications and add a stage first.") : stage === "admission" ? "Only applicants who reached this stage and accepted their place can claim." : undefined}>
                 <Dropdown value={form[roundKey]} onChange={(event) => set(roundKey, event.target.value)} required>
                   <option value="">{stage === "admission" ? "Choose a stage" : "Choose a round"}</option>
                   {rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}
                 </Dropdown>
               </Field>
-            ) : null}
-            {stage === "admission" ? (
-              <CheckboxField checked={form.requireAccepted} onCheckedChange={(checked) => set("requireAccepted", checked === true)} label="Only accepted applications" description="Otherwise anyone whose application reached the stage and is still in review, offered, waitlisted or accepted." />
             ) : null}
             {stage === "judging" ? (
               <CheckboxField checked={form.requireFinalistsPublished} onCheckedChange={(checked) => set("requireFinalistsPublished", checked === true)} label="Only once this round's finalists are published" />

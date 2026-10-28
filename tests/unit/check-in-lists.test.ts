@@ -74,6 +74,14 @@ describe("gateListCheckIn", () => {
     }
   });
 
+  it("never lets an override admit an admission application that isn't accepted", () => {
+    for (const status of ["WAITLISTED", "PENDING_APPROVAL"] as const) {
+      expect(gateCheckInForStatus(status, true, true)).toMatchObject({ ok: false, blocked: true, needsForce: false, reason: expect.stringContaining("hasn't been accepted") });
+      expect(gateListCheckIn({ status, entryCheckedInAt: null, force: true, list: openList, applicant: true })).toMatchObject({ ok: false, blocked: true });
+    }
+    expect(gateCheckInForStatus("WAITLISTED", true, false)).toEqual({ ok: true });
+  });
+
   it("lets only confirmed guests in without Override", () => {
     expect(gateListCheckIn({ status: "CONFIRMED", entryCheckedInAt: null, force: false, list: openList }).ok).toBe(true);
     expect(gateListCheckIn({ status: "WAITLISTED", entryCheckedInAt: null, force: false, list: openList })).toMatchObject({ ok: false, needsForce: true });

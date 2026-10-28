@@ -14,6 +14,9 @@ import { resolveAdmissionOrganiser } from "@/lib/admission/access";
 import { draftDecisions } from "@/lib/admission/decisions";
 import { HAS_REGISTRATIONS_REFUSAL, setAdmissionEnabled } from "@/lib/admission/settings";
 import { offerNextWaitlisted } from "@/lib/payments/operations";
+import { gateCheckInForStatus } from "@/lib/checkIn";
+import { commitListCheckIn } from "@/lib/checkInListMutations";
+import { commitCheckInProjection } from "@/lib/checkInMutations";
 import { appOf, apply, createAdmissionEvent, decide, organiserCtx, paid, people, setUpAdmission, tearDownAdmission } from "./helpers/admission";
 
 /*
@@ -76,6 +79,19 @@ describe.sequential("admission guards", () => {
     } finally {
       await prisma.organisation.delete({ where: { id: other.id } });
     }
+  });
+
+  it("never checks in a waitlisted applicant, even with an override, at the door or on a list", async () => {
+    const { event, ctx } = await createAdmissionEvent();
+    const waiting = await apply(event, "door");
+    await decide(ctx, [waiting.application.id], "WAITLIST");
+    const at = new Date();
+    const door = await commitCheckInProjection({ rsvpId: waiting.rsvp.id, actorUserId: people.owner, source: "online", checkedInAt: at, force: true });
+    expect(door).toEqual({ state: "ineligible", status: RsvpStatus.WAITLISTED, applicant: true });
+    expect(gateCheckInForStatus(RsvpStatus.WAITLISTED, true, door.state === "ineligible" && door.applicant)).toMatchObject({ ok: false, blocked: true });
+    const list = await prisma.checkInList.create({ data: { eventId: event.id, name: "Lunch" } });
+    expect(await commitListCheckIn({ listId: list.id, rsvpId: waiting.rsvp.id, actorUserId: people.owner, source: "online", checkedInAt: at, force: true })).toMatchObject({ state: "ineligible", gate: { reason: expect.stringContaining("hasn't been accepted") } });
+    expect((await prisma.rSVP.findUniqueOrThrow({ where: { id: waiting.rsvp.id } })).checkedInAt).toBeNull();
   });
 
   it("turns applications on or off only before anyone registers", async () => {

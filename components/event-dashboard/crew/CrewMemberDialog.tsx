@@ -4,7 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import { addCrewMember, updateCrewMember, uploadCrewPhoto } from "@/app/actions/crew";
 import { ImageUploadPicker } from "@/components/forms/ImageUploadPicker";
 import { Button } from "@/components/ui/button";
-import { SwitchRow } from "@/components/ui/choice";
+import { CheckboxField, SwitchRow } from "@/components/ui/choice";
 import { Callout } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Dropdown, Field, Input, Textarea } from "@/components/ui/field";
@@ -51,6 +51,9 @@ export function CrewMemberDialog({
   const [photo, setPhoto] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when the server says this email has an open application (docs/CREW.md "Applicants").
+  const [applicationWarning, setApplicationWarning] = useState<string | null>(null);
+  const [withdrawApplication, setWithdrawApplication] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,9 +79,12 @@ export function CrewMemberDialog({
       const values = { name, email, foodPreference, role, bio, photoUrl: savedPhotoUrl, linkedinUrl, showOnPage, kind };
       const result = member
         ? await updateCrewMember({ organisationSlug, eventId, memberId: member.id, member: values })
-        : await addCrewMember({ organisationSlug, eventId, member: values });
+        : await addCrewMember({ organisationSlug, eventId, member: { ...values, withdrawApplication } });
       if (!result.ok) {
-        setError(result.error);
+        if (result.code === "ADMISSION_MANAGED") {
+          setApplicationWarning(result.error);
+          setWithdrawApplication(false);
+        } else setError(result.error);
         return;
       }
       onSaved(member ? `${name.trim()} updated` : `${name.trim()} added to the crew. Their ticket is on its way.`);
@@ -103,12 +109,25 @@ export function CrewMemberDialog({
           />
           <DialogBody className="flex flex-col gap-4">
             {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
+            {applicationWarning && !editing ? (
+              <Callout tone="warning" role="alert" title="This person has an open application">
+                <p>{applicationWarning}</p>
+                <CheckboxField
+                  className="mt-3"
+                  checked={withdrawApplication}
+                  onCheckedChange={(checked) => setWithdrawApplication(checked === true)}
+                  disabled={busy}
+                  label="Withdraw their application and add them to the crew"
+                  description="Their reviews and decisions stay in the Applications tab as history. This can't be undone."
+                />
+              </Callout>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Name" required>
                 <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.name} autoComplete="off" disabled={busy} autoFocus />
               </Field>
               <Field label="Email" required helperText={editing ? "Never shown on the event page." : "Their ticket is sent here. Never shown on the event page."}>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={LIMITS.email} autoComplete="off" disabled={busy} />
+                <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setApplicationWarning(null); setWithdrawApplication(false); }} maxLength={LIMITS.email} autoComplete="off" disabled={busy} />
               </Field>
               <Field label="Role" optional helperText="For example: Volunteer, Registration desk">
                 <Input value={role} onChange={(e) => setRole(e.target.value)} maxLength={LIMITS.role} disabled={busy} />
@@ -157,7 +176,7 @@ export function CrewMemberDialog({
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={busy} disabled={!name.trim() || !email.trim()}>
+            <Button type="submit" variant="primary" loading={busy} disabled={!name.trim() || !email.trim() || (applicationWarning != null && !editing && !withdrawApplication)}>
               {editing ? "Save changes" : "Add and send ticket"}
             </Button>
           </DialogFooter>

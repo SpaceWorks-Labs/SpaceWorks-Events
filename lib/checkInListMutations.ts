@@ -4,6 +4,7 @@ import { OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { CheckInGate } from "@/lib/checkIn";
 import { gateListCheckIn, type CheckInListSource } from "@/lib/checkInLists";
+import { applicationStatusSelect, isUnacceptedApplicant } from "@/lib/checkInMutations";
 
 export type ListCheckInCommitResult =
   | { state: "checked-in"; checkedInAt: Date }
@@ -42,7 +43,7 @@ export async function commitListCheckIn(params: {
       await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${params.rsvpId} FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "CheckInList" WHERE "id" = ${params.listId} FOR SHARE`;
       const [rsvp, list, existing] = await Promise.all([
-        tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { status: true, checkedInAt: true, eventId: true, orderId: true } }),
+        tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { status: true, checkedInAt: true, eventId: true, orderId: true, ...applicationStatusSelect } }),
         tx.checkInList.findUnique({ where: { id: params.listId }, select: { eventId: true, name: true, archived: true, requiresEntryCheckIn: true, addOn: { select: { id: true, name: true } } } }),
         tx.checkInListRecord.findUnique({ where: { listId_rsvpId: { listId: params.listId, rsvpId: params.rsvpId } }, select: { checkedInAt: true } }),
       ]);
@@ -51,7 +52,7 @@ export async function commitListCheckIn(params: {
         return { state: "ineligible", gate: { ok: false, reason: "This list is archived and read-only.", needsForce: false, blocked: true } };
       }
       if (existing) return { state: "already-checked-in", checkedInAt: existing.checkedInAt };
-      const gate = gateListCheckIn({ status: rsvp.status, entryCheckedInAt: rsvp.checkedInAt, force: params.force, list });
+      const gate = gateListCheckIn({ status: rsvp.status, entryCheckedInAt: rsvp.checkedInAt, force: params.force, list, applicant: rsvp.status !== "CONFIRMED" && isUnacceptedApplicant(rsvp) });
       if (!gate.ok) return { state: "ineligible", gate };
       if (list.addOn) {
         const refused = await addOnAllowance(tx, list.addOn, params.listId, rsvp.orderId);

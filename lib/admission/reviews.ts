@@ -61,7 +61,7 @@ export async function loadReviewItem(ctx: AdmissionContext, assignmentId: string
   const { stage, application } = assignment;
   // Off the panel now, or a conflict: no more reading either.
   const pool = stagePool(stage.panel.map((row) => row.userId), await eligibleReviewers(prisma, ctx.organisationId, ctx.eventId));
-  if (!pool.has(ctx.userId) || (await blockedPairs(prisma, ctx.eventId, [application], [ctx.userId])).size) return null;
+  if (!pool.has(ctx.userId) || (await blockedPairs(prisma, ctx.eventId, [application], [ctx.userId], assignment.stageId)).size) return null;
   const shown = await applicationPeople(prisma, application, stage.blindReview);
   const review = await prisma.admissionReview.findFirst({ where: { assignmentId, answersRevision: application.answersRevision }, select: { scores: true, notes: true } });
   const open = stage.status === AdmissionStageStatus.OPEN && application.status === AdmissionStatus.IN_REVIEW && application.currentStageId === assignment.stageId;
@@ -87,7 +87,7 @@ export async function submitReview(ctx: AdmissionContext, assignmentId: string, 
     if (application.status !== AdmissionStatus.IN_REVIEW || application.currentStageId !== assignment.stageId) return fail("This application has moved on, so it can't be reviewed here any more.");
     const pool = stagePool(stage.panel.map((row) => row.userId), await eligibleReviewers(tx, ctx.organisationId, ctx.eventId));
     if (!pool.has(ctx.userId)) return fail("You aren't on this stage's reviewer panel any more.");
-    if ((await blockedPairs(tx, ctx.eventId, [application], [ctx.userId])).size) return fail("You have a conflict with this application, so you can't review it.");
+    if ((await blockedPairs(tx, ctx.eventId, [application], [ctx.userId], assignment.stageId)).size) return fail("You have a conflict with this application (or reviewed it in an earlier stage, and this stage wants fresh eyes), so you can't review it.");
     const scores = normaliseScores(stage.criteria, input.scores);
     if (!scores) return fail("Score every criterion from 1 to 5.");
     try {
@@ -128,7 +128,7 @@ async function pickReplacement(tx: Prisma.TransactionClient, ctx: AdmissionConte
   const taken = new Set((await tx.admissionReviewAssignment.findMany({ where: { stageId, applicationId: app.id }, select: { reviewerUserId: true } })).map((row) => row.reviewerUserId));
   const candidates = [...pool].filter((id) => !taken.has(id));
   if (candidates.length === 0) return null;
-  const blocked = await blockedPairs(tx, ctx.eventId, [app], candidates);
+  const blocked = await blockedPairs(tx, ctx.eventId, [app], candidates, stageId);
   const loads = await tx.admissionReviewAssignment.groupBy({ by: ["reviewerUserId"], where: { stageId, reviewerUserId: { in: candidates }, status: { not: AdmissionAssignmentStatus.RECUSED } }, _count: { _all: true } });
   const load = new Map(loads.map((row) => [row.reviewerUserId, row._count._all]));
   const ranked = candidates

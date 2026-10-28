@@ -3086,8 +3086,7 @@ enum ReimbursementEligibility {
   /// non-away Mentor Desk check-in).
   MENTORING_ROUND
   /// Participants whose application (their team's, or their own when solo)
-  /// reached `admissionStageId` and is still in play (in review, offered,
-  /// waitlisted or accepted), or only accepted with `requireAccepted`.
+  /// reached `admissionStageId` and has been accepted (ACCEPTED only).
   ADMISSION_STAGE
 }
 
@@ -3110,8 +3109,6 @@ model ReimbursementPolicy {
   /// CREW only: limit to these crew kinds (docs/VOLUNTEERS.md); empty is every crew member.
   crewKinds                 CrewKind[]               @default([])
   admissionStageId          String?
-  /// ADMISSION_STAGE only: the application must also be accepted.
-  requireAccepted           Boolean                  @default(false)
   capPerPersonMinor         BigInt
   /// At least one.
   categories                ExpenseCategory[]
@@ -3895,6 +3892,10 @@ model AdmissionStage {
   reviewsPerApplication Int                  @default(1)
   /// Reviewers don't see who applied (names, emails, phone numbers, team names).
   blindReview           Boolean              @default(false)
+  /// Fresh eyes: nobody reviews an application here that they reviewed in
+  /// an earlier stage (assignment, manual assign and reviewing all refuse
+  /// it). Fixed once the stage leaves DRAFT or has assignments or reviews.
+  freshEyes             Boolean              @default(false)
   /// What reviewers score, each 1..5; none means one overall score.
   criteria              String[]             @default([])
   /// Up to 2000 characters shown to reviewers.

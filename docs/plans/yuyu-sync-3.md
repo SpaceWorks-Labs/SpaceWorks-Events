@@ -113,6 +113,7 @@ commit names its upstream hash on a "cherry picked from Yuyu <hash>" line.
 - `docs/manual/` and the Yuyu PDF are kept.
 - Event-page photo uploads get their own rate-limit bucket. The shared `upload` bucket (certificates, member IDs, ticket designs) stays at 12 an hour.
 - The mobile app calls the API host directly. Android and Apple app ids and fingerprints are runtime settings, never compiled into the release images.
+- The Android App Links fingerprint variable is deliberately named `ANDROID_APP_SHA256_FINGERPRINTS` (Yuyu: `ANDROID_APP_SHA256_CERT_FINGERPRINTS`), matching `ANDROID_APP_PACKAGE_NAME` and `docs/CONFIGURATION.md`. An operator copying a Yuyu `.env` renames it; nothing reads the Yuyu name.
 - Each branch merges into `dev` locally once lint, TypeScript, unit and integration tests, the build, the relevant e2e suites and a review pass. The owner checks everything once at the end. Nothing is pushed unless asked.
 
 ## Not ported

@@ -19,7 +19,8 @@ export const CREW_REGISTRATION_ERROR = "This person is on the event crew. Manage
 export const CREW_EMAIL_REFUSED = "This email is on the event crew and already has a crew ticket. Ask the organisers if you need a different place.";
 
 export type OrganiserCrewContext = { organisationId: string; eventId: string; actorUserId: string };
-export type CrewResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
+/** `ADMISSION_MANAGED`: an open application needs the organiser to confirm withdrawing it. */
+export type CrewResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string; code?: "ADMISSION_MANAGED" };
 
 export const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 
@@ -48,7 +49,12 @@ export const crewProfileSchema = z
  * Organisers also choose the crew kind (display, badges and filters only;
  * never authority). Omitted: VOLUNTEER for a new member, unchanged on edit.
  */
-export const organiserCrewSchema = crewProfileSchema.extend({ showOnPage: z.boolean().default(true), kind: z.nativeEnum(CrewKind).optional() }).strict();
+export const organiserCrewSchema = crewProfileSchema.extend({
+  showOnPage: z.boolean().default(true),
+  kind: z.nativeEnum(CrewKind).optional(),
+  // The organiser confirmed withdrawing an open application (docs/CREW.md "Applicants").
+  withdrawApplication: z.boolean().default(false),
+}).strict();
 
 export type CrewProfileInput = z.infer<typeof crewProfileSchema>;
 
@@ -78,7 +84,7 @@ export function summariseFoodPreferences(values: readonly string[]): Array<{ lab
 }
 
 export type EventForCrew = { id: string; organisationId: string; title: string; status: EventStatus; endDateTime: Date };
-export const eventForCrewSelect = { id: true, organisationId: true, title: true, status: true, endDateTime: true } as const satisfies Prisma.EventSelect;
+export const eventForCrewSelect = { id: true, organisationId: true, title: true, status: true, endDateTime: true, admissionEnabled: true } as const satisfies Prisma.EventSelect;
 
 /**
  * The same Event row lock every capacity, payment and team change takes, so

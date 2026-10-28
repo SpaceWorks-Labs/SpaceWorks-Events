@@ -12,15 +12,6 @@ b4d2e15 Skipped: Yuyu's V1 release docs; the ported changes carry their own docs
 294ccfa Skipped: Yuyu's security-report channel and contribution policy
 e668935 Skipped: Yuyu's own branching policy
 
-# Deferred to its own project (docs/plans/yuyu-sync.md): the mobile API.
-945c05b Deferred: mobile API (session model and tokens)
-077bf71 Deferred: mobile API (shared action cores)
-75d227f Deferred: mobile API (routes and app links)
-15e142a Deferred: mobile API (OpenAPI contract)
-64117fc Deferred: mobile API (docs)
-7918e38 Deferred: mobile API (sign-up close, refresh grace)
-c005b96 Deferred: mobile API (Google azp, app links)
-
 # Third sync, help centre branch (feat/help-centre).
 f997fb8a Skipped: Yuyu's changelog line; dev keeps its own changelog
 671461ce Skipped: Yuyu's AGENTS.md refresh for its own release; dev's AGENTS.md names the guide itself

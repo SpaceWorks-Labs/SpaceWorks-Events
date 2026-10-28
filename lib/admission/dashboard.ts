@@ -24,7 +24,7 @@ export async function loadAdmissionDashboard(ctx: AdmissionContext) {
   });
   if (!event) return null;
   const [stages, eligible, apps, draft, holding] = await Promise.all([
-    prisma.admissionStage.findMany({ where: { eventId: event.id }, orderBy: { position: "asc" }, select: { id: true, position: true, name: true, status: true, reviewsPerApplication: true, blindReview: true, criteria: true, guidance: true, opensAt: true, closesAt: true, panel: { select: { userId: true } }, _count: { select: { entries: true } } } }),
+    prisma.admissionStage.findMany({ where: { eventId: event.id }, orderBy: { position: "asc" }, select: { id: true, position: true, name: true, status: true, reviewsPerApplication: true, blindReview: true, freshEyes: true, criteria: true, guidance: true, opensAt: true, closesAt: true, panel: { select: { userId: true } }, _count: { select: { entries: true } } } }),
     eligibleReviewers(prisma, ctx.organisationId, event.id),
     prisma.admissionApplication.findMany({
       where: { eventId: event.id },
@@ -78,6 +78,7 @@ export async function loadAdmissionDashboard(ctx: AdmissionContext) {
       status: stage.status,
       reviewsPerApplication: stage.reviewsPerApplication,
       blindReview: stage.blindReview,
+      freshEyes: stage.freshEyes,
       criteria: stage.criteria,
       guidance: stage.guidance,
       panelUserIds: stage.panel.map((row) => row.userId),
