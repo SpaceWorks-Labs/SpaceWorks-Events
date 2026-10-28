@@ -2,7 +2,7 @@ import "server-only";
 
 import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import crypto from "node:crypto";
-import { RsvpStatus } from "@prisma/client";
+import { ExpenseClaimStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueOperatorNotice, enqueueRsvpConfirmation } from "@/lib/outbox";
@@ -10,6 +10,14 @@ import { AdmissionManagedError, PaymentOperationError } from "./operations";
 import { lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
 
 const HOUR = 3_600_000;
+
+/** The holder's expense claims go with their registration; a ticket with claims in play stays with them (`code` for API clients). */
+export class OpenClaimsError extends PaymentOperationError {
+  readonly code = "OPEN_CLAIMS";
+  constructor() {
+    super("This ticket has expense claims waiting, approved or paid, so it can't be transferred. Withdraw a waiting claim first, or ask the organisers.");
+  }
+}
 
 /** A new ticket link: the old one stops working once a ticket changes hands. */
 function newTicketToken() {
@@ -54,6 +62,9 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     await lockOrderTargets(tx, order, now);
     const ticket = await tx.rSVP.findFirst({ where: { id: params.rsvpId, orderId: order.id }, select: { attendeeKey: true, guestEmail: true, user: { select: { email: true } } } });
     if (!ticket) throw new PaymentOperationError("Ticket not found.");
+    // Claims are read and withdrawn by registration, so the new holder would see the previous holder's (docs/FINANCE.md).
+    const claims = await tx.expenseClaim.count({ where: { rsvp: { orderId: order.id, attendeeKey: ticket.attendeeKey }, status: { in: [ExpenseClaimStatus.SUBMITTED, ExpenseClaimStatus.APPROVED, ExpenseClaimStatus.PAID] } } });
+    if (claims > 0) throw new OpenClaimsError();
     // The same person's tickets in this order (every date of a pass) move together.
     const seats = await tx.rSVP.findMany({
       where: { orderId: order.id, attendeeKey: ticket.attendeeKey, status: RsvpStatus.CONFIRMED, checkedInAt: null },

@@ -20,4 +20,6 @@ export type ActionErrorCode =
   /** A submission this judge may not score (not submitted, unassigned, conflict of interest, another event's). */
   | "NOT_VISIBLE"
   /** An application's registration, team or order (docs/ADMISSION.md): decided and paid only through the Applications flow. */
-  | "ADMISSION_MANAGED";
+  | "ADMISSION_MANAGED"
+  /** A ticket transfer refused: the holder has expense claims waiting, approved or paid on it. */
+  | "OPEN_CLAIMS";
