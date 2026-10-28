@@ -66,12 +66,18 @@ export function newWebhookEventId() {
 
 /** Fire and forget. Safe to call from any commit point; never throws. */
 export function emitWebhookEvent(emission: WebhookEmission) {
+  // A registration change may have moved its application too (a settled
+  // payment, a cancelled ticket): send the recorded application changes as well.
+  if (emission.type === "registration.status_changed") track(import("@/lib/admission/statusEvents").then((module) => module.drainApplicationEvents()).then(() => undefined));
+  track(enqueueWebhookEvent(emission).then(() => undefined), emission.type);
+}
+
+function track(work: Promise<void>, type = "application.status_changed") {
   const pending = pendingEmits();
-  const task = enqueueWebhookEvent(emission)
-    .then(() => undefined)
+  const task = work
     .catch(() => {
       // Category only: payload loading touches attendee names.
-      console.warn(`[webhooks] could not queue ${emission.type}`);
+      console.warn(`[webhooks] could not queue ${type}`);
     })
     .finally(() => {
       pending.delete(task);

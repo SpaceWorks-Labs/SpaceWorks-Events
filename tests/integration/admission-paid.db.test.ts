@@ -8,6 +8,9 @@ import { prisma } from "@/lib/db";
 import { respondAsApplicant } from "@/lib/admission/respond";
 import { PER_MEMBER_PAID_REFUSAL, setAdmissionEnabled } from "@/lib/admission/settings";
 import { startCheckout } from "@/lib/payments/checkout";
+import { drainApplicationEvents } from "@/lib/admission/statusEvents";
+import { MANUAL_PAID_REFUSAL } from "@/lib/admission/registration";
+import { submitManualTicketOrderCore } from "@/lib/rsvpCore/manual";
 import { payOrder } from "./helpers/paidOrg";
 import { appOf, apply, createAdmissionEvent, decide, organiserCtx, paid, rsvpOf, setUpAdmission, tearDownAdmission } from "./helpers/admission";
 
@@ -46,6 +49,13 @@ describe.sequential("paid applications", () => {
     expect((await payOrder(order.id)).outcome).toBe("confirmed");
     expect((await rsvpOf(a.rsvp.id)).status).toBe(RsvpStatus.CONFIRMED);
     expect(await appOf(a.application.id)).toMatchObject({ status: AdmissionStatus.ACCEPTED });
+    // The trigger-made transition is recorded and sent as a webhook after commit.
+    await drainApplicationEvents();
+    expect(await prisma.admissionStatusEvent.count({ where: { applicationId: a.application.id, status: AdmissionStatus.ACCEPTED, previousStatus: AdmissionStatus.OFFERED, emittedAt: { not: null } } })).toBe(1);
+
+    // An organiser can't add a paid guest who would skip review and the offer.
+    const manual = await submitManualTicketOrderCore({ eventId: event.id, name: "Walk-in", guestEmail: `walkin-${paid.suffix}@example.test`, ticketTypeId: ticket!.id, payment: "offline", answers: {} }, { organisationId: paid.organisationId, actorUserId: ctx.userId });
+    expect(manual).toMatchObject({ ok: false, error: MANUAL_PAID_REFUSAL });
   });
 
   it("has the team leader pay once for the team and confirms every member with the payment", async () => {

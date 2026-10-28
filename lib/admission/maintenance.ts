@@ -84,15 +84,15 @@ export async function runAdmissionMaintenance(now = new Date()) {
     });
   }
 
-  const auto = await prisma.event.findMany({ where: { admissionEnabled: true, admissionMode: AdmissionMode.AUTO, endDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.IN_REVIEW } } }, select: { id: true }, take: BATCH });
+  const auto = await prisma.event.findMany({ where: { admissionEnabled: true, admissionMode: AdmissionMode.AUTO, startDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.IN_REVIEW } } }, select: { id: true }, take: BATCH });
   for (const event of auto) {
     await autoDecide(event.id, now).catch(() => 0);
     touched.add(event.id);
   }
-  const waiting = await prisma.event.findMany({ where: { admissionEnabled: true, endDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.WAITLISTED } } }, select: { id: true }, take: BATCH });
+  const waiting = await prisma.event.findMany({ where: { admissionEnabled: true, startDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.WAITLISTED } } }, select: { id: true }, take: BATCH });
   let promoted = 0;
   for (const event of new Set([...touched, ...waiting.map((row) => row.id)])) promoted += await promoteWaitlisted(event, now).catch(() => 0);
 
-  emitAll(webhooks);
+  await emitAll(webhooks);
   return { expired, reopened, reminded, promoted };
 }

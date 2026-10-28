@@ -3003,12 +3003,18 @@ model AdmissionApplication {
   /// Set at the first released decision; answers can't change after.
   answersLockedAt     DateTime?
   version             Int             @default(1)
+  /// Who applied, kept when the registration or team is gone: the solo
+  /// registrant's or team's name (up to 200 characters), and the attendee key
+  /// of everyone ever in it (one application per person per event).
+  subjectName         String          @default("")
+  applicantKeys       String[]        @default([])
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @default(now()) @updatedAt
 
   event           Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  rsvp            RSVP?                       @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
-  team            Team?                       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  /// SET NULL: a deleted registration or team withdraws and detaches its application (trigger).
+  rsvp            RSVP?                       @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
+  team            Team?                       @relation(fields: [teamId], references: [id], onDelete: SetNull)
   currentStage    AdmissionStage?             @relation("AdmissionCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
   entries         AdmissionStageEntry[]
   assignments     AdmissionReviewAssignment[]
@@ -3016,6 +3022,7 @@ model AdmissionApplication {
   decisions       AdmissionDecision[]
   answerRevisions AdmissionAnswerRevision[]
   conflicts       AdmissionReviewConflict[]
+  statusEvents    AdmissionStatusEvent[]
 
   @@index([eventId, status, queuedAt, id])
   @@index([eventId, status, respondBy])
@@ -3086,20 +3093,21 @@ model AdmissionReviewAssignment {
 /// answers revision; `scores` maps each criterion (or "overall") to 1..5.
 model AdmissionReview {
   id              String   @id @default(cuid())
-  assignmentId    String
+  /// Null once the assignment or the reviewer's account is gone; the review stays.
+  assignmentId    String?
   stageId         String
   applicationId   String
-  reviewerUserId  String
+  reviewerUserId  String?
   answersRevision Int
   scores          Json
   /// Up to 2000 characters; organisers only.
   notes           String   @default("")
   createdAt       DateTime @default(now())
 
-  assignment  AdmissionReviewAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  stage       AdmissionStage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
-  application AdmissionApplication      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  reviewer    User                      @relation(fields: [reviewerUserId], references: [id], onDelete: Cascade)
+  assignment  AdmissionReviewAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  stage       AdmissionStage             @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  application AdmissionApplication       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer    User?                      @relation(fields: [reviewerUserId], references: [id], onDelete: SetNull)
 
   @@unique([assignmentId, answersRevision])
   @@index([applicationId, stageId])
@@ -3201,7 +3209,8 @@ model AdmissionDecision {
 model AdmissionAnswerRevision {
   id              String   @id @default(cuid())
   applicationId   String
-  rsvpId          String
+  /// Null once the registration is gone; the revision stays.
+  rsvpId          String?
   /// The revision these answers belonged to.
   answersRevision Int
   /// [{ fieldId, label, value }] as they were.
@@ -3209,7 +3218,27 @@ model AdmissionAnswerRevision {
   createdAt       DateTime @default(now())
 
   application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  rsvp        RSVP                 @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  rsvp        RSVP?                @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
 
+  @@index([applicationId, createdAt])
+}
+
+/// Every status or stage change of an application, written by a trigger
+/// (also for changes made by other triggers, such as a settled payment) and
+/// turned into application.status_changed webhooks after commit
+/// (lib/admission/statusEvents.ts), which sets `emittedAt`.
+model AdmissionStatusEvent {
+  id             String           @id @default(cuid())
+  applicationId  String
+  eventId        String
+  status         AdmissionStatus
+  previousStatus AdmissionStatus?
+  stageId        String?
+  createdAt      DateTime         @default(now())
+  emittedAt      DateTime?
+
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([emittedAt, createdAt])
   @@index([applicationId, createdAt])
 }

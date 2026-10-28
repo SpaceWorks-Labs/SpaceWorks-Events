@@ -51,7 +51,8 @@ export async function promoteWaitlisted(eventId: string, now = new Date()): Prom
   const webhooks: WebhookEmission[] = [];
   const offered = await prisma.$transaction(async (tx) => {
     const event = await lockAdmissionEvent(tx, eventId);
-    if (!event?.admissionEnabled || event.endDateTime <= now) return 0;
+    // No offers once the event has started: an offer couldn't be answered in time.
+    if (!event?.admissionEnabled || event.startDateTime <= now) return 0;
     const left = offersLeft(offerCeiling(event), await countOfferHolding(tx, event.id));
     if (left === 0) return 0;
     const queue = await tx.admissionApplication.findMany({ where: { eventId, status: AdmissionStatus.WAITLISTED }, orderBy: [{ queuedAt: "asc" }, { id: "asc" }], take: QUEUE_PAGE, select: applicationSelect });
@@ -70,7 +71,7 @@ export async function promoteWaitlisted(eventId: string, now = new Date()): Prom
     for (const id of plan.offer) webhooks.push(...(await offerPlace({ tx, event, app: byId.get(id)!, now })));
     return plan.offer.length;
   }, { timeout: 30_000, maxWait: 10_000 });
-  emitAll(webhooks);
+  await emitAll(webhooks);
   return offered;
 }
 
@@ -82,7 +83,7 @@ export async function autoDecide(eventId: string, now = new Date()): Promise<num
   const webhooks: WebhookEmission[] = [];
   const decided = await prisma.$transaction(async (tx) => {
     const event = await lockAdmissionEvent(tx, eventId);
-    if (!event?.admissionEnabled || event.admissionMode !== AdmissionMode.AUTO || event.endDateTime <= now) return 0;
+    if (!event?.admissionEnabled || event.admissionMode !== AdmissionMode.AUTO || event.startDateTime <= now) return 0;
     let left = offersLeft(offerCeiling(event), await countOfferHolding(tx, event.id));
     const pending = await tx.admissionApplication.findMany({ where: { eventId, status: AdmissionStatus.IN_REVIEW }, orderBy: [{ submittedAt: "asc" }, { id: "asc" }], take: QUEUE_PAGE, select: applicationSelect });
     for (const app of pending) {
@@ -95,6 +96,6 @@ export async function autoDecide(eventId: string, now = new Date()): Promise<num
     }
     return pending.length;
   }, { timeout: 30_000, maxWait: 10_000 });
-  emitAll(webhooks);
+  await emitAll(webhooks);
   return decided;
 }

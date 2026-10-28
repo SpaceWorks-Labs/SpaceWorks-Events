@@ -4,6 +4,7 @@ import { EventPrivacyType, OrderStatus, RegistrationMode, RsvpStatus, SoloPolicy
 import { enqueueRsvpConfirmation, enqueueTeamCreated } from "@/lib/outbox";
 import { noticeEach, noticeSubject, personEmail } from "@/lib/notices";
 import { LEADER_STILL_PAYING, TeamRegistrationError } from "@/lib/rsvpCore/team";
+import { admissionJoinRefusal } from "@/lib/admission/registration";
 import { assignTeamLeaderTx, countConfirmedUnits, settleTeamAfterMemberLeft, teamPlacesTaken } from "@/lib/teamUnits";
 import { generateTeamManageToken, generateTeamToken } from "@/lib/teamToken";
 import { teamNameKey, type TeamRegistrationIntent } from "@/lib/validators";
@@ -67,6 +68,8 @@ export async function planTeamOrder(tx: Prisma.TransactionClient, params: {
   if (!team) throw new TeamRegistrationError("This team link is no longer valid. Ask your team leader for a new one.");
   if (team.status === RsvpStatus.REJECTED) throw new TeamRegistrationError("This team can no longer be joined.");
   if (team.status === RsvpStatus.PENDING_PAYMENT) throw new TeamRegistrationError(LEADER_STILL_PAYING);
+  const closed = await admissionJoinRefusal(tx, { teamId: team.id });
+  if (closed) throw new TeamRegistrationError(closed);
   if (mode === TeamTicketMode.PER_TEAM) throw new TeamRegistrationError("Joining this team is free: its leader paid for the whole team.");
   if (event.teamMaxSize == null || await teamPlacesTaken(tx, team.id, params.now) >= event.teamMaxSize) throw new TeamRegistrationError("This team is already full.");
   return { kind: "join", mode, unitsLeft: null, team };

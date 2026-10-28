@@ -7,7 +7,7 @@ import { enqueueRsvpStatusNotification } from "@/lib/outbox";
 import { onlineAccount, PaymentOperationError } from "@/lib/payments/operations/shared";
 import type { WebhookEmission } from "@/lib/webhooks/emit";
 import type { AdmissionContext } from "./access";
-import { applicationChanged, emitAll } from "./notify";
+import { emitAll } from "./notify";
 import { holdPaidPlace } from "./payment";
 import { promoteWaitlisted } from "./promotion";
 import { extensionRefusal } from "./rules";
@@ -87,7 +87,7 @@ async function respond(eventId: string, applicationId: string, action: RespondAc
         if (event.capacity != null && (await placesTaken(tx, event, now)) >= event.capacity) return fail("There are no free places right now. Try again a little later.");
         if (!(await ticketTypeHasRoom(tx, members[0]?.ticketTypeId ?? null, event.id, now))) return fail("This ticket type has no free places right now. Try again a little later.");
         await updateApplication(tx, app, { status: AdmissionStatus.ACCEPTED, skipReason: null });
-        webhooks.push(...(await setUnitStatus(tx, app, RsvpStatus.CONFIRMED)), applicationChanged(app.id, app.status, AdmissionStatus.ACCEPTED));
+        webhooks.push(...(await setUnitStatus(tx, app, RsvpStatus.CONFIRMED)));
         const team = app.teamId ? await tx.team.findUnique({ where: { id: app.teamId }, select: { name: true } }) : null;
         for (const member of members) {
           const to = personEmailOf(member);
@@ -104,7 +104,7 @@ async function respond(eventId: string, applicationId: string, action: RespondAc
       webhooks.push(...(await closeApplication({ tx, event, app, now }, to)));
       return { ok: true, status: to, paying: false };
     }, { timeout: 20_000, maxWait: 10_000 });
-    emitAll(webhooks);
+    await emitAll(webhooks);
     if (result.ok && promote) await promoteWaitlisted(eventId, now).catch(() => 0);
     return result;
   } catch (error) {

@@ -1,9 +1,10 @@
 import "server-only";
 
-import type { AdmissionStatus, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { AdmissionNoticeKind } from "@/lib/email/admission";
 import { enqueueAdmissionNotices } from "@/lib/outbox/admission";
 import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
+import { drainApplicationEvents } from "./statusEvents";
 import { personEmailOf, personNameOf, unitMembers, type ApplicationRow } from "./state";
 
 /*
@@ -34,11 +35,12 @@ export async function queueNotice(
   await enqueueAdmissionNotices(tx, payloads);
 }
 
-export function applicationChanged(applicationId: string, previousStatus: AdmissionStatus | null, status: AdmissionStatus): WebhookEmission {
-  return { type: "application.status_changed", applicationId, status, previousStatus };
-}
-
-/** Emit collected webhooks; call only after the transaction committed. */
-export function emitAll(emissions: readonly WebhookEmission[]): void {
+/**
+ * Emit collected registration webhooks and the application changes recorded
+ * by the database (lib/admission/statusEvents.ts); call only after the
+ * transaction committed.
+ */
+export async function emitAll(emissions: readonly WebhookEmission[]): Promise<void> {
   for (const emission of emissions) emitWebhookEvent(emission);
+  await drainApplicationEvents().catch(() => 0);
 }

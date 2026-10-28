@@ -61,7 +61,9 @@ export async function stageCoverage(tx: Prisma.TransactionClient, ctx: { organis
   const stage = await tx.admissionStage.findUniqueOrThrow({ where: { id: stageId }, select: { reviewsPerApplication: true, panel: { select: { userId: true } } } });
   const eligible = await eligibleReviewers(tx, ctx.organisationId, ctx.eventId);
   const pool = stagePool(stage.panel.map((row) => row.userId), eligible);
-  const reviews = await tx.admissionReview.findMany({ where: { stageId, applicationId: { in: apps.map((app) => app.id) } }, select: { applicationId: true, reviewerUserId: true, answersRevision: true } });
+  // A review whose reviewer's account is gone no longer counts.
+  const reviews = (await tx.admissionReview.findMany({ where: { stageId, applicationId: { in: apps.map((app) => app.id) }, reviewerUserId: { not: null } }, select: { applicationId: true, reviewerUserId: true, answersRevision: true } }))
+    .map((review) => ({ ...review, reviewerUserId: review.reviewerUserId! }));
   const blocked = await blockedPairs(tx, ctx.eventId, apps, [...new Set(reviews.map((review) => review.reviewerUserId))]);
   const counted = new Map<string, number>();
   for (const app of apps) {

@@ -31,7 +31,7 @@ export async function loadAdmissionDashboard(ctx: AdmissionContext) {
       orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
       take: LIST_LIMIT,
       select: {
-        id: true, rsvpId: true, teamId: true, status: true, currentStageId: true, answersRevision: true, respondBy: true, queuedAt: true, skipReason: true, submittedAt: true, version: true,
+        id: true, rsvpId: true, teamId: true, subjectName: true, status: true, currentStageId: true, answersRevision: true, respondBy: true, queuedAt: true, skipReason: true, submittedAt: true, version: true,
         team: { select: { name: true, _count: { select: { members: true } } } },
         rsvp: { select: { guestName: true, guestEmail: true, user: { select: { name: true, email: true } } } },
         reviews: { select: { stageId: true, scores: true, answersRevision: true } },
@@ -92,7 +92,7 @@ export async function loadAdmissionDashboard(ctx: AdmissionContext) {
       const decision = decisionOf.get(app.id);
       return {
         id: app.id,
-        name: app.team?.name ?? (app.rsvp?.user?.name?.trim() || app.rsvp?.guestName?.trim() || "Guest"),
+        name: app.team?.name ?? (app.rsvp?.user?.name?.trim() || app.rsvp?.guestName?.trim() || app.subjectName || "Guest"),
         email: app.rsvp ? app.rsvp.user?.email ?? app.rsvp.guestEmail : null,
         teamSize: app.team?._count.members ?? null,
         status: app.status,
@@ -130,7 +130,7 @@ export async function applicationDetail(ctx: AdmissionContext, applicationId: st
     answerRevisions: app.answerRevisions.length,
     reviews: app.reviews.map((review) => ({
       stage: review.stage.name,
-      reviewer: review.reviewer.name?.trim() || review.reviewer.email || "Reviewer",
+      reviewer: review.reviewer ? review.reviewer.name?.trim() || review.reviewer.email || "Reviewer" : "Former reviewer",
       scores: review.scores as Record<string, number>,
       mean: reviewMean(review.scores as Record<string, number>),
       notes: review.notes,

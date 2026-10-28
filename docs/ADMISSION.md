@@ -20,7 +20,7 @@ Code: `lib/admission/*` (rules, cores), `app/actions/admission.ts`
 `lib/outbox/admission.ts`, `lib/api/v1/applications.ts`. Schema:
 `prisma/schema.prisma` (`Admission*` models), migrations
 `20261117000000_admission_permission`, `20261117010000_hackathon_admission`,
-`20261117020000_admission_guards`.
+`20261117020000_admission_guards`, `20261117030000_admission_retention`.
 
 ## Setting up
 
@@ -54,8 +54,36 @@ unique. Database triggers make it with the registration
 registration path (guest, account, team create/join, organiser add, order)
 can skip review. A crew ticket never becomes an application
 (`admission_application_shape` and the insert trigger skip `isCrew`). A solo
-registrant who joins a team loses their solo application (deleted if
-untouched, else WITHDRAWN); one leaving a team gets a solo application.
+registrant who joins a team loses their solo application (discarded only when
+nobody touched it in the same transaction, as when a paid leader's
+registration is placed just before its team; else WITHDRAWN); one leaving a
+team gets a solo application.
+
+## Retention and one application per person
+
+- Deleting a registration or a team, by any path (the applicant cancelling,
+  a full refund, an organiser removing a guest or deleting a team, an ended
+  hold replaced by a new order, attendance "No"), **withdraws and detaches**
+  its application (`admission_withdraw_on_delete`, FKs SET NULL). The
+  application keeps `subjectName` and `applicantKeys` (every attendee key
+  ever in it), and its reviews, decisions, stage entries and answer
+  revisions stay. Undo-restore of a removed applicant is refused.
+- Reviews, answer revisions, stage entries, released (and cancelled)
+  decisions and applications are deleted only with their event; an update
+  may only clear a user link (an account deleted). A reviewer's deleted
+  account leaves their reviews, which then no longer count.
+- **One application per person per event**: a registration whose attendee
+  key is already in an application of the event is refused
+  (`admission_registration_guard`; friendly message from
+  `admissionRegistrationRefusal`), whatever happened to that application.
+- Registrations and teams on admission events are created **pending only**:
+  organiser-added paid guests (paid by hand, waived or sent a link) are
+  refused (`MANUAL_PAID_REFUSAL`), and nothing inserts a confirmed place.
+- A team takes new members (join link, matching, organiser move) only while
+  its application is **in review**; an applicant whose own application is
+  closed or holds an offer joins no team. There is no way to reopen a decided
+  team application yet (and its members can't apply again, one application
+  per person), so organisers decide teams once their roster is final.
 
 | Application | Registration(s) |
 | --- | --- |
@@ -120,21 +148,33 @@ Organisers (owners/admins or MANAGE_REGISTRATIONS) draft decisions
 optional note and override reason. `releaseDraftBatch` locks the Event and
 releases all or nothing:
 
-1. every application is unchanged (version, stage) and the outcome still
-   fits (ADVANCE only before the last stage; from WAITLISTED only ACCEPT or
-   REJECT);
-2. every decision meets its stage's review target, or has an override reason;
+1. a decision whose application changed since drafting (version, stage, or
+   an outcome that no longer fits) is **skipped**: it moves to a new draft to
+   decide again, and the release reports how many (`skipped`); if every
+   decision is stale, nothing is released;
+2. every other decision meets its stage's review target, or has an override
+   reason;
 3. offers made fit the offers left (OFFERED + ACCEPTED against the offer
-   capacity).
+   capacity), and no offer is made once the event has started.
 
 Released decisions are append-only (`admission_decision_guard`). The first
 released decision locks the answers. Cancelling a batch keeps it for the
-record (CANCELLED). Releases and cancels are audited.
+record (CANCELLED). Drafts (`ADMISSION_DECISIONS_DRAFTED`), releases, cancels
+and every override with its reason (`ADMISSION_REVIEW_OVERRIDDEN`) are audited.
+
+Once a stage has reviews its criteria, blind review and reviews per
+application can't change (its name, status, guidance and window can), so
+coverage always measures reviews against the rubric they were given. An
+assignment with a review is never removed (manual unassign or a "replace"
+run).
 
 ## Offers
 
 ACCEPT makes the application OFFERED with `respondBy` = now +
 `admissionRsvpDays`, never after the event starts; nothing is held or charged.
+No offer is made once the event has started (release, promotion and AUTO
+all stop). Organiser payment links and approvals refuse application orders
+(`AdmissionManagedError`, code `ADMISSION_MANAGED`).
 The applicant answers from their ticket page (the ticket token is the bearer,
 rate limited), or an organiser answers for them (audited):
 
@@ -199,8 +239,10 @@ The registration email says "Application received" on these events.
 - `application.status_changed` (`docs/WEBHOOKS.md`): event reference,
   application id, the solo or leader registration id, team id, status and
   current stage (id, position, name), previous status. Never answers,
-  scores, reviews or reviewers. Emitted after commit, including stage moves
-  (same status).
+  scores, reviews or reviewers. A trigger records every status or stage
+  change in `AdmissionStatusEvent`, whatever made it (a release, an answer, a
+  settled payment, a deleted registration); after each commit and from the
+  beat those rows are claimed once each and sent (`drainApplicationEvents`).
 - `GET /api/v1/events/:eventId/applications` (`applications:read`,
   `docs/API.md`): counts by status and stage and the offers out. Numbers only.
 

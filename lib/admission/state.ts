@@ -81,6 +81,8 @@ export type UnitMember = Prisma.RSVPGetPayload<{ select: typeof memberSelect }>;
 /** The registrations an application stands for: the solo RSVP, or every team member (leader first). */
 export async function unitMembers(tx: Prisma.TransactionClient, app: Pick<ApplicationRow, "rsvpId" | "teamId">): Promise<UnitMember[]> {
   if (app.rsvpId) return tx.rSVP.findMany({ where: { id: app.rsvpId }, select: memberSelect });
+  // A detached application (its registration or team is gone) has nobody left.
+  if (!app.teamId) return [];
   const team = await tx.team.findUnique({ where: { id: app.teamId! }, select: { leaderRsvpId: true } });
   const members = await tx.rSVP.findMany({ where: { teamId: app.teamId! }, select: memberSelect, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
   return members.sort((a, b) => Number(b.id === team?.leaderRsvpId) - Number(a.id === team?.leaderRsvpId));
@@ -93,6 +95,7 @@ export async function unitOrder(tx: Prisma.TransactionClient, app: Pick<Applicat
     const rsvp = await tx.rSVP.findUnique({ where: { id: app.rsvpId }, select: { order: { select } } });
     return rsvp?.order ?? null;
   }
+  if (!app.teamId) return null;
   return tx.order.findFirst({ where: { teamId: app.teamId!, teamName: { not: null } }, select, orderBy: { createdAt: "asc" } });
 }
 
@@ -107,6 +110,7 @@ export function isPaid(order: { totalMinor: bigint } | null): order is { totalMi
  * (emit after commit).
  */
 export async function setUnitStatus(tx: Prisma.TransactionClient, app: Pick<ApplicationRow, "rsvpId" | "teamId">, to: RsvpStatus, holdExpiresAt: Date | null = null): Promise<RegistrationStatusWebhook[]> {
+  if (!app.rsvpId && !app.teamId) return [];
   if (app.teamId) await tx.team.updateMany({ where: { id: app.teamId, status: { not: to } }, data: { status: to } });
   const where = app.rsvpId ? { id: app.rsvpId } : { teamId: app.teamId! };
   const changing = await tx.rSVP.findMany({ where: { ...where, OR: [{ status: { not: to } }, { holdExpiresAt: { not: holdExpiresAt } }] }, select: { id: true, status: true } });

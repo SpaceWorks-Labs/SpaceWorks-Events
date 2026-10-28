@@ -4,6 +4,7 @@ import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import crypto from "crypto";
 import { EventPrivacyType, OfflinePaymentMethod, OrderStatus, PaymentStatus, RsvpStatus, TeamTicketMode, TicketVisibility, type Prisma } from "@prisma/client";
 import { PER_MEMBER_PAID_REFUSAL } from "@/lib/admission/rules";
+import { admissionRegistrationRefusal, MANUAL_PAID_REFUSAL } from "@/lib/admission/registration";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { noticeOrganisersOfRequest } from "@/lib/notices";
 import { notifyChat } from "@/lib/chat/notify";
@@ -145,6 +146,11 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   // Crew already hold a free crew ticket (docs/CREW.md) and never buy one.
   if ("eventId" in params.target && (await hasCrewEmail(tx, params.target.eventId, emails))) throw new OrderError(CREW_EMAIL_REFUSED);
 
+  // Applications (docs/ADMISSION.md): one per person, and an ended hold is no fresh start.
+  if ("eventId" in params.target) {
+    const applied = await admissionRegistrationRefusal(tx, params.target.eventId, params.buyer.attendeeKey);
+    if (applied) throw new OrderError(applied);
+  }
   // An unpaid hold that has ended no longer blocks these people from registering again.
   const keys = [params.buyer.attendeeKey, ...attendees.flatMap((attendee) => (attendee.email ? [`guest:${attendee.email.trim().toLowerCase()}`] : []))];
   await tx.rSVP.deleteMany({
@@ -216,7 +222,9 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
       const minimum = providerMinimumMinor(params.payment.provider, currency);
       if (totalMinor < minimum) throw new OrderError(`The total is below the smallest payment the provider accepts (${formatMoney(minimum, currency)}).`);
     }
-    if (sellable.admission && teamPlan && teamPlan.mode === TeamTicketMode.PER_MEMBER) {
+    if (sellable.admission && manual) {
+      throw new OrderError(MANUAL_PAID_REFUSAL);
+    } else if (sellable.admission && teamPlan && teamPlan.mode === TeamTicketMode.PER_MEMBER) {
       throw new OrderError(PER_MEMBER_PAID_REFUSAL);
     } else if (sellable.privacyType === EventPrivacyType.APPROVAL_REQUIRED && !manual && (!teamPlan || sellable.admission)) {
       // Sign up first; pay after approval (an accepted application's offer), through a payment link.

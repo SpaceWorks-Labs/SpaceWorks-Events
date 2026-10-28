@@ -1,4 +1,5 @@
 import "server-only";
+import { admissionJoinRefusal } from "@/lib/admission/registration";
 
 import { EventStatus, RegistrationMode, RsvpStatus, TeamJoinRequestStatus } from "@prisma/client";
 import { z } from "zod";
@@ -108,6 +109,9 @@ export async function organiserMoveMember(
     if (target.status === RsvpStatus.PENDING_PAYMENT) return fail("That team's leader is still paying for it.");
     if (rsvp.teamId === target.id) return fail("This person is already in that team.");
     if (target.status === RsvpStatus.REJECTED) return fail("A rejected team can't take new members.");
+    // Applications (docs/ADMISSION.md): a decided team takes nobody new; a closed applicant joins nobody.
+    const closed = await admissionJoinRefusal(tx, { teamId: target.id, rsvpId: rsvp.teamId ? null : rsvp.id });
+    if (closed) return fail(closed);
     // A checked-in person is at the event: moving them into a team without a
     // place would release their unit to the waitlist while they stay inside.
     if (rsvp.checkedInAt && target.status !== RsvpStatus.CONFIRMED) {

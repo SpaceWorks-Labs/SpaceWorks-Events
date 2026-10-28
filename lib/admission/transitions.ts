@@ -2,7 +2,7 @@ import "server-only";
 
 import { AdmissionEntrySource, AdmissionStatus, RsvpStatus, type Prisma } from "@prisma/client";
 import type { WebhookEmission } from "@/lib/webhooks/emit";
-import { applicationChanged, queueNotice } from "./notify";
+import { queueNotice } from "./notify";
 import { respondByFor } from "./rules";
 import { AdmissionError, cancelUnpaidOrder, setUnitStatus, updateApplication, type AdmissionEvent, type ApplicationRow } from "./state";
 
@@ -14,24 +14,28 @@ import { AdmissionError, cancelUnpaidOrder, setUnitStatus, updateApplication, ty
  * paid place leaves the order REQUESTED until the applicant accepts and pays.
  */
 
+export const OFFERS_CLOSED = "The event has started, so no more places can be offered.";
+
 type Change = { tx: Prisma.TransactionClient; event: AdmissionEvent; app: ApplicationRow; now: Date };
 
 const lockAnswers = (app: ApplicationRow, now: Date) => (app.answersLockedAt ? {} : { answersLockedAt: now });
 
 /** Offer a place: OFFERED until respondBy; the registrations stay pending (nothing is held or charged). */
 export async function offerPlace({ tx, event, app, now }: Change): Promise<WebhookEmission[]> {
+  // An offer must be answerable before the event starts.
+  if (event.startDateTime <= now) throw new AdmissionError(OFFERS_CLOSED);
   const respondBy = respondByFor(now, event.admissionRsvpDays, event.startDateTime);
   await updateApplication(tx, app, { status: AdmissionStatus.OFFERED, offeredAt: now, respondBy, queuedAt: null, skipReason: null, offerReminderSentAt: null, decisionRevision: { increment: 1 }, ...lockAnswers(app, now) });
   const registrations = await setUnitStatus(tx, app, RsvpStatus.PENDING_APPROVAL);
   await queueNotice(tx, event.organisationId, app, "offer", app.decisionRevision + 1);
-  return [...registrations, applicationChanged(app.id, app.status, AdmissionStatus.OFFERED)];
+  return [...registrations];
 }
 
 export async function waitlistApplication({ tx, event, app, now }: Change): Promise<WebhookEmission[]> {
   await updateApplication(tx, app, { status: AdmissionStatus.WAITLISTED, queuedAt: app.queuedAt ?? now, respondBy: null, decisionRevision: { increment: 1 }, ...lockAnswers(app, now) });
   const registrations = await setUnitStatus(tx, app, RsvpStatus.WAITLISTED);
   await queueNotice(tx, event.organisationId, app, "waitlisted", app.decisionRevision + 1);
-  return [...registrations, applicationChanged(app.id, app.status, AdmissionStatus.WAITLISTED)];
+  return [...registrations];
 }
 
 export async function rejectApplication({ tx, event, app, now }: Change): Promise<WebhookEmission[]> {
@@ -39,7 +43,7 @@ export async function rejectApplication({ tx, event, app, now }: Change): Promis
   const registrations = await setUnitStatus(tx, app, RsvpStatus.REJECTED);
   await cancelUnpaidOrder(tx, app);
   await queueNotice(tx, event.organisationId, app, "rejected", app.decisionRevision + 1);
-  return [...registrations, applicationChanged(app.id, app.status, AdmissionStatus.REJECTED)];
+  return [...registrations];
 }
 
 /** Move an application in review to the stage after its current one. */
@@ -50,7 +54,7 @@ export async function advanceApplication({ tx, event, app, now }: Change, params
   await tx.admissionStageEntry.create({ data: { stageId: next.id, applicationId: app.id, source: AdmissionEntrySource.ADVANCED, advancedByUserId: params.actorUserId, advancedAt: now, sourceRank: params.sourceRank } });
   await updateApplication(tx, app, { currentStageId: next.id, decisionRevision: { increment: 1 }, ...lockAnswers(app, now) });
   if (event.emailApplicantsOnStageAdvance) await queueNotice(tx, event.organisationId, app, "stage-advanced", app.decisionRevision + 1);
-  return [applicationChanged(app.id, app.status, app.status)];
+  return [];
 }
 
 /**
@@ -63,5 +67,5 @@ export async function closeApplication({ tx, event, app }: Change, to: "DECLINED
   const registrations = await setUnitStatus(tx, app, RsvpStatus.REJECTED);
   await cancelUnpaidOrder(tx, app);
   if (to === "EXPIRED") await queueNotice(tx, event.organisationId, app, "expired", app.decisionRevision + 1);
-  return [...registrations, applicationChanged(app.id, app.status, to)];
+  return [...registrations];
 }
