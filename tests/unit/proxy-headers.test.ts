@@ -69,3 +69,22 @@ describe("capability page caching", () => {
     expect(other.headers.get("cache-control")).toBe("no-transform");
   });
 });
+
+describe("split-hosting view reads", () => {
+  const view = "https://api.example.test/api/frontend/view/app__account__page%3AloadAccountView";
+  const globalChecks = () => mocks.checkRateLimit.mock.calls.filter(([, bucket]) => bucket === "global").length;
+
+  it("lets the website's authenticated view reads skip the global bucket, like a single-server render", async () => {
+    vi.stubEnv("FRONTEND_GATEWAY_SECRET", "g".repeat(64));
+    mocks.checkRateLimit.mockClear();
+    await proxy(new NextRequest(view, { method: "POST", headers: { "x-swe-frontend-key": "g".repeat(64) } }));
+    expect(globalChecks()).toBe(0);
+    // Actions and every other API path still count.
+    await proxy(new NextRequest("https://api.example.test/api/frontend/action/x", { method: "POST", headers: { "x-swe-frontend-key": "g".repeat(64) } }));
+    await proxy(new NextRequest(view, { method: "POST" }));
+    expect(globalChecks()).toBe(2);
+    // A wrong key never reaches the limiter or the reader.
+    expect((await proxy(new NextRequest(view, { method: "POST", headers: { "x-swe-frontend-key": "x".repeat(64) } }))).status).toBe(404);
+    vi.unstubAllEnvs();
+  });
+});

@@ -61,7 +61,7 @@ export function teamsMatchingTests() {
     const matching = page.locator("section", { has: page.locator("#team-matching") });
     await expect(matching.locator("p", { hasText: "Sasha S." }).first()).toBeVisible();
     await waitForHydration(page, "section:has(#team-matching) button");
-    await matching.getByRole("button", { name: "Invite", exact: true }).click();
+    await matching.getByRole("button", { name: "Invite Sasha S.", exact: true }).click();
     await expect(matching.getByRole("heading", { name: "Invitations you sent" })).toBeVisible();
     await expect(matching.getByText("Everyone looking for a team has already been invited. Check back later.")).toBeVisible();
     await expect(matching.getByText("No one is looking for a team yet")).toHaveCount(0);

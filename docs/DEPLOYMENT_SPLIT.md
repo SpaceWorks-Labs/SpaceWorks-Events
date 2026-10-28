@@ -109,6 +109,11 @@ retain their tenant-bound bearer validation. The proxy blocks the internal outbo
 readiness and private peer routes. The worker and the beat run on the VPS; they
 never depend on a Netlify scheduled function.
 
+A page render reads its data from the API's private view route, often a dozen
+or more reads per page. Those authenticated reads skip the per-visitor global API
+limit, as a single-server page render does; peer actions and every other API
+request keep their limits.
+
 Ticket state streams connect straight to the API hostname so long-lived SSE does
 not occupy a Netlify function. Only ticket status/events routes return CORS for
 the exact frontend origin; they expose only the existing rate-limited state
