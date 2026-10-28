@@ -3,6 +3,9 @@ import { loadEventDashboard } from "@/lib/eventDashboard/context";
 import { prisma } from "@/lib/db";
 import { CATEGORY_LABELS, financeCurrency } from "@/lib/claims/shared";
 import { loadEventFinance } from "@/lib/finance";
+import { eligibilityChanges } from "@/lib/claims/policies/claims";
+import { listPolicies, policyAdminRows, policyStageOptions } from "@/lib/claims/policies/view";
+import { safeTimeZone } from "@/lib/timeZone";
 import { formatMoney } from "@/lib/payments/money";
 
 /**
@@ -17,7 +20,19 @@ export async function loadFinancePanel({ ctx }: { ctx: EventDashboardContext; })
   const currency = await financeCurrency(prisma, ctx.event);
   if (ctx.permissions.isAdmin) {
     const finance = await loadEventFinance(ctx.event.id, ctx.organisation.id);
-    return finance ? { admin: true as const, scope, categories, currency, finance, userId: ctx.userId, exportHref: `/api/exports/events/${ctx.event.id}/finance` } : null;
+    if (!finance) return null;
+    const [policies, stageOptions, changed] = await Promise.all([
+      listPolicies(prisma, ctx.event.id),
+      policyStageOptions(prisma, ctx.event.id),
+      // Waiting policy claims whose person no longer qualifies, flagged for approvers.
+      prisma.expenseClaim.findMany({ where: { id: { in: finance.claims.map((claim) => claim.id) }, status: "SUBMITTED", policyId: { not: null } }, select: { id: true, status: true, eventId: true, rsvpId: true, policyId: true, eligibilitySnapshot: true } }).then((rows) => eligibilityChanges(prisma, rows)),
+    ]);
+    const claims = finance.claims.map((claim) => ({ ...claim, eligibilityChanged: changed.get(claim.id) ?? null }));
+    return {
+      admin: true as const, scope, categories, currency, finance: { ...finance, claims }, userId: ctx.userId, exportHref: `/api/exports/events/${ctx.event.id}/finance`,
+      policies: policyAdminRows(policies, currency, safeTimeZone(ctx.event.timezone)),
+      policyOptions: { ...stageOptions, categories },
+    };
   }
   const mine = await prisma.expenseClaim.findMany({
     where: { eventId: ctx.event.id, submittedByUserId: ctx.userId },

@@ -14,7 +14,9 @@ import { useSave } from "./shared";
  * Staff can claim on behalf of someone else (a speaker or volunteer);
  * participants claim for themselves from their ticket page.
  */
-export function ClaimForm({ kind, hidden, categories, currency, note }: {
+type PolicyOption = { id: string; name: string; left: string; categories: Array<{ value: string; label: string; }>; };
+
+export function ClaimForm({ kind, hidden, categories, currency, note, policies = [], general = true }: {
   /** Staff claim on the event dashboard, or a participant's from their ticket. */
   kind: "staff" | "participant";
   /** Fields the action needs besides the form's own (event scope, or the ticket token). */
@@ -22,10 +24,18 @@ export function ClaimForm({ kind, hidden, categories, currency, note }: {
   categories: Array<{ value: string; label: string; }>;
   currency: string;
   note?: string | null;
+  /** Participant and crew claims: reimbursement policies open to them now, with what is left. */
+  policies?: PolicyOption[];
+  /** Whether the event's general claims (no policy) are open too. */
+  general?: boolean;
 }) {
   const action = kind === "staff" ? submitStaffClaimAction : submitParticipantClaimAction;
   const formRef = useRef<HTMLFormElement>(null);
-  const [category, setCategory] = useState(categories[0]?.value ?? "OTHER");
+  const [policyId, setPolicyId] = useState(general ? "" : (policies[0]?.id ?? ""));
+  const policy = policies.find((option) => option.id === policyId);
+  const choices = policy ? policy.categories : categories;
+  const [picked, setCategory] = useState(choices[0]?.value ?? "OTHER");
+  const category = choices.some((option) => option.value === picked) ? picked : (choices[0]?.value ?? "OTHER");
   const { pending, error, save } = useSave();
   return (
     <form
@@ -35,14 +45,24 @@ export function ClaimForm({ kind, hidden, categories, currency, note }: {
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
         for (const [name, value] of Object.entries(hidden)) formData.set(name, value);
+        formData.set("category", category);
+        if (kind === "participant") formData.set("policyId", policyId);
         save(() => action(formData), "Claim sent. The organisers will email you when it's decided.", () => formRef.current?.reset());
       }}
     >
       {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
       {note ? <p className="text-caption text-ink-muted">{note}</p> : null}
+      {policies.length > 0 ? (
+        <Field label="Claim under" helperText={policy ? `${policy.left} left for you under ${policy.name}.` : "The event's general expense claims."}>
+          <Dropdown value={policyId} onChange={(event) => setPolicyId(event.target.value)}>
+            {general ? <option value="">General expenses</option> : null}
+            {policies.map((option) => <option key={option.id} value={option.id}>{option.name} ({option.left} left)</option>)}
+          </Dropdown>
+        </Field>
+      ) : null}
       <Field label="What for">
         <Dropdown name="category" value={category} onChange={(event) => setCategory(event.target.value)}>
-          {categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {choices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </Dropdown>
       </Field>
       <Field label="Details" helperText="Where you went or what you bought, and why.">

@@ -25,6 +25,11 @@ export type ClaimRow = {
   payeeEmail?: string;
   kind?: string;
   approvedInput?: string;
+  /** Reimbursement policy (docs/FINANCE.md "Reimbursement policies"). */
+  policyId?: string | null;
+  policy?: string | null;
+  /** For approvers: why the person no longer qualifies under the policy, if so. */
+  eligibilityChanged?: string | null;
 };
 
 type Dialogs = { kind: "approve" | "reject" | "pay"; claim: ClaimRow; } | null;
@@ -32,13 +37,25 @@ type Dialogs = { kind: "approve" | "reject" | "pay"; claim: ClaimRow; } | null;
 /** Claims on the Finance tab: everything for owners and admins, your own for everyone else. */
 export function ClaimsList({ scope, claims, admin, timezone, currency }: { scope: FinanceScope; claims: ClaimRow[]; admin: boolean; timezone: string; currency: string; }) {
   const [open, setOpen] = useState<Dialogs>(null);
+  const [filter, setFilter] = useState("all");
   const withdraw = useSave();
+  const policies = [...new Map(claims.flatMap((claim) => (claim.policyId && claim.policy ? [[claim.policyId, claim.policy] as const] : []))).entries()];
+  const shown = filter === "all" ? claims : claims.filter((claim) => (filter === "none" ? !claim.policyId : claim.policyId === filter));
   if (claims.length === 0) return <p className="text-caption text-ink-muted">{admin ? "No expense claims yet." : "You haven't claimed anything for this event."}</p>;
   return (
     <>
       {withdraw.error ? <Callout tone="danger" role="alert">{withdraw.error}</Callout> : null}
+      {admin && policies.length > 0 ? (
+        <Field label="Policy">
+          <Dropdown value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option value="all">All claims</option>
+            <option value="none">No policy</option>
+            {policies.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </Dropdown>
+        </Field>
+      ) : null}
       <ul className="flex flex-col divide-y divide-line">
-        {claims.map((claim) => (
+        {shown.map((claim) => (
           <li key={claim.id} className="flex flex-col gap-2 py-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
@@ -46,7 +63,9 @@ export function ClaimsList({ scope, claims, admin, timezone, currency }: { scope
                 <p className="text-caption text-ink-muted">
                   {claim.payeeName ? `${claim.payeeName}${claim.kind === "PARTICIPANT" ? " (participant)" : claim.kind === "CREW" ? " (crew)" : ""} · ` : ""}{formatDayTime(claim.createdAt, timezone)}
                 </p>
+                {claim.policy ? <p className="text-caption text-ink-muted">Policy: {claim.policy}</p> : null}
                 <p className="mt-1 whitespace-pre-line text-body-ui text-ink-secondary">{claim.description}</p>
+                {admin && claim.eligibilityChanged ? <Callout tone="warning" className="mt-2" title="Eligibility changed since submission">{claim.eligibilityChanged} Approval is refused until it is met again; you can reject the claim.</Callout> : null}
                 {claim.note ? <p className="mt-1 text-caption text-ink-muted">Note: {claim.note}</p> : null}
               </div>
               <Chip tone={CLAIM_STATUS[claim.status]?.tone ?? "neutral"} size="sm">{CLAIM_STATUS[claim.status]?.label ?? claim.status}</Chip>
