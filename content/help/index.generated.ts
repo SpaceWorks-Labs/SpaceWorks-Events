@@ -1312,6 +1312,57 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "attending/still-coming": {
+    "headings": [
+      {
+        "id": "answer-the-question",
+        "title": "Answer the question",
+        "level": 2
+      },
+      {
+        "id": "saying-no",
+        "title": "Saying No",
+        "level": 2
+      },
+      {
+        "id": "changing-your-answer",
+        "title": "Changing your answer",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Shortly before an event, the organisers may email you to ask whether you're still coming. It helps them plan food, seats and staff, and lets them offer your place to someone else if you can't make it. Answering takes a moment and you don't need an account. The email is only sent to people with a confirmed place, and only when the organisers choose to ask. Its subject is \"Are you still coming to\" followed by the event name; a reminder starts with \"Reminder:\". Organisers can also send you the same link by text or chat."
+      },
+      {
+        "heading": "Answer the question",
+        "anchor": "answer-the-question",
+        "text": "Open the email and choose Yes, I'll be there or No, I can't make it. Your answer page opens with that choice picked. It shows the event's date, time and place, and your name and email. If you like, add a Note for the organisers, such as \"Arriving late\". Notes can be up to 500 characters. Choose Send my answer. You'll see \"Thanks, see you there!\" or \"Thanks for letting us know\", with your answer and when you sent it. The organisers see your answer and note straight away. The link is private to you: anyone with it can answer for you. If the organisers send a reminder or a new link, the earlier one stops working, so use the newest."
+      },
+      {
+        "heading": "Saying No",
+        "anchor": "saying-no",
+        "text": "What happens when you say No depends on how the organisers set up the event, and on your ticket: Your answer is just recorded. You keep your place and your ticket. The organisers may follow up with you. Your place is released. The page warns you first with \"Answering No releases your place\", and the button changes to Release my place. When you send it, your registration is cancelled and your place can go to someone else. You'll see \"Your place has been released\". A paid ticket you bought on its own order is cancelled under the event's refund policy, the same as cancelling from your order page. You get back what the policy allows, and the buyer is emailed about the refund. See Asking for a refund. A paid ticket after the refund window has closed keeps its place. Your No is sent to the organisers with a refund request, and they decide. A paid ticket on an order with several tickets, or one someone else paid for, is never cancelled from this page. Your answer goes to the organisers, who will sort out the order with whoever paid. The page only says your place will be released when that is really what will happen. A released place can't be taken back from the answer page. If your plans change, register again from the event page while places are left. If you've already been checked in at the event, you keep your place whatever you answer. On a team event, a released place cancels only your own registration, as if you'd left the team. See Registering as a team."
+      },
+      {
+        "heading": "Changing your answer",
+        "anchor": "changing-your-answer",
+        "text": "You can change your answer until the event starts. Open the link again, choose Change my answer, pick the other option and send it. If you answered No and your place was released, you can't change it: register again instead. Once the event has started, the page says \"Answers are closed\" and shows the answer you gave."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "If the event has been cancelled, or your registration is no longer confirmed, the page explains that there's nothing to answer. Answering Yes doesn't replace your ticket. Bring your QR code as usual. See Your ticket. You can also cancel from your ticket at any time before you're checked in. If you have an account, your answers are included when you download your data."
+      }
+    ]
+  },
   "attending/submitting-a-project": {
     "headings": [
       {
@@ -3496,6 +3547,82 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "guests/attendance-confirmation": {
+    "headings": [
+      {
+        "id": "who-gets-asked",
+        "title": "Who gets asked",
+        "level": 2
+      },
+      {
+        "id": "ask-your-guests",
+        "title": "Ask your guests",
+        "level": 2
+      },
+      {
+        "id": "guests-who-get-a-place-later",
+        "title": "Guests who get a place later",
+        "level": 3
+      },
+      {
+        "id": "reminding-people-who-haven-t-replied",
+        "title": "Reminding people who haven't replied",
+        "level": 3
+      },
+      {
+        "id": "sending-a-guest-s-link-yourself",
+        "title": "Sending a guest's link yourself",
+        "level": 3
+      },
+      {
+        "id": "freeing-places-when-a-guest-says-no",
+        "title": "Freeing places when a guest says No",
+        "level": 2
+      },
+      {
+        "id": "following-the-replies",
+        "title": "Following the replies",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "A day or two before a busy event, it helps to know who is really coming. Attendance confirmation emails every confirmed guest a short \"Are you still coming?\" with Yes and No buttons, and collects the answers for you. If you like, a No can free the guest's place for someone else. Nothing is ever sent automatically. There's no schedule or timer: guests are only asked when you choose to ask them. Owners and admins of the organisation. No co-organiser permission covers emailing guests, so co-organisers don't see the Attendance confirmation card or the Share attendance link option."
+      },
+      {
+        "heading": "Who gets asked",
+        "anchor": "who-gets-asked",
+        "text": "Every guest whose registration is Going on a one-off event, at the address they registered with. On team events, each team member is asked individually. Guests on the waitlist, waiting for approval, waiting to pay, or declined are never asked. Crew are never asked: they're running the event. A guest who was asked and then joins the crew loses the question, and its link stops working. Each guest is only asked once. Anyone already asked is skipped, even if two organisers press send at the same time. Recurring series dates and passes can't be asked yet."
+      },
+      {
+        "heading": "Ask your guests",
+        "anchor": "ask-your-guests",
+        "text": "Open the event and choose the Emails tab. The Attendance confirmation card is at the top. Decide whether a No should free the guest's place (see below), and set Free the place when a guest says No before you send. Choose Ask guests to confirm attendance. Check how many confirmed guests will be asked and the event date. Choose the send button, for example Send to 40 guests. Each guest gets one email, and each email counts towards your email sending limit. The email shows the event's date, time and place, with two buttons: Yes, I'll be there and No, I can't make it. Choosing one opens the guest's private answer page with that answer picked; they then send it and can add a note of up to 500 characters. See Answering \"Are you still coming?\" for what guests see. Most organisers send it one or two days before the event. You can send until the event starts. Guests who get a place later After the first send, the button reads Ask newly confirmed guests. Use it for people who got a place since, for example from the waitlist. It only asks guests who haven't been asked before. Reminding people who haven't replied Choose Remind people who haven't replied and confirm. Guests without an answer get the question again, with a new link; the link in their earlier email stops working. Each guest can be reminded at most once every 12 hours, and the card tells you when the next reminder is possible. You can send or remind up to 10 times an hour. Sending a guest's link yourself If you'd rather reach someone by text or WhatsApp, or their email isn't getting through, you can copy their personal link and send it yourself. Open the Guests tab and choose People. Find the guest, open the row's menu and choose Share attendance link. Choose Create link, then Copy link, and paste it into your message. No email is sent. The link opens the same answer page as the email. Send it only to that guest, because anyone with the link can answer for them. If the guest hasn't been asked yet, they now count as asked and show No reply. Ask guests to confirm attendance won't email them as well. If they were already asked, the button reads Create new link. The new link replaces the one in their email, which stops working. An answer they already gave stays, and they can change it with the new link. For safety, Space Works Events can't show a link again later. Each time you choose Share attendance link, you get a new one, and the previous one stops working. The option shows for guests who are Going, until the event starts."
+      },
+      {
+        "heading": "Freeing places when a guest says No",
+        "anchor": "freeing-places-when-a-guest-says-no",
+        "text": "Free the place when a guest says No is off unless you turn it on. Off: a No is only recorded. The guest keeps their registration until you or they cancel it. On: a No gives the place up, in the same way the guest could themselves. What \"giving the place up\" means depends on the ticket: Ticket What a No does Free The registration is cancelled, as if the guest cancelled from their ticket. If you don't approve each sign-up, the next person on the waitlist moves up. On team events the usual team rules apply, such as passing leadership on. Paid, on an order of its own, and the person answering bought it The order is cancelled under the event's refund policy, exactly as the buyer could cancel it from their order page, and they get back what the policy allows. Paid, but the refund policy no longer allows a cancellation The place is kept and a refund request is opened for you. Approve or decline it under Finance. See Refund requests. Paid, on an order with several tickets (or a team ticket that pays for the whole team), or bought by someone else Nothing is cancelled. You get an email (and a chat message, if your chat is connected), and the guest list shows Said No · paid. Cancel or refund it yourself if you need to: see Refunds and cancellations. Guests are warned before they send a No that releases their place, and they can't take it back from the answer page: they'd have to register again while places are left. A guest who has already checked in always keeps their place, but their answer is still recorded. The email follows the switch, and the guest's own ticket, at the moment it's delivered: it only mentions giving up the place when that would really happen. It never promises the place to someone on the waitlist, because events where you approve each sign-up don't move anyone up automatically. Choose the setting before you send. The confirmation step reminds you which way it's set: \"A No frees their place\" or \"A No is recorded only\"."
+      },
+      {
+        "heading": "Following the replies",
+        "anchor": "following-the-replies",
+        "text": "Answers from a link you shared yourself show up in exactly the same places as answers from the email. The card shows how many guests were asked, when and by whom the last email went, and counts for Coming, Not coming, No reply and Newly confirmed, not asked. If places were released, it says how many. Guests → People shows each guest's answer as a chip (Said No · paid when a paid place was kept) and any note under their row. A drop-down filters the list by answer, with counts, and saved views keep it. See The guest list. The check-in desk shows the answer chip for guests who were asked, never their note. See The check-in desk. The Overview tab adds a line such as \"Attendance: 12 coming · 3 not coming · 5 no reply\" once anyone has been asked. The guest CSV has Attendance confirmation and Attendance note columns. See Exporting guest data. Guests can change their answer until the event starts. After that, the replies are final."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "You can't ask, remind or share links once the event has started, or if it's cancelled. A queued email is dropped rather than sent if the guest has already answered, is no longer going, or the event was cancelled. Cloning an event copies the Free the place when a guest says No setting, never the questions or answers. See Cloning, cancelling and deleting. Answers are deleted with the registration. Guests' own answers are included when they download their data. For any other message to guests, see Emailing your guests."
+      }
+    ]
+  },
   "guests/automatic-emails": {
     "headings": [
       {
@@ -3851,7 +3978,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Guest statuses",
         "anchor": "guest-statuses",
-        "text": "Status Meaning Going Has a place and a ticket. Waitlist Signed up when the event was full and is waiting for a place. To approve Asked to join an event where you approve each sign-up. Declined You turned down their request or removed them from the waitlist. Unpaid Has places held while they pay for a ticket. Narrow the list with the filter chips (All, Going, Waitlist, To approve, Declined, Checked in, Not checked in), choose Everyone, Guests only (registered without an account) or Signed-in users, and search by name or email. Team events add In a team and Solo. See Filters and saved views."
+        "text": "Status Meaning Going Has a place and a ticket. Waitlist Signed up when the event was full and is waiting for a place. To approve Asked to join an event where you approve each sign-up. Declined You turned down their request or removed them from the waitlist. Unpaid Has places held while they pay for a ticket. Narrow the list with the filter chips (All, Going, Waitlist, To approve, Declined, Checked in, Not checked in), choose Everyone, Guests only (registered without an account) or Signed-in users, and search by name or email. Team events add In a team and Solo. Once you've asked guests whether they're still coming, an attendance drop-down filters by their answer, and each row shows the answer and any note. See Filters and saved views and Attendance confirmation."
       },
       {
         "heading": "Approving, declining and giving places",

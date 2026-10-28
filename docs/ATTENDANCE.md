@@ -23,7 +23,7 @@ Space Works rules for paid tickets.
 
 ## Who is asked
 
-Every **CONFIRMED registration of a one-off event**, one email per person (each
+Every **CONFIRMED, non-crew registration of a one-off event**, one email per person (each
 team member individually), to the registration's own address. Waitlisted,
 pending-approval, pending-payment, rejected and cancelled registrations are
 never asked, and neither are **series dates or passes** (their registrations
@@ -31,8 +31,11 @@ belong to an `EventInstance`, and a check always points at an `Event`).
 
 The rule lives in one function, `attendanceEligibleRsvpWhere`
 (`lib/attendanceEligibility.ts`), used by sending, reminders, shared links,
-delivery, replies, the card counts and the Guests filters. Event crew (a later
-branch) adds `isCrew: false` there.
+delivery, replies, the card counts and the Guests filters. It requires
+`isCrew: false`: [crew](CREW.md) are never asked, counted or given a link, and
+carry no attendance badge. Adding an asked guest to the crew deletes their
+question, so its link stops working and a later No can never release a crew
+ticket.
 
 ## Sending
 
@@ -147,6 +150,9 @@ token or a note.
 | Server Actions | `app/actions/attendance-check.ts` |
 | Page | `app/attend/[token]/page.tsx`, `lib/views/app__attend__token__page.ts`, `components/attendance/` |
 | Dashboard | `components/event-dashboard/emails/AttendanceCheckCard.tsx`, `guests/AttendanceLinkDialog.tsx`, `GuestRow.tsx`, `panels/GuestsPeople/Toolbar.tsx` |
+
+The guide's articles are `content/help/guests/attendance-confirmation.mdx`
+(organisers) and `content/help/attending/still-coming.mdx` (guests).
 
 Not covered yet: series dates and passes, the mobile API, and any automatic
 sending (see `docs/FUTURE_PHASES.md`).

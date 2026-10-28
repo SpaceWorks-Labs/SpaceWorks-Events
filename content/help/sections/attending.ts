@@ -12,6 +12,7 @@ export const attending = {
     { slug: "attending/orders-and-receipts", title: "Your order and receipt", summary: "Open your order page, download your receipt, and find your tickets after paying." },
     { slug: "attending/asking-for-a-refund", title: "Asking for a refund", summary: "Request your money back, and what happens when an event is cancelled." },
     { slug: "attending/your-ticket", title: "Your ticket", summary: "Open, download and use your QR ticket, add it to your calendar, or cancel." },
+    { slug: "attending/still-coming", title: "Answering \"Are you still coming?\"", summary: "Tell the organisers whether you can still make it, and what a No does to your place." },
     { slug: "attending/teams", title: "Registering as a team", summary: "Create or join a team, register solo, find teammates, and manage your team page." },
     { slug: "attending/submitting-a-project", title: "Submitting a hackathon project", summary: "Draft, submit, edit and withdraw your team's or your own project." },
     { slug: "attending/claiming-expenses", title: "Claiming expenses", summary: "Ask the organiser to pay back travel or other costs from your ticket page." },
