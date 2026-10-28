@@ -159,6 +159,11 @@ that lost awards are not given back (reassign them on the Awards tab).
   broadcasts (admin), and webhooks (admin) all refuse a judge-only
   collaborator, and `eventCapabilities` (`canJudge`, `isJudgeOnly`) shows such
   a viewer only the judging workspace. See [Permissions](PERMISSIONS.md).
+- Judges are organisation staff: a `JUDGE` collaborator, like an owner or
+  admin, must pass the staff authenticator check this session
+  (`lib/staffMfa.ts`) before `resolveJudgeContext` grants anything, and the
+  cores' own re-check (`isEligibleJudge`) fails closed the same way for the
+  person acting, so a judging context resolved earlier stops working too.
 - **Managing judging is owner/admin only.** Settings, the rubric, judge
   assignments, disqualification and reinstatement, awards, results
   publication, and the scores CSV (`canManageJudging`, `resolveJudgingOrganiser`)
@@ -169,6 +174,18 @@ that lost awards are not given back (reassign them on the Awards tab).
   dedicated grant could delegate it.
 - Organisers choose **All judges see all submissions** or assign specific
   submissions to specific judges (`JudgeAssignment`).
+- **Recusal** (as Space Works judging has it): a judge assigned to a project
+  in the open round can **Recuse myself** from it on the scoring view (web)
+  or `POST …/judging/submissions/:submissionId/recusal` (mobile), until
+  their review of it is submitted (then it is the organisers' call). The
+  assignment stays with `recusedAt` set: the project leaves the judge's list,
+  scoring and "Score next" in that round, manual and automatic assignment
+  never give it back to them (an automatic run leaves recused rows alone and
+  treats the pair as blocked), and it counts like a missing review in
+  Progress, whose Judges list shows each judge's recusals. The judge sees a
+  **Recused** list with **Undo** while the round is open (`DELETE` on the
+  same mobile path). Removing the assignment clears the recusal with it.
+  Audited (`JUDGE_RECUSED`, `JUDGE_RECUSAL_WITHDRAWN`).
 - The **Judges** tab lists **Invited judges** (`JUDGE` grants; its count is
   theirs alone) with an empty state linking to Settings, then **Organisers who
   can also judge** (owners and admins). Inside the Judging tab, the **Score**
@@ -300,7 +317,8 @@ interest. Rules are pure functions in `lib/judgingProgress.ts`.
   assignments, scores, or reviews. Assigned (or, when judges see all, every
   project they may see), started (scores saved, review unsubmitted),
   submitted, and completion (submitted reviews of those projects over their
-  number, 0 to 100), lowest completion first.
+  number, 0 to 100), lowest completion first. Projects a judge recused from
+  leave their expected work and coverage, and the row says how many.
 - **Outlier scores**: for a project with counted reviews from n ≥ 3 judges,
   a judge whose weighted percentage differs from the mean of the other
   judges' by more than 2 × the population standard deviation of all n; with
@@ -416,7 +434,14 @@ audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
   with a reason when some fall short (missing reviews are never counted as
   zero). A finalised round can't reopen, and its target and score method
   can't change; finalising can be undone until finalists have advanced. It
-  is separate from publishing results.
+  is separate from publishing results. Finalising freezes which reviews count:
+  the counted (project, judge) pairs are stored in `JudgingRoundCountedReview`
+  (`JudgingRound.countedFrozenAt` marks it), and the round's Results table,
+  CSV and finalist advancement read them from then on, so a judge grant
+  revoked, a panel changed or a new conflict later never moves a finalised
+  ranking (a project disqualified since still drops out). Undoing finalising
+  clears the snapshot and the round counts live again. Rounds finalised
+  before this snapshot existed keep counting live.
 - **Advancing finalists** into an ADVANCED round from the round before it,
   once that round is closed and finalised: the top N scored projects of its
   ranking (the Results table's order; a tie at the cut is flagged) or a
@@ -433,15 +458,21 @@ audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
   the Awards picker and the CSV rank the current round (the final one once
   it has opened); publishing results is refused while a later round is still
   DRAFT. When the final round judges advanced finalists, only its finalists
-  can win an award (checked on the server). Prizes and payouts follow the
-  award winners as before.
+  can win an award (`lib/core/judging/rounds/awardEligibility.ts`): picking a
+  winner checks it, advancing finalists into the final round removes award
+  winners left out (the preview warns how many; audited in
+  `JUDGING_FINALISTS_ADVANCED` as `awardWinnersRemoved`), publishing results
+  is refused while any winner isn't a finalist, and the public results page
+  and prize payouts apply the same rule. With more than one round, results
+  are published only once the final round is finalised; a single-round event
+  publishes from a closed round as before.
 - **Judges' round switcher** offers the rounds that have opened and the
   current round, never a later DRAFT round (refused on the server too).
 - **Publishing finalists** (separate from results) sets
   `finalistsPublishedAt`, shows a **Finalists** block on
   `/{org}/{event}/results` (titles, entrant display names and links,
   alphabetical; never scores or ranks; the page exists once either finalists
-  or results are published). When **Email entrants when results are
+  or results are published, and is titled "Finalists" until results are). When **Email entrants when results are
   published** is on (`Event.emailEntrantsOnResults`, off by default; the
   single gate is `entrantJudgingEmailsEnabled`), it queues one transactional
   `finalists-announced` email per address of the finalists' confirmed
@@ -523,7 +554,8 @@ audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
   `/{orgSlug}/{eventSlug}/results` (awards, winners' project titles, team or
   entrant display names, and links), and, only when
   `emailEntrantsOnResults` is on (see [Hackathon emails](#hackathon-emails)),
-  queues one `results-published` email per confirmed entrant member, once:
+  queues one `results-published` email per confirmed entrant member (crew
+  places are never emailed, and the recipient count leaves them out), once:
   unpublishing withdraws undelivered
   announcements (and, when none had been delivered, clears
   `resultsAnnouncedAt`), and a re-publication emails only addresses whose copy
@@ -622,7 +654,19 @@ audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
   and recorded, conflict-free and balanced, manual changes audited, panels
   narrowing the pool, fresh eyes. `judging-rounds-migration.db.test.ts`: the
   migration backfill, the expand-phase fill and mirror triggers, and
-  cascades.
+  cascades. `judging-rounds-frozen.db.test.ts`: a finalised round's counted
+  reviews frozen against a revoked grant until unfinalised, and a deletion
+  undo putting a finalist place back only into the round it was taken from
+  once open. `judging-results-guards.db.test.ts`: award winners kept to the
+  final round's finalists (advancement removes them, publishing refuses, the
+  public page and payouts skip them), multi-round results only after
+  finalising, the finalists-only page title, and the results email leaving
+  crew out. `judging-recusal.db.test.ts`: recusing only from an assigned
+  project in the open round before a submitted review, hidden and unscorable
+  after, never reassigned to that judge, shown in Progress, undo, audited.
+  `judging-judge-mfa.db.test.ts`: a `JUDGE` collaborator without this
+  session's authenticator check refused by the Server Actions and by the
+  cores' re-check.
   `tests/integration/hackathon-email-toggles.db.test.ts`: both switches
   `NOT NULL DEFAULT false`, also for rows written without them; publishing
   with the results switch off queues

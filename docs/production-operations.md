@@ -137,6 +137,7 @@ How to read the lock notes. Prisma runs each migration in one transaction withou
 | `20261118030000_reimbursement_crew_kinds` | `ReimbursementPolicy.crewKinds` (empty means every crew member) with a CHECK | Safe |
 | `20261118040000_reimbursement_admission_kind` | Adds `ADMISSION_STAGE` to `ReimbursementEligibility`, alone in its migration | Safe (the type arrives in the same release) |
 | `20261118050000_reimbursement_admission_stage` | `ReimbursementPolicy.admissionStageId` (`NO ACTION` foreign key to `AdmissionStage`) and `requireAccepted` (default `false`); the stage-shape CHECK and stage trigger are replaced to cover admission stages | Safe |
+| `20261119000000_judging_counted_reviews_recusal` | Nullable `JudgeAssignment.recusedAt` (judge self-recusal); nullable `JudgingRound.countedFrozenAt` with a CHECK that it is set only on a finalised round (a scan of `JudgingRound`); new `JudgingRoundCountedReview` table (the reviews a finalised round counted) cascading on `JudgingRound`. No backfill: rounds finalised earlier keep counting live | Safe |
 
 The release that adds `/help` also reserves that organisation address: `npm run db:verify` fails if an organisation already uses it (see [Reserved organisation addresses](#reserved-organisation-addresses)). Rename it before upgrading.
 
