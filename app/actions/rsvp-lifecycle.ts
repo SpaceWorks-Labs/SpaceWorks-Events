@@ -46,7 +46,7 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
-  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR };
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR, code: "TEAM_MEMBER" };
   if (rsvp.status !== RsvpStatus.PENDING_APPROVAL) {
     return { ok: false, error: "Only pending requests can be approved." };
   }
@@ -77,6 +77,7 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
       return {
         ok: false,
         error: "Event is at capacity. Free a spot or promote from waitlist first.",
+        code: "CAPACITY_FULL",
       };
     }
     if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
@@ -106,6 +107,7 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
     return {
       ok: false,
       error: "This occurrence is at capacity.",
+      code: "CAPACITY_FULL",
     };
   }
   if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
@@ -145,7 +147,7 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
-  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR };
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR, code: "TEAM_MEMBER" };
   if (
     rsvp.status !== RsvpStatus.PENDING_APPROVAL &&
     rsvp.status !== RsvpStatus.WAITLISTED
@@ -241,7 +243,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
-  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR };
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR, code: "TEAM_MEMBER" };
   if (rsvp.status !== RsvpStatus.WAITLISTED) {
     return { ok: false, error: "Only waitlisted attendees can be promoted." };
   }
@@ -264,7 +266,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
       ...(to ? { notification: { to, eventTitle: ctx.event.title, checkInToken: rsvp.checkInToken } } : {}),
     });
     if (result === "full") {
-      return { ok: false, error: "Event is still at capacity." };
+      return { ok: false, error: "Event is still at capacity.", code: "CAPACITY_FULL" };
     }
     if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
     await recordAuditEvent({ action: "RSVP_WAITLIST_PROMOTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
@@ -286,7 +288,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
     ...(to ? { notification: { to, eventTitle: series.title, checkInToken: rsvp.checkInToken } } : {}),
   });
   if (result === "full") {
-    return { ok: false, error: "This occurrence is still at capacity." };
+    return { ok: false, error: "This occurrence is still at capacity.", code: "CAPACITY_FULL" };
   }
   if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
   await recordAuditEvent({ action: "RSVP_WAITLIST_PROMOTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });

@@ -9,6 +9,7 @@ import { CancelRsvpButton } from "@/components/ticket/CancelRsvpButton";
 import { TicketSeekerPanel, TicketTeamCard } from "@/components/team/TicketTeamSection";
 import { TicketJoinTeamForm } from "@/components/team/JoinTeamWithRegistration";
 import { TicketSubmissionCard } from "@/components/submission/TicketSubmissionCard";
+import { TicketMentorDeskCard } from "@/components/mentor-desk/participant/TicketMentorDeskCard";
 import { TicketDownloadButton } from "@/components/ticket/TicketDownloadButton";
 import { TicketClaims } from "@/components/ticket/TicketClaims";
 import { TicketStatusStorageSync } from "@/components/ticket/TicketStatusStorageSync";
@@ -30,7 +31,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function TicketPage({ params, searchParams }: Props) {
-  const { isCrew, designedTicket, claims, teamSection, submissionMode, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const { isCrew, designedTicket, claims, teamSection, submissionMode, mentorDesk, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
   const teamBlock = teamSection?.kind === "member" ? (
     <TicketTeamCard ticketToken={rsvp.checkInToken} team={teamSection.team} manageHref={teamSection.manageHref} canLeave={teamSection.canLeave} eventPageHref={eventPageHref} />
   ) : teamSection?.kind === "solo" ? (
@@ -204,6 +205,8 @@ export default async function TicketPage({ params, searchParams }: Props) {
         {teamBlock}
 
         {submissionMode ? <TicketSubmissionCard ticketToken={rsvp.checkInToken} mode={submissionMode} /> : null}
+
+        {mentorDesk ? <TicketMentorDeskCard desk={mentorDesk} /> : null}
 
         {claims ? <TicketClaims ticketToken={rsvp.checkInToken} view={claims} /> : null}
 

@@ -4,6 +4,8 @@ import { isTeamTokenShape } from "@/lib/teamToken";
 import { loadTeamPageData } from "@/lib/teamPageData";
 import { resolveEntrantByTeamManageToken } from "@/lib/core/judging";
 import { loadSubmissionEditorView } from "@/lib/submissionEditorView";
+import { resolveParticipantByManageToken } from "@/lib/core/mentorDesk/access";
+import { loadParticipantDesk } from "@/lib/core/mentorDesk/readsParticipant";
 
 /** The leader's team page by management token, a bearer capability: unknown or retired tokens are a plain 404. */
 export async function loadTeamManageView({ params }: { params: Promise<{ token: string; }>; }) {
@@ -17,5 +19,8 @@ export async function loadTeamManageView({ params }: { params: Promise<{ token: 
   // The same management link edits the team's hackathon submission (docs/HACKATHON.md).
   const entrant = await resolveEntrantByTeamManageToken(raw);
   const submission = entrant ? await loadSubmissionEditorView(entrant) : null;
-  return { data, teamRef: { manageToken: raw }, submission };
+  // The same link raises help and books office hours when the Mentor Desk is on (docs/MENTOR_DESK.md).
+  const participant = await resolveParticipantByManageToken(raw);
+  const mentorDesk = participant ? await loadParticipantDesk(participant) : null;
+  return { data, teamRef: { manageToken: raw }, submission, mentorDesk };
 }

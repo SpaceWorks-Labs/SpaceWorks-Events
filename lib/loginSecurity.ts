@@ -84,7 +84,9 @@ export async function consumeSignInCode(userId: string, code: string) {
   return used.count === 1;
 }
 
-function describeBrowser(userAgent: string) {
+/** The Space Works mobile app sends `SpaceWorksEvents/<version> (<Android|iOS> …)`. */
+export function describeBrowser(userAgent: string) {
+  if (/^SpaceWorksEvents\//.test(userAgent)) return `the Space Works app on ${/iOS|iPhone|iPad/.test(userAgent) ? "iOS" : /Android/.test(userAgent) ? "Android" : "a phone"}`;
   const browser = /Edg\//.test(userAgent) ? "Edge" : /Firefox\//.test(userAgent) ? "Firefox" : /Chrome\//.test(userAgent) ? "Chrome" : /Safari\//.test(userAgent) ? "Safari" : "A browser";
   const system = /Windows/.test(userAgent) ? "Windows" : /Android/.test(userAgent) ? "Android" : /iPhone|iPad/.test(userAgent) ? "iOS" : /Mac OS X/.test(userAgent) ? "macOS" : /Linux/.test(userAgent) ? "Linux" : "an unknown system";
   return `${browser} on ${system}`;

@@ -10,6 +10,7 @@ import { MEMBER_ID_EMAIL_KIND } from "@/lib/memberIds/email";
 import { PAYMENT_EMAIL_KIND } from "@/lib/payments/email";
 import { isTeamMessageKind, teamMessageOrganisation } from "./team";
 import { isJudgingMessageKind, judgingMessageOrganisation } from "./judging";
+import { isMentorMessageKind, mentorMessageOrganisation } from "./mentor";
 import { EVENT_REMINDER_KIND } from "./payloads";
 import { ATTENDANCE_CHECK_KIND, attendanceMessageOrganisation } from "./attendance";
 
@@ -107,6 +108,7 @@ export async function messageOrganisation(kind: string, payload: Prisma.JsonValu
   if (isTeamMessageKind(kind)) return teamMessageOrganisation(kind, p);
   if (isJudgingMessageKind(kind)) return judgingMessageOrganisation(kind, p);
   if (kind === ATTENDANCE_CHECK_KIND) return attendanceMessageOrganisation(p);
+  if (isMentorMessageKind(kind)) return mentorMessageOrganisation(kind, p);
   if (kind === MEMBER_ID_EMAIL_KIND && text("memberId")) return (await prisma.idMember.findUnique({ where: { id: text("memberId")! }, select: { programme: { select: { organisationId: true } } } }))?.programme.organisationId ?? null;
   return null;
 }

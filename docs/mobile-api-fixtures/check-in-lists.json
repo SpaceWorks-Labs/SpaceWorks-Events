@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "data": {
+    "lists": [
+      {
+        "id": "cllist00000000000000001",
+        "name": "Lunch",
+        "requiresEntryCheckIn": true,
+        "checkedIn": 37
+      },
+      {
+        "id": "cllist00000000000000002",
+        "name": "T-shirt",
+        "requiresEntryCheckIn": false,
+        "checkedIn": 12
+      }
+    ]
+  }
+}

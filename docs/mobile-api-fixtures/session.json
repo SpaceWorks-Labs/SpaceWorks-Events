@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "data": {
+    "accessToken": "yma_EXAMPLEaccessTokenEXAMPLEaccessTokenEXAMPL",
+    "accessTokenExpiresAt": "2030-05-01T09:15:00.000Z",
+    "refreshToken": "ymr_EXAMPLErefreshTokenEXAMPLErefreshTokenEXAM",
+    "refreshTokenExpiresAt": "2030-06-30T09:00:00.000Z",
+    "user": {
+      "id": "cluser0000000000000000001",
+      "name": "Ada Organiser",
+      "email": "ada@example.test",
+      "imageUrl": "https://events.example/api/uploads/users/cluser0000000000000000001/profile-images/avatar.webp",
+      "emailVerified": true,
+      "mfaEnabled": false
+    }
+  }
+}

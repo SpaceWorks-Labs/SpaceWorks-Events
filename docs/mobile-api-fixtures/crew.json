@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "data": {
+    "members": [
+      {
+        "id": "clcrew0000000000000000001",
+        "name": "Grace Hopper",
+        "email": "grace@example.test",
+        "role": "Volunteer lead",
+        "foodPreference": "Vegetarian",
+        "showOnPage": true,
+        "joinedViaLink": false,
+        "rsvpId": "clrsvp00000000000000004",
+        "checkedInAt": null
+      }
+    ],
+    "food": [
+      {
+        "label": "Vegetarian",
+        "count": 1
+      }
+    ]
+  }
+}

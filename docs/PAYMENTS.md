@@ -104,6 +104,17 @@ hours, with one reminder a few hours before it ends.
 - **Refused refunds** (for example a low provider balance) are emailed to the
   owners and admins so they can retry or refund another way.
 
+### In the mobile apps
+
+The Space Works apps sell the same tickets ([Mobile API](MOBILE_API.md)): a
+paid registration answers `PENDING_PAYMENT` with the order id and the hosted
+checkout, opened in the system browser, and is never a ticket until the
+provider's webhook confirms it. Signed-in buyers reach their orders by id (the
+access token is never sent to the app) to pay, cancel under the refund policy,
+ask for a refund, download the receipt and transfer tickets. Organisers with
+`MANAGE_REGISTRATIONS` settle at the desk, resend payment links and refund;
+the check-in preview shows what is owed.
+
 ## Reporting
 
 - **Event Analytics** and the **series dashboard** show a Money card: collected,

@@ -1,6 +1,6 @@
 import { requireSuperAdminMfa } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { getEmailSettingsStatus, getGoogleSsoStatus, INSTANCE_SETTINGS_ID, resolveBackupPosture } from "@/lib/instanceSettings";
+import { getEmailSettingsStatus, getGoogleSsoStatus, getMobileGoogleClientIdsFromEnv, INSTANCE_SETTINGS_ID, resolveBackupPosture } from "@/lib/instanceSettings";
 import { decryptInstanceConfigSecret } from "@/lib/instanceConfigSecrets";
 import type { InstanceServiceSettingsFallback } from "@/components/super-admin/InstanceServiceSettingsForm";
 
@@ -57,6 +57,7 @@ export async function loadSuperAdminSettingsView() {
         smtpPort: email.service ? undefined : String(email.port), smtpUser: email.user,
       } : {}),
       ...(google.source === "environment" ? { googleClientId: google.clientId } : {}),
+      ...(settings?.googleMobileClientIds ? {} : { googleMobileClientIds: getMobileGoogleClientIdsFromEnv().join(", ") || undefined }),
       ...(backup.source === "environment" ? {
         backupProvider: backup.provider,
         backupRetentionDays: backup.retentionDays ? String(backup.retentionDays) : undefined,
@@ -75,6 +76,7 @@ export async function loadSuperAdminSettingsView() {
       smtpUser: settings?.smtpUser ?? "",
       smtpAllowUnauthenticated: settings?.smtpAllowUnauthenticated ?? false,
       googleClientId: settings?.googleClientId ?? "",
+      googleMobileClientIds: settings?.googleMobileClientIds ?? "",
       backupProvider: settings?.backupProvider ?? "",
       backupLastSuccessAt: utcInputValue(settings?.backupLastSuccessAt),
       backupRetentionDays: settings?.backupRetentionDays ? String(settings.backupRetentionDays) : "",

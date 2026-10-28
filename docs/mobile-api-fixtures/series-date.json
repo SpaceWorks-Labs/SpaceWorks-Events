@@ -1,0 +1,84 @@
+{
+  "ok": true,
+  "data": {
+    "series": {
+      "slug": "tuesday-runs",
+      "title": "Tuesday Runs",
+      "description": "A 5k loop, every week.",
+      "timezone": "Asia/Kolkata",
+      "requiresApproval": false
+    },
+    "date": {
+      "instanceId": "clinst00000000000000001",
+      "startDateTime": "2030-06-04T18:00:00.000Z",
+      "endDateTime": "2030-06-04T20:00:00.000Z",
+      "capacity": 30,
+      "spotsLeft": 12,
+      "cancelled": false
+    },
+    "registrationOpen": true,
+    "paidRequest": null,
+    "myRsvp": null,
+    "ticketing": {
+      "currency": "INR",
+      "tickets": [
+        {
+          "id": "cltt0000000000000000001",
+          "name": "Season pass",
+          "description": "Entry and lunch",
+          "priceMinor": 49900,
+          "currency": "INR",
+          "minPerOrder": 1,
+          "maxPerOrder": 6,
+          "sales": "ON_SALE",
+          "salesStartAt": null,
+          "salesEndAt": "2030-05-31T18:30:00.000Z",
+          "remaining": 42,
+          "pass": true,
+          "passDates": 8,
+          "flexible": false,
+          "suggestedMinor": null,
+          "maxPriceMinor": null,
+          "seatsPerTicket": 1,
+          "feeMinor": 0,
+          "visibility": "PUBLIC",
+          "payAtDesk": false
+        }
+      ],
+      "addOns": [
+        {
+          "id": "cladd000000000000000001",
+          "name": "T-shirt",
+          "description": "",
+          "priceMinor": 30000,
+          "currency": "INR",
+          "maxPerOrder": 2,
+          "remaining": null
+        }
+      ],
+      "promoCodes": true,
+      "accessCodes": false,
+      "sellsPaid": true,
+      "paidSalesOpen": true,
+      "refundPolicy": "Full refund until 48 hours before the start."
+    },
+    "upcomingDates": [
+      {
+        "instanceId": "clinst00000000000000001",
+        "startDateTime": "2030-06-04T18:00:00.000Z",
+        "endDateTime": "2030-06-04T20:00:00.000Z",
+        "capacity": 30,
+        "spotsLeft": 12,
+        "cancelled": false
+      },
+      {
+        "instanceId": "clinst00000000000000002",
+        "startDateTime": "2030-06-11T18:00:00.000Z",
+        "endDateTime": "2030-06-11T20:00:00.000Z",
+        "capacity": 30,
+        "spotsLeft": 30,
+        "cancelled": false
+      }
+    ]
+  }
+}

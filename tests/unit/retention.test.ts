@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   outbox: vi.fn(),
   webhooks: vi.fn(),
   webhookDeliveries: vi.fn(),
+  mobileSessions: vi.fn(),
   crewPhotos: vi.fn(),
 }));
 
@@ -26,6 +27,7 @@ vi.mock("@/lib/db", () => ({ prisma: {
   outboxMessage: { deleteMany: mocks.outbox },
   processedWebhookEvent: { deleteMany: mocks.webhooks },
   webhookDelivery: { deleteMany: mocks.webhookDeliveries },
+  mobileSession: { deleteMany: mocks.mobileSessions },
 } }));
 
 import { purgeExpiredOperationalData } from "@/lib/retention";
@@ -36,7 +38,7 @@ describe("operational retention", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OUTBOX_RETENTION_DAYS = "30";
-    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries]) {
+    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries, mocks.mobileSessions]) {
       mock.mockResolvedValue({ count: 1 });
     }
     mocks.crewPhotos.mockResolvedValue(2);
@@ -60,6 +62,7 @@ describe("operational retention", () => {
       failedOutboxMessages: 1,
       processedWebhookEvents: 1,
       webhookDeliveries: 1,
+      mobileSessions: 1,
       unusedCrewPhotos: 2,
     });
     expect(mocks.crewPhotos).toHaveBeenCalledWith(now);

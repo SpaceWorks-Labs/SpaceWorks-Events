@@ -46,7 +46,10 @@ export type Bucket =
   | "attendanceCheckSettings"
   | "attendanceCheckLink"
   | "attendanceCheckReply"
-  | "attendanceCheckView";
+  | "attendanceCheckView"
+  | "mobileAuth"
+  | "mobileRefresh"
+  | "mobileApi";
 
 const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   global: { max: 300, windowMs: 60_000 },
@@ -126,6 +129,12 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   attendanceCheckReply: { max: 10, windowMs: 60_000 },
   // Opening /attend/{token}, per client address: links are unguessable, this only blunts scraping.
   attendanceCheckView: { max: 60, windowMs: 60_000 },
+  // Mobile app sign-in (password, Google) and authenticator checks, per IP.
+  mobileAuth: { max: 10, windowMs: 60_000 },
+  // Mobile token refreshes, per IP. Phones at one venue often share a NAT.
+  mobileRefresh: { max: 60, windowMs: 60_000 },
+  // Signed-in mobile requests, per app session (not per IP: venue NAT).
+  mobileApi: { max: 300, windowMs: 60_000 },
 };
 
 // Local fallback store
