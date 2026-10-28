@@ -285,6 +285,20 @@ Cancels the caller's own RSVP with the website's cancel rules (refused after
 check-in, promotes the waitlist, queues emails, audited) → `null`.
 `NOT_FOUND` for anyone else's RSVP.
 
+### `GET` / `POST /me/registrations/:rsvpId/attendance` (auth)
+
+"Are you still coming?" for one of the caller's own registrations
+([Attendance confirmation](ATTENDANCE.md)). `GET` → `{ "attendance": MyAttendance|null }`
+(`null` when never asked): `{ "response", "respondedAt", "note", "closed", "releaseKind", "releaseRefund" }`.
+`POST` `{ "response": "ATTENDING|NOT_ATTENDING", "note"? }` answers with the
+same rules as `/attend/:token` (open until the start, a note of up to 500
+characters, rate limited per registration) → `{ "response", "released", "releaseFailed|null" }`.
+With "Free the place when a guest says No" on, a No releases a free place or
+cancels a paid single ticket the caller bought under the refund policy
+(`released: true`: the registration is gone), or keeps the place and says why.
+The bearer session is the credential: the link token is never needed or
+returned. Not asked or anyone else's RSVP: `NOT_FOUND`; closed: `CONFLICT`.
+
 ## Public (no auth required; a valid bearer, if sent, identifies the attendee; an invalid one is 401)
 
 `EventSummary = { "id", "slug", "title", "coverImageUrl|null", "startDateTime", "endDateTime", "timezone", "location", "mapLinkUrl|null", "isOnline", "accentColor|null", "status", "registrationMode": "INDIVIDUAL|TEAM", "organisation": { "slug", "name", "logoUrl|null" } }`
@@ -484,6 +498,10 @@ up to 200.
 
 `{ "event": EventSummary & { "privacyType", "registrationOpen", "registrationClosesAt|null", "registrationClosedReason|null", "registrationManuallyClosed", "feedbackOpen", "eventUrl", "shortUrl|null" }, "counts": EventCounts|null, "myPermissions": EventPermissions }`
 (`registrationManuallyClosed`: sign-ups were closed from an app and can be reopened there).
+`EventCounts.attendance` is `{ "coming", "notComing", "noReply", "notAsked" }`
+for viewers with `sendEmails` once anyone at the event was asked
+([Attendance confirmation](ATTENDANCE.md)), and `null` otherwise, as on the
+dashboard Overview.
 
 ### Guests
 
@@ -584,6 +602,12 @@ check-ins. History sources: `mobile-scan` (by `rawInput`), `mobile-manual` (by
   web view with JavaScript disabled).
 - `POST …/broadcasts/test` `{ "subject", "body", "design" }` → `{ "to" }` (the caller's own verified inbox).
 - `POST …/broadcasts` `{ "statuses", "attendance", "subject", "body", "design" }` → `201` `{ "broadcastId", "recipientCount" }`.
+- `POST …/guests/:rsvpId/attendance-link` → `{ "url", "replaced" }`: one
+  confirmed guest's attendance link to send by hand (no email), the web's
+  **Share attendance link**. Each call issues a new link that replaces any
+  earlier one; refused (`CONFLICT`) after the start, for a cancelled event and
+  for a guest who isn't a confirmed, non-crew attendee. Audited without the token.
+  Sending the question itself and reminders stay on the web.
 
 `design` is one of `classic`, `minimal`, `accent`, `photo`, `letter` (default
 `classic`). Bodies are sanitised on the server with `sanitizeBroadcastHtml`;

@@ -121,6 +121,9 @@ const fixtures: Array<[file: string, component: string, zod: z.ZodType]> = [
   ["participant-desk.json", "ParticipantDeskResponse", dto.successEnvelope(dto.participantDeskDtoSchema)],
   ["mentor-console.json", "MentorConsoleResponse", dto.successEnvelope(dto.mentorConsoleDtoSchema)],
   ["desk-queue.json", "DeskQueueResponse", dto.successEnvelope(dto.deskQueueDtoSchema)],
+  ["my-attendance.json", "MyAttendanceResponse", dto.successEnvelope(dto.myAttendanceDtoSchema)],
+  ["attendance-reply.json", "AttendanceReplyResponse", dto.successEnvelope(dto.attendanceReplyDtoSchema)],
+  ["attendance-link.json", "AttendanceLinkResponse", dto.successEnvelope(dto.attendanceLinkDtoSchema)],
 ];
 
 describe("mobile API contract", () => {
@@ -275,6 +278,11 @@ describe("mobile API contract", () => {
     ["FeedbackForm", dto.feedbackFormDtoSchema],
     ["EventPermissions", dto.eventPermissionsSchema],
     ["EventCounts", dto.eventCountsSchema],
+    ["AttendanceCounts", dto.attendanceCountsSchema],
+    ["MyAttendance", dto.myAttendanceSchema],
+    ["MyAttendanceResult", dto.myAttendanceDtoSchema],
+    ["AttendanceReply", dto.attendanceReplyDtoSchema],
+    ["AttendanceLink", dto.attendanceLinkDtoSchema],
     ["OrgEventDetail", dto.orgEventDetailDtoSchema],
     ["Guest", dto.guestSchema],
     ["GuestDetail", dto.guestDetailDtoSchema],

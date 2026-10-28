@@ -21,6 +21,7 @@ import { CHAT_MESSAGE_KIND } from "@/lib/chat/notify";
 import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload, asEmailVerificationPayload, asEventInvitePayload, asEventReminderPayload, asOperatorNoticePayload, asPasswordResetPayload, asRsvpConfirmationPayload, asRsvpStatusPayload, asSignInCodePayload, containsCapability, isExpired, messageId, retryDelayMs } from "./payloads";
 import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
+import { ATTENDANCE_CHECK_KIND, deliverAttendanceCheck } from "./attendance";
 import { deliverMentorMessage, isMentorMessageKind } from "./mentor";
 import { deliverCrewMessage, isCrewMessageKind } from "./crew";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
@@ -205,6 +206,15 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if ((await deliverPaymentEmail(payload, stableMessageId)) === "dropped") {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
+          continue;
+        }
+      } else if (message.kind === ATTENDANCE_CHECK_KIND) {
+        const outcome = await deliverAttendanceCheck(message.payload, stableMessageId);
+        if (!outcome) throw new PermanentOutboxError();
+        if (outcome !== "sent") {
+          // A stale question is dropped; one that missed the event's start expired (counted as failed).
+          await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
+          if (outcome === "expired") failed += 1;
           continue;
         }
       } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind)) {

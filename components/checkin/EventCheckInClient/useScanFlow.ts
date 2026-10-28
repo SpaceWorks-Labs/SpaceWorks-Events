@@ -81,6 +81,7 @@ export function useScanFlow({
       checkInDetails: attendee.checkInDetails ?? [],
       registrationDetails: attendee.registrationDetails ?? [],
       teamName: attendee.teamName ?? null,
+      attendance: attendee.attendance ?? null,
       kind: "success",
     });
     if (idCardPrintingEnabled) showIdCard({
@@ -94,6 +95,7 @@ export function useScanFlow({
       checkInDetails: attendee.checkInDetails ?? [],
       registrationDetails: attendee.registrationDetails ?? [],
       teamName: attendee.teamName ?? null,
+      attendance: attendee.attendance ?? null,
     });
     playSuccessFeedback();
     await refreshOfflineState();
@@ -127,6 +129,7 @@ export function useScanFlow({
             checkInDetails: attendee.checkInDetails ?? [],
             registrationDetails: attendee.registrationDetails ?? [],
             teamName: attendee.teamName ?? null,
+            attendance: attendee.attendance ?? null,
             gate,
           });
           setScanIsOffline(true);

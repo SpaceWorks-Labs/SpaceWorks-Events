@@ -182,6 +182,12 @@ enum ScoreNormalization {
   ZSCORE
 }
 
+/// A guest's reply to the organiser's "Are you still coming?" email (docs/ATTENDANCE.md).
+enum AttendanceResponse {
+  ATTENDING
+  NOT_ATTENDING
+}
+
 /// A judging round's lifecycle (docs/HACKATHON.md "Rounds"). At most one
 /// round of an event is OPEN (partial unique index). DRAFT rounds can still
 /// change their rubric and entries; CLOSED freezes scores.
@@ -818,6 +824,7 @@ model Event {
   promoCodes       PromoCode[]
   checkInLists     CheckInList[]
   savedViews       SavedView[]
+  attendanceChecks AttendanceCheck[]
   crewMembers      EventCrewMember[]
   crewJoinLink     EventCrewJoinLink?
 
@@ -869,6 +876,10 @@ model Event {
   /// `submission-received` receipt. Registration and payment emails are never gated.
   emailEntrantsOnResults              Boolean          @default(false)
   emailSubmissionReceipts             Boolean          @default(false)
+  /// Attendance confirmation (docs/ATTENDANCE.md): when a confirmed guest
+  /// answers "No", release their place (free: cancelled; paid: under the
+  /// buyer refund policy, or a refund request). Sending is always manual.
+  attendanceCheckReleaseOnDecline     Boolean          @default(false)
   /// Fee to submit a project, in minor units of the event's currency; null
   /// is free. Paid once per entrant through the normal checkout (Order.submissionId).
   submissionFeeMinor                  BigInt?
@@ -1677,6 +1688,7 @@ model RSVP {
   submission        Submission?
   submissionLink    SubmissionLink?
   expenseClaims     ExpenseClaim[]
+  attendanceCheck   AttendanceCheck?
   helpRequests      HelpRequest[]
   crewMember        EventCrewMember?
   @@index([eventId])
@@ -2499,6 +2511,48 @@ model SubmissionLink {
   rsvp RSVP @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
 }
 
+/// "Are you still coming?" for one CONFIRMED registration of a one-off event
+/// (docs/ATTENDANCE.md). Created only by an organiser's send, reminder or
+/// shared link; nothing is sent automatically. The raw `/attend/{token}`
+/// token is emailed or shown once; only its SHA-256 digest is stored, and a
+/// reminder or a new shared link rotates it. CHECK constraints keep the digest
+/// shape, the note length, the response/respondedAt pair and releaseOutcome.
+model AttendanceCheck {
+  id             String              @id @default(cuid())
+  rsvpId         String              @unique
+  eventId        String
+  /// Hex SHA-256 of the raw token (64 characters).
+  tokenHash      String              @unique
+  /// When the question (or the latest reminder or shared link) was issued.
+  sentAt         DateTime
+  response       AttendanceResponse?
+  respondedAt    DateTime?
+  /// Optional note from the guest, at most 500 characters.
+  note           String?
+  /// A "No" whose place was not released automatically: "multiTicket" or
+  /// "notBuyer" (a paid order; organisers were told), "refundRequested"
+  /// (refund window closed; a refund request was opened) or "failed".
+  releaseOutcome String?
+  /// Set once when owners and admins were told about a "No" on a paid place
+  /// that was kept; never cleared, so changing the answer back and forth
+  /// never repeats the notice.
+  organisersNotifiedAt  DateTime?
+  /// Set once when a "No" opened a refund request (policy closed); never
+  /// cleared, so a later "No" never opens another one.
+  refundRequestOpenedAt DateTime?
+  /// That refund request, withdrawn if the guest says Yes while it is open.
+  refundRequestId       String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  rsvp          RSVP           @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  refundRequest RefundRequest? @relation(fields: [refundRequestId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, response])
+  @@index([refundRequestId])
+}
+
 /// One rubric line. Frozen once judging leaves NOT_STARTED. CHECK
 /// constraints keep weight and maxScore within 1..10.
 model JudgingCriterion {
@@ -2893,6 +2947,8 @@ model RefundRequest {
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   decidedBy    User?        @relation("RefundRequestDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  /// A guest's "No" to attendance confirmation that opened this request (docs/ATTENDANCE.md).
+  attendanceChecks AttendanceCheck[]
 
   @@index([orderId, status])
   @@index([organisationId, status, createdAt])

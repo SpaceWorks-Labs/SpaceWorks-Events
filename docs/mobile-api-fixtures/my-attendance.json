@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "data": {
+    "attendance": {
+      "response": "NOT_ATTENDING",
+      "respondedAt": "2030-05-08T09:15:00.000Z",
+      "note": "Train strike, sorry",
+      "closed": null,
+      "releaseKind": "paid",
+      "releaseRefund": "₹249.50"
+    }
+  }
+}

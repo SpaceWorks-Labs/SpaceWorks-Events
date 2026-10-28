@@ -42,6 +42,11 @@ export type Bucket =
   | "clientError"
   | "webhookManage"
   | "webhookTest"
+  | "attendanceCheckSend"
+  | "attendanceCheckSettings"
+  | "attendanceCheckLink"
+  | "attendanceCheckReply"
+  | "attendanceCheckView"
   | "mobileAuth"
   | "mobileRefresh"
   | "mobileApi";
@@ -113,6 +118,17 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   webhookManage: { max: 30, windowMs: 60_000 },
   // Webhook test sends and manual redeliveries each make an outbound request.
   webhookTest: { max: 20, windowMs: 60 * 60_000 },
+  // Attendance confirmation (docs/ATTENDANCE.md): organiser sends and reminders
+  // queue one email per guest, so they share a tight hourly budget.
+  attendanceCheckSend: { max: 10, windowMs: 60 * 60_000 },
+  // The release-on-decline switch in the Emails tab.
+  attendanceCheckSettings: { max: 30, windowMs: 60_000 },
+  // Guests · People "Share attendance link": one guest per click, no email.
+  attendanceCheckLink: { max: 60, windowMs: 10 * 60_000 },
+  // Public replies on /attend/{token}, per link and per client address.
+  attendanceCheckReply: { max: 10, windowMs: 60_000 },
+  // Opening /attend/{token}, per client address: links are unguessable, this only blunts scraping.
+  attendanceCheckView: { max: 60, windowMs: 60_000 },
   // Mobile app sign-in (password, Google) and authenticator checks, per IP.
   mobileAuth: { max: 10, windowMs: 60_000 },
   // Mobile token refreshes, per IP. Phones at one venue often share a NAT.
