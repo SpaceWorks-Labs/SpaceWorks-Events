@@ -49,9 +49,14 @@ export async function proxy(request: NextRequest) {
   // failed distributed limiter means the application is not fully ready.
   // Payment provider webhooks have their own bucket instead of the global one.
   const isPaymentWebhook = pathname.startsWith("/api/webhooks/");
+  // A split-hosted page render reads its views here, a dozen or more per page.
+  // A single-server render spends no API budget, so these authenticated peer
+  // reads (the gateway key was checked above) skip the per-user global bucket.
+  // Peer actions keep their own limit (lib/frontend/handler.ts).
+  const isPeerView = request.headers.has(GATEWAY_HEADER) && pathname.startsWith("/api/frontend/view/");
   if (isPaymentWebhook) {
     if (!(await checkRateLimit(request, "paymentWebhook"))) return tooMany();
-  } else if (pathname.startsWith("/api") && pathname !== "/api/health") {
+  } else if (pathname.startsWith("/api") && pathname !== "/api/health" && !isPeerView) {
     if (!(await checkRateLimit(request, "global"))) {
       return tooMany(pathname.startsWith("/api/v1"), pathname.startsWith("/api/mobile/"));
     }
