@@ -59,6 +59,9 @@ export async function loadReviewItem(ctx: AdmissionContext, assignmentId: string
   const assignment = await ownAssignment(prisma, ctx, assignmentId);
   if (!assignment || assignment.status === AdmissionAssignmentStatus.RECUSED) return null;
   const { stage, application } = assignment;
+  // Off the panel now, or a conflict: no more reading either.
+  const pool = stagePool(stage.panel.map((row) => row.userId), await eligibleReviewers(prisma, ctx.organisationId, ctx.eventId));
+  if (!pool.has(ctx.userId) || (await blockedPairs(prisma, ctx.eventId, [application], [ctx.userId])).size) return null;
   const shown = await applicationPeople(prisma, application, stage.blindReview);
   const review = await prisma.admissionReview.findFirst({ where: { assignmentId, answersRevision: application.answersRevision }, select: { scores: true, notes: true } });
   const open = stage.status === AdmissionStageStatus.OPEN && application.status === AdmissionStatus.IN_REVIEW && application.currentStageId === assignment.stageId;

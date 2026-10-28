@@ -22,7 +22,8 @@ export function DecisionsBar({ scope, data }: { scope: AdmissionScope; data: Adm
   const short = drafted.filter((app) => app.status === "IN_REVIEW" && app.counted < app.target && !app.draft?.overrideReason).length;
   const summary = (value: unknown) => {
     const counts = value as Record<string, number>;
-    return `Released: ${counts.ACCEPT ?? 0} offered, ${counts.ADVANCE ?? 0} moved on, ${counts.WAITLIST ?? 0} waitlisted, ${counts.REJECT ?? 0} declined.`;
+    const skipped = counts.skipped ? ` ${counts.skipped} changed since drafting and ${counts.skipped === 1 ? "is" : "are"} back in the draft.` : "";
+    return `Released: ${counts.ACCEPT ?? 0} offered, ${counts.ADVANCE ?? 0} moved on, ${counts.WAITLIST ?? 0} waitlisted, ${counts.REJECT ?? 0} declined.${skipped}`;
   };
   return (
     <Callout
@@ -41,7 +42,7 @@ export function DecisionsBar({ scope, data }: { scope: AdmissionScope; data: Adm
       <ConfirmationDialog
         open={confirming}
         title="Release these decisions?"
-        message="Every drafted decision takes effect together and applicants are emailed. If any can't be released, none is."
+        message="The drafted decisions take effect together and applicants are emailed. One whose application changed since drafting goes back into the draft; if any other can't be released, none is."
         confirmLabel="Release"
         destructive={false}
         loading={busy === "release"}

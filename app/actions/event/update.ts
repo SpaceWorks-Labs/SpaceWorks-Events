@@ -16,6 +16,7 @@ import { noticeEach, noticeSubject, whenLabel } from "@/lib/notices";
 import { getBroadcastBaseUrl } from "@/lib/eventBroadcast";
 import { revalidateEventPaths, validationError } from "./shared";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { perMemberRefusal, PER_MEMBER_PAID_REFUSAL } from "@/lib/admission/settings";
 
 const EVENT_UPDATE_REFUSALS = {
   missing: "Event not found.",
@@ -25,6 +26,7 @@ const EVENT_UPDATE_REFUSALS = {
   teamSize: "Maximum team size cannot be lower than the largest current team.",
   groupTickets: "Group tickets can't be used with team registration: each person registers for themselves. Take them off sale first.",
   admissionPrivacy: "This event takes applications, so it stays approval-only. Turn applications off first (Applications tab).",
+  admissionPerMember: PER_MEMBER_PAID_REFUSAL,
 } as const;
 
 export async function updateEvent(input: unknown): Promise<ActionResult> {
@@ -110,10 +112,11 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
   try {
     const saved = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
-      const locked = await tx.event.findUnique({ where: { id: event.id }, select: { status: true, registrationMode: true, admissionEnabled: true } });
+      const locked = await tx.event.findUnique({ where: { id: event.id }, select: { status: true, registrationMode: true, admissionEnabled: true, teamTicketMode: true } });
       if (!locked) return "missing" as const;
-      // Applications (docs/ADMISSION.md) keep the event approval-only.
+      // Applications (docs/ADMISSION.md) keep the event approval-only, and paid team places are paid by the leader.
       if (locked.admissionEnabled && data.privacyType !== EventPrivacyType.APPROVAL_REQUIRED) return "admissionPrivacy" as const;
+      if (locked.admissionEnabled && teamSettings?.registrationMode === RegistrationMode.TEAM && locked.registrationMode !== RegistrationMode.TEAM && (await perMemberRefusal(tx, { id: event.id, registrationMode: RegistrationMode.TEAM, teamTicketMode: locked.teamTicketMode }))) return "admissionPerMember" as const;
       if (data.capacity != null) {
         // TEAM events count units (docs/TEAMS.md); INDIVIDUAL events keep the
         // confirmed-RSVP count.

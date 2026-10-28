@@ -53,7 +53,9 @@ async function buildPlan(tx: Prisma.TransactionClient, ctx: AdmissionContext, in
   const live = assignments.filter((row) => row.status !== AdmissionAssignmentStatus.RECUSED);
   const blocked = await blockedPairs(tx, ctx.eventId, apps, [...new Set([...picked, ...live.map((row) => row.reviewerUserId)])]);
   for (const row of assignments) if (row.status === AdmissionAssignmentStatus.RECUSED) blocked.add(pairKey(row.reviewerUserId, row.applicationId));
-  const started = new Set(live.filter((row) => row.status === AdmissionAssignmentStatus.SUBMITTED).map((row) => pairKey(row.reviewerUserId, row.applicationId)));
+  // Started: any assignment with a review (on any answers) is never removed.
+  const reviewed = new Set((await tx.admissionReview.findMany({ where: { stageId: stage.id, assignmentId: { in: live.map((row) => row.id) } }, select: { assignmentId: true } })).map((row) => row.assignmentId));
+  const started = new Set(live.filter((row) => row.status === AdmissionAssignmentStatus.SUBMITTED || reviewed.has(row.id)).map((row) => pairKey(row.reviewerUserId, row.applicationId)));
   const plan = planAssignments({
     itemIds: apps.map((app) => app.id),
     poolReviewerIds: picked,
@@ -113,7 +115,7 @@ export async function applyAssignment(ctx: AdmissionContext, input: AssignInput)
       select: { id: true },
     });
     const removeIds = plan.remove.map((pair) => built.data.ids.get(pairKey(pair.reviewerId, pair.itemId))).filter((id): id is string => Boolean(id));
-    if (removeIds.length) await tx.admissionReviewAssignment.deleteMany({ where: { id: { in: removeIds }, status: AdmissionAssignmentStatus.ASSIGNED } });
+    if (removeIds.length) await tx.admissionReviewAssignment.deleteMany({ where: { id: { in: removeIds }, status: AdmissionAssignmentStatus.ASSIGNED, reviews: { none: {} } } });
     if (plan.add.length) await tx.admissionReviewAssignment.createMany({ data: plan.add.map((pair) => ({ stageId: stage.id, applicationId: pair.itemId, reviewerUserId: pair.reviewerId, runId: run.id })), skipDuplicates: true });
     await tx.admissionStage.update({ where: { id: stage.id }, data: { reviewsPerApplication: input.perApplication } });
     await recordAuditEvent({
@@ -148,7 +150,7 @@ export async function assignReviewer(ctx: AdmissionContext, params: { stageId: s
 
 /** Remove an assignment not yet reviewed. */
 export async function unassignReviewer(ctx: AdmissionContext, assignmentId: string): Promise<Result<undefined>> {
-  const removed = await prisma.admissionReviewAssignment.deleteMany({ where: { id: assignmentId, status: AdmissionAssignmentStatus.ASSIGNED, stage: { eventId: ctx.eventId, event: { organisationId: ctx.organisationId } } } });
+  const removed = await prisma.admissionReviewAssignment.deleteMany({ where: { id: assignmentId, status: AdmissionAssignmentStatus.ASSIGNED, reviews: { none: {} }, stage: { eventId: ctx.eventId, event: { organisationId: ctx.organisationId } } } });
   if (removed.count !== 1) return fail("Only an assignment that hasn't been reviewed can be removed.");
   await recordAuditEvent({ action: "ADMISSION_REVIEWER_UNASSIGNED", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "Event", targetId: ctx.eventId, metadata: { assignmentId } });
   return { ok: true, data: undefined };

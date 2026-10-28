@@ -79,7 +79,7 @@ describe.sequential("application review", () => {
     expect(await editApplicationAnswers(a.token, { why: "Because" })).toEqual({ ok: true });
     const revisions = await prisma.admissionAnswerRevision.findMany({ where: { applicationId: a.application.id } });
     expect(revisions).toHaveLength(1);
-    await expect(prisma.admissionAnswerRevision.update({ where: { id: revisions[0]!.id }, data: { answers: [] } })).rejects.toThrow(/append-only/);
+    await expect(prisma.admissionAnswerRevision.update({ where: { id: revisions[0]!.id }, data: { answers: [{ fieldId: "x", label: "Rewritten", value: "y" }] } })).rejects.toThrow(/append-only/);
     expect(await appOf(a.application.id)).toMatchObject({ answersRevision: 2 });
     expect((await prisma.admissionReviewAssignment.findUniqueOrThrow({ where: { id: assignment.id } })).status).toBe(AdmissionAssignmentStatus.ASSIGNED);
     // The old review no longer counts, so the decision needs a fresh one (or an override).

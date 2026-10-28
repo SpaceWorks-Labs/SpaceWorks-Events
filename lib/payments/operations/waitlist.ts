@@ -9,7 +9,7 @@ import { enqueuePaymentEmail } from "../email";
 import { HOLD_EXTENSION_CAP_MS, PAYMENT_LINK_HOLD_MS } from "../holds";
 import { providerMinimumMinor } from "../money";
 import { hasFreeSeats, lockSeriesDates, ORDER_SUBJECT_SELECT, orderSubject, seatTargetOf, type SeatTarget } from "../targets";
-import { attendeeEmail, lockOrder, onlineAccount, PaymentOperationError, subjectTitle, ZERO } from "./shared";
+import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, onlineAccount, PaymentOperationError, subjectTitle, ZERO } from "./shared";
 
 /**
  * Offer a paid request (approved, or reached on the waitlist) its seats: the
@@ -39,6 +39,7 @@ export async function offerInTransaction(tx: Prisma.TransactionClient, params: {
 }
 
 export async function offerRequestedOrder(params: { orderId: string; organisationId: string; actorUserId: string | null; now?: Date; }) {
+  if (await isAdmissionOrder(prisma, params.orderId)) throw new AdmissionManagedError();
   const account = await onlineAccount(params.organisationId);
   await prisma.$transaction((tx) => offerInTransaction(tx, { ...params, provider: account.provider, testMode: account.testMode, now: params.now ?? new Date() }));
 }
@@ -167,6 +168,8 @@ export async function sendPaymentLink(params: { orderId: string; organisationId:
     await recordAuditEvent({ action: "PAYMENT_LINK_SENT", actorUserId: params.actorUserId, organisationId: params.organisationId, targetType: "Order", targetId: order.id });
     return "resent";
   }
+  // An application's order is held only through its accepted offer (docs/ADMISSION.md).
+  if (await isAdmissionOrder(prisma, order.id)) throw new AdmissionManagedError();
   if (order.status === OrderStatus.REQUESTED) {
     await offerRequestedOrder(params);
     return "reopened";

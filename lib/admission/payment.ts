@@ -8,7 +8,7 @@ import { providerMinimumMinor } from "@/lib/payments/money";
 import { offerInTransaction } from "@/lib/payments/operations/waitlist";
 import { ORDER_SUBJECT_SELECT, orderSubject } from "@/lib/payments/targets";
 import { countConfirmedUnits } from "@/lib/teamUnits";
-import { AdmissionError, setUnitStatus, unitOrder, type AdmissionEvent, type ApplicationRow } from "./state";
+import { AdmissionError, setUnitStatus, ticketTypeHasRoom, unitOrder, type AdmissionEvent, type ApplicationRow } from "./state";
 
 /*
  * Paying for an accepted offer (docs/ADMISSION.md "Paid places"). A place is
@@ -56,6 +56,9 @@ async function holdTeamPlace(
   if (event.registrationMode === RegistrationMode.TEAM && event.capacity != null && (await countConfirmedUnits(tx, event.id, now)) >= event.capacity) {
     throw new AdmissionError("There are no free places right now. Try again later.");
   }
+  // The leader's ticket type limit, as hasFreeSeats checks for a solo order.
+  const leader = await tx.rSVP.findFirst({ where: { orderId: order.id, teamId: params.teamId }, select: { ticketTypeId: true } });
+  if (!(await ticketTypeHasRoom(tx, leader?.ticketTypeId ?? null, event.id, now))) throw new AdmissionError("This ticket type has no free places right now. Try again later.");
   const holdExpiresAt = new Date(now.getTime() + PAYMENT_LINK_HOLD_MS);
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.PENDING, holdExpiresAt, holdCapAt: new Date(holdExpiresAt.getTime() + HOLD_EXTENSION_CAP_MS), testMode: account.testMode } });
   // The team holds its unit through the leader's hold (countConfirmedUnits); the members, who

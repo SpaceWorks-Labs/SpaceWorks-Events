@@ -22,26 +22,37 @@ beforeAll(() => setUpAdmission("Application batches"));
 afterAll(() => tearDownAdmission());
 
 describe.sequential("decision batches and the waitlist", () => {
-  it("releases nothing when one decision is stale, and nothing from a cancelled batch", async () => {
+  it("skips a stale decision back into the draft, releases nothing from a cancelled batch, and audits overrides", async () => {
     const { event, ctx } = await createAdmissionEvent();
     const a = await apply(event, "one");
     const b = await apply(event, "two");
-    expect(await draftDecisions(ctx, { applicationIds: [a.application.id], outcome: "ACCEPT", overrideReason: "Known speaker" })).toMatchObject({ ok: true });
+    const c = await apply(event, "three");
+    expect(await draftDecisions(ctx, { applicationIds: [a.application.id], outcome: "WAITLIST", overrideReason: "Known speaker" })).toMatchObject({ ok: true });
     expect(await draftDecisions(ctx, { applicationIds: [b.application.id], outcome: "REJECT", overrideReason: "Out of scope" })).toMatchObject({ ok: true });
-    // B withdraws after the draft: the batch is stale.
+    // B withdraws after the draft: its decision is skipped, A's is released.
     expect(await respondAsApplicant(b.token, "withdraw")).toMatchObject({ ok: true });
+    expect(await releaseDraftBatch(ctx)).toMatchObject({ ok: true, data: { WAITLIST: 1, skipped: 1 } });
+    expect(await appOf(a.application.id)).toMatchObject({ status: AdmissionStatus.WAITLISTED });
+    expect(await prisma.auditEvent.count({ where: { action: "ADMISSION_REVIEW_OVERRIDDEN", targetId: event.id, metadata: { path: ["reason"], equals: "Known speaker" } } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "ADMISSION_DECISIONS_DRAFTED", targetId: event.id } })).toBe(2);
+    // The skipped decision waits in a new draft; it can't be released (B is closed), so cancel it.
+    const redraft = await prisma.admissionDecisionBatch.findFirstOrThrow({ where: { eventId: event.id, status: "DRAFT" }, include: { decisions: true } });
+    expect(redraft.decisions.map((d) => d.applicationId)).toEqual([b.application.id]);
     expect(await releaseDraftBatch(ctx)).toMatchObject({ ok: false, error: expect.stringContaining("changed since") });
-    expect(await appOf(a.application.id)).toMatchObject({ status: AdmissionStatus.IN_REVIEW, decisionRevision: 0 });
+    expect(await cancelDraftBatch(ctx)).toEqual({ ok: true, data: undefined });
+
+    expect(await draftDecisions(ctx, { applicationIds: [c.application.id], outcome: "REJECT", overrideReason: "x" })).toMatchObject({ ok: true });
 
     expect(await cancelDraftBatch(ctx)).toEqual({ ok: true, data: undefined });
-    expect(await prisma.admissionDecisionBatch.findFirstOrThrow({ where: { eventId: event.id } })).toMatchObject({ status: AdmissionBatchStatus.CANCELLED });
+    expect(await prisma.admissionDecisionBatch.count({ where: { eventId: event.id, status: AdmissionBatchStatus.CANCELLED } })).toBe(2);
     expect(await releaseDraftBatch(ctx)).toMatchObject({ ok: false });
-    expect(await appOf(a.application.id)).toMatchObject({ status: AdmissionStatus.IN_REVIEW });
+    expect(await appOf(c.application.id)).toMatchObject({ status: AdmissionStatus.IN_REVIEW });
 
-    // A fresh batch works, and a released decision can't be rewritten.
+    // A fresh batch works, and a released decision can't be rewritten or deleted.
     await decide(ctx, [a.application.id], "ACCEPT");
     const released = await prisma.admissionDecision.findFirstOrThrow({ where: { applicationId: a.application.id, batch: { status: AdmissionBatchStatus.RELEASED } } });
     await expect(prisma.admissionDecision.update({ where: { id: released.id }, data: { note: "changed" } })).rejects.toThrow(/append-only/);
+    await expect(prisma.admissionDecision.delete({ where: { id: released.id } })).rejects.toThrow(/append-only/);
     // Only one draft batch per event.
     await prisma.admissionDecisionBatch.create({ data: { eventId: event.id } });
     await expect(prisma.admissionDecisionBatch.create({ data: { eventId: event.id } })).rejects.toThrow();

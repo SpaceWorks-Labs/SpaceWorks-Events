@@ -67,6 +67,8 @@ export async function saveTicketType(input: unknown): Promise<ActionResult<{ id:
   // Anything that can take money needs paid events on and a connected account.
   if (priceMinor > ZERO || flexible || feeMinor > ZERO) {
     if (!(await isPaidEventsEnabled())) return { ok: false, error: "Paid tickets are turned off on this installation." };
+    // Applications (docs/ADMISSION.md): a team's paid place is paid once by its leader.
+    if ("eventId" in owner && (await prisma.event.count({ where: { id: owner.eventId, admissionEnabled: true, registrationMode: "TEAM", teamTicketMode: "PER_MEMBER" } })) > 0) return { ok: false, error: PER_MEMBER_PAID_REFUSAL };
     const provider = configuredProvider(settings);
     if (!provider) return { ok: false, error: "Connect a payment account in Settings → Payments before adding a paid ticket." };
     const minimum = providerMinimumMinor(provider, currency);
