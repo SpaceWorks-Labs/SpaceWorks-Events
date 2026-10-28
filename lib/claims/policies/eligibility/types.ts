@@ -22,7 +22,6 @@ export type EligibilityTerms = {
   admissionStageId: string | null;
 };
 
-
 /** Plain facts kept in the snapshot: ids, statuses and flags, never names or contact details. */
 export type EligibilityFacts = Record<string, string | boolean | null>;
 

@@ -60,7 +60,6 @@ export function PolicyDialog({ scope, initial, options, currency, onClose }: { s
             </Field>
             {stage ? (
               <Field label={stage === "judging" ? "Judging round" : stage === "mentoring" ? "Mentoring round" : "Admission stage"} helperText={rounds.length === 0 ? (stage === "judging" ? "Add a judging round that takes advanced projects first." : stage === "mentoring" ? "Add a mentoring round on the Mentor Desk first." : "Turn on applications and add a stage first.") : stage === "admission" ? "Only applicants who reached this stage and accepted their place can claim." : undefined}>
-
                 <Dropdown value={form[roundKey]} onChange={(event) => set(roundKey, event.target.value)} required>
                   <option value="">{stage === "admission" ? "Choose a stage" : "Choose a round"}</option>
                   {rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}

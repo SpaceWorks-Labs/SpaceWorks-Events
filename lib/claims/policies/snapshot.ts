@@ -56,7 +56,6 @@ export function freezeTerms(policy: Pick<ReimbursementPolicy, "id" | "name" | "e
 
 export function eligibilityTerms(terms: FrozenTerms): EligibilityTerms {
   return { eligibility: terms.eligibility, judgingRoundId: terms.judgingRoundId, mentoringRoundId: terms.mentoringRoundId, requireFinalistsPublished: terms.requireFinalistsPublished, attendanceRequired: terms.attendanceRequired, crewKinds: terms.crewKinds, admissionStageId: terms.admissionStageId };
-
 }
 
 export function recordCheck(evaluation: Evaluation, at = new Date()): EligibilityCheck {

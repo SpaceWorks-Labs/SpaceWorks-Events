@@ -63,7 +63,6 @@ describe("frozen policy terms", () => {
     const legacy = readSnapshot({ ...(json as object), terms: { ...terms, requireAccepted: false } } as never);
     expect(legacy && eligibilityTerms(legacy.terms)).not.toHaveProperty("requireAccepted");
     expect(readSnapshot({ version: 2 } as never)).toBeNull();
-
     expect(readSnapshot(null)).toBeNull();
     expect(() => snapshotJson({ ...read!, terms: { ...read!.terms, capPerPersonMinor: "-1" } })).toThrow();
   });

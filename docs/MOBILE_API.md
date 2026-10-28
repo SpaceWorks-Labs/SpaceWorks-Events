@@ -765,7 +765,6 @@ registrations carry `isCrew: true`.
   member or an entrant, and emails the crew ticket). An applicant with an open
   application is refused with `ADMISSION_MANAGED` (409) until
   `withdrawApplication: true` confirms withdrawing it ([CREW.md](CREW.md#applicants)).
-
 - `DELETE …/crew/:memberId` removes the member and their crew ticket.
 
 The crew sign-up link, photos and crew expense claims stay on the website.

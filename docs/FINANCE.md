@@ -98,7 +98,6 @@ create, edit, close (**Close to new claims**) and delete them
     waitlisted or offered never qualify; a withdrawn, declined, expired or
     rejected application no longer qualifies, also at approval. An admission
     stage a policy is for can't be deleted.
-
   Every kind needs a confirmed registration, and a check-in when the policy
   asks for attendance. A CHECK keeps exactly the kind's stage id set and a
   trigger keeps the stage in the policy's event. Who a policy is for is fixed

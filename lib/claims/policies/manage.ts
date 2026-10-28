@@ -104,7 +104,6 @@ export async function savePolicy(ctx: PolicyAdminContext, input: unknown): Promi
       name: data.name, eligibility: data.eligibility, ...stage, capPerPersonMinor: cap, budgetMinor: budget, categories: [...new Set(data.categories)], ...window,
       requireFinalistsPublished: data.eligibility === ReimbursementEligibility.JUDGING_ROUND_ENTRY && data.requireFinalistsPublished,
       crewKinds: data.eligibility === ReimbursementEligibility.CREW ? [...new Set(data.crewKinds)] : [],
-
       attendanceRequired: data.attendanceRequired, active: data.active, notifyWhenAvailable: data.notifyWhenAvailable,
     };
     let policyId = data.policyId;

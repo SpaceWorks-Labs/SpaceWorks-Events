@@ -14,7 +14,6 @@ const bodySchema = z.object({
   withdrawApplication: z.boolean().optional(),
 }).strict();
 
-
 async function crewList(organisationId: string, eventId: string, actorUserId: string) {
   const { members, food } = await listCrewForOrganiser({ organisationId, eventId, actorUserId });
   return crewListDtoSchema.parse({

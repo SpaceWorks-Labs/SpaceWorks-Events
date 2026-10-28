@@ -93,7 +93,6 @@ counts are shown) but never in *spots left* or *sold out*.
   transaction and the waitlist is offered the freed place after the commit
   (`promoteWaitlisted`). A crew ticket never accepts an offer or holds one.
   The crew link never converts anyone.
-
 - The ticket page shows a **Crew** chip and *You're on the crew*, with no
   cancel, payment, transfer, refund, team or project controls; **Account →
   Registrations** shows *Crew* and offers no cancel.

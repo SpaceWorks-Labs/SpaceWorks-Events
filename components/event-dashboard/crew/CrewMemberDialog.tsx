@@ -127,8 +127,7 @@ export function CrewMemberDialog({
                 <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.name} autoComplete="off" disabled={busy} autoFocus />
               </Field>
               <Field label="Email" required helperText={editing ? "Never shown on the event page." : "Their ticket is sent here. Never shown on the event page."}>
-                <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setApplicationWarning(null); setWithdrawApplication(false); }}
- maxLength={LIMITS.email} autoComplete="off" disabled={busy} />
+                <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setApplicationWarning(null); setWithdrawApplication(false); }} maxLength={LIMITS.email} autoComplete="off" disabled={busy} />
               </Field>
               <Field label="Role" optional helperText="For example: Volunteer, Registration desk">
                 <Input value={role} onChange={(e) => setRole(e.target.value)} maxLength={LIMITS.role} disabled={busy} />
@@ -178,7 +177,6 @@ export function CrewMemberDialog({
           <DialogFooter>
             <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!name.trim() || !email.trim() || (applicationWarning != null && !editing && !withdrawApplication)}>
-
               {editing ? "Save changes" : "Add and send ticket"}
             </Button>
           </DialogFooter>

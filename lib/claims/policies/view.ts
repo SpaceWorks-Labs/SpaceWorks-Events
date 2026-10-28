@@ -78,7 +78,6 @@ export function policyAdminRows(policies: ListedPolicy[], currency: string, time
       judgingRoundId: policy.judgingRoundId ?? "",
       mentoringRoundId: policy.mentoringRoundId ?? "",
       admissionStageId: policy.admissionStageId ?? "",
-
       requireFinalistsPublished: policy.requireFinalistsPublished,
       crewKinds: [...policy.crewKinds] as string[],
       cap: minorToDecimalString(policy.capPerPersonMinor, currency),
