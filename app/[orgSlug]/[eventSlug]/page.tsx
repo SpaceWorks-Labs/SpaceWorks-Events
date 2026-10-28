@@ -92,6 +92,7 @@ export default async function EventPage({ params }: Props) {
       paidSalesOpen={paidSalesOpen}
       ticketing={ticketing}
       approvalRequired={event.privacyType === EventPrivacyType.APPROVAL_REQUIRED}
+      applications={event.admissionEnabled}
       viewerRsvp={viewerRsvp ? { token: viewerRsvp.checkInToken, status: viewerRsvp.status } : null}
       team={publicTeamRegistrationConfig(event)}
       judging={judging}

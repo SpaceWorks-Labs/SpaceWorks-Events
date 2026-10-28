@@ -30,4 +30,10 @@ describe("registrationActionLabel", () => {
   it("prefers the waitlist wording when full and approval-required", () => {
     expect(registrationActionLabel({ full: true, approvalRequired: true }, { soloPolicy: "TEAMS_ONLY" })).toBe("Join the waitlist with your team");
   });
+
+  it("says Apply on events taking applications, solo or teams", () => {
+    expect(registrationActionLabel({ full: true, approvalRequired: true, applications: true }, null)).toBe("Apply");
+    expect(registrationActionLabel({ full: false, approvalRequired: true, applications: true }, { soloPolicy: "TEAMS_ONLY" })).toBe("Apply as a team");
+    expect(registrationActionLabel({ full: false, approvalRequired: true, applications: true }, { soloPolicy: "SOLO_ALLOWED" })).toBe("Apply");
+  });
 });

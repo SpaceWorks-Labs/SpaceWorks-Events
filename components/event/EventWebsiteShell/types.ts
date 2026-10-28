@@ -62,6 +62,8 @@ export type Props = {
   /** At capacity: new registrations join the waitlist. Derived server-side. */
   registrationFull: boolean;
   approvalRequired: boolean;
+  /** Registering means applying (docs/ADMISSION.md). */
+  applications?: boolean;
   /** The signed-in viewer's own registration, so the card shows it on any device. */
   viewerRsvp?: { token: string; status: RsvpStatus } | null;
   /** Ticket types on sale; empty for a free event without types. */

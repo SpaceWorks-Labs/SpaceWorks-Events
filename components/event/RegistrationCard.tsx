@@ -23,6 +23,8 @@ type RegistrationState = {
   /** At or over capacity: new registrations join the waitlist. */
   full: boolean;
   approvalRequired: boolean;
+  /** Registering means applying (docs/ADMISSION.md). */
+  applications?: boolean;
 };
 
 const statusLabels: Partial<Record<RsvpStatus, { chip: string; tone: "success" | "warning" | "neutral"; action: string }>> = {
@@ -125,9 +127,13 @@ export function RegistrationCard(props: {
     }
   };
 
-  const savedLabel = saved ? statusLabels[saved.status ?? "CONFIRMED"] ?? { chip: "Registered", tone: "neutral" as const, action: "View registration" } : null;
-  const registerLabel = team ? registrationActionLabel(state, team) : state.full ? "Join the waitlist" : state.approvalRequired ? "Request to join" : allFree ? "Register — it's free" : "Get tickets";
-  const registerNote = team
+  const savedLabel = saved && state.applications && saved.status === "PENDING_APPROVAL"
+    ? { chip: "Application sent", tone: "warning" as const, action: "View your application" }
+    : saved ? statusLabels[saved.status ?? "CONFIRMED"] ?? { chip: "Registered", tone: "neutral" as const, action: "View registration" } : null;
+  const registerLabel = team || state.applications ? registrationActionLabel(state, team ?? null) : state.full ? "Join the waitlist" : state.approvalRequired ? "Request to join" : allFree ? "Register — it's free" : "Get tickets";
+  const registerNote = state.applications
+    ? `Apply with the form below. Every application is reviewed; if you're offered a place, you accept it${allFree ? "" : " (and pay)"} from your ticket page. Nothing is charged now.`
+    : team
     ? team.soloPolicy === "TEAMS_ONLY"
       ? "Create a team or join one with its link. Each team takes one place. We'll email your ticket."
       : "Create a team, join one with its link, or take part on your own. We'll email your ticket."
