@@ -169,6 +169,22 @@ export function ApiDeveloperReference({ apiBaseUrl }: { apiBaseUrl: string }) {
   "pagination": { "nextCursor": "opaque-cursor-or-null" }
 }`,
   });
+  endpoints.push({
+    title: "Application counts",
+    scope: "applications:read",
+    description: "Counts an event's applications by status and by stage, with the offers out. Numbers only.",
+    request: `curl --request GET --url "${apiBaseUrl}/events/${eventId}/applications" --header "Authorization: Bearer ${token}"`,
+    response: `{
+  "data": {
+    "eventId": "event-id",
+    "enabled": true,
+    "total": 120,
+    "byStatus": { "IN_REVIEW": 80, "OFFERED": 10, "WAITLISTED": 5, "ACCEPTED": 20, "REJECTED": 3, "DECLINED": 1, "EXPIRED": 1, "WITHDRAWN": 0 },
+    "stages": [{ "position": 1, "name": "Review", "status": "OPEN", "reached": 120, "inReview": 60 }],
+    "offers": { "out": 30, "limit": 40 }
+  }
+}`,
+  });
   const scopes: ScopeReference[] = [
     {
       scope: "events:read",
@@ -193,6 +209,12 @@ export function ApiDeveloperReference({ apiBaseUrl }: { apiBaseUrl: string }) {
       capability: "Read the orders placed for an event owned by this organisation.",
       includes: "Order ID, reference, status, currency, total, amount paid and refunded, ticket count, test flag and when it was placed.",
       excludes: "Buyer names and email addresses, order links, receipts, card details, payment provider IDs, and all write operations.",
+    },
+    {
+      scope: "applications:read",
+      capability: "Count the applications of an event owned by this organisation.",
+      includes: "Totals by status and by stage, and the offers out against the offer limit.",
+      excludes: "Applicant names and contact details, answers, reviews, scores, reviewers, and all write operations.",
     },
   ];
 

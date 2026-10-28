@@ -451,6 +451,11 @@
       "id": "app__verify__token__page:loadVerifyView"
     },
     {
+      "module": "lib/views/components__event-dashboard__admission__ReviewWorkspace",
+      "name": "loadReviewWorkspace",
+      "id": "components__event-dashboard__admission__ReviewWorkspace:loadReviewWorkspace"
+    },
+    {
       "module": "lib/views/components__event-dashboard__judging__JudgeWorkspace",
       "name": "loadJudgeWorkspace",
       "id": "components__event-dashboard__judging__JudgeWorkspace:loadJudgeWorkspace"
@@ -464,6 +469,11 @@
       "module": "lib/views/components__event-dashboard__panels__AnalyticsPanel",
       "name": "loadAnalyticsPanel",
       "id": "components__event-dashboard__panels__AnalyticsPanel:loadAnalyticsPanel"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__panels__ApplicationsPanel",
+      "name": "loadApplicationsPanel",
+      "id": "components__event-dashboard__panels__ApplicationsPanel:loadApplicationsPanel"
     },
     {
       "module": "lib/views/components__event-dashboard__panels__CheckInPanel",
@@ -606,6 +616,116 @@
       "module": "app/actions/account",
       "name": "updateAccountPassword",
       "id": "account:updateAccountPassword"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "respondToApplicationOffer",
+      "id": "admission-applicant:respondToApplicationOffer"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "saveApplicationAnswers",
+      "id": "admission-applicant:saveApplicationAnswers"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "loadApplicationReview",
+      "id": "admission-applicant:loadApplicationReview"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "submitApplicationReview",
+      "id": "admission-applicant:submitApplicationReview"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "recuseFromApplication",
+      "id": "admission-applicant:recuseFromApplication"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "setApplicationsEnabled",
+      "id": "admission:setApplicationsEnabled"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "saveApplicationSettings",
+      "id": "admission:saveApplicationSettings"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "createApplicationStage",
+      "id": "admission:createApplicationStage"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "updateApplicationStage",
+      "id": "admission:updateApplicationStage"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "deleteApplicationStage",
+      "id": "admission:deleteApplicationStage"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "setApplicationStagePanel",
+      "id": "admission:setApplicationStagePanel"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "previewReviewerAssignment",
+      "id": "admission:previewReviewerAssignment"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "applyReviewerAssignment",
+      "id": "admission:applyReviewerAssignment"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "assignApplicationReviewer",
+      "id": "admission:assignApplicationReviewer"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "unassignApplicationReviewer",
+      "id": "admission:unassignApplicationReviewer"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "draftApplicationDecisions",
+      "id": "admission:draftApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "removeApplicationDecisions",
+      "id": "admission:removeApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "cancelApplicationDecisions",
+      "id": "admission:cancelApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "releaseApplicationDecisions",
+      "id": "admission:releaseApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "extendApplicationOffer",
+      "id": "admission:extendApplicationOffer"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "respondForApplication",
+      "id": "admission:respondForApplication"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "loadApplicationDetail",
+      "id": "admission:loadApplicationDetail"
     },
     {
       "module": "app/actions/api-clients",

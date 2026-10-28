@@ -26,6 +26,7 @@ Invalid, expired, revoked, and disabled credentials all receive the same generic
 | `participants:read` | Read the minimal confirmed-participant roster for an event belonging to the client's organisation; can filter it by attendance without returning attendance data |
 | `participants:attendance:read` | With `participants:read`, opt in to the `checkedInAt` timestamp with `include=attendance` |
 | `orders:read` | Read an event's orders as totals: reference, status, amounts paid and refunded, ticket count |
+| `applications:read` | Count an event's applications ([ADMISSION.md](ADMISSION.md)) by status and by stage, and the offers out |
 
 `participants:attendance:read` does not grant roster access by itself. Participant access does not include email, user IDs, registration answers, invitation data, feedback linkage, or ticket/check-in/certificate tokens.
 
@@ -74,6 +75,12 @@ Requires `participants:read`. Only confirmed standalone-event RSVPs are returned
 ```
 
 ### List orders
+
+```http
+GET /api/v1/events/:eventId/applications
+```
+
+Requires `applications:read`. Counts only: `total`, `byStatus` (every application status), `stages` (position, name, status, how many reached it and how many are in review there) and `offers` (`out`: offered plus accepted; `limit`: the offer capacity, or the event capacity, or null). No applicant names, contact details, answers, reviews, scores or reviewers.
 
 ```http
 GET /api/v1/events/:eventId/orders?limit=50&cursor=<cursor>

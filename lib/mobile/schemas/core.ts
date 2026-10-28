@@ -30,6 +30,8 @@ export const mobileErrorCodeSchema = z.enum([
   // Space Works additions: staff authenticator, sign-in protections, payments.
   "STAFF_MFA_REQUIRED", "STAFF_MFA_ENROLMENT_REQUIRED", "EMAIL_CODE_REQUIRED", "TOO_MANY_ATTEMPTS", "REAUTH_REQUIRED",
   "PAID_ORDER", "REGISTRATION_CLOSED", "PAYMENT_UNAVAILABLE", "PAYLOAD_TOO_LARGE", "IDEMPOTENCY_STALE",
+  // Applications (docs/ADMISSION.md).
+  "ADMISSION_MANAGED",
 ]);
 
 export const errorEnvelopeSchema = z.object({

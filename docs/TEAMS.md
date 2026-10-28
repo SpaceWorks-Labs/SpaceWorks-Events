@@ -361,3 +361,7 @@ Paid places are paid **up front**, never requested first:
 - Unit tests: validators, the unit-count helper, status decisions, DTOs for the
   join page and seeker list (forbidden fields), the token hashing, pasted
   join-link parsing, and the Teams view cursor and search escaping.
+
+## Applications
+
+A TEAM event can take applications ([ADMISSION.md](ADMISSION.md)): the team applies as one application (solo registrants as their own), the leader answers offers and, for paid places, pays once for the team (PER_TEAM only; paying per member isn't supported with applications yet and is refused). On these events team places are not paid up front: the leader's order waits as a request until the offer is accepted. While the leader pays, the team holds its unit (team `PENDING_PAYMENT`) and the members, who have no order, stay pending until the payment confirms them all; an applying team is never deleted when the leader's hold ends. Approve, decline and promote in the Teams view refuse application teams. A solo applicant who joins a team leaves their solo application (an applicant holding an offer can't join a team).

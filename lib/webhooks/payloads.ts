@@ -1,4 +1,4 @@
-import { EventStatus, ExpenseCategory, ExpenseClaimKind, ExpenseClaimStatus, RsvpStatus } from "@prisma/client";
+import { AdmissionStatus, EventStatus, ExpenseCategory, ExpenseClaimKind, ExpenseClaimStatus, RsvpStatus } from "@prisma/client";
 import { z } from "zod";
 
 /**
@@ -62,6 +62,20 @@ const feedbackData = z.object({
   event: webhookEventRefSchema,
   feedback: z.object({ id: z.string(), submittedAt: isoDate }).strict(),
 }).strict();
+/** Applications (docs/ADMISSION.md): ids, status and stage only; never answers, scores or reviewers. */
+export const webhookApplicationSchema = z.object({
+  id: z.string(),
+  /** The solo registration, or the team leader's. */
+  registrationId: z.string().nullable(),
+  teamId: z.string().nullable(),
+  status: z.nativeEnum(AdmissionStatus),
+  stage: z.object({ id: z.string(), position: z.number().int(), name: z.string() }).strict().nullable(),
+}).strict();
+const applicationStatusData = z.object({
+  event: webhookEventRefSchema,
+  application: webhookApplicationSchema,
+  previousStatus: z.nativeEnum(AdmissionStatus).nullable(),
+}).strict();
 /** Ids, kind, status and amounts only: never the payee's name or email, the details or receipts (docs/FINANCE.md). */
 export const webhookExpenseClaimSchema = z.object({
   id: z.string(),
@@ -85,6 +99,7 @@ export const webhookDataSchemas = {
   "event.published": eventStatusData,
   "event.cancelled": eventStatusData,
   "feedback.submitted": feedbackData,
+  "application.status_changed": applicationStatusData,
   "expense_claim.status_changed": expenseClaimData,
   ping: pingData,
 } as const;

@@ -17,6 +17,8 @@ export async function loadEventManageView({ params }: Props) {
   // A mentor-only collaborator (MENTOR, possibly with JUDGE) sees the mentor
   // console (and the judging workspace for JUDGE) and nothing else (docs/MENTOR_DESK.md).
   if (permissions.isMentorOnly) return { judgeOnly: false as const, mentorOnly: true as const, organisation, event, permissions, ctx };
+  // A REVIEW_APPLICATIONS-only collaborator (possibly with JUDGE or MENTOR) sees their workspaces alone (docs/ADMISSION.md).
+  if (permissions.isReviewerOnly) return { judgeOnly: true as const, mentorOnly: false as const, organisation, event, permissions, ctx };
   const teamMode = event.registrationMode === "TEAM";
   const [counts, capacityUsed] = permissions.canManageRegistrations
     ? await Promise.all([loadRsvpStatusCounts(event.id), loadCapacityUsed(event.id, event.registrationMode)])
@@ -49,8 +51,10 @@ export async function loadEventManageView({ params }: Props) {
   // Judging tab: only on events that use judging, so ordinary events keep
   // eight tabs. Until then owners and admins turn submissions on in Settings.
   const showJudging = (permissions.canManageJudging || permissions.canJudge) && (await eventUsesJudging(ctx));
+  // Applications tab (docs/ADMISSION.md): only on events taking applications; turned on in Settings.
+  const showApplications = event.admissionEnabled && (permissions.canManageApplications || permissions.canReviewApplications);
   const publicPath = `/${organisation.slug}/${event.slug}`;
   // Mentors tab: once the Mentor Desk is on (Settings), for owners/admins and mentors.
   const showMentors = event.mentorDeskEnabled && (permissions.canManageMentorDesk || permissions.canMentor);
-  return { judgeOnly: false as const, mentorOnly: false as const, organisation, event, stats, permissions, ctx, publicPath, counts, showJudging, showMentors };
+  return { judgeOnly: false as const, mentorOnly: false as const, organisation, event, stats, permissions, ctx, publicPath, counts, showJudging, showMentors, showApplications };
 }

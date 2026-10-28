@@ -694,6 +694,230 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "applications/decisions-and-offers": {
+    "headings": [
+      {
+        "id": "drafting-and-releasing-decisions",
+        "title": "Drafting and releasing decisions",
+        "level": 2
+      },
+      {
+        "id": "offers",
+        "title": "Offers",
+        "level": 2
+      },
+      {
+        "id": "when-an-offer-ends",
+        "title": "When an offer ends",
+        "level": 2
+      },
+      {
+        "id": "the-waitlist",
+        "title": "The waitlist",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Decisions are drafted first and released together, so you can review a whole batch before anyone is emailed, and a batch never goes out half done. Drafting, releasing and cancelling decisions, and answering or extending offers: owners and admins of the organisation, and co-organisers with Manage registrations."
+      },
+      {
+        "heading": "Drafting and releasing decisions",
+        "anchor": "drafting-and-releasing-decisions",
+        "text": "Open Applications → Review and decide. Filter by stage and status. Open an application to read its answers and its reviews. Reviews shows how many count against the stage's target. Tick one or more applications, choose a Decision (Advance to next stage, Offer a place, Waitlist or Decline) and choose Draft decision. When the batch is ready, choose Release at the top of the list. Release checks every decision again and changes nothing unless they all pass: Reviews. An application needs the stage's number of reviews, on its current answers, from reviewers who are still on the stage's panel and have no conflict. To decide without them (a known speaker, say), give an Override reason when drafting. Changes. If an application changed after you drafted its decision (the applicant withdrew, or edited their answers), draft it again. Offers. Offers that are open or accepted can't go above Most offers out at once, or the event capacity. Cancel draft throws the whole batch away. Nothing is sent. Applicants can change their answers until the first decision about them is released. Changed answers need fresh reviews; the old reviews are kept but no longer count."
+      },
+      {
+        "heading": "Offers",
+        "anchor": "offers",
+        "text": "An offer gives the applicant a few days to answer (see Days to accept an offer in Overview). They are emailed a link to their ticket page, reminded a day before the offer ends, and can: Accept: a free place is confirmed at once, with their ticket; Accept and pay: a paid place is held for a day while they pay. It is confirmed only when the payment arrives; Decline. On team events, the team leader answers for the team. When the leader pays, the whole team is confirmed. If someone asks you to answer for them, open their application and choose Accept for them (for a paid place, this sends them the payment link), Decline for them, or Extend to give them more days."
+      },
+      {
+        "heading": "When an offer ends",
+        "anchor": "when-an-offer-ends",
+        "text": "An unanswered offer expires at its answer-by time, and the applicant is told. If a paid applicant started paying but didn't finish, their offer stands again until its answer-by time."
+      },
+      {
+        "heading": "The waitlist",
+        "anchor": "the-waitlist",
+        "text": "Waitlisted applicants are offered places first in, first offered, whenever a place frees up: an offer declined, withdrawn or expired, or more offers allowed. An application that can't take a place right now (its ticket type is full, or its team has too few members) is passed over and keeps its place in the queue; Offers and waitlist shows why."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "Moving an application to the next stage emails the applicant only if you turned that email on. The guest list's Approve, Decline and Promote don't work for applications. Every release, override and assignment is recorded in the organisation's audit log."
+      }
+    ]
+  },
+  "applications/overview": {
+    "headings": [
+      {
+        "id": "turning-applications-on",
+        "title": "Turning applications on",
+        "level": 2
+      },
+      {
+        "id": "an-example-a-free-workshop",
+        "title": "An example: a free workshop",
+        "level": 2
+      },
+      {
+        "id": "free-and-paid-places",
+        "title": "Free and paid places",
+        "level": 2
+      },
+      {
+        "id": "settings",
+        "title": "Settings",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Sometimes you have more interest than places, or you want to choose who comes: a workshop with 30 seats and 200 hopefuls, a conference that reviews speaker applications, a fellowship, or a hackathon that picks its teams. Applications turn registration into an application. People apply with your registration form, your reviewers score them in one or more stages, and you offer places. A place is confirmed only when the applicant accepts it, and pays for it if the ticket costs money. Applications work on any one-off event: free or paid, people registering on their own or as teams. Recurring series can't take applications, because their registrations are per date. Turning applications on or off and changing their settings: owners and admins of the organisation. Stages, reviewers, decisions and offers: owners and admins, and co-organisers with Manage registrations. Reviewing: anyone with the Review applications permission, and owners and admins."
+      },
+      {
+        "heading": "Turning applications on",
+        "anchor": "turning-applications-on",
+        "text": "Open the event and choose the Settings tab. In Applications and shortlisting, choose Take applications. A new Applications tab appears. Its first stage, Review, is open and ready. You can turn applications on or off only before anyone has registered, so every registration is an application or none is. Crew don't count: they never apply. While applications are on, the event stays approval-only; the Privacy setting can't change until you turn applications off."
+      },
+      {
+        "heading": "An example: a free workshop",
+        "anchor": "an-example-a-free-workshop",
+        "text": "Say you run a free, hands-on workshop with 30 seats. Set the event Capacity to 30 and add a question or two to the registration form, such as \"What do you hope to build?\". Turn on applications. Everyone who registers is now an applicant, shown as In review. Invite two volunteers as co-organisers with Review applications. In Applications → Reviewers, assign each application to both. When the reviews are in, select the strongest 30 in Review and decide, choose Offer a place, and Release the batch. Each person gets an email with a link to their ticket page, where they choose Accept. Their place is confirmed straight away and they get their ticket. Put a few more on the waitlist. If someone declines or doesn't answer in time, the next person on the waitlist is offered the place automatically. Nothing in this flow involves money, orders or payment holds."
+      },
+      {
+        "heading": "Free and paid places",
+        "anchor": "free-and-paid-places",
+        "text": "Free places are confirmed as soon as the applicant accepts the offer, with the usual ticket email. Paid places are never confirmed unpaid. The applicant chooses Accept and pay: their place is held for a day while they pay through the payment link, and the payment confirms it. If they don't pay in time, the offer stands again until its answer-by time, then expires. A free ticket type on a paid event (a scholarship ticket, say) works like a free place for whoever chose it. On team events the team applies as one, and the team leader answers the offer. When places cost money, the leader pays once for the whole team: set who pays to The team leader in Settings before turning applications on. Paying per member isn't supported with applications yet."
+      },
+      {
+        "heading": "Settings",
+        "anchor": "settings",
+        "text": "In Applications → Overview: Decisions: Reviewed (you release decisions in batches) or First come, first served (each application is offered a place as it arrives, until the offers run out, then the waitlist). Days to accept an offer: 1 to 30. An offer never runs past the start of the event. Most offers out at once: offers that are open or accepted. Leave it empty to use the event capacity. Email applicants when they move to the next stage: off by default. Offers, reminders, waitlist places, expired offers and \"not successful\" decisions are always emailed, because they carry a decision or a deadline."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "The ordinary Approve, Decline and Promote buttons in Guests don't work for applications: decide them in the Applications tab, where reviews and offers are checked. Hackathons can use applications to choose their teams, then judge projects as usual in the Judging tab. See Stages and reviewers and Decisions, offers and the waitlist next."
+      }
+    ]
+  },
+  "applications/reviewing": {
+    "headings": [
+      {
+        "id": "reviewing-an-application",
+        "title": "Reviewing an application",
+        "level": 2
+      },
+      {
+        "id": "conflicts-of-interest",
+        "title": "Conflicts of interest",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "If an organiser asked you to review applications, this is your part. You see only the applications assigned to you, and only what the stage allows. Co-organisers with the Review applications permission, and owners and admins of the organisation. You'll be asked for your authenticator code, like every organiser."
+      },
+      {
+        "heading": "Reviewing an application",
+        "anchor": "reviewing-an-application",
+        "text": "Open the event from your dashboard. Your review list is shown (organisers find it under Applications → My reviews). Choose Open next to an application marked To review. Read the guidance and the answers. On a blind stage you won't see names, email addresses, phone numbers or team names. Score each criterion from 1 (weakest) to 5 (strongest), add notes for the organisers if you like, and choose Submit review. A review can't be changed once submitted. If the applicant changes their answers afterwards, the application comes back to your list so you can review the new answers."
+      },
+      {
+        "heading": "Conflicts of interest",
+        "anchor": "conflicts-of-interest",
+        "text": "If you know the applicant, or anything else makes a fair review difficult, choose I have a conflict of interest instead of scoring. The application goes to someone else on the panel, and you won't be given it again. You're never assigned your own application, or anyone's if you applied to the event yourself."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "You can review only while the stage is Open and the application is still in review there. Your notes are for the organisers. Applicants never see reviews or scores."
+      }
+    ]
+  },
+  "applications/stages-and-reviewers": {
+    "headings": [
+      {
+        "id": "how-stages-work",
+        "title": "How stages work",
+        "level": 2
+      },
+      {
+        "id": "adding-a-stage",
+        "title": "Adding a stage",
+        "level": 2
+      },
+      {
+        "id": "choosing-a-stage-s-reviewers",
+        "title": "Choosing a stage's reviewers",
+        "level": 2
+      },
+      {
+        "id": "assigning-reviewers",
+        "title": "Assigning reviewers",
+        "level": 2
+      },
+      {
+        "id": "conflicts-of-interest",
+        "title": "Conflicts of interest",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Stages let you shortlist in steps: a quick first look at everyone, then a closer look at a shortlist, perhaps an interview round after that. Each stage has its own reviewers, its own criteria and its own number of reviews per application. Stages, panels and assignments: owners and admins of the organisation, and co-organisers with Manage registrations."
+      },
+      {
+        "heading": "How stages work",
+        "anchor": "how-stages-work",
+        "text": "Every application starts in the first stage. Later stages hold only the applications you advance into them, so the work narrows as you go. You can offer a place, waitlist or decline an application at any stage; moving it on is just one more choice. Each stage has: a Status: reviewers can review only while a stage is Open; Reviews per application: how many reviews an application needs before you can release a decision about it without giving a reason; Blind review: reviewers don't see names, email addresses, phone numbers or team names, only the other answers; Criteria: up to 10, each scored from 1 to 5. With none, reviewers give one overall score; Guidance for reviewers, shown above every application they open."
+      },
+      {
+        "heading": "Adding a stage",
+        "anchor": "adding-a-stage",
+        "text": "Open Applications → Stages. Choose Add stage. It is added at the end, as a draft. Name it (for example \"Shortlist\"), set its reviews, criteria and blind review, and choose Save stage. Set its Status to Open when reviewers should start. Only the last stage can be deleted, and only while no application has reached it."
+      },
+      {
+        "heading": "Choosing a stage's reviewers",
+        "anchor": "choosing-a-stage-s-reviewers",
+        "text": "First invite reviewers: in Settings, invite co-organisers with the Review applications permission. That permission opens their review workspace and nothing else. A stage with no panel is reviewed by everyone with Review applications. To use a different group for a stage (say, senior reviewers for the final stage), tick them under Reviewer panel and choose Save panel. Owners and admins can be on a panel too."
+      },
+      {
+        "heading": "Assigning reviewers",
+        "anchor": "assigning-reviewers",
+        "text": "Open Applications → Reviewers and choose the stage. Set Reviewers per application. Choose Balanced (even workloads, the same plan every time) or Random (even workloads, shuffled). Choose whether to Keep existing assignments and add more, or Start over (assignments already reviewed always stay). Untick anyone who shouldn't get work this time, then choose Preview. Check the workloads and any applications that can't reach the target. With Random, choose Re-roll for a different shuffle. Choose Apply. A random assignment is drawn from a stored seed, so the same seed always gives the same plan, and every applied run is recorded. If anything changed between the preview and Apply (a new application, a reviewer removed), Apply is refused: preview again."
+      },
+      {
+        "heading": "Conflicts of interest",
+        "anchor": "conflicts-of-interest",
+        "text": "A reviewer is never assigned an application they have a conflict with: their own application, or one from their team; any application at all, if they applied to the event themselves; one they stepped back from. A reviewer who opens an application and chooses I have a conflict of interest steps back from it. The application goes to the reviewer on the panel with the least work. You can also add or remove a reviewer for one application by opening it in Review and decide."
+      }
+    ]
+  },
   "attending/asking-for-a-refund": {
     "headings": [
       {
@@ -1603,6 +1827,57 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "heading": "Good to know",
         "anchor": "good-to-know",
         "text": "Recurring series don't use teams. Teammates see each other's names on their tickets, never their emails. To cancel a paid place, see Asking for a refund. To submit your team's project, see Submitting a hackathon project."
+      }
+    ]
+  },
+  "attending/your-application": {
+    "headings": [
+      {
+        "id": "following-your-application",
+        "title": "Following your application",
+        "level": 2
+      },
+      {
+        "id": "answering-an-offer",
+        "title": "Answering an offer",
+        "level": 2
+      },
+      {
+        "id": "withdrawing",
+        "title": "Withdrawing",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Some events choose who comes: when you register, you're applying for a place. This page explains what happens next and how to answer an offer."
+      },
+      {
+        "heading": "Following your application",
+        "anchor": "following-your-application",
+        "text": "After you register you get an email and a ticket page link, just like any registration. Open it any time to see Your application: In review: the organisers are looking at it. It may move through a few stages, such as a shortlist. Offered a place: you've been offered a place. Answer before the time shown. Waitlisted: all places are offered for now. If one opens up, places go in the order people joined the waitlist, and you'll get an email. Accepted: your place is confirmed. Your ticket is ready. Not successful, Declined, Offer expired or Withdrawn: the application is closed. Until the first decision about you, you can change your answers from the same page with Edit answers."
+      },
+      {
+        "heading": "Answering an offer",
+        "anchor": "answering-an-offer",
+        "text": "Open the link in your offer email, or your ticket page. Choose Accept to take the place, or Decline to let someone else have it. For a free place, choosing Accept confirms it straight away and your ticket arrives by email. For a paid place, choose Accept and pay. The place is held for you for a day while you pay with the payment link (see Paying for a ticket). It's confirmed only when the payment goes through. If you don't finish paying, you can try again until the offer's answer-by time. On a team application, the team leader answers for everyone and, for a paid place, pays once for the whole team. Team members see the same status on their own ticket pages."
+      },
+      {
+        "heading": "Withdrawing",
+        "anchor": "withdrawing",
+        "text": "Changed your mind before you have a place? Choose Withdraw on your ticket page. Once your place is confirmed, cancel your ticket instead."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "An offer you don't answer in time expires and goes to the next person on the waitlist. Nothing is charged unless you accept a paid place and pay. Reviews and scores are never shown to applicants."
       }
     ]
   },

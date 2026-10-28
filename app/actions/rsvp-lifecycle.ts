@@ -42,7 +42,7 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
     eventId,
     eventInstanceId,
   );
-  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error };
+  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error, ...("code" in ctx && ctx.code ? { code: ctx.code } : {}) };
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
@@ -143,7 +143,7 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
     eventId,
     eventInstanceId,
   );
-  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error };
+  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error, ...("code" in ctx && ctx.code ? { code: ctx.code } : {}) };
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
@@ -239,7 +239,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
     eventId,
     eventInstanceId,
   );
-  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error };
+  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error, ...("code" in ctx && ctx.code ? { code: ctx.code } : {}) };
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;

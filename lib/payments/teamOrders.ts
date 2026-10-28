@@ -1,9 +1,10 @@
 import "server-only";
 
 import { EventPrivacyType, OrderStatus, RegistrationMode, RsvpStatus, SoloPolicy, TeamTicketMode, type Prisma } from "@prisma/client";
-import { enqueueTeamCreated } from "@/lib/outbox";
+import { enqueueRsvpConfirmation, enqueueTeamCreated } from "@/lib/outbox";
 import { noticeEach, noticeSubject, personEmail } from "@/lib/notices";
 import { LEADER_STILL_PAYING, TeamRegistrationError } from "@/lib/rsvpCore/team";
+import { admissionJoinRefusal } from "@/lib/admission/registration";
 import { assignTeamLeaderTx, countConfirmedUnits, settleTeamAfterMemberLeft, teamPlacesTaken } from "@/lib/teamUnits";
 import { generateTeamManageToken, generateTeamToken } from "@/lib/teamToken";
 import { teamNameKey, type TeamRegistrationIntent } from "@/lib/validators";
@@ -58,7 +59,7 @@ export async function planTeamOrder(tx: Prisma.TransactionClient, params: {
   if (intent.mode === "create") {
     const nameKey = teamNameKey(intent.name);
     // An unpaid team keeps its name only while its leader's hold lasts.
-    await tx.team.deleteMany({ where: { eventId: params.eventId, nameKey, status: RsvpStatus.PENDING_PAYMENT, members: { none: { holdExpiresAt: { gt: params.now } } } } });
+    await tx.team.deleteMany({ where: { eventId: params.eventId, nameKey, status: RsvpStatus.PENDING_PAYMENT, members: { none: { holdExpiresAt: { gt: params.now } } }, admissionApplication: { is: null } } });
     const taken = await tx.team.findUnique({ where: { eventId_nameKey: { eventId: params.eventId, nameKey } }, select: { id: true } });
     if (taken) throw new TeamRegistrationError("That team name is already taken for this event.");
     return { kind: "create", mode, unitsLeft, name: intent.name, nameKey };
@@ -67,6 +68,8 @@ export async function planTeamOrder(tx: Prisma.TransactionClient, params: {
   if (!team) throw new TeamRegistrationError("This team link is no longer valid. Ask your team leader for a new one.");
   if (team.status === RsvpStatus.REJECTED) throw new TeamRegistrationError("This team can no longer be joined.");
   if (team.status === RsvpStatus.PENDING_PAYMENT) throw new TeamRegistrationError(LEADER_STILL_PAYING);
+  const closed = await admissionJoinRefusal(tx, { teamId: team.id });
+  if (closed) throw new TeamRegistrationError(closed);
   if (mode === TeamTicketMode.PER_TEAM) throw new TeamRegistrationError("Joining this team is free: its leader paid for the whole team.");
   if (event.teamMaxSize == null || await teamPlacesTaken(tx, team.id, params.now) >= event.teamMaxSize) throw new TeamRegistrationError("This team is already full.");
   return { kind: "join", mode, unitsLeft: null, team };
@@ -116,15 +119,21 @@ type TeamOrderRow = { id: string; eventId: string | null; teamId: string | null;
 export async function placePaidTeamOrder(tx: Prisma.TransactionClient, order: TeamOrderRow, rsvpId: string, holdActive: boolean, now: Date): Promise<{ status: RsvpStatus; teamName: string | null; } | "gone" | null> {
   if (!order.eventId) return null;
   const eventId = order.eventId;
-  const event = await tx.event.findUnique({ where: { id: eventId }, select: { registrationMode: true, privacyType: true, capacity: true, teamMaxSize: true } });
+  const event = await tx.event.findUnique({ where: { id: eventId }, select: { registrationMode: true, privacyType: true, capacity: true, teamMaxSize: true, admissionEnabled: true, title: true } });
   if (event?.registrationMode !== RegistrationMode.TEAM) return null;
-  const placed = event.privacyType === EventPrivacyType.APPROVAL_REQUIRED ? RsvpStatus.PENDING_APPROVAL : RsvpStatus.CONFIRMED;
+  // An accepted application's payment confirms the place (docs/ADMISSION.md); other approval events approve after payment.
+  const placed = event.privacyType === EventPrivacyType.APPROVAL_REQUIRED && !event.admissionEnabled ? RsvpStatus.PENDING_APPROVAL : RsvpStatus.CONFIRMED;
   // A unit is only taken by a confirmed place; the hold kept one free until now.
   const unitFree = async () => placed !== RsvpStatus.CONFIRMED || holdActive || event.capacity == null || await countConfirmedUnits(tx, eventId, now) < event.capacity;
   if (order.teamName != null) {
     const team = order.teamId ? await tx.team.findFirst({ where: { id: order.teamId, eventId, status: RsvpStatus.PENDING_PAYMENT }, select: { id: true, name: true } }) : null;
     if (!team || !(await unitFree())) return "gone";
     await tx.team.update({ where: { id: team.id }, data: { status: placed } });
+    if (event.admissionEnabled) {
+      // The leader paid once for the team (PER_TEAM): every member's held place is confirmed with it.
+      await confirmApplyingTeamMembers(tx, { teamId: team.id, leaderRsvpId: rsvpId, eventTitle: event.title, teamName: team.name });
+      return { status: placed, teamName: team.name };
+    }
     await assignTeamLeaderTx(tx, { teamId: team.id, leaderRsvpId: rsvpId, reason: "created" });
     return { status: placed, teamName: team.name };
   }
@@ -141,7 +150,8 @@ export async function placePaidTeamOrder(tx: Prisma.TransactionClient, order: Te
 
 /** A leader's hold ended unpaid: the team (only ever the leader) goes, freeing its name. */
 export async function releaseUnpaidTeam(tx: Prisma.TransactionClient, orderId: string) {
-  await tx.team.deleteMany({ where: { status: RsvpStatus.PENDING_PAYMENT, orders: { some: { id: orderId, teamName: { not: null } } } } });
+  // An applying team (docs/ADMISSION.md) stays: its offer stands again until it is answered or expires.
+  await tx.team.deleteMany({ where: { status: RsvpStatus.PENDING_PAYMENT, orders: { some: { id: orderId, teamName: { not: null } } }, admissionApplication: { is: null } } });
 }
 
 export type CancelledRegistration = { id: string; eventId: string | null; eventInstanceId: string | null; userId: string | null; guestName: string | null; createdAt: Date; checkedInAt: Date | null; status: RsvpStatus; };
@@ -197,4 +207,15 @@ export async function paidOrdersOfTeam(tx: Prisma.TransactionClient, teamId: str
 export async function leadsPaidTeam(tx: Prisma.TransactionClient, rsvpId: string) {
   const rsvp = await tx.rSVP.findUnique({ where: { id: rsvpId }, select: { order: { select: { teamName: true, totalMinor: true } }, event: { select: { teamTicketMode: true } } } });
   return rsvp?.order?.teamName != null && rsvp.order.totalMinor > BigInt(0) && rsvp.event?.teamTicketMode === TeamTicketMode.PER_TEAM;
+}
+
+/** An applying team's paid place (docs/ADMISSION.md): the members waiting on the leader's payment are confirmed and sent their tickets. */
+async function confirmApplyingTeamMembers(tx: Prisma.TransactionClient, params: { teamId: string; leaderRsvpId: string; eventTitle: string; teamName: string }) {
+  const members = await tx.rSVP.findMany({ where: { teamId: params.teamId, id: { not: params.leaderRsvpId }, status: RsvpStatus.PENDING_APPROVAL }, select: { id: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } });
+  if (members.length === 0) return;
+  await tx.rSVP.updateMany({ where: { id: { in: members.map((member) => member.id) } }, data: { status: RsvpStatus.CONFIRMED, holdExpiresAt: null } });
+  for (const member of members) {
+    const to = member.user?.email?.trim() || member.guestEmail;
+    if (to) await enqueueRsvpConfirmation(tx, { to, eventTitle: params.eventTitle, status: RsvpStatus.CONFIRMED, checkInToken: member.checkInToken, teamName: params.teamName });
+  }
 }

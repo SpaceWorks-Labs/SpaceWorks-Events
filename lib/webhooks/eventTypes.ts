@@ -10,6 +10,7 @@ export const WEBHOOK_EVENT_TYPES = [
   "event.published",
   "event.cancelled",
   "feedback.submitted",
+  "application.status_changed",
   "expense_claim.status_changed",
 ] as const;
 
@@ -28,6 +29,7 @@ export const WEBHOOK_EVENT_LABELS: Record<WebhookEventType, { label: string; des
   "event.published": { label: "Event published", description: "An event goes live." },
   "event.cancelled": { label: "Event cancelled", description: "An event is marked as cancelled." },
   "feedback.submitted": { label: "Feedback submitted", description: "Someone submits the feedback form (no answers are sent)." },
+  "application.status_changed": { label: "Application status changed", description: "An application is offered a place, waitlisted, declined, accepted, moves stage, expires or is withdrawn (no answers or reviews are sent)." },
   "expense_claim.status_changed": { label: "Expense claim status changed", description: "A claim is filed, withdrawn, approved, rejected, paid or has its payment reversed (amounts and ids only)." },
 };
 

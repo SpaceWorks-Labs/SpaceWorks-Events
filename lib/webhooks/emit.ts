@@ -2,7 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { outsideRequestActor } from "@/lib/requestActor";
-import type { EventStatus, ExpenseClaimStatus, Prisma } from "@prisma/client";
+import type { AdmissionStatus, EventStatus, ExpenseClaimStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   buildWebhookEnvelope,
@@ -51,6 +51,7 @@ export type WebhookEmission =
   | { type: "checkin.undone"; rsvpId: string; undoneAt: Date }
   | { type: "event.published" | "event.cancelled"; eventId: string; previousStatus: EventStatus | null }
   | { type: "feedback.submitted"; feedbackResponseId: string }
+  | { type: "application.status_changed"; applicationId: string; status: AdmissionStatus; previousStatus: AdmissionStatus | null }
   /** The committed transition; the payload carries ids and amounts only. */
   | { type: "expense_claim.status_changed"; claimId: string; status: ExpenseClaimStatus; previousStatus: ExpenseClaimStatus | null };
 
@@ -68,13 +69,19 @@ export function newWebhookEventId() {
 
 /** Fire and forget. Safe to call from any commit point; never throws. */
 export function emitWebhookEvent(emission: WebhookEmission) {
+  // A registration change may have moved its application too (a settled
+  // payment, a cancelled ticket): send the recorded application changes as well.
+  if (emission.type === "registration.status_changed") track(() => import("@/lib/admission/statusEvents").then((module) => module.drainApplicationEvents()).then(() => undefined));
+  track(() => enqueueWebhookEvent(emission).then(() => undefined), emission.type);
+}
+
+function track(work: () => Promise<void>, type = "application.status_changed") {
   const pending = pendingEmits();
   // Queued in the background, never as the request's actor.
-  const task = outsideRequestActor(() => enqueueWebhookEvent(emission))
-    .then(() => undefined)
+  const task = outsideRequestActor(work)
     .catch(() => {
       // Category only: payload loading touches attendee names.
-      console.warn(`[webhooks] could not queue ${emission.type}`);
+      console.warn(`[webhooks] could not queue ${type}`);
     })
     .finally(() => {
       pending.delete(task);
@@ -189,6 +196,28 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
       return {
         organisation: event.organisation,
         data: { event: { ...webhookEventRef({ kind: "event", event }), status: event.status }, previousStatus: emission.previousStatus },
+      };
+    }
+    case "application.status_changed": {
+      const application = await prisma.admissionApplication.findUnique({
+        where: { id: emission.applicationId },
+        select: { id: true, rsvpId: true, teamId: true, team: { select: { leaderRsvpId: true } }, currentStage: { select: { id: true, position: true, name: true } }, event: { select: eventRefSelect } },
+      });
+      if (!application) return null;
+      return {
+        organisation: application.event.organisation,
+        data: {
+          event: webhookEventRef({ kind: "event", event: application.event }),
+          application: {
+            id: application.id,
+            registrationId: application.rsvpId ?? application.team?.leaderRsvpId ?? null,
+            teamId: application.teamId,
+            // The committed transition, not a later re-read.
+            status: emission.status,
+            stage: application.currentStage,
+          },
+          previousStatus: emission.previousStatus,
+        },
       };
     }
     case "feedback.submitted": {

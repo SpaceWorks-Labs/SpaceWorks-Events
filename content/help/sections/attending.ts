@@ -8,6 +8,7 @@ export const attending = {
   articles: [
     { slug: "attending/finding-events", title: "Finding events", summary: "Discover, search, organisation pages and short links." },
     { slug: "attending/registering", title: "Registering for an event", summary: "Sign up as a guest or with an account, and what happens with approvals and waitlists." },
+    { slug: "attending/your-application", title: "Your application", summary: "Follow your application, answer an offer, and accept (and pay for) your place." },
     { slug: "attending/paying-for-tickets", title: "Paying for a ticket", summary: "Choose tickets and extras, use a promo or access code, and pay the organiser securely." },
     { slug: "attending/orders-and-receipts", title: "Your order and receipt", summary: "Open your order page, download your receipt, and find your tickets after paying." },
     { slug: "attending/asking-for-a-refund", title: "Asking for a refund", summary: "Request your money back, and what happens when an event is cancelled." },

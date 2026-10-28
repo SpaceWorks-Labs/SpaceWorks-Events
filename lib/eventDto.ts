@@ -13,6 +13,8 @@ export type EventClientDto = Omit<Event,
   | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
+  // Applications have their own view (lib/admission/).
+  | "admissionEnabled" | "admissionMode" | "admissionRsvpDays" | "admissionOfferCapacity" | "emailApplicantsOnStageAdvance"
   // Volunteer shifts have their own view (lib/eventDashboard/volunteerShifts.ts).
   | "volunteerShiftsEnabled" | "contributorCertificateTemplate"
   // Attendance confirmation has its own status DTO (lib/eventDashboard/attendanceCheckCard.ts).
