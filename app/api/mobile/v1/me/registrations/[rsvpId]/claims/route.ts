@@ -31,4 +31,4 @@ export const POST = authedMobileRoute<{ rsvpId: string }>("POST /api/mobile/v1/m
   const result = await submitParticipantClaimAction(fields);
   if (!result.ok) return mobileActionError(result);
   return mobileOk(await loadMyParticipantClaims(auth.userId, rsvpId), 201);
-});
+}, { idempotent: { maxBytes: MAX_BYTES } });

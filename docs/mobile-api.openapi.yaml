@@ -216,8 +216,8 @@ paths:
     post:
       tags: [Me]
       summary: Cancel one of the caller's own RSVPs
-      description: A ticket with money collected answers 409 `PAID_ORDER`; cancel its order instead (POST /me/orders/{orderId}/cancel) under the refund policy. A paid request is withdrawn and a held order released.
-      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      description: A ticket with money collected or still owed at the desk, or a PER_TEAM leader's team ticket, answers 409 `PAID_ORDER`; cancel its order instead (POST /me/orders/{orderId}/cancel) under the refund policy. A paid request is withdrawn and a held order released.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { $ref: "#/components/responses/NullData" }
         "404": { $ref: "#/components/responses/Error" }
@@ -264,7 +264,7 @@ paths:
         once the policy has closed; an order with several tickets is never
         cancelled. `released` true means the registration no longer exists.
         Not asked: `NOT_FOUND`. Closed: `CONFLICT`.
-      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -361,6 +361,7 @@ paths:
         tickets needs a bearer. `team` registers on a team event; without it the
         registration is solo, which a teams-only event refuses (`TEAM_REQUIRED`).
       security: [{}, { bearerAuth: [] }]
+      parameters: [{ name: Idempotency-Key, in: header, required: false, schema: { type: string, minLength: 8, maxLength: 128 }, description: "Required with a bearer (a signed-in registration runs at most once per key; a replay carries `ticketToken: null`). The guest flow has no key." }]
       requestBody:
         required: true
         content:
@@ -443,7 +444,7 @@ paths:
     post:
       tags: [Organiser]
       summary: Add a guest (organisation admins)
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -468,7 +469,7 @@ paths:
     post:
       tags: [Organiser]
       summary: Undo a guest deletion within five minutes (404 unless the undo belongs to this event)
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -506,7 +507,7 @@ paths:
       tags: [Organiser]
       summary: Approve a pending request (organisation admins)
       description: A guest who belongs to a team is refused with `TEAM_MEMBER` (409); change the whole team with `…/teams/{teamId}/approve`.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -519,7 +520,7 @@ paths:
       tags: [Organiser]
       summary: Reject a pending or waitlisted guest (organisation admins)
       description: A guest who belongs to a team is refused with `TEAM_MEMBER` (409); change the whole team with `…/teams/{teamId}/reject`.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -532,7 +533,7 @@ paths:
       tags: [Organiser]
       summary: Promote a waitlisted guest (organisation admins)
       description: A guest who belongs to a team is refused with `TEAM_MEMBER` (409); change the whole team with `…/teams/{teamId}/promote`.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -563,7 +564,7 @@ paths:
       tags: [Organiser]
       summary: Re-accept a declined guest (organisation admins); confirmed when there is room, otherwise waitlisted
       description: A member of a declined team is refused with `TEAM_MEMBER` (409).
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -602,7 +603,7 @@ paths:
       tags: [Teams]
       summary: Approve a whole pending team (every member confirmed together)
       description: Same permission (`canManageRegistrationsFor`), core (`transitionTeamStatus`), transaction, emails, webhooks, audit and `rsvp` rate limit as the dashboard. Returns the updated team.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TeamResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -616,7 +617,7 @@ paths:
       tags: [Teams]
       summary: Decline a whole pending or waitlisted team
       description: Same permission (`canManageRegistrationsFor`), core (`transitionTeamStatus`), transaction, emails, webhooks, audit and `rsvp` rate limit as the dashboard. Returns the updated team.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TeamResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -630,7 +631,7 @@ paths:
       tags: [Teams]
       summary: Give a waitlisted team a place (one unit)
       description: Same permission (`canManageRegistrationsFor`), core (`transitionTeamStatus`), transaction, emails, webhooks, audit and `rsvp` rate limit as the dashboard. Returns the updated team.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TeamResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -717,7 +718,7 @@ paths:
         With `comment`, also saves the private comment as a draft. Refusals:
         `JUDGING_CLOSED` (409, judging not open), `NOT_VISIBLE` (404),
         `INVALID_REQUEST` (unknown criterion, out of range, duplicate criterion).
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -748,7 +749,7 @@ paths:
         is kept. Refusals: `JUDGING_CLOSED` (409), `INCOMPLETE_SCORES` (409,
         a criterion is unscored or there is no rubric), `NOT_VISIBLE` (404).
         Returns the project as `GET …/judging/submissions/{submissionId}`.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: false
         content:
@@ -828,7 +829,7 @@ paths:
     post:
       tags: [Check-in]
       summary: Check a guest in
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -853,7 +854,7 @@ paths:
     post:
       tags: [Check-in]
       summary: Undo a check-in
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -906,7 +907,7 @@ paths:
     post:
       tags: [Check-in]
       summary: Upload offline check-ins
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -981,7 +982,7 @@ paths:
     post:
       tags: [Emails]
       summary: Send a test to the caller's own verified inbox
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastContent" } } }
@@ -997,7 +998,7 @@ paths:
     post:
       tags: [Emails]
       summary: Queue a broadcast
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1040,6 +1041,7 @@ paths:
         - { $ref: "#/components/parameters/orgSlug" }
         - { $ref: "#/components/parameters/eventId" }
         - { name: sessionId, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/idempotencyKey" }
       requestBody:
         required: true
         content:
@@ -1056,7 +1058,7 @@ paths:
     post:
       tags: [Day-of]
       summary: Open or close the feedback form (organisation admins)
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1079,7 +1081,7 @@ paths:
         `registrationManuallyClosed` is true and restores the stored cutoff
         (which may itself have passed: then `registrationOpen` is false with a
         reason); otherwise 409 `CONFLICT`.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1119,7 +1121,7 @@ paths:
       tags: [Orders]
       summary: Open the hosted payment page for a held order
       description: Open `checkoutUrl` in the system browser, then poll the order; the provider's webhook confirms it.
-      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      parameters: [{ $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckoutResponse" } } } }
         "404": { $ref: "#/components/responses/Error" }
@@ -1132,7 +1134,7 @@ paths:
     post:
       tags: [Orders]
       summary: Cancel the whole order under its refund policy
-      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      parameters: [{ $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrderDetailResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -1144,7 +1146,7 @@ paths:
     post:
       tags: [Orders]
       summary: Ask the organisers for a refund outside the policy
-      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      parameters: [{ $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1172,7 +1174,8 @@ paths:
     post:
       tags: [Orders]
       summary: Give one holder's ticket to someone else
-      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      description: Refused with 409 `OPEN_CLAIMS` while the holder has expense claims waiting, approved or paid on the ticket.
+      parameters: [{ $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1215,7 +1218,7 @@ paths:
     post:
       tags: [Claims]
       summary: File an expense claim with receipt photos
-      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1251,7 +1254,7 @@ paths:
     post:
       tags: [Claims]
       summary: Withdraw an undecided claim
-      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/claimId" }]
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/claimId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantClaimsResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -1283,7 +1286,7 @@ paths:
     post:
       tags: [Me]
       summary: Pay the project's entry fee
-      parameters: [{ $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckoutResponse" } } } }
         "404": { $ref: "#/components/responses/Error" }
@@ -1361,7 +1364,8 @@ paths:
     post:
       tags: [Payments]
       summary: Settle at the desk (collected in person, or complimentary)
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }]
+      description: An applicant's place (docs/ADMISSION.md) is never waived; `waive` answers 409 `ADMISSION_MANAGED`, while `offline` records money taken at the desk.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1379,7 +1383,7 @@ paths:
     post:
       tags: [Payments]
       summary: Email the buyer a fresh payment link
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1396,7 +1400,7 @@ paths:
     post:
       tags: [Payments]
       summary: Refund the order through its provider
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1425,7 +1429,7 @@ paths:
     post:
       tags: [Check-in]
       summary: Check a guest into a list
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/listId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/listId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1443,7 +1447,7 @@ paths:
     post:
       tags: [Check-in]
       summary: Take a guest back out of a list
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/listId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/listId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1480,7 +1484,7 @@ paths:
     post:
       tags: [Finance]
       summary: File an expense claim with receipt photos
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1506,7 +1510,7 @@ paths:
     post:
       tags: [Finance]
       summary: Withdraw one of the caller's undecided claims
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/StaffClaimsResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -1518,7 +1522,7 @@ paths:
     post:
       tags: [Finance]
       summary: Approve a claim
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1536,7 +1540,7 @@ paths:
     post:
       tags: [Finance]
       summary: Decline a claim
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1565,7 +1569,7 @@ paths:
     post:
       tags: [Finance]
       summary: Approve (refunding) or decline a refund request
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/requestId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/requestId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -1592,7 +1596,7 @@ paths:
     post:
       tags: [Organiser]
       summary: Add a crew member and email their free crew ticket
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/idempotencyKey" }]
       requestBody:
         required: true
         content:
@@ -2076,6 +2080,7 @@ paths:
         - { $ref: "#/components/parameters/rsvpId" }
         - { name: id, in: path, required: true, schema: { type: string } }
         - { name: action, in: path, required: true, schema: { type: string, enum: [apply, withdraw, check-in, check-out] } }
+        - { $ref: "#/components/parameters/idempotencyKey" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyShiftsResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -2420,6 +2425,7 @@ components:
     listId: { name: listId, in: path, required: true, schema: { type: string } }
     requestId: { name: requestId, in: path, required: true, schema: { type: string } }
     instanceId: { name: instanceId, in: path, required: true, schema: { type: string } }
+    idempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action. A retry with the same key, path and body replays the first answer (`Idempotent-Replayed: true`, ticket tokens left out) without acting twice; the same key on another path or body is CONFLICT." }
 
   responses:
     Error:
@@ -2466,7 +2472,7 @@ components:
           additionalProperties: false
           required: [code, message]
           properties:
-            code: { type: string, enum: [INVALID_REQUEST, UNAUTHENTICATED, MFA_REQUIRED, EMAIL_VERIFICATION_REQUIRED, FORBIDDEN, NOT_FOUND, CONFLICT, NEEDS_FORCE, RATE_LIMITED, TEAM_REQUIRED, TEAM_MEMBER, TEAM_INCOMPLETE, CAPACITY_FULL, JUDGING_CLOSED, INCOMPLETE_SCORES, NOT_VISIBLE, INTERNAL_ERROR, STAFF_MFA_REQUIRED, STAFF_MFA_ENROLMENT_REQUIRED, EMAIL_CODE_REQUIRED, TOO_MANY_ATTEMPTS, REAUTH_REQUIRED, PAID_ORDER, REGISTRATION_CLOSED, PAYMENT_UNAVAILABLE, PAYLOAD_TOO_LARGE, IDEMPOTENCY_STALE, ADMISSION_MANAGED] }
+            code: { type: string, enum: [INVALID_REQUEST, UNAUTHENTICATED, MFA_REQUIRED, EMAIL_VERIFICATION_REQUIRED, FORBIDDEN, NOT_FOUND, CONFLICT, NEEDS_FORCE, RATE_LIMITED, TEAM_REQUIRED, TEAM_MEMBER, TEAM_INCOMPLETE, CAPACITY_FULL, JUDGING_CLOSED, INCOMPLETE_SCORES, NOT_VISIBLE, INTERNAL_ERROR, STAFF_MFA_REQUIRED, STAFF_MFA_ENROLMENT_REQUIRED, EMAIL_CODE_REQUIRED, TOO_MANY_ATTEMPTS, REAUTH_REQUIRED, PAID_ORDER, REGISTRATION_CLOSED, PAYMENT_UNAVAILABLE, PAYLOAD_TOO_LARGE, IDEMPOTENCY_STALE, ADMISSION_MANAGED, OPEN_CLAIMS] }
             message: { type: string, description: UI-safe text. }
             fieldErrors: { type: object, additionalProperties: { type: array, items: { type: string } } }
 

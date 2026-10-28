@@ -18,4 +18,4 @@ export const POST = authedMobileRoute<Params>("POST /api/mobile/v1/me/registrati
   const result = await myShiftAction({ ticketToken: rsvp.checkInToken, action: known, id: id.slice(0, 64) });
   if (!result.ok) return mobileActionError(result);
   return mobileOk(await loadMyShiftsDto(rsvp, baseUrl));
-});
+}, { idempotent: true });

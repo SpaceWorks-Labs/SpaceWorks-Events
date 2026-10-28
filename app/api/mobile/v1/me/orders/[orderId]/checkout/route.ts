@@ -21,4 +21,4 @@ export const POST = authedMobileRoute<{ orderId: string }>("POST /api/mobile/v1/
   if (outcome.error === "not_found") return notFound();
   if (outcome.error === "busy" || outcome.error === "unavailable") return mobileError("PAYMENT_UNAVAILABLE");
   return mobileError("CONFLICT", MESSAGES[outcome.error]);
-});
+}, { idempotent: true });

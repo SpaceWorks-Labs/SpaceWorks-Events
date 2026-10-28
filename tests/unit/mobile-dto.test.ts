@@ -72,16 +72,21 @@ describe("mobile DTOs", () => {
     expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true }).judge).toBe(true);
     expect(eventPermissionsFor(null, ["JUDGE"]).judge).toBe(false);
     expect(eventPermissionsFor(null, ["CHECK_IN", "MANAGE_REGISTRATIONS"], { submissionsEnabled: true }).judge).toBe(false);
-    // JUDGE never satisfies any other flag.
-    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, manageCrew: false, fileClaims: false, manageFinance: false, manageApplications: false, reviewApplications: false });
-    // MENTOR is isolated like JUDGE: the console only, no organiser flags.
-    expect(Object.values(eventPermissionsFor(null, ["MENTOR"])).some(Boolean)).toBe(false);
+    // JUDGE never satisfies any other organiser flag; like any grant, it files its own staff claims (docs/FINANCE.md).
+    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, manageCrew: false, fileClaims: true, manageFinance: false, manageApplications: false, reviewApplications: false });
+    // MENTOR and REVIEW_APPLICATIONS are isolated like JUDGE: their console only, no organiser flags but their own claims.
+    for (const grant of ["MENTOR", "REVIEW_APPLICATIONS"] as const) {
+      const { fileClaims, ...rest } = eventPermissionsFor(null, [grant]);
+      expect(fileClaims).toBe(true);
+      expect(Object.values(rest).some(Boolean)).toBe(false);
+    }
+    expect(eventPermissionsFor(null, []).fileClaims).toBe(false);
     // Applications (docs/ADMISSION.md): only on events taking them; REVIEW_APPLICATIONS opens the review workspace alone.
     expect(eventPermissionsFor(null, ["MANAGE_REGISTRATIONS"], { admissionEnabled: true })).toMatchObject({ manageApplications: true, reviewApplications: false });
     expect(eventPermissionsFor("OWNER", [], { admissionEnabled: true })).toMatchObject({ manageApplications: true, reviewApplications: true });
     expect(eventPermissionsFor("OWNER", [])).toMatchObject({ manageApplications: false, reviewApplications: false });
     const reviewer = eventPermissionsFor(null, ["REVIEW_APPLICATIONS"], { admissionEnabled: true });
-    expect(Object.entries(reviewer).filter(([, value]) => value).map(([key]) => key)).toEqual(["reviewApplications"]);
+    expect(Object.entries(reviewer).filter(([, value]) => value).map(([key]) => key)).toEqual(["fileClaims", "reviewApplications"]);
   });
 
 });

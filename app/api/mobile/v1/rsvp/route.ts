@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { submitRsvpCore } from "@/lib/rsvpCore";
 import { teamRegistrationIntentSchema } from "@/lib/validators";
 import { mobileActionError, mobileError, mobileOk, readJsonBody, zodFieldErrors } from "@/lib/mobile/http";
+import { idempotentRequest } from "@/lib/mobile/idempotency";
 import { mobileRoute } from "@/lib/mobile/route";
 import { rsvpResultDtoSchema } from "@/lib/mobile/schemas";
 import { checkRateLimitById, getClientIpFromHeaders } from "@/lib/rateLimit";
@@ -30,9 +31,17 @@ function stringField(body: unknown, key: string) {
  * the system browser) and when the hold ends. A paid request on an approval
  * event answers PENDING_APPROVAL with its order id. The order's access token
  * is never returned.
+ *
+ * Signed in, it needs an Idempotency-Key, so a retried tap never registers or
+ * orders twice (a replayed answer carries `ticketToken: null`; read the
+ * registration for it). The guest flow has no account to hold keys; its
+ * duplicate check by email applies instead.
  */
-export const POST = mobileRoute("POST /api/mobile/v1/rsvp", async (request, _params, { auth }) => {
-  const body = await readJsonBody(request, 128 * 1024);
+const ROUTE = "POST /api/mobile/v1/rsvp";
+const MAX_BYTES = 128 * 1024;
+
+async function register(request: Request, auth: { userId: string } | null) {
+  const body = await readJsonBody(request, MAX_BYTES);
   if ("response" in body) return body.response;
 
   const guestEmail = stringField(body.value, "guestEmail")?.trim().toLowerCase() ?? null;
@@ -90,4 +99,8 @@ export const POST = mobileRoute("POST /api/mobile/v1/rsvp", async (request, _par
     // A ticket only for a confirmed place: a free registration, or an order already paid or free.
     ticketToken: rsvp.status === RsvpStatus.CONFIRMED ? result.data.ticketToken : null,
   }));
-}, { optionalAuth: true });
+}
+
+export const POST = mobileRoute(ROUTE, async (request, _params, { auth }) => (auth
+  ? idempotentRequest(request, auth.userId, ROUTE, (copy) => register(copy, auth), MAX_BYTES)
+  : register(request, null)), { optionalAuth: true });

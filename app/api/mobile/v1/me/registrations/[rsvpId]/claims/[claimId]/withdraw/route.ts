@@ -10,4 +10,4 @@ export const POST = authedMobileRoute<{ rsvpId: string; claimId: string }>("POST
   const result = await withdrawParticipantClaimAction(rsvp.checkInToken, claimId);
   if (!result.ok) return mobileActionError(result);
   return mobileOk(await loadMyParticipantClaims(auth.userId, rsvpId));
-});
+}, { idempotent: true });

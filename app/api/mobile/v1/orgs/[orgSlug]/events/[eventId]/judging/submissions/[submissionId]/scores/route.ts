@@ -50,4 +50,4 @@ export const PUT = judgingRoute<Params>("PUT /api/mobile/v1/orgs/:orgSlug/events
       scoredCriteria: saved.data.scored,
     },
   }));
-});
+}, { idempotent: true });

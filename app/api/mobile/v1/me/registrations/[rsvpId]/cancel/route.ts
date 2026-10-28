@@ -12,4 +12,4 @@ export const POST = authedMobileRoute<{ rsvpId: string }>("POST /api/mobile/v1/m
   const result = await cancelRsvpForUser(auth.userId, { rsvpId: rsvp.id });
   if (!result.ok) return mobileActionError(result);
   return mobileOk(null);
-});
+}, { idempotent: true });

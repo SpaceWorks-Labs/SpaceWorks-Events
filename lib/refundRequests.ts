@@ -1,6 +1,6 @@
 import "server-only";
 
-import { OrderStatus, PaymentStatus, RefundRequestStatus, type Prisma } from "@prisma/client";
+import { AttendanceResponse, OrderStatus, PaymentStatus, RefundRequestStatus, type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
@@ -117,12 +117,32 @@ export async function decideRefundRequest(ctx: ClaimAdminContext, input: unknown
     // Only a refusal happens before the refund commits; then the request is
     // open again. Anything later leaves it approved, so it never refunds twice.
     if (!(error instanceof PaymentOperationError)) throw error;
-    await prisma.refundRequest.update({ where: { id: request.id }, data: { status: RefundRequestStatus.OPEN, approvedMinor: null, decidedByUserId: null, decidedAt: null, decisionNote: "" } });
+    await reopenRefusedRequest(request.id);
     return { ok: false, error: error.message };
   }
   await prisma.refundRequest.update({ where: { id: request.id }, data: { approvedMinor: refunded.refundedMinor } });
   await recordAuditEvent({ action: "REFUND_REQUEST_APPROVED", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "RefundRequest", targetId: request.id, metadata: { amountMinor: amountMinor?.toString() ?? "all", cancelTickets: parsed.data.cancelTickets } });
   return { ok: true };
+}
+
+/**
+ * The refund was refused: open the request again, only while it is still the
+ * approval this call made. A request opened by an attendance "No" whose guest
+ * has since said Yes (docs/ATTENDANCE.md) is withdrawn instead, as their Yes
+ * would have done had it not been mid-approval.
+ */
+async function reopenRefusedRequest(requestId: string) {
+  await prisma.$transaction(async (tx) => {
+    // Locked before the answer is read: a Yes landing meanwhile waits here, then withdraws the reopened request.
+    await tx.$queryRaw`SELECT "id" FROM "RefundRequest" WHERE "id" = ${requestId} FOR UPDATE`;
+    const coming =await tx.attendanceCheck.count({ where: { refundRequestId: requestId, response: AttendanceResponse.ATTENDING } });
+    await tx.refundRequest.updateMany({
+      where: { id: requestId, status: RefundRequestStatus.APPROVED },
+      data: coming > 0
+        ? { status: RefundRequestStatus.WITHDRAWN, approvedMinor: null, decidedByUserId: null, decisionNote: "Withdrawn: the guest said they're coming after all.", decidedAt: new Date() }
+        : { status: RefundRequestStatus.OPEN, approvedMinor: null, decidedByUserId: null, decidedAt: null, decisionNote: "" },
+    });
+  });
 }
 
 /** For the order page: the buyer's latest request on this order, if any. */

@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { withApiMonitoring } from "@/lib/apiMonitor";
 import { requireMobileUser, optionalMobileUser, type MobileAuthContext } from "@/lib/mobileAuth";
 import { mobileError } from "@/lib/mobile/http";
+import { idempotentRequest } from "@/lib/mobile/idempotency";
 import { getRequestOrigin } from "@/lib/publicUrl";
 import { ANONYMOUS_ACTOR, runAsRequestActor } from "@/lib/requestActor";
 import { staffMfaState } from "@/lib/staffMfa";
@@ -69,10 +70,17 @@ export async function staffGate(userId: string) {
   return null;
 }
 
+/**
+ * `idempotent`: the write needs an Idempotency-Key and runs at most once per
+ * key (lib/mobile/idempotency.ts), after sign-in, the request limit and the
+ * staff authenticator gate. `maxBytes` raises the body cap for uploads.
+ */
+export type RouteOptions = { staff?: boolean; idempotent?: true | { maxBytes: number } };
+
 export function authedMobileRoute<P extends Record<string, string>>(
   routeId: string,
   handler: (request: Request, params: P, context: AuthedRouteContext) => Promise<Response>,
-  options: { staff?: boolean } = {},
+  options: RouteOptions = {},
 ) {
   return withApiMonitoring(routeId, async (request: Request, segment?: RouteParams<P>) => {
     try {
@@ -83,7 +91,11 @@ export function authedMobileRoute<P extends Record<string, string>>(
       const baseUrl = await mobileBaseUrl();
       return await runAsRequestActor(auth, async () => {
         const refused = options.staff ? await staffGate(auth.userId) : null;
-        return refused ?? handler(request, params, { baseUrl, auth });
+        if (refused) return refused;
+        if (!options.idempotent) return handler(request, params, { baseUrl, auth });
+        // The key is the user's, per route; a reused key on another path is CONFLICT (lib/mobile/idempotency.ts).
+        const maxBytes = typeof options.idempotent === "object" ? options.idempotent.maxBytes : undefined;
+        return idempotentRequest(request, auth.userId, routeId, (copy) => handler(copy, params, { baseUrl, auth }), maxBytes);
       });
     } catch {
       console.error(`[mobile-api] ${routeId} failed`);

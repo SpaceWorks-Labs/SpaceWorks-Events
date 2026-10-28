@@ -80,9 +80,11 @@ super admin are exempt. The permission helpers underneath fail closed too.
   `REAUTH_REQUIRED` (401, sign in again before signing out everywhere),
   `PAID_ORDER` (409, money was taken: use the order's refund rules),
   `REGISTRATION_CLOSED` (409), `PAYMENT_UNAVAILABLE` (503, the payment
-  provider can't be reached) and `ADMISSION_MANAGED` (409, the registration,
+  provider can't be reached), `ADMISSION_MANAGED` (409, the registration,
   team or order is an application: decide it through Applications,
-  docs/ADMISSION.md).
+  docs/ADMISSION.md), `OPEN_CLAIMS` (409, a ticket transfer refused while the
+  holder has expense claims waiting, approved or paid) and
+  `IDEMPOTENCY_STALE` (409, see Idempotency below).
 - Team and judging refusals carry their own codes so the app can react
   without parsing messages:
   - `TEAM_MEMBER` (409): an individual approve, reject, promote or re-accept
@@ -115,6 +117,45 @@ super admin are exempt. The permission helpers underneath fail closed too.
 - Limits: the proxy's per-IP API limit, 300 authenticated requests per minute
   per user, plus each operation's own website limit (check-in, RSVP,
   broadcasts, sign-in…).
+
+### Idempotency
+
+Every signed-in write that moves money or creates or changes a record needs
+an `Idempotency-Key` header (8 to 128 printable characters, a fresh one per
+user action, kept for retries of that action); the OpenAPI marks it required
+on each. Without one the write answers `INVALID_REQUEST` and does nothing.
+The first request runs; a retry with the same key, path and body within a day
+gets the first answer again with `Idempotent-Replayed: true`, so a retried
+refund, order, claim or check-in never happens twice. A multipart upload
+(claims with receipts) matches by its fields and files, so a retry may use a
+new boundary. The same key on another path or with another body, or while the
+first is still running, is `CONFLICT`; it never replays another resource's
+answer.
+
+- Only definitive answers are kept. A 5xx, `RATE_LIMITED`, `UNAUTHENTICATED`
+  or a staff authenticator refusal is not, so retry it with the same key
+  (after signing in or confirming the code).
+- Use a new key only after a definitive 4xx answer, which the same key would
+  replay.
+- `IDEMPOTENCY_STALE` (409): an earlier request with this key started over a
+  minute ago and never finished, so its outcome is unknown and it is never run
+  again under that key. Re-read the record; if the change is not there, send
+  the action again with a new key.
+- A replayed answer never carries a ticket token: every `ticketToken` is kept
+  as `null` (re-read the registration or order for it). Keys and bodies are
+  kept only as HMACs, and kept answers are deleted after a day.
+- `POST /rsvp` needs a key only with a bearer; the guest flow has no account
+  to hold keys, and its duplicate check by email applies instead.
+- Exempt, with the reason: the sign-in routes (`/auth/login`, `/auth/google`,
+  `/auth/refresh`, `/auth/mfa`, `/auth/logout`, `/auth/logout-all`: their
+  answers are fresh session tokens, which are never stored, or a repeat has
+  nothing left to do); writes that only read (`…/broadcasts/count`,
+  `…/broadcasts/preview`, `…/check-in/preview`, `/public/access-code/unlock`,
+  `/public/promo/check`); `…/guests/:rsvpId/attendance-link` (its answer is a
+  fresh bearer link, never stored, and each call replaces the last); `PATCH`
+  writes, which set values a repeat leaves unchanged; and `DELETE` writes,
+  where a repeat finds nothing to remove.
+  `tests/unit/mobile-idempotency-coverage.test.ts` keeps this list exact.
 
 ## Sessions
 
@@ -285,7 +326,9 @@ for a solo registration). Anyone else's RSVP, including a teammate's, is
 
 Cancels the caller's own RSVP with the website's cancel rules (refused after
 check-in, promotes the waitlist, queues emails, audited) → `null`.
-`NOT_FOUND` for anyone else's RSVP.
+`NOT_FOUND` for anyone else's RSVP. A ticket whose order collected money, is
+still owed at the desk, or pays for a whole team (a PER_TEAM leader) answers
+`PAID_ORDER` (409): cancel the order instead (`POST /me/orders/:orderId/cancel`).
 
 ### `GET` / `POST /me/registrations/:rsvpId/attendance` (auth)
 
@@ -424,8 +467,9 @@ codes, passes, pay at the desk, and refunds under the policy frozen at purchase.
   It is never `CONFIRMED` until the provider's webhook records the payment. A
   paid request (approval event or paid waitlist) answers `PENDING_APPROVAL`
   with its `orderId` and no checkout; the organiser's approval emails a link.
-- `POST /me/registrations/:rsvpId/cancel` on a ticket with money collected
-  answers `PAID_ORDER` (409); cancel the order instead. A paid request is
+- `POST /me/registrations/:rsvpId/cancel` on a ticket with money collected or
+  still owed at the desk, or a PER_TEAM leader's team ticket, answers
+  `PAID_ORDER` (409); cancel the order instead. A paid request is
   withdrawn and a held order released, as on the website.
 
 ### Orders (auth; the caller's own, by id)
@@ -447,7 +491,9 @@ their orders by id, and anyone else's are `NOT_FOUND`.
 - `GET /me/orders/:orderId/receipt` → the receipt PDF once money was collected.
 - `POST /me/orders/:orderId/transfer` `{ "rsvpId", "name", "email" }` and
   `PATCH /me/orders/:orderId/tickets/:rsvpId` `{ "name", "email?", "answers?" }`
-  → the order, where the organiser allows transfers.
+  → the order, where the organiser allows transfers. A transfer is refused
+  with `OPEN_CLAIMS` (409) while the holder has expense claims waiting,
+  approved or paid on the ticket (withdraw a waiting claim first).
 - `GET /me/registrations/:rsvpId/team` adds `order` (`{ "orderId", "status", "holdExpiresAt" }` or null) for a paid team place.
 
 ### Expense claims, projects and prizes (auth)
@@ -508,7 +554,8 @@ event with submissions switched on (the judging routes below);
 `MANAGE_REGISTRATIONS` grant (as the web guest list and payment tools);
 `sendEmails`, `manageFeedback`, `manageRegistrationWindow` and `manageFinance`
 = organisation OWNER/ADMIN; `checkInToLists` = OWNER/ADMIN or `CHECK_IN`;
-`fileClaims` = anyone on the event dashboard. All come from
+`fileClaims` = organisation members and any event collaborator (JUDGE,
+MENTOR and REVIEW_APPLICATIONS included). All come from
 `eventCapabilities()` (lib/eventDashboard/capabilities.ts), the website's own
 source (see [Permissions](PERMISSIONS.md#mobile-api)). The flags only hide controls; every
 mutation is re-checked server-side.
@@ -715,7 +762,9 @@ send call client-side.
 - `GET …/orders/:orderId` → buyer, total, paid, refunded, still `due`,
   `payAtDesk` and the tickets. Guests carry `orderId` in every guest list.
 - `POST …/orders/:orderId/settle` `{ "mode": "offline"|"waive", "method?", "reference?" }`
-  records money collected in person or makes the order complimentary.
+  records money collected in person or makes the order complimentary. An
+  applicant's place (docs/ADMISSION.md) is never waived: `waive` answers
+  `ADMISSION_MANAGED`; `offline` (paid at the desk) is recorded.
 - `POST …/orders/:orderId/payment-link` emails the buyer a fresh link.
 - `POST …/orders/:orderId/refund` `{ "amount?", "reason", "cancelTickets?" }`
   refunds through the provider.
@@ -738,7 +787,9 @@ send call client-side.
 
 ### Finance (docs/FINANCE.md)
 
-- `fileClaims` (anyone on the dashboard): `GET …/finance/claims/mine`,
+- `fileClaims` (organisation members and any event collaborator, the isolated
+  JUDGE, MENTOR and REVIEW_APPLICATIONS grants included, for their own claims
+  on that event only): `GET …/finance/claims/mine`,
   `POST …/finance/claims` (multipart: `category`, `description`, `amount`,
   `payeeName`, `payeeEmail`, up to three `receipts`), and
   `POST …/finance/claims/:claimId/withdraw`.
@@ -900,23 +951,9 @@ and organisers. Reads use the website's own read models; every write runs the
 website's action body as the app session. Help text reaches only the team
 that raised it and mentors who may see it; it is never logged.
 
-**Idempotency.** Every Mentor Desk write needs an `Idempotency-Key` header (8
-to 128 printable characters, a fresh one per user action, kept for retries of
-that action). The first request runs; a retry with the same key, path and body
-within a day gets the first answer again with `Idempotent-Replayed: true`. The
-same key on another path (another event, request, slot or round) or with
-another body, or while the first is still running, is `CONFLICT`; it never
-replays another resource's answer.
-
-- Only definitive answers are kept. A 5xx, `RATE_LIMITED`, `UNAUTHENTICATED`
-  or a staff authenticator refusal is not, so retry it with the same key
-  (after signing in or confirming the code).
-- Use a new key only after a definitive 4xx answer, which the same key would
-  replay.
-- `IDEMPOTENCY_STALE` (409): an earlier request with this key started over a
-  minute ago and never finished, so its outcome is unknown and it is never run
-  again under that key. Re-read the record; if the change is not there, send
-  the action again with a new key.
+**Idempotency.** Every Mentor Desk write needs an `Idempotency-Key` header,
+as every signed-in write does (see [Idempotency](#idempotency)). The same key
+on another path (another event, request, slot or round) is `CONFLICT`.
 
 Commands also take the record's `expectedVersion` (from the last read) and
 answer `CONFLICT` when someone changed it first.

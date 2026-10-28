@@ -21,4 +21,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   const result = await restoreRsvpForUser(auth.userId, { organisationSlug: event.organisation.slug, undoId: body.data.undoId });
   if (!result.ok) return mobileActionError(result);
   return mobileOk(null);
-});
+}, { idempotent: true });

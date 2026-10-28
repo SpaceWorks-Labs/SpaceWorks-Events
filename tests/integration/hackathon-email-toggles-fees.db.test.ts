@@ -4,7 +4,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
 
 import { prisma } from "@/lib/db";
-import { disqualifySubmission, submitSubmission, type EntrantAuth } from "@/lib/core/judging";
+import { disqualifySubmission, reinstateSubmission, submitSubmission, type EntrantAuth } from "@/lib/core/judging";
+import { REFUNDED_FEE_REFUSAL } from "@/lib/core/judging/disqualification";
 import { settleOrderByHand } from "@/lib/payments/operations";
 import { paid, payOrder, setUpPaidOrg, tearDownPaidOrg } from "./helpers/paidOrg";
 
@@ -72,6 +73,9 @@ describe.sequential("hackathon receipts on the entry-fee path", () => {
     const organiser = { userId: organiserId, organisationId: paid.organisationId, orgSlug: paid.orgSlug, eventId: event.id, eventSlug: event.slug };
     expect(await disqualifySubmission(organiser, { submissionId: submission.id, reason: "Plagiarised" })).toMatchObject({ ok: true });
     expect(await notices(order.id, "refunded")).toBe(1);
+    // Its fee came back, so reinstating would leave it submitted unpaid.
+    expect(await reinstateSubmission(organiser, submission.id)).toMatchObject({ ok: false, error: REFUNDED_FEE_REFUSAL });
+    expect(await prisma.submission.findUniqueOrThrow({ where: { id: submission.id } })).toMatchObject({ status: SubmissionStatus.DISQUALIFIED });
   });
 
   it("queues exactly one receipt when receipts are on and the provider confirms the fee", async () => {
@@ -95,5 +99,9 @@ describe.sequential("hackathon receipts on the entry-fee path", () => {
     expect(await settleOrderByHand({ orderId: waived.order.id, organisationId: paid.organisationId, actorUserId: organiserId, mode: "waive" })).toBe("confirmed");
     expect(await prisma.submission.findUniqueOrThrow({ where: { id: waived.submission.id } })).toMatchObject({ status: SubmissionStatus.SUBMITTED });
     expect(await receipts(waived.submission.id)).toBe(0);
+    // A waived fee is never refunded: the project can be disqualified and reinstated.
+    const organiser = { userId: organiserId, organisationId: paid.organisationId, orgSlug: paid.orgSlug, eventId: waived.event.id, eventSlug: waived.event.slug };
+    expect(await disqualifySubmission(organiser, { submissionId: waived.submission.id, reason: "Checking" })).toMatchObject({ ok: true });
+    expect(await reinstateSubmission(organiser, waived.submission.id)).toMatchObject({ ok: true });
   });
 });

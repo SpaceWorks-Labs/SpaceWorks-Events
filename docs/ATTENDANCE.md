@@ -103,7 +103,7 @@ it on, a No is handled after the reply has been recorded
 | --- | --- |
 | Free (no order, or an order that cost nothing) | The guest's own cancellation (`cancelRegistrationByToken` in `lib/rsvpCancel.ts`, without revalidation): capacity, waitlist promotion and team rules (leader handover, team units) apply as on the ticket page. |
 | An order that cost money (paid, or still owed at the desk) with only this ticket, the replier is the buyer, refund policy open | The buyer's own cancellation (`cancelOrderAsBuyer`), refunding what the policy says after the reply commits. Nothing collected means nothing refunded, and an owed desk payment is cancelled. |
-| The same with money collected, refund policy closed | The place is kept and a refund request is opened for the organisers (`requestRefundForOrder`; an already open request is reused). Guests shows **Said No · paid**. |
+| The same with money collected, refund policy closed | The place is kept and a refund request is opened for the organisers (`requestRefundForOrder`; the buyer's own open request is reused and recorded on the check, so a later Yes withdraws it). Guests shows **Said No · paid**. |
 | An order that cost money with several tickets (desk orders included), a team ticket covering the whole team, or a ticket somebody else paid for | Nothing is cancelled. Owners and admins are emailed and the chat hears a cancellation notice; Guests shows **Said No · paid**. |
 | Already checked in, or any refused cancellation | The place is kept; the reply is recorded with `releaseOutcome = "failed"`. |
 

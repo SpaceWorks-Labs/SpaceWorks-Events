@@ -56,7 +56,9 @@ On an event or series dashboard → **Tickets**:
   until a number of hours before the start, or a percentage back until then.
   The policy is shown before payment and fixed on each order.
 - **Transfers:** optionally let buyers hand a ticket to someone else until a
-  cut-off before the start.
+  cut-off before the start. A ticket whose holder has expense claims waiting,
+  approved or paid ([Finance](FINANCE.md)) stays with them, since claims
+  belong to the registration.
 
 At checkout the seats are held for 30 minutes while the buyer pays. Approval
 requests and waitlist places get a payment link that holds the seats for 24

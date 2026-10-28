@@ -11,6 +11,9 @@ import { POST as login } from "@/app/api/mobile/v1/auth/login/route";
  * and presents the app session to Server Action bodies.
  */
 
+/** Signed-in writes keep Idempotency-Key HMACs under a key derived from MFA_ENCRYPTION_KEY (lib/mobile/idempotency.ts). */
+process.env.MFA_ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
+
 export const BASE = "https://events.example.test";
 export const PASSWORD = "correct horse battery staple";
 
@@ -19,12 +22,23 @@ function address() {
   return `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
 }
 
+/** A fresh Idempotency-Key: signed-in writes need one (lib/mobile/idempotency.ts). */
+export const newKey = () => `test-${randomBytes(12).toString("hex")}`;
+
+/** A JSON POST; signed in, it carries a fresh Idempotency-Key (use `keyed` to choose one). */
 export function post(path: string, body: unknown, token?: string) {
   return new Request(`${BASE}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-real-ip": address(), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { "content-type": "application/json", "x-real-ip": address(), ...(token ? { authorization: `Bearer ${token}`, "idempotency-key": newKey() } : {}) },
     body: JSON.stringify(body),
   });
+}
+
+/** A signed-in JSON POST without an Idempotency-Key (to check it is refused). */
+export function unkeyed(path: string, body: unknown, token: string) {
+  const request = post(path, body, token);
+  request.headers.delete("idempotency-key");
+  return request;
 }
 
 export function get(path: string, token?: string) {

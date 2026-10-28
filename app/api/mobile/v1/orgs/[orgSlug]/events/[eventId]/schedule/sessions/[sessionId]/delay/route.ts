@@ -12,4 +12,4 @@ export const POST = eventRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events
   const result = await setEventSessionDelayForUser(auth.userId, { organisationSlug: event.organisation.slug, eventId: event.event.id, sessionId, delayMinutes: body.data.delayMinutes });
   if (!result.ok) return mobileActionError(result);
   return mobileOk(null);
-});
+}, { idempotent: true });

@@ -30,8 +30,8 @@ export function eventPermissionsFor(
     checkInToLists: can.canCheckInToLists,
     manageOrders: can.canManageRegistrations,
     manageCrew: can.canManageCrew,
-    // Anyone on the event dashboard files their own claims (docs/FINANCE.md).
-    fileClaims: role !== null || hasOrganiserGrant(grant),
+    // Members and any event collaborator file their own claims (docs/FINANCE.md).
+    fileClaims: role !== null || grant.length > 0,
     manageFinance: can.isAdmin,
     // Applications (docs/ADMISSION.md): the same rules as the Applications tab, on events taking them.
     manageApplications: Boolean(options.admissionEnabled) && can.canManageApplications,

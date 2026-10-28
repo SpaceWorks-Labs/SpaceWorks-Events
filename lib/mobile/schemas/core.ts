@@ -32,6 +32,8 @@ export const mobileErrorCodeSchema = z.enum([
   "PAID_ORDER", "REGISTRATION_CLOSED", "PAYMENT_UNAVAILABLE", "PAYLOAD_TOO_LARGE", "IDEMPOTENCY_STALE",
   // Applications (docs/ADMISSION.md).
   "ADMISSION_MANAGED",
+  // A ticket transfer refused while the holder's expense claims are in play (docs/FINANCE.md).
+  "OPEN_CLAIMS",
 ]);
 
 export const errorEnvelopeSchema = z.object({

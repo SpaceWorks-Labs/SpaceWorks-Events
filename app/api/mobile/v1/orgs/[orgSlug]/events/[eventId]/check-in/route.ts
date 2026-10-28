@@ -20,4 +20,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
     : await checkInByRsvpIdForUser(auth.userId, { ...target, rsvpId: body.data.rsvpId }, { source: "mobile-manual" });
   if (!result.ok) return mobileActionError(result);
   return result.data ? mobileOk(toCheckInResult(result.data)) : mobileError("INTERNAL_ERROR");
-});
+}, { idempotent: true });

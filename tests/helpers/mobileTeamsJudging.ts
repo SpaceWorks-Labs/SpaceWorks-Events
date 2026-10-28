@@ -5,6 +5,9 @@ import { EventPermission, EventPrivacyType, EventStatus, JudgingStatus, Registra
 import { prisma } from "@/lib/db";
 import { POST as login } from "@/app/api/mobile/v1/auth/login/route";
 
+/** Signed-in writes keep Idempotency-Key HMACs under a key derived from MFA_ENCRYPTION_KEY (lib/mobile/idempotency.ts). */
+process.env.MFA_ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
+
 /* The seeded hackathon behind tests/integration/mobile-teams-judging.db.test.ts. */
 
 export const suffix = randomUUID().replaceAll("-", "").slice(0, 16);
@@ -26,7 +29,7 @@ export const OWNER_COMMENT = `Owner private comment ${suffix}`;
 export function request(path: string, token: string, init: { method?: string; body?: unknown } = {}) {
   return new Request(`https://events.example.test${path}`, {
     method: init.method ?? "GET",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}`, ...(init.method && init.method !== "GET" ? { "idempotency-key": `test-${Math.random().toString(36).slice(2)}${Date.now()}` } : {}) },
     ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
   });
 }

@@ -21,4 +21,4 @@ export const POST = authedMobileRoute<{ eventId: string }>("POST /api/mobile/v1/
   if ("url" in checkout) return mobileOk(checkoutDtoSchema.parse({ checkoutUrl: checkout.url }));
   if ("paid" in checkout) return mobileError("CONFLICT", "The entry fee is already paid.");
   return mobileError("PAYMENT_UNAVAILABLE", checkout.error);
-});
+}, { idempotent: true });

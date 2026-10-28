@@ -36,7 +36,8 @@ export type MobileErrorCode =
   | "ADMISSION_MANAGED"
   | "PAYMENT_UNAVAILABLE"
   | "PAYLOAD_TOO_LARGE"
-  | "IDEMPOTENCY_STALE";
+  | "IDEMPOTENCY_STALE"
+  | "OPEN_CLAIMS";
 
 export const MOBILE_ERROR_STATUS: Record<MobileErrorCode, number> = {
   INVALID_REQUEST: 400,
@@ -67,6 +68,7 @@ export const MOBILE_ERROR_STATUS: Record<MobileErrorCode, number> = {
   PAYMENT_UNAVAILABLE: 503,
   PAYLOAD_TOO_LARGE: 413,
   IDEMPOTENCY_STALE: 409,
+  OPEN_CLAIMS: 409,
 };
 
 const DEFAULT_MESSAGES: Record<MobileErrorCode, string> = {
@@ -98,6 +100,7 @@ const DEFAULT_MESSAGES: Record<MobileErrorCode, string> = {
   PAYMENT_UNAVAILABLE: "Payments can't be taken right now. Try again in a moment.",
   PAYLOAD_TOO_LARGE: "Request is too large.",
   IDEMPOTENCY_STALE: "An earlier try of this change never finished. Refresh to check whether it happened, then try again if it did not.",
+  OPEN_CLAIMS: "This ticket has expense claims in progress, so it can't be transferred.",
 };
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
@@ -131,7 +134,7 @@ export const unauthenticated = () => mobileError("UNAUTHENTICATED");
 export const notFound = () => mobileError("NOT_FOUND");
 
 /** Core refusal codes passed through unchanged (ActionErrorCode, JudgingRefusalCode). */
-const PASS_THROUGH_CODES = ["TEAM_REQUIRED", "TEAM_MEMBER", "TEAM_INCOMPLETE", "CAPACITY_FULL", "JUDGING_CLOSED", "INCOMPLETE_SCORES", "NOT_VISIBLE", "PAID_ORDER", "REGISTRATION_CLOSED", "ADMISSION_MANAGED"] as const;
+const PASS_THROUGH_CODES = ["TEAM_REQUIRED", "TEAM_MEMBER", "TEAM_INCOMPLETE", "CAPACITY_FULL", "JUDGING_CLOSED", "INCOMPLETE_SCORES", "NOT_VISIBLE", "PAID_ORDER", "REGISTRATION_CLOSED", "ADMISSION_MANAGED", "OPEN_CLAIMS"] as const;
 type PassThroughCode = (typeof PASS_THROUGH_CODES)[number];
 
 type FailedActionResult = { ok: false; error: string; fieldErrors?: Record<string, string[]>; needsForce?: boolean; reauthRequired?: boolean; code?: string };
@@ -172,7 +175,7 @@ export function zodFieldErrors(error: ZodError): Record<string, string[]> {
   return out;
 }
 
-const MAX_BODY_BYTES = 256 * 1024;
+export const MAX_BODY_BYTES = 256 * 1024;
 
 /** Read a bounded JSON body (streamed with a hard cap). Returns `{ value }` or a ready error response. */
 export async function readJsonBody(request: Request, maxBytes = MAX_BODY_BYTES): Promise<{ value: unknown } | { response: Response }> {

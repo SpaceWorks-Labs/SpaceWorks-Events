@@ -13,7 +13,7 @@ import { AdmissionManagedError, cancelOrderAsBuyer, PaymentOperationError } from
 import { validateAndNormalizeAnswers } from "@/lib/rsvpCore";
 import { isValidAttendeeName } from "@/lib/validators";
 import { ORDER_SUBJECT_SELECT, orderSubject } from "@/lib/payments/targets";
-import { transferTicket } from "@/lib/payments/transfers";
+import { OpenClaimsError, transferTicket } from "@/lib/payments/transfers";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -136,7 +136,7 @@ export async function transferOrderTicket(input: unknown): Promise<ActionResult>
   try {
     await transferTicket(parsed.data);
   } catch (error) {
-    if (error instanceof PaymentOperationError) return { ok: false, error: error.message, ...(error instanceof AdmissionManagedError ? { code: error.code } : {}) };
+    if (error instanceof PaymentOperationError) return { ok: false, error: error.message, ...(error instanceof AdmissionManagedError || error instanceof OpenClaimsError ? { code: error.code } : {}) };
     if (typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "P2002") {
       return { ok: false, error: "That person already has a ticket for this event." };
     }

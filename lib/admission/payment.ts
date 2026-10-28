@@ -32,7 +32,12 @@ export async function holdPaidPlace(
   if (!order) throw new AdmissionError("This place has no order to pay.");
   if (order.status === OrderStatus.EXPIRED) await reopenEndedHold(tx, app);
   if (app.rsvpId) {
-    await offerInTransaction(tx, { orderId: order.id, organisationId: event.organisationId, provider: account.provider, testMode: account.testMode, actorUserId: params.actorUserId, now });
+    // A solo applicant on a TEAM event takes one unit (teams count once), not one person against capacity.
+    const hasRoom = event.registrationMode === RegistrationMode.TEAM
+      ? async (rsvps: Array<{ ticketTypeId: string | null }>) => (event.capacity == null || (await countConfirmedUnits(tx, event.id, now)) < event.capacity)
+        && (await Promise.all(rsvps.map((rsvp) => ticketTypeHasRoom(tx, rsvp.ticketTypeId, event.id, now)))).every(Boolean)
+      : undefined;
+    await offerInTransaction(tx, { orderId: order.id, organisationId: event.organisationId, provider: account.provider, testMode: account.testMode, actorUserId: params.actorUserId, now, hasRoom });
     return;
   }
   await holdTeamPlace(tx, { event, teamId: app.teamId!, orderId: order.id, account, actorUserId: params.actorUserId, now });

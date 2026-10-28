@@ -25,4 +25,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   });
   if (!result.ok) return mobileActionError(result);
   return result.data ? mobileOk(syncDtoSchema.parse(result.data)) : mobileError("INTERNAL_ERROR");
-});
+}, { idempotent: true });

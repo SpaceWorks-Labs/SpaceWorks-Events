@@ -10,4 +10,4 @@ export const POST = eventRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events
   const result = await withdrawStaffClaimAction({ organisationSlug: event.organisation.slug, eventId: event.event.id }, claimId);
   if (!result.ok) return mobileActionError(result);
   return mobileOk(await loadMyStaffClaims(auth.userId, event.event.id));
-});
+}, { idempotent: true, anyGrant: true });

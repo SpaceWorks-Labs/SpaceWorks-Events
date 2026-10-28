@@ -18,4 +18,4 @@ export const POST = eventRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events
   const result = await approveClaimAction({ organisationSlug: event.organisation.slug, eventId: event.event.id }, { claimId, ...body.data });
   if (!result.ok) return mobileActionError(result);
   return mobileOk(await loadEventClaims(event.event.id));
-});
+}, { idempotent: true });

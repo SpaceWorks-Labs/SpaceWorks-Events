@@ -14,4 +14,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   const result = await sendEventBroadcastTestForUser(auth.userId, { ...parsed.data, organisationSlug: event.organisation.slug, eventId: event.event.id });
   if (!result.ok) return mobileActionError(result);
   return result.data ? mobileOk(broadcastTestDtoSchema.parse(result.data)) : mobileError("INTERNAL_ERROR");
-});
+}, { idempotent: true });

@@ -16,7 +16,14 @@ import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, onli
  * order holds them for a day with one pending payment and the buyer is
  * emailed a link. The checkout page opens only when they click Pay.
  */
-export async function offerInTransaction(tx: Prisma.TransactionClient, params: { orderId: string; organisationId: string; provider: "RAZORPAY" | "STRIPE"; testMode: boolean; actorUserId: string | null; now: Date; }) {
+type OfferRsvp = { id: string; orderId: string | null; eventId: string | null; eventInstanceId: string | null; ticketTypeId: string | null; };
+
+/**
+ * Offer a paid request its payment link, holding its seats. `hasRoom`
+ * replaces the seat check (hasFreeSeats) where places are counted otherwise:
+ * a solo applicant on a TEAM admission event takes one unit.
+ */
+export async function offerInTransaction(tx: Prisma.TransactionClient, params: { orderId: string; organisationId: string; provider: "RAZORPAY" | "STRIPE"; testMode: boolean; actorUserId: string | null; now: Date; hasRoom?: (rsvps: OfferRsvp[]) => Promise<boolean>; }) {
   await lockOrder(tx, params.orderId);
   const order = await tx.order.findFirst({
     where: { id: params.orderId, organisationId: params.organisationId },
@@ -26,7 +33,7 @@ export async function offerInTransaction(tx: Prisma.TransactionClient, params: {
   const subject = orderSubject(order);
   if (!subject || !subject.open(params.now)) throw new PaymentOperationError("This event is no longer open for registration.");
   if (order.totalMinor < providerMinimumMinor(params.provider, order.currency)) throw new PaymentOperationError("This order is below the smallest payment the provider accepts.");
-  if (!(await hasFreeSeats(tx, order.rsvps, params.now))) throw new PaymentOperationError("There aren't enough free places for this order yet.");
+  if (!(await (params.hasRoom ? params.hasRoom(order.rsvps) : hasFreeSeats(tx, order.rsvps, params.now)))) throw new PaymentOperationError("There aren't enough free places for this order yet.");
   const holdExpiresAt = new Date(params.now.getTime() + PAYMENT_LINK_HOLD_MS);
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.PENDING, holdExpiresAt, holdCapAt: new Date(holdExpiresAt.getTime() + HOLD_EXTENSION_CAP_MS), testMode: params.testMode } });
   await tx.rSVP.updateMany({ where: { orderId: order.id }, data: { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt } });

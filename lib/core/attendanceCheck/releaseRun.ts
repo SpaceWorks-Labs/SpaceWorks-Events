@@ -97,7 +97,11 @@ async function refundRequestOnce(check: CheckForRelease, orderId: string, note: 
   const result = await requestRefundForOrder(orderId, reason, (tx, requestId) => tx.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestId: requestId, refundRequestOpenedAt: now } }));
   // An open request on the order (the buyer's own) already reaches the organisers.
   if (!result.ok && result.error !== ALREADY_REQUESTED) return failed(check, result.error);
-  if (!result.ok) await prisma.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestOpenedAt: now } });
+  if (!result.ok) {
+    // The buyer's own open request stands for this check: a later No or Yes follows that one.
+    const open = await prisma.refundRequest.findFirst({ where: { orderId, status: RefundRequestStatus.OPEN }, select: { id: true } });
+    await prisma.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestOpenedAt: now, refundRequestId: open?.id ?? null } });
+  }
   await recordOutcome(check.id, "refundRequested");
   return { released: false as const, message: keptMessage("refundRequested") };
 }
