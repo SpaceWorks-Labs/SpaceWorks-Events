@@ -29,7 +29,7 @@ export async function loadMyParticipantClaims(userId: string, rsvpId: string) {
   const rsvp = await ownRegistration(userId, rsvpId);
   if (!rsvp) return undefined;
   const view = await loadTicketClaims(rsvp);
-  return view ? participantClaimsDtoSchema.parse({ currency: view.currency, cap: view.cap, categories: view.categories, claims: view.claims }) : null;
+  return view ? participantClaimsDtoSchema.parse({ currency: view.currency, general: view.general, cap: view.cap, categories: view.categories, claims: view.claims }) : null;
 }
 
 /** The reimbursement policies open to this registration now, with what is left under each; null when there is nothing to claim. */

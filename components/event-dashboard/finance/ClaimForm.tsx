@@ -31,7 +31,10 @@ export function ClaimForm({ kind, hidden, categories, currency, note, policies =
 }) {
   const action = kind === "staff" ? submitStaffClaimAction : submitParticipantClaimAction;
   const formRef = useRef<HTMLFormElement>(null);
-  const [policyId, setPolicyId] = useState(general ? "" : (policies[0]?.id ?? ""));
+  const [chosen, setPolicyId] = useState(general ? "" : (policies[0]?.id ?? ""));
+  // A policy can drop out of the list after a refresh (closed, or its budget used up): fall back.
+  const listed = chosen === "" ? general : policies.some((option) => option.id === chosen);
+  const policyId = listed ? chosen : general ? "" : (policies[0]?.id ?? "");
   const policy = policies.find((option) => option.id === policyId);
   const choices = policy ? policy.categories : categories;
   const [picked, setCategory] = useState(choices[0]?.value ?? "OTHER");

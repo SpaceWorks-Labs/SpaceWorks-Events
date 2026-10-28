@@ -412,8 +412,9 @@ their orders by id, and anyone else's are `NOT_FOUND`.
 ### Expense claims, projects and prizes (auth)
 
 - `GET /me/registrations/:rsvpId/claims` → the registration's participant
-  claims (travel grants), cap and categories, or `null` when the event takes
-  none. `POST` the same path as `multipart/form-data` (`category`,
+  claims (travel grants), `general` (whether general claims without a
+  `policyId` are open: show the general form only when true), cap and
+  categories, or `null` when nothing is open and nothing was claimed. `POST` the same path as `multipart/form-data` (`category`,
   `description`, `amount`, an optional `policyId`, up to three `receipts`
   photos) to file one;
   `POST …/claims/:claimId/withdraw` before it is decided. Receipt photos of the

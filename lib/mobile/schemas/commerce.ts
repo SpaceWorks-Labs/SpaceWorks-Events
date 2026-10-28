@@ -179,6 +179,8 @@ export const claimSchema = z.object({
 
 export const participantClaimsDtoSchema = z.object({
   currency: z.string(),
+  /** General claims (no policy) are open: file without `policyId`. */
+  general: z.boolean(),
   cap: money.nullable(),
   categories: z.array(z.object({ value: z.string(), label: z.string() }).strict()),
   claims: z.array(claimSchema),

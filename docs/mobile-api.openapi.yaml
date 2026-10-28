@@ -2805,9 +2805,10 @@ components:
     ParticipantClaims:
       type: object
       additionalProperties: false
-      required: [currency, cap, categories, claims]
+      required: [currency, general, cap, categories, claims]
       properties:
         currency: { type: string }
+        general: { type: boolean, description: General claims (no policyId) are open to this registration. When false only the policies from GET …/reimbursements take claims. }
         cap: { type: [string, "null"] }
         categories: { type: array, items: { type: object, additionalProperties: false, required: [value, label], properties: { value: { type: string }, label: { type: string } } } }
         claims: { type: array, items: { $ref: "#/components/schemas/Claim" } }

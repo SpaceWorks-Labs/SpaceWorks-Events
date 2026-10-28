@@ -2,6 +2,7 @@
   "ok": true,
   "data": {
     "currency": "INR",
+    "general": true,
     "cap": "₹2,000.00",
     "categories": [
       {
