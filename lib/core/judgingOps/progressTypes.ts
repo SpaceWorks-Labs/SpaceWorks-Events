@@ -29,6 +29,8 @@ export type ProgressJudgeRow = {
   started: number;
   /** Counted reviews. */
   submitted: number;
+  /** Assigned projects the judge recused themselves from (left out of `assigned`, like a missing review). */
+  recused: number;
   /** Submitted reviews of expected projects over expected projects, 0..100. */
   completion: number;
 };

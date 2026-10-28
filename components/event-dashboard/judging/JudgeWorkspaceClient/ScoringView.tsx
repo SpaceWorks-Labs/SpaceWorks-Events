@@ -21,6 +21,7 @@ import {
   type WorkspaceAudience,
 } from "../judgeProgress";
 import type { Scope } from "./types";
+import { RecuseButton } from "./Recusal";
 
 const COMMENT_MAX_LENGTH = 2000;
 
@@ -86,6 +87,7 @@ export function ScoringView({
         submission: { ...submission, scoredCriteria: res.data.scored, reviewSubmitted: nowSubmitted },
         myScores: entered,
         myReview: { comment, submittedAt: nowSubmitted ? (detail.myReview?.submittedAt ?? new Date()) : null },
+        canRecuse: detail.canRecuse && !nowSubmitted,
       });
       router.refresh();
       if (submit && nowSubmitted && !submitted) {
@@ -178,6 +180,7 @@ export function ScoringView({
             {!complete && criteria.length > 0 ? (
               <p className="text-caption text-ink-muted sm:mr-auto">Score every criterion to submit your review.</p>
             ) : null}
+            {detail.canRecuse ? <RecuseButton scope={scope} submissionId={submission.id} title={submission.title} onRecused={onBack} /> : null}
             <Button type="button" variant="secondary" onClick={() => save(false)} loading={saving === "draft"} disabled={pending}>
               Save scores
             </Button>

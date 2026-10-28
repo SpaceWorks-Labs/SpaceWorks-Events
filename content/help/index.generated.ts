@@ -4785,7 +4785,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Winners come from the final round",
         "anchor": "winners-come-from-the-final-round",
-        "text": "Once a final round of finalists has been judged, the Results ranking, the award picker and the export all use that round, and only its finalists can win an award. Publishing results waits until every round has been judged, or you delete the rounds you won't use. See Awards and results."
+        "text": "Once a final round of finalists has been judged, the Results ranking, the award picker and the export all use that round, and only its finalists can win an award. Advancing finalists into the final round takes any award winner who isn't among them off their award, and the preview warns you first. Publishing results waits until every round has been judged and the final round is finalised, or you delete the rounds you won't use. See Awards and results."
       }
     ]
   },
@@ -4858,6 +4858,11 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "level": 2
       },
       {
+        "id": "stepping-away-from-a-project",
+        "title": "Stepping away from a project",
+        "level": 3
+      },
+      {
         "id": "closing-judging",
         "title": "Closing judging",
         "level": 2
@@ -4897,7 +4902,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Scoring a project",
         "anchor": "scoring-a-project",
-        "text": "Judges open the event from their dashboard. Owners and admins use Judging → Score. Choose Score next project. It opens a project you've started, or else the one with the fewest reviews so far. Or pick one from the list. Read the summary and open the links to the code, demo or video. Give a score for each criterion, from 0 to its maximum. Add a Private comment if you like. Only organisers see it, never the entrants. Choose Save scores to come back later, or Submit review once every criterion is scored. After you submit, the next project opens by itself. Choose Back to list or All submissions to return to the list. When there's nothing left, you'll see \"You're all caught up\". The list has filters for All, To score, In progress and Reviewed, and a search by project or team name. While judging is open, you can change a submitted review and choose Update review. Only submitted reviews count. Saved scores that haven't been submitted are left out of the results."
+        "text": "Judges open the event from their dashboard. Owners and admins use Judging → Score. Choose Score next project. It opens a project you've started, or else the one with the fewest reviews so far. Or pick one from the list. Read the summary and open the links to the code, demo or video. Give a score for each criterion, from 0 to its maximum. Add a Private comment if you like. Only organisers see it, never the entrants. Choose Save scores to come back later, or Submit review once every criterion is scored. After you submit, the next project opens by itself. Choose Back to list or All submissions to return to the list. When there's nothing left, you'll see \"You're all caught up\". The list has filters for All, To score, In progress and Reviewed, and a search by project or team name. While judging is open, you can change a submitted review and choose Update review. Only submitted reviews count. Saved scores that haven't been submitted are left out of the results. Stepping away from a project If you shouldn't judge a project you were assigned, for example because you know the team, open it and choose Recuse myself, then confirm. It leaves your list and the organisers see that you stepped away, so they can ask another judge. While judging is open, the project is listed under Recused with an Undo button. Once you've submitted a review of a project, ask the organisers instead."
       },
       {
         "heading": "Closing judging",
@@ -5328,7 +5333,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Publishing the results page",
         "anchor": "publishing-the-results-page",
-        "text": "You can publish once judging is closed. Until then, the Results page card tells you what to do next. Check the winners on the Awards section. On Results, in the Results page card, choose Publish results…. Confirm with Publish results. The event's results page goes live, showing each award with its winning projects' titles, team or entrant names, and links. Scores, ranks and judges' comments are never shown. Whether anyone is emailed depends on a switch; see Emailing entrants about the results. Choose View results page to see it as guests do. The results page follows the event page's visibility, so a private or invite-only event keeps its results private too. If more than 10 winners are listed, visitors can search them. Publishing also adds award badges to the public project gallery, with a filter for award winners."
+        "text": "You can publish once judging is closed (with more than one round, once the final round is finalised too). Until then, the Results page card tells you what to do next. Check the winners on the Awards section. On Results, in the Results page card, choose Publish results…. Confirm with Publish results. The event's results page goes live, showing each award with its winning projects' titles, team or entrant names, and links. Scores, ranks and judges' comments are never shown. Whether anyone is emailed depends on a switch; see Emailing entrants about the results. Choose View results page to see it as guests do. The results page follows the event page's visibility, so a private or invite-only event keeps its results private too. If more than 10 winners are listed, visitors can search them. Publishing also adds award badges to the public project gallery, with a filter for award winners."
       },
       {
         "heading": "Emailing entrants about the results",
@@ -5419,7 +5424,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Finalising a round",
         "anchor": "finalising-a-round",
-        "text": "Before finalists can move on, finalise the round you're advancing from: select it and choose Finalise round. Finalising checks that every project in the round has the target number of submitted reviews. If some are short, the app tells you how many and asks for a reason before it finalises anyway. Missing reviews never count as a zero; a project with fewer reviews simply has fewer judges behind its score. A finalised round can't reopen, and its target and score method stay as they were. If you need to change something, Undo finalise works until finalists have been advanced from the round."
+        "text": "Before finalists can move on, finalise the round you're advancing from: select it and choose Finalise round. Finalising checks that every project in the round has the target number of submitted reviews. If some are short, the app tells you how many and asks for a reason before it finalises anyway. Missing reviews never count as a zero; a project with fewer reviews simply has fewer judges behind its score. A finalised round can't reopen, and its target and score method stay as they were. Its ranking stays as it was finalised too: the reviews counted then keep counting, even if a judge is removed later. If you need to change something, Undo finalise works until finalists have been advanced from the round. With more than one round, finalise the final round before you publish the results."
       },
       {
         "heading": "Looking at earlier rounds",

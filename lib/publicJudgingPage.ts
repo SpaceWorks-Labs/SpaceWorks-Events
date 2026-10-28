@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { isEventPublished, shouldIndexPublicEvent } from "@/lib/eventVisibility";
 import { resolvePublicEventAccess } from "@/lib/publicEventAccess";
 import { isProjectGalleryVisible } from "@/lib/core/judging";
+import { loadPublicFinalists } from "@/lib/core/judgingRounds";
 
 /*
  * Shared loading for the public hackathon pages (`/{org}/{event}/projects`
@@ -74,14 +75,13 @@ export async function publicJudgingMetadata(
    */
   listing: { page?: number; filtered?: boolean } = {},
 ): Promise<Metadata> {
-  const label = kind === "projects" ? "Projects" : "Results";
   const loaded = await loadEvent(orgSlug, eventSlug);
   const event = loaded?.event;
-  const available = event
-    ? kind === "projects"
-      ? isProjectGalleryVisible(event)
-      : event.submissionsEnabled && event.resultsPublishedAt != null
-    : false;
+  const resultsOut = Boolean(event?.submissionsEnabled && event.resultsPublishedAt != null);
+  // Before results, the results page shows only published finalists: it is titled for them.
+  const finalistsOnly = kind === "results" && Boolean(event) && !resultsOut && (await loadPublicFinalists(event!.id)).length > 0;
+  const label = kind === "projects" ? "Projects" : finalistsOnly ? "Finalists" : "Results";
+  const available = event ? (kind === "projects" ? isProjectGalleryVisible(event) : resultsOut || finalistsOnly) : false;
   if (
     !loaded ||
     !event ||
@@ -96,7 +96,9 @@ export async function publicJudgingMetadata(
   const description =
     kind === "projects"
       ? `Projects submitted to ${event.title}.`
-      : `Awards and winning projects from ${event.title}.`;
+      : finalistsOnly
+        ? `Finalists of ${event.title}.`
+        : `Awards and winning projects from ${event.title}.`;
   const page = kind === "projects" && listing.page && listing.page > 1 ? Math.floor(listing.page) : 1;
   const canonicalPage = listing.filtered ? 1 : page;
   const indexable = shouldIndexPublicEvent(event.status, event.privacyType, event.listedPublicly);

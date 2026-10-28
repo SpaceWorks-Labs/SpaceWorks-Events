@@ -41,12 +41,14 @@ export async function loadJudgeProgress(ctx: JudgingOrganiserContext, options: {
   if (!round) return null;
   const submittedOnly = roundProjectsWhere(round);
   const inRound = { roundId: round.id };
-  const [eligible, reviewAuthors, scorers, assignedAll, assignedSubmitted, countedReviews, submittedCount] = await Promise.all([
+  const [eligible, reviewAuthors, scorers, assignedAll, assignedSubmitted, recusedSubmitted, countedReviews, submittedCount] = await Promise.all([
     listEligibleJudges(ctx),
     prisma.judgeReview.groupBy({ by: ["judgeUserId"], where: { ...inRound, submission: { eventId: event.id } }, _count: { _all: true }, orderBy: { judgeUserId: "asc" } }),
     prisma.judgeScore.groupBy({ by: ["judgeUserId"], where: { ...roundScoresWhere(round), submission: { eventId: event.id } }, _count: { _all: true }, orderBy: { judgeUserId: "asc" } }),
     prisma.judgeAssignment.groupBy({ by: ["judgeUserId"], where: { eventId: event.id, ...inRound, submission: { eventId: event.id } }, _count: { _all: true }, orderBy: { judgeUserId: "asc" } }),
-    prisma.judgeAssignment.groupBy({ by: ["judgeUserId"], where: { eventId: event.id, ...inRound, submission: submittedOnly }, _count: { _all: true }, orderBy: { judgeUserId: "asc" } }),
+    prisma.judgeAssignment.groupBy({ by: ["judgeUserId"], where: { eventId: event.id, ...inRound, recusedAt: null, submission: submittedOnly }, _count: { _all: true }, orderBy: { judgeUserId: "asc" } }),
+    // Recusals (./recusal.ts) take a project out of what the judge sees.
+    prisma.judgeAssignment.groupBy({ by: ["judgeUserId"], where: { eventId: event.id, ...inRound, recusedAt: { not: null }, submission: submittedOnly }, _count: { _all: true }, orderBy: { judgeUserId: "asc" } }),
     prisma.judgeReview.groupBy({ by: ["judgeUserId"], where: { ...inRound, submittedAt: { not: null }, submission: submittedOnly }, _count: { _all: true }, orderBy: { judgeUserId: "asc" } }),
     prisma.submission.count({ where: submittedOnly }),
   ]);
@@ -77,13 +79,14 @@ export async function loadJudgeProgress(ctx: JudgingOrganiserContext, options: {
 
   const assignedTotal = countBy(assignedAll);
   const assignedVisible = countBy(assignedSubmitted);
+  const recusedCount = countBy(recusedSubmitted);
   const reviewsCounted = countBy(countedReviews);
   const progress = (userId: string) => {
     const own = conflicted.filter((row) => hasConflictOfInterest(row, conflicts.get(userId)));
     const hidden = own.filter((row) => round.judgesSeeAll || row.assignments.some((assignment) => assignment.judgeUserId === userId)).length;
     const hiddenReviews = own.filter((row) => row.reviews.some((review) => review.judgeUserId === userId)).length;
     return {
-      visible: (round.judgesSeeAll ? submittedCount : assignedVisible.get(userId) ?? 0) - hidden,
+      visible: (round.judgesSeeAll ? submittedCount - (recusedCount.get(userId) ?? 0) : assignedVisible.get(userId) ?? 0) - hidden,
       reviewsSubmitted: (reviewsCounted.get(userId) ?? 0) - hiddenReviews,
     };
   };

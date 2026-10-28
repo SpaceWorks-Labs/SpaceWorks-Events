@@ -91,16 +91,22 @@ export async function loadJudgingResults(ctx: JudgingOrganiserContext, options: 
   const submitted = submissions.filter((row) => row.status === SubmissionStatus.SUBMITTED);
   const byId = new Map(submissions.map((row) => [row.id, row]));
   const eligibleIds = new Set(eligible.map((judge) => judge.userId));
-  const reviewAuthorIds = [...new Set(reviews.map((review) => review.judgeUserId))];
+  const frozen = await frozenCountedReviews(round);
+  const reviewAuthorIds = frozen ? [] : [...new Set(reviews.map((review) => review.judgeUserId))];
   const authorConflicts = await conflictKeysFor(prisma, event.id, reviewAuthorIds);
   // Only reviews that may count: submitted, of a SUBMITTED project (both
   // checked in SQL above), by someone who can still judge this event, with no
   // conflict of interest now. A revoked JUDGE grant or a judge who later
   // registered on that entrant drops out of the score (their rows stay, for
-  // the organiser's record).
+  // the organiser's record). A finalised round counts exactly the reviews it
+  // counted when it was finalised (`frozenCountedReviews`), so later grant,
+  // panel or conflict changes never move its ranking; a project disqualified
+  // since still drops out.
   const submittedReviews = reviews.filter((review) => {
     const row = byId.get(review.submissionId);
-    return Boolean(row?.status === SubmissionStatus.SUBMITTED && eligibleIds.has(review.judgeUserId) && !hasConflictOfInterest(row, authorConflicts.get(review.judgeUserId)));
+    if (row?.status !== SubmissionStatus.SUBMITTED) return false;
+    if (frozen) return frozen.has(`${review.submissionId}\u0000${review.judgeUserId}`);
+    return eligibleIds.has(review.judgeUserId) && !hasConflictOfInterest(row, authorConflicts.get(review.judgeUserId));
   });
   // The saved method ranks, unless the caller names one (the Results CSV
   // passes the method the organiser's table is showing).
@@ -129,6 +135,19 @@ export async function loadJudgingResults(ctx: JudgingOrganiserContext, options: 
 
   const countedReviewKeys = submittedReviews.map((review) => `${review.submissionId}\u0000${review.judgeUserId}`);
   return { roundId: round.id, judgingStatus: judgingStatusFor(round.status), resultsPublishedAt: event.resultsPublishedAt, scoreNormalization: method, criteria, rows, countedReviewKeys };
+}
+
+/**
+ * The `submissionId\0judgeUserId` keys a finalised round counted, frozen when
+ * it was finalised (JudgingRoundCountedReview); null for a round that isn't
+ * finalised, or was finalised before the snapshot existed (counted live).
+ */
+async function frozenCountedReviews(round: { id: string | null; finalizedAt: Date | null }): Promise<Set<string> | null> {
+  if (!round.id || !round.finalizedAt) return null;
+  const marker = await prisma.judgingRound.findUnique({ where: { id: round.id }, select: { countedFrozenAt: true } });
+  if (!marker?.countedFrozenAt) return null;
+  const rows = await prisma.judgingRoundCountedReview.findMany({ where: { roundId: round.id }, select: { submissionId: true, judgeUserId: true } });
+  return new Set(rows.map((row) => `${row.submissionId}\u0000${row.judgeUserId}`));
 }
 
 export type JudgingResultsPageDto = NumberedPage<ResultRowDto> & {

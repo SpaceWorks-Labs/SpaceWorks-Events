@@ -4,7 +4,9 @@ import "server-only";
  * Finalist advancement (docs/HACKATHON.md "Rounds"): preview which projects
  * of the previous, closed and finalised round move into an ADVANCED round, then apply the
  * same plan under the Event lock. The plan itself is pure
- * (lib/judgingAdvancement.ts).
+ * (lib/judgingAdvancement.ts). Advancing into the final round removes award
+ * winners left out of it (only the final round's finalists can win; see
+ * ./awardEligibility.ts), which the preview warns about.
  */
 
 import { JudgingRoundEntrySource, JudgingRoundStatus, Prisma, SubmissionStatus } from "@prisma/client";
@@ -31,6 +33,8 @@ export type AdvancementPreviewDto = {
   removed: number;
   kept: number;
   tieAtCutoff: boolean;
+  /** Award winners this plan would remove: projects left out of the final round. */
+  awardWinnersRemoved: number;
   /** The previous round's SUBMITTED projects in ranking order, for hand-picking (the first FINALISTS_LIMIT). */
   candidates: AdvancementCandidateDto[];
   candidatesTotal: number;
@@ -38,6 +42,12 @@ export type AdvancementPreviewDto = {
 };
 
 type Built = { ok: true; source: JudgingRoundScope & { id: string }; target: JudgingRoundScope & { id: string }; ranking: ResultRowDto[]; plan: AdvancementPlan; existing: string[] };
+
+/** Award winners outside the plan's finalists, when the target is the final round (else none: a later round decides). */
+function winnersLeftOutWhere(event: JudgingEvent, built: Built): Prisma.EventAwardWinnerWhereInput | null {
+  if (!built.target.isFinal) return null;
+  return { award: { eventId: event.id }, submissionId: { notIn: built.plan.chosen.map((row) => row.submissionId) } };
+}
 
 /** Check the target round and its source, read the source ranking, and plan. */
 async function buildAdvancement(client: Prisma.TransactionClient, ctx: JudgingOrganiserContext, event: JudgingEvent, roundId: string, input: unknown): Promise<Built | { ok: false; error: string; fieldErrors?: Record<string, string[]> }> {
@@ -79,6 +89,7 @@ export async function previewAdvancement(ctx: JudgingOrganiserContext, roundId: 
   if (!built.ok) return built;
   const chosen = new Set(built.plan.chosen.map((row) => row.submissionId));
   const current = new Set(built.existing);
+  const leftOut = winnersLeftOutWhere(event, built);
   return ok({
     sourceRound: { id: built.source.id, name: built.source.name },
     targetRound: { id: built.target.id, name: built.target.name },
@@ -87,6 +98,7 @@ export async function previewAdvancement(ctx: JudgingOrganiserContext, roundId: 
     removed: built.plan.removed.length,
     kept: built.plan.kept,
     tieAtCutoff: built.plan.tieAtCutoff,
+    awardWinnersRemoved: leftOut ? await prisma.eventAwardWinner.count({ where: leftOut }) : 0,
     candidates: built.ranking.slice(0, FINALISTS_LIMIT).map((row) => candidate(row, current.has(row.submissionId))),
     candidatesTotal: built.ranking.length,
     fingerprint: built.plan.fingerprint,
@@ -98,7 +110,9 @@ export async function previewAdvancement(ctx: JudgingOrganiserContext, roundId: 
  * differs from the preview, then replace the round's finalists in one
  * transaction (kept finalists keep their row and get their fresh source
  * rank). Refused once the round opens or its finalists are published.
- * Audited (JUDGING_FINALISTS_ADVANCED, counts only).
+ * Into the final round, award winners left out are removed in the same
+ * transaction. Audited (JUDGING_FINALISTS_ADVANCED, counts only, with
+ * `awardWinnersRemoved`).
  */
 export async function applyAdvancement(ctx: JudgingOrganiserContext, roundId: unknown, input: unknown): Promise<JudgingResult<{ added: number; removed: number; finalists: number }>> {
   if (!isId(roundId)) return fail(ROUND_NOT_FOUND);
@@ -121,6 +135,8 @@ export async function applyAdvancement(ctx: JudgingOrganiserContext, roundId: un
       for (const row of plan.chosen) {
         if (!added.has(row.submissionId)) await tx.judgingRoundEntry.updateMany({ where: { roundId: target.id, submissionId: row.submissionId }, data: { sourceRank: row.sourceRank } });
       }
+      const leftOut = winnersLeftOutWhere(event, built);
+      const awardWinnersRemoved = leftOut ? (await tx.eventAwardWinner.deleteMany({ where: leftOut })).count : 0;
       await recordAuditEvent({
         client: tx,
         action: "JUDGING_FINALISTS_ADVANCED",
@@ -128,7 +144,7 @@ export async function applyAdvancement(ctx: JudgingOrganiserContext, roundId: un
         organisationId: ctx.organisationId,
         targetType: "Event",
         targetId: event.id,
-        metadata: { round: target.position, finalists: plan.chosen.length, added: plan.added.length, removed: plan.removed.length },
+        metadata: { round: target.position, finalists: plan.chosen.length, added: plan.added.length, removed: plan.removed.length, awardWinnersRemoved },
       });
       return ok({ added: plan.added.length, removed: plan.removed.length, finalists: plan.chosen.length });
     },

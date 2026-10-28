@@ -5,6 +5,7 @@ import "server-only";
 import { EventPermission, JudgingRoundEntrySource, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isOrgAdmin } from "@/lib/permissions";
+import { staffMfaSatisfied } from "@/lib/staffMfa";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { judgeAssignmentSchema } from "@/lib/validators";
 import { fail, type JudgingEvent, type JudgingResult, NOT_FOUND, okEmpty, withOrganiserLock } from "./shared";
@@ -21,13 +22,20 @@ export const ROUND_NOT_FOUND = "Judging round not found.";
 // Judges: eligibility, assignment, conflict of interest
 // ---------------------------------------------------------------------------
 
-/** Org OWNER/ADMIN or a JUDGE collaborator on this event, read inside the caller's transaction. */
+/**
+ * Org OWNER/ADMIN or a JUDGE collaborator on this event, read inside the
+ * caller's transaction, and past the staff authenticator check when this is
+ * the person acting (`staffMfaSatisfied` never holds back a check about
+ * someone else, such as the judge an organiser assigns). Fails closed, so a
+ * core re-check refuses a judge whose session owes the check.
+ */
 export async function isEligibleJudge(tx: Prisma.TransactionClient, organisationId: string, eventId: string, userId: string): Promise<boolean> {
   const [membership, grant] = await Promise.all([
     tx.membership.findUnique({ where: { userId_organisationId: { userId, organisationId } }, select: { role: true } }),
     tx.eventCollaborator.findFirst({ where: { eventId, userId, permissions: { has: EventPermission.JUDGE } }, select: { id: true } }),
   ]);
-  return Boolean((membership && isOrgAdmin(membership.role)) || grant);
+  if (!(membership && isOrgAdmin(membership.role)) && !grant) return false;
+  return staffMfaSatisfied(userId);
 }
 
 export type ConflictKeys = { rsvpIds: Set<string>; teamIds: Set<string> };
@@ -130,6 +138,9 @@ export async function assignJudge(ctx: JudgingOrganiserContext, input: unknown, 
     if (hasConflictOfInterest(submission, conflicts.get(parsed.data.judgeUserId))) return fail("This judge is registered on this entry, so they can't judge it.");
     if ((await freshEyesBlockedPairs(tx, round)).has(pairKey(parsed.data.judgeUserId, submission.id))) {
       return fail("This judge reviewed this project in an earlier round, and this round uses fresh eyes.");
+    }
+    if (await tx.judgeAssignment.findFirst({ where: { roundId: round.id, judgeUserId: parsed.data.judgeUserId, submissionId: submission.id, recusedAt: { not: null } }, select: { id: true } })) {
+      return fail("This judge recused themselves from this project in this round.");
     }
     const created = await tx.judgeAssignment.createMany({
       data: [{ eventId: event.id, roundId: round.id, judgeUserId: parsed.data.judgeUserId, submissionId: submission.id }],

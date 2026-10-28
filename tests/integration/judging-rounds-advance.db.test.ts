@@ -49,7 +49,7 @@ describe.sequential("finalist advancement", () => {
     expect(preview.finalists.map((row) => row.submissionId)).toEqual([projects[2]!.id]);
     expect(await previewAdvancement(ctx, roundTwoId, { mode: "pick", submissionIds: [projects[0]!.id] })).toMatchObject({ ok: false });
     // Undo finalising the first round: advancing is refused until it is finalised again.
-    await prisma.judgingRound.update({ where: { id: roundOneId }, data: { finalizedAt: null } });
+    await prisma.judgingRound.update({ where: { id: roundOneId }, data: { finalizedAt: null, countedFrozenAt: null } });
     expect(await previewAdvancement(ctx, roundTwoId, { mode: "top", count: 1 })).toMatchObject({ ok: false, error: expect.stringContaining("Finalise") });
   });
 
@@ -88,6 +88,9 @@ describe.sequential("finalist advancement", () => {
     expect(candidates?.rows.map((row) => row.submissionId)).toEqual([projects[1]!.id, projects[0]!.id]);
     const award = must(await createEventAward(ctx, { name: "Overall winner", description: "" }));
     must(await setAwardWinner(ctx, { awardId: award.id, submissionId: projects[1]!.id, place: 1 }));
+    // With more than one round, the final round is finalised before publishing.
+    expect(await publishResults(ctx)).toMatchObject({ ok: false, error: expect.stringContaining("Finalise") });
+    must(await finalizeJudgingRound(ctx, roundTwoId, { reason: "One judge for the finals." }));
     must(await publishResults(ctx));
     // The first round's own ranking is still there for the record.
     const first = await prisma.judgingRound.findFirstOrThrow({ where: { eventId: event.id, position: 1 } });
@@ -128,7 +131,7 @@ describe.sequential("finalist advancement", () => {
     const { event, ctx } = await twoRoundEvent([9, 7]);
     const late = await project(event, "Late entry");
     const first = await prisma.judgingRound.findFirstOrThrow({ where: { eventId: event.id, position: 1 } });
-    await prisma.judgingRound.update({ where: { id: first.id }, data: { finalizedAt: null } });
+    await prisma.judgingRound.update({ where: { id: first.id }, data: { finalizedAt: null, countedFrozenAt: null } });
     // Target 2 judges: the two judged projects have them, the late entry none (missing reviews never count as zero).
     expect(await finalizeJudgingRound(ctx, first.id, {})).toMatchObject({ ok: false, fieldErrors: { reason: [expect.stringContaining("1 project has fewer than 2")] } });
     expect(must(await finalizeJudgingRound(ctx, first.id, { reason: "Two judges were enough." }))).toEqual({ projects: 3, target: 2, short: 1 });

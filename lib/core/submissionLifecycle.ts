@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, SubmissionStatus } from "@prisma/client";
+import { JudgingRoundStatus, Prisma, SubmissionStatus } from "@prisma/client";
 import { z } from "zod";
 
 /**
@@ -85,7 +85,8 @@ export const submissionSnapshotSchema = z.object({
     submittedAt: isoDate.nullable(),
     createdAt: isoDate,
   })).max(1_000),
-  assignments: z.array(z.object({ roundId: z.string().min(1).max(128).nullish(), judgeUserId: z.string().min(1).max(128), createdAt: isoDate })).max(1_000),
+  // `recusedAt`: the judge's recusal (absent from older snapshots).
+  assignments: z.array(z.object({ roundId: z.string().min(1).max(128).nullish(), judgeUserId: z.string().min(1).max(128), createdAt: isoDate, recusedAt: isoDate.nullish() })).max(1_000),
   awardWins: z.array(z.object({ awardId: z.string().min(1).max(128), place: z.number().int().min(1).max(1000) })).max(200),
   /** Rounds the project had advanced into (absent from older snapshots). */
   roundEntries: z.array(z.object({
@@ -93,6 +94,8 @@ export const submissionSnapshotSchema = z.object({
     advancedByUserId: z.string().min(1).max(128).nullable(),
     advancedAt: isoDate,
     sourceRank: z.number().int().min(1).nullable(),
+    /** The round had already opened when the project was deleted (absent from older snapshots). */
+    roundOpened: z.boolean().optional(),
   })).max(100).optional(),
 });
 
@@ -123,9 +126,9 @@ export async function captureSubmissionSnapshotTx(
       createdAt: true,
       scores: { select: { judgeUserId: true, criterionId: true, score: true, createdAt: true } },
       reviews: { select: { roundId: true, judgeUserId: true, comment: true, submittedAt: true, createdAt: true } },
-      assignments: { select: { roundId: true, judgeUserId: true, createdAt: true } },
+      assignments: { select: { roundId: true, judgeUserId: true, createdAt: true, recusedAt: true } },
       awardWins: { select: { awardId: true, place: true } },
-      roundEntries: { select: { roundId: true, advancedByUserId: true, advancedAt: true, sourceRank: true } },
+      roundEntries: { select: { roundId: true, advancedByUserId: true, advancedAt: true, sourceRank: true, round: { select: { status: true } } } },
     },
   });
   if (!row) return null;
@@ -143,9 +146,9 @@ export async function captureSubmissionSnapshotTx(
     createdAt: row.createdAt.toISOString(),
     scores: row.scores.map((score) => ({ ...score, createdAt: score.createdAt.toISOString() })),
     reviews: row.reviews.map((review) => ({ ...review, submittedAt: review.submittedAt?.toISOString() ?? null, createdAt: review.createdAt.toISOString() })),
-    assignments: row.assignments.map((assignment) => ({ ...assignment, createdAt: assignment.createdAt.toISOString() })),
+    assignments: row.assignments.map((assignment) => ({ ...assignment, createdAt: assignment.createdAt.toISOString(), recusedAt: assignment.recusedAt?.toISOString() ?? null })),
     awardWins: row.awardWins,
-    roundEntries: row.roundEntries.map((entry) => ({ ...entry, advancedAt: entry.advancedAt.toISOString() })),
+    roundEntries: row.roundEntries.map(({ round, ...entry }) => ({ ...entry, advancedAt: entry.advancedAt.toISOString(), roundOpened: round.status !== JudgingRoundStatus.DRAFT })),
   };
 }
 
@@ -183,7 +186,7 @@ export async function restoreSubmissionSnapshotTx(
     judgeIds.length > 0 ? tx.user.findMany({ where: { id: { in: judgeIds } }, select: { id: true } }) : Promise.resolve([]),
     tx.judgingCriterion.findMany({ where: { eventId: owner.eventId }, select: { id: true, maxScore: true } }),
     tx.eventAward.findMany({ where: { eventId: owner.eventId }, select: { id: true } }),
-    tx.judgingRound.findMany({ where: { eventId: owner.eventId }, orderBy: { position: "asc" }, select: { id: true } }),
+    tx.judgingRound.findMany({ where: { eventId: owner.eventId }, orderBy: { position: "asc" }, select: { id: true, status: true } }),
   ]);
   const liveUsers = new Set(users.map((user) => user.id));
   // A row from a round deleted since is skipped. An older snapshot predates
@@ -219,12 +222,24 @@ export async function restoreSubmissionSnapshotTx(
   const assignments = snapshot.assignments.filter((assignment) => liveUsers.has(assignment.judgeUserId) && roundLive(assignment.roundId));
   if (assignments.length > 0) {
     await tx.judgeAssignment.createMany({
-      data: assignments.map((assignment) => ({ eventId: owner.eventId, roundId: assignment.roundId ?? firstRoundId, judgeUserId: assignment.judgeUserId, submissionId: snapshot.id, createdAt: new Date(assignment.createdAt) })),
+      data: assignments.map((assignment) => ({
+        eventId: owner.eventId,
+        roundId: assignment.roundId ?? firstRoundId,
+        judgeUserId: assignment.judgeUserId,
+        submissionId: snapshot.id,
+        createdAt: new Date(assignment.createdAt),
+        recusedAt: assignment.recusedAt ? new Date(assignment.recusedAt) : null,
+      })),
       skipDuplicates: true,
     });
   }
-  // Restoring puts the project back where it was, finalist places included (even in a round that has opened since).
-  const entries = (snapshot.roundEntries ?? []).filter((entry) => liveRounds.has(entry.roundId));
+  // Restoring puts the project back where it was, finalist places included.
+  // Finalists are fixed once a round opens, so a place goes back into a round
+  // that has opened only when this deletion took it from that opened round;
+  // a round that was still DRAFT then (or an older snapshot that didn't
+  // record it) and has opened since doesn't take the project back.
+  const draftRounds = new Set(rounds.filter((round) => round.status === JudgingRoundStatus.DRAFT).map((round) => round.id));
+  const entries = (snapshot.roundEntries ?? []).filter((entry) => liveRounds.has(entry.roundId) && (draftRounds.has(entry.roundId) || entry.roundOpened === true));
   if (entries.length > 0) {
     const advancers = new Set((await tx.user.findMany({ where: { id: { in: entries.flatMap((entry) => (entry.advancedByUserId ? [entry.advancedByUserId] : [])) } }, select: { id: true } })).map((user) => user.id));
     await tx.judgingRoundEntry.createMany({

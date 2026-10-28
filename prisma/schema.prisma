@@ -2704,6 +2704,10 @@ model JudgeAssignment {
   roundId      String?
   judgeUserId  String
   submissionId String
+  /// Set when the judge recused themselves from this project (docs/HACKATHON.md
+  /// "Recusal"): they no longer see or score it, and it doesn't count towards
+  /// coverage. Cleared when they undo it. Changed only while the round is OPEN.
+  recusedAt    DateTime?
   createdAt    DateTime @default(now())
 
   event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -2790,6 +2794,10 @@ model JudgingRound {
   /// (organiser-only, up to 500 characters; CHECK keeps it with finalizedAt).
   finalizedAt          DateTime?
   finalizeExceptionReason String?
+  /// Set with finalizedAt: the reviews counted at that moment are frozen in
+  /// JudgingRoundCountedReview and every later read of this round counts only
+  /// those. Null for a round finalised before the snapshot existed (counted live).
+  countedFrozenAt      DateTime?
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
 
@@ -2803,9 +2811,25 @@ model JudgingRound {
   assignmentRuns JudgingAssignmentRun[]
   finalistNotices JudgingFinalistNotice[]
   reimbursementPolicies ReimbursementPolicy[]
+  countedReviews JudgingRoundCountedReview[]
 
   @@unique([eventId, position])
   @@index([eventId, status])
+}
+
+/// The reviews a finalised round counted (docs/HACKATHON.md "Finalising"),
+/// written when the round is finalised and removed when it is unfinalised, so
+/// its results, CSV and advancement stay as finalised even when judge grants,
+/// panels or conflicts change later. Keyed by ids rather than foreign keys to
+/// the submission and judge, so a deletion undo finds its rows again.
+model JudgingRoundCountedReview {
+  roundId      String
+  submissionId String
+  judgeUserId  String
+
+  round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@id([roundId, submissionId, judgeUserId])
 }
 
 /// A project advanced into an ADVANCED round. Written only while the round is

@@ -136,6 +136,11 @@ function AdvanceForm({ scope, round, onDone }: { scope: JudgingScope; round: Jud
               From {preview.sourceRound.name}: {advanceSummary({ ...preview, finalists: preview.finalists.length })}
             </p>
             {preview.tieAtCutoff ? <Callout tone="warning">The next project below the cut has the same score as the last finalist. Pick by hand to include or leave out tied projects.</Callout> : null}
+            {preview.awardWinnersRemoved > 0 ? (
+              <Callout tone="warning">
+                {preview.awardWinnersRemoved === 1 ? "1 award winner isn't" : `${preview.awardWinnersRemoved} award winners aren't`} among these finalists. Only the final round&apos;s finalists can win, so advancing removes {preview.awardWinnersRemoved === 1 ? "that winner" : "those winners"}.
+              </Callout>
+            ) : null}
             <ol className="flex max-h-60 flex-col divide-y divide-line overflow-y-auto rounded-lg border border-line">
               {preview.finalists.map((row) => (
                 <li key={row.submissionId} className="flex items-center justify-between gap-3 px-4 py-2 text-body-ui">

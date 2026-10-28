@@ -190,6 +190,7 @@ export function JudgingPanelProgress({
                   {row.kind === "admin" ? "Organiser" : "Judge"}
                   {row.email ? ` · ${row.email}` : ""}
                 </span>
+                {row.recused > 0 ? <span className="block text-caption text-ink-secondary">Recused from {row.recused} {row.recused === 1 ? "project" : "projects"}</span> : null}
               </TD>
               <TD className="text-right tabular-nums">{row.assigned}</TD>
               <TD className="text-right tabular-nums">{row.started}</TD>

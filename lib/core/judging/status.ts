@@ -12,6 +12,7 @@ import { queueResultsAnnouncement } from "./announcement";
 import { judgingStatusFor, resolveJudgingRound, roundStatusFor } from "./rounds/scope";
 import { ensureJudgingRound, syncCurrentRound } from "./rounds/sync";
 import { changeRoundStatus } from "./rounds/status";
+import { ineligibleAwardWinners } from "./rounds/awardEligibility";
 
 // ---------------------------------------------------------------------------
 // Judging status and results publication
@@ -72,7 +73,10 @@ export async function setScoreNormalization(ctx: JudgingOrganiserContext, input:
 
 /**
  * Publish results (judging must be CLOSED). Idempotent: publishing again while
- * published changes nothing and queues nothing.
+ * published changes nothing and queues nothing. With more than one round,
+ * the final round must be finalised first (a single round is unchanged), and
+ * every award winner must be a finalist of the final round when it takes
+ * advanced finalists (./rounds/awardEligibility.ts).
  *
  * Email is opt-in (`Event.emailEntrantsOnResults`, off by default; see
  * lib/hackathonEmails.ts), read under the Event lock at publish time:
@@ -99,6 +103,11 @@ export async function publishResults(ctx: JudgingOrganiserContext): Promise<Judg
     // Results come from the final round: a round still to judge after the current one blocks publication.
     const round = await resolveJudgingRound(tx, event);
     if (round && !round.isFinal) return fail("A later judging round hasn't been judged yet. Open and close it, or delete it, before publishing results.");
+    if (round && round.roundCount > 1 && !round.finalizedAt) return fail(`Finalise “${round.name}” before publishing results.`);
+    const ineligible = await ineligibleAwardWinners(tx, event.id);
+    if (ineligible > 0) {
+      return fail(`${ineligible === 1 ? "An award winner isn't" : `${ineligible} award winners aren't`} in the final round. Remove ${ineligible === 1 ? "it" : "them"} or pick finalists before publishing results.`);
+    }
     const publishedAt = new Date();
     const emailed = shouldEmailOnPublish(event);
     const firstAnnouncement = !event.resultsAnnouncedAt;

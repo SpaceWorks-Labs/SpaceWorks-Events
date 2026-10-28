@@ -14,6 +14,7 @@ import { entrantDisplayName } from "@/lib/judgingDto";
 import { pairKey, planAutoAssignment, type AssignmentPair, type AutoAssignMode } from "@/lib/judgingAssignment";
 import { autoAssignInputSchema, type AutoAssignStrategy } from "@/lib/judgingProgress";
 import { freshEyesBlockedPairs } from "@/lib/core/judging/rounds/freshEyes";
+import { recusedPairs } from "@/lib/core/judging/recusal";
 import { assignmentInputFingerprint, newAssignmentSeed, recordAssignmentRun } from "./assignmentRun";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { EVENT_NOT_FOUND, fail, lockOpsEvent, ok, type OpsEvent, opsEventSelect } from "./shared";
@@ -102,7 +103,8 @@ async function buildAutoAssignPlan(client: Prisma.TransactionClient, ctx: Judgin
   const submittedOnly = roundProjectsWhere(round);
   const [projects, existing, worked] = await Promise.all([
     client.submission.findMany({ where: submittedOnly, select: { id: true, teamId: true, rsvpId: true }, orderBy: { id: "asc" } }),
-    client.judgeAssignment.findMany({ where: { eventId: event.id, roundId: round.id, submission: submittedOnly }, select: { id: true, judgeUserId: true, submissionId: true } }),
+    // Recused assignments stay as the judge left them: the plan never moves them, and their pairs are blocked below.
+    client.judgeAssignment.findMany({ where: { eventId: event.id, roundId: round.id, recusedAt: null, submission: submittedOnly }, select: { id: true, judgeUserId: true, submissionId: true } }),
     // Pairs with saved scores or a review row (draft or submitted).
     judgeWorkOnSubmitted(client, round, { withScores: false }),
   ]);
@@ -112,6 +114,7 @@ async function buildAutoAssignPlan(client: Prisma.TransactionClient, ctx: Judgin
   // Conflicts of interest, plus fresh eyes (projects a judge reviewed in an earlier round) when the round has it on.
   const blocked = conflictedPairs(projects, conflicts);
   for (const key of await freshEyesBlockedPairs(client, round)) blocked.add(key);
+  for (const key of await recusedPairs(client, round)) blocked.add(key);
   const seed = input.strategy === "random" ? input.seed ?? null : null;
   const started = new Set(worked.map((row) => pairKey(row.judgeUserId, row.submissionId)));
   const submitted = new Set(worked.filter((row) => row.submittedAt).map((row) => pairKey(row.judgeUserId, row.submissionId)));

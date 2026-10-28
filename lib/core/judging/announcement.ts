@@ -15,7 +15,8 @@ import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { CHANGED, fail, type JudgingResult, ok, personEmail, personName, personSelect, withOrganiserLock } from "./shared";
 
 /**
- * Plan the `results-published` emails: one per confirmed entrant member,
+ * Plan the `results-published` emails: one per confirmed entrant member
+ * (crew places excluded),
  * deduplicated by lower-cased address. After an earlier announcement
  * (`firstAnnouncement` false), only addresses whose copy was withdrawn
  * undelivered by an unpublish are emailed: anyone with a delivered (or
@@ -35,7 +36,8 @@ async function planResultsAnnouncement(
   const alreadyTold = new Set(previous.map((row) => asResultsPublishedPayload(row.payload)?.to.toLowerCase()).filter((to): to is string => Boolean(to)));
   if (!firstAnnouncement && alreadyTold.size === 0) return [];
   const recipients = await tx.rSVP.findMany({
-    where: { eventId, status: RsvpStatus.CONFIRMED },
+    // Entrants only: crew places (docs/CREW.md) are never told about results.
+    where: { eventId, status: RsvpStatus.CONFIRMED, isCrew: false },
     select: personSelect,
     orderBy: { createdAt: "asc" },
   });
@@ -104,7 +106,7 @@ export async function sendResultsAnnouncement(ctx: JudgingOrganiserContext): Pro
  * How many entrants a results announcement would email right now: what the
  * publish confirmation (switch on) and "Send results email now" show. Counted
  * in SQL with the same rules as `planResultsAnnouncement` (confirmed
- * registrations, the account email else the guest email, trimmed and
+ * non-crew registrations, the account email else the guest email, trimmed and
  * lower-cased, distinct, minus addresses already holding an announcement for
  * this event; none after an announcement whose rows are all gone). Null
  * without the organiser's event.
@@ -122,7 +124,7 @@ export async function countResultsAnnouncementRecipients(ctx: JudgingOrganiserCo
       SELECT lower(COALESCE(NULLIF(btrim(u."email"), ''), NULLIF(btrim(r."guestEmail"), ''))) AS "email"
       FROM "RSVP" r
       LEFT JOIN "User" u ON u."id" = r."userId"
-      WHERE r."eventId" = ${event.id} AND r."status" = 'CONFIRMED'
+      WHERE r."eventId" = ${event.id} AND r."status" = 'CONFIRMED' AND r."isCrew" = false
     ) s
     WHERE s."email" IS NOT NULL
       AND NOT EXISTS (

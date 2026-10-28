@@ -5,7 +5,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { resolveJudgeContext, type JudgeContext } from "@/lib/judgingAccess";
-import { listJudgeSubmissionsPage, listSubmissionsForJudge, loadSubmissionForJudge, nextSubmissionForJudge, saveJudgeScores, submitJudgeReview, type JudgeNextDto } from "@/lib/core/judging";
+import { listJudgeSubmissionsPage, listSubmissionsForJudge, loadSubmissionForJudge, nextSubmissionForJudge, saveJudgeScores, setJudgeRecusal, submitJudgeReview, type JudgeNextDto } from "@/lib/core/judging";
 import type { JudgeSubmissionDetailDto, JudgeSubmissionsPageDto, JudgeWorkspaceDto } from "@/lib/judgingDto";
 import { judgeSubmissionsQuerySchema } from "@/lib/judgingPaging";
 import { judgeReviewSchema } from "@/lib/validators";
@@ -133,6 +133,20 @@ export async function saveJudgeReviewAction(input: unknown): Promise<ActionResul
  * totals and first page, under that round's visibility rules. Read-only, on
  * the search bucket; scoring always targets the current round.
  */
+/**
+ * Recuse yourself from a project you're assigned in the open round
+ * (`recused: true`), or undo it (`false`). The core checks the assignment,
+ * the round and that no review of it is submitted. Audited there.
+ */
+export async function setJudgeRecusalAction(input: unknown): Promise<ActionResult<{ recused: boolean }>> {
+  const gate = await judgeGate(input);
+  if (!gate.ok) return gate;
+  if (typeof gate.rest.recused !== "boolean") return { ok: false, error: "Invalid request." };
+  const result = await setJudgeRecusal(gate.ctx, { submissionId: gate.rest.submissionId }, gate.rest.recused);
+  if (result.ok) revalidateJudgeWorkspace(gate.ctx);
+  return result;
+}
+
 export async function loadJudgeWorkspaceRound(input: unknown): Promise<ActionResult<JudgeWorkspaceDto>> {
   const gate = await judgeGate(input, "search");
   if (!gate.ok) return gate;
