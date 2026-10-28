@@ -389,13 +389,16 @@ model MobileSession {
   accessTokenHash          String    @unique
   /// Hex SHA-256 of the current refresh token.
   refreshTokenHash         String    @unique
-  /// Hex SHA-256 of the refresh token this one replaced. Presenting it again
-  /// after the retry grace window is treated as theft and revokes the session.
-  previousRefreshTokenHash String?   @unique
+  /// Hex SHA-256s of the last refresh tokens this one replaced, newest first
+  /// (at most MOBILE_REFRESH_HISTORY). Presenting any of them again revokes the
+  /// session, except the newest within the retry grace window.
+  previousRefreshTokenHashes String[] @default([])
   rotatedAt                DateTime?
   sessionVersion           Int
-  /// SHA-256 (lib/loginSecurity.ts deviceHash) of the app's install id. A
-  /// refresh must come from the same install.
+  /// SHA-256 (lib/loginSecurity.ts deviceHash) of the install id the app sends.
+  /// Refreshes must send the same id. It is client-supplied, so it catches a
+  /// token replayed by another install that doesn't know the id; it is not
+  /// proof against someone who copied both.
   deviceHash               String
   deviceName               String?
   /// "android" or "ios"; informational only.
@@ -415,6 +418,7 @@ model MobileSession {
 
   @@index([userId, revokedAt])
   @@index([refreshExpiresAt])
+  @@index([previousRefreshTokenHashes], type: Gin)
 }
 
 /// A browser this account signed in from with a password. A sign-in from a

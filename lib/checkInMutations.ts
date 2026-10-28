@@ -4,11 +4,11 @@ import type { RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { publishTicketCheckedIn } from "@/lib/ticketCheckInEvents";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
-import { currentRequestActor } from "@/lib/requestActor";
+import { currentMobileActor } from "@/lib/requestActor";
 
 /** A mobile app's dashboard-style check-in records how the app reached it. */
 function recordedSource<T extends CheckInSource>(source: T): T | "mobile-scan" | "mobile-manual" {
-  const actor = currentRequestActor();
+  const actor = currentMobileActor();
   return source === "online" && actor?.checkInSource ? actor.checkInSource : source;
 }
 

@@ -1,8 +1,9 @@
 import { submitParticipantClaimAction } from "@/app/actions/participant-claims";
-import { mobileActionError, mobileError, mobileOk, notFound } from "@/lib/mobile/http";
+import { mobileActionError, mobileOk, readFormBody, notFound } from "@/lib/mobile/http";
 import { loadMyParticipantClaims, ownRegistration } from "@/lib/mobile/attendee";
 import { authedMobileRoute } from "@/lib/mobile/route";
 
+/** Three 5 MB receipt photos and the fields; read with a hard cap before parsing. */
 const MAX_BYTES = 16 * 1024 * 1024;
 
 /** This registration's expense claims (travel grants), the cap and the categories; null when the event takes none. */
@@ -19,10 +20,9 @@ export const GET = authedMobileRoute<{ rsvpId: string }>("GET /api/mobile/v1/me/
 export const POST = authedMobileRoute<{ rsvpId: string }>("POST /api/mobile/v1/me/registrations/:rsvpId/claims", async (request, { rsvpId }, { auth }) => {
   const rsvp = await ownRegistration(auth.userId, rsvpId);
   if (!rsvp) return notFound();
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_BYTES) return mobileError("INVALID_REQUEST", "Request is too large.");
-  const form = await request.formData().catch(() => null);
-  if (!form) return mobileError("INVALID_REQUEST", "Send the claim as a multipart form.");
+  const body = await readFormBody(request, MAX_BYTES);
+  if ("response" in body) return body.response;
+  const { form } = body;
   const fields = new FormData();
   fields.set("ticketToken", rsvp.checkInToken);
   for (const name of ["category", "description", "amount"]) fields.set(name, String(form.get(name) ?? ""));

@@ -65,7 +65,10 @@ export type MobileGoogleConfig = { webClientId: string; mobileClientIds: string[
 export async function getMobileGoogleConfig(): Promise<MobileGoogleConfig | null> {
   const settings = await getGoogleSsoSettings();
   if (!settings) return null;
-  return { webClientId: settings.clientId, mobileClientIds: await getMobileGoogleClientIds() };
+  // No app client ids, no mobile Google sign-in: a web-audience token would
+  // otherwise be accepted from any client of the web id.
+  const mobileClientIds = await getMobileGoogleClientIds();
+  return mobileClientIds.length > 0 ? { webClientId: settings.clientId, mobileClientIds } : null;
 }
 
 /**
@@ -83,7 +86,7 @@ export async function verifyGoogleIdToken(
   keySet: JWTVerifyGetKey = defaultGoogleKeySet(),
 ): Promise<GoogleIdentity | null> {
   const audiences = Array.from(new Set([config.webClientId, ...config.mobileClientIds].filter(Boolean)));
-  if (audiences.length === 0 || idToken.length > 8192) return null;
+  if (config.mobileClientIds.length === 0 || idToken.length > 8192) return null;
   try {
     const { payload } = await jwtVerify(idToken, keySet, {
       issuer: GOOGLE_ISSUERS,
@@ -94,9 +97,9 @@ export async function verifyGoogleIdToken(
     });
     if (payload.email_verified !== true) return null;
     const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (aud.includes(config.webClientId) && config.mobileClientIds.length > 0) {
-      if (typeof payload.azp !== "string" || !config.mobileClientIds.includes(payload.azp)) return null;
-    }
+    // The usual "server client id" flow mints the token for the web client id;
+    // its authorised party must then be one of the app client ids.
+    if (aud.includes(config.webClientId) && (typeof payload.azp !== "string" || !config.mobileClientIds.includes(payload.azp))) return null;
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
     if (!email || typeof payload.sub !== "string" || !payload.sub) return null;
     return {

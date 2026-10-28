@@ -1,5 +1,6 @@
 import type { EventPermission, MembershipRole } from "@prisma/client";
 import { eventCapabilities } from "@/lib/eventDashboard/capabilities";
+import { isOrgAdmin } from "@/lib/permissionRoles";
 import type { EventPermissionsDto } from "@/lib/mobile/schemas";
 
 /*
@@ -22,7 +23,8 @@ export function eventPermissionsFor(
     sendEmails: can.canSendEmails,
     schedule: can.canManageSchedule,
     manageFeedback: can.canManageFeedback,
-    manageRegistrationWindow: can.canEditEventDetails,
+    // The same rule as the core (canPublishEvents: organisation OWNER/ADMIN).
+    manageRegistrationWindow: role !== null && isOrgAdmin(role),
     // The judging workspace, once the event takes submissions.
     judge: Boolean(options.submissionsEnabled) && can.canJudge,
     checkInToLists: can.canCheckInToLists,

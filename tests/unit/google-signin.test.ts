@@ -35,19 +35,19 @@ beforeAll(async () => {
 
 describe("Google ID-token verification", () => {
   it("accepts a valid token for a configured audience", async () => {
-    await expect(verifyGoogleIdToken(await token({}), webOnly, keySet)).resolves.toEqual({ sub: "google-sub-1", email: "ada@example.test", name: "Ada", picture: null });
-    await expect(verifyGoogleIdToken(await token({}, { issuer: "accounts.google.com" }), webOnly, keySet)).resolves.not.toBeNull();
+    await expect(verifyGoogleIdToken(await token({ azp: ANDROID }), withMobile, keySet)).resolves.toEqual({ sub: "google-sub-1", email: "ada@example.test", name: "Ada", picture: null });
+    await expect(verifyGoogleIdToken(await token({ azp: ANDROID }, { issuer: "accounts.google.com" }), withMobile, keySet)).resolves.not.toBeNull();
   });
 
   it("rejects a bad signature, issuer, audience, expiry or unverified email", async () => {
-    await expect(verifyGoogleIdToken(await token({}, { key: otherPrivateKey }), webOnly, keySet)).resolves.toBeNull();
-    await expect(verifyGoogleIdToken(await token({}, { issuer: "https://evil.example" }), webOnly, keySet)).resolves.toBeNull();
-    await expect(verifyGoogleIdToken(await token({}, { audience: "someone-else" }), webOnly, keySet)).resolves.toBeNull();
-    await expect(verifyGoogleIdToken(await token({}, { expiresIn: Math.floor(Date.now() / 1000) - 3600 }), webOnly, keySet)).resolves.toBeNull();
-    await expect(verifyGoogleIdToken(await token({ email_verified: false }), webOnly, keySet)).resolves.toBeNull();
-    await expect(verifyGoogleIdToken(await token({ email_verified: "true" }), webOnly, keySet)).resolves.toBeNull();
-    await expect(verifyGoogleIdToken(await token({ email: undefined }), webOnly, keySet)).resolves.toBeNull();
-    await expect(verifyGoogleIdToken("not.a.jwt", webOnly, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({}, { key: otherPrivateKey }), withMobile, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({}, { issuer: "https://evil.example" }), withMobile, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({}, { audience: "someone-else" }), withMobile, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({}, { expiresIn: Math.floor(Date.now() / 1000) - 3600 }), withMobile, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({ email_verified: false }), withMobile, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({ email_verified: "true" }), withMobile, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({ email: undefined }), withMobile, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken("not.a.jwt", withMobile, keySet)).resolves.toBeNull();
     await expect(verifyGoogleIdToken(await token({}), { webClientId: "", mobileClientIds: [] }, keySet)).resolves.toBeNull();
   });
 
@@ -57,7 +57,8 @@ describe("Google ID-token verification", () => {
     await expect(verifyGoogleIdToken(await token({}), withMobile, keySet)).resolves.toBeNull();
     // A token minted directly for a mobile client id is accepted on its own audience.
     await expect(verifyGoogleIdToken(await token({}, { audience: ANDROID }), withMobile, keySet)).resolves.not.toBeNull();
-    // With no mobile ids configured, the web audience alone is accepted.
-    await expect(verifyGoogleIdToken(await token({ azp: "anything" }), webOnly, keySet)).resolves.not.toBeNull();
+    // With no app client ids configured, nothing is accepted (Space Works: mobile Google sign-in stays off).
+    await expect(verifyGoogleIdToken(await token({ azp: "anything" }), webOnly, keySet)).resolves.toBeNull();
+    await expect(verifyGoogleIdToken(await token({}, { audience: ANDROID }), webOnly, keySet)).resolves.toBeNull();
   });
 });

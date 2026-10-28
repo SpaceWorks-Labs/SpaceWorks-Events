@@ -10,6 +10,7 @@ import { prisma } from "@/lib/db";
 import { canPublishEvents, getMembership } from "@/lib/permissions";
 import { isRegistrationClosed, registrationClosesAt } from "@/lib/registrationCutoff";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
+import { forUser } from "./actor";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -83,7 +84,12 @@ const stateSelect = {
 
 export const NOTHING_TO_REOPEN = "Sign-ups were not closed from the app, so there is nothing to reopen. Change the registration cutoff on the website.";
 
-export async function setRegistrationWindowForUser(
+/** Close or reopen sign-ups for `actorUserId`, who must be this request's actor (lib/core/actor.ts). */
+export function setRegistrationWindowForUser(actorUserId: string | null, input: unknown): Promise<ActionResult<RegistrationWindowState>> {
+  return forUser(actorUserId, () => setRegistrationWindow(actorUserId, input));
+}
+
+async function setRegistrationWindow(
   actorUserId: string | null,
   input: unknown,
 ): Promise<ActionResult<RegistrationWindowState>> {

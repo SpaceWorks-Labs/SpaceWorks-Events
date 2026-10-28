@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ZodError, ZodType } from "zod";
+import { readBoundedBody } from "./boundedBody";
 
 /*
  * Response envelope for /api/mobile/v1 (the Space Works apps, Android and iOS).
@@ -32,7 +33,8 @@ export type MobileErrorCode =
   | "REAUTH_REQUIRED"
   | "PAID_ORDER"
   | "REGISTRATION_CLOSED"
-  | "PAYMENT_UNAVAILABLE";
+  | "PAYMENT_UNAVAILABLE"
+  | "PAYLOAD_TOO_LARGE";
 
 export const MOBILE_ERROR_STATUS: Record<MobileErrorCode, number> = {
   INVALID_REQUEST: 400,
@@ -60,6 +62,7 @@ export const MOBILE_ERROR_STATUS: Record<MobileErrorCode, number> = {
   PAID_ORDER: 409,
   REGISTRATION_CLOSED: 409,
   PAYMENT_UNAVAILABLE: 503,
+  PAYLOAD_TOO_LARGE: 413,
 };
 
 const DEFAULT_MESSAGES: Record<MobileErrorCode, string> = {
@@ -88,6 +91,7 @@ const DEFAULT_MESSAGES: Record<MobileErrorCode, string> = {
   PAID_ORDER: "This ticket was paid for. Cancel it from its order, under the refund policy.",
   REGISTRATION_CLOSED: "Registration is closed.",
   PAYMENT_UNAVAILABLE: "Payments can't be taken right now. Try again in a moment.",
+  PAYLOAD_TOO_LARGE: "Request is too large.",
 };
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
@@ -164,23 +168,29 @@ export function zodFieldErrors(error: ZodError): Record<string, string[]> {
 
 const MAX_BODY_BYTES = 256 * 1024;
 
-/** Read a bounded JSON body. Returns `{ value }` or a ready error response. */
+/** Read a bounded JSON body (streamed with a hard cap). Returns `{ value }` or a ready error response. */
 export async function readJsonBody(request: Request, maxBytes = MAX_BODY_BYTES): Promise<{ value: unknown } | { response: Response }> {
-  const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes) return { response: mobileError("INVALID_REQUEST", "Request is too large.") };
-  let text: string;
-  try {
-    text = await request.text();
-  } catch {
-    return { response: mobileError("INVALID_REQUEST", "Invalid request body.") };
-  }
-  if (Buffer.byteLength(text, "utf8") > maxBytes) return { response: mobileError("INVALID_REQUEST", "Request is too large.") };
+  const bytes = await readBoundedBody(request, maxBytes);
+  if (bytes === "too_large") return { response: mobileError("PAYLOAD_TOO_LARGE") };
+  if (bytes === "unreadable") return { response: mobileError("INVALID_REQUEST", "Invalid request body.") };
+  const text = new TextDecoder().decode(bytes);
   if (!text.trim()) return { value: {} };
   try {
     return { value: JSON.parse(text) as unknown };
   } catch {
     return { response: mobileError("INVALID_REQUEST", "Invalid JSON.") };
   }
+}
+
+/** A multipart form, streamed with a hard cap before it is parsed (receipt uploads). */
+export async function readFormBody(request: Request, maxBytes: number): Promise<{ form: FormData } | { response: Response }> {
+  const type = request.headers.get("content-type") ?? "";
+  if (!/^multipart\/form-data;/i.test(type)) return { response: mobileError("INVALID_REQUEST", "Send a multipart form.") };
+  const bytes = await readBoundedBody(request, maxBytes);
+  if (bytes === "too_large") return { response: mobileError("PAYLOAD_TOO_LARGE") };
+  if (bytes === "unreadable") return { response: mobileError("INVALID_REQUEST", "Invalid request body.") };
+  const form = await new Response(Buffer.from(bytes), { headers: { "content-type": type } }).formData().catch(() => null);
+  return form ? { form } : { response: mobileError("INVALID_REQUEST", "Send a multipart form.") };
 }
 
 /** Parse a JSON body against a schema, producing an INVALID_REQUEST with field errors on failure. */

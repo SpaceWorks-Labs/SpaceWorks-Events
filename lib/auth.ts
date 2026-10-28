@@ -163,5 +163,6 @@ export const { handlers, signIn, signOut } = nextAuth;
 export async function auth(): Promise<Session | null> {
   const actor = currentRequestActor();
   if (!actor) return nextAuth.auth();
-  return actorSession(actor);
+  // A mobile request without a bearer is signed out, never the cookie session.
+  return actor.kind === "mobile" ? actorSession(actor) : null;
 }

@@ -3,7 +3,7 @@ import "server-only";
 import { EventPrivacyType, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { seatTakingWhere } from "@/lib/payments/holds";
-import { currentRequestActor } from "@/lib/requestActor";
+import { currentMobileActor } from "@/lib/requestActor";
 import { loadInstanceEventView } from "@/lib/views/app__orgSlug__i__instanceId__page";
 import { seriesDateDtoSchema } from "@/lib/mobile/schemas";
 
@@ -33,7 +33,7 @@ export async function loadSeriesDate(orgSlug: string, instanceId: string) {
     take: UPCOMING_DATES,
     select: { id: true, startDateTime: true, endDateTime: true, capacity: true, cancelledAt: true, _count: { select: { rsvps: { where: seatTakingWhere(now) } } } },
   });
-  const viewerId = currentRequestActor()?.userId;
+  const viewerId = currentMobileActor()?.userId;
   const mine = viewerId ? await prisma.rSVP.findFirst({ where: { eventInstanceId: view.instance.id, userId: viewerId }, select: { id: true, status: true, checkInToken: true } }) : null;
   const capacityOf = (capacity: number | null) => capacity ?? view.series.capacity;
   const ticketing = view.ticketing ? {

@@ -5,7 +5,7 @@ import { withApiMonitoring } from "@/lib/apiMonitor";
 import { requireMobileUser, optionalMobileUser, type MobileAuthContext } from "@/lib/mobileAuth";
 import { mobileError } from "@/lib/mobile/http";
 import { getRequestOrigin } from "@/lib/publicUrl";
-import { runAsRequestActor } from "@/lib/requestActor";
+import { ANONYMOUS_ACTOR, runAsRequestActor } from "@/lib/requestActor";
 import { staffMfaState } from "@/lib/staffMfa";
 import { checkRateLimitById } from "@/lib/rateLimit";
 
@@ -46,7 +46,8 @@ export function mobileRoute<P extends Record<string, string>>(
       if (options.optionalAuth && request.headers.get("authorization") && !auth) return mobileError("UNAUTHENTICATED");
       const baseUrl = await mobileBaseUrl();
       if (auth && !(await checkRateLimitById("mobileApi", userRateKey(auth.userId)))) return mobileError("RATE_LIMITED");
-      return auth ? await runAsRequestActor(auth, () => handler(request, params, { baseUrl, auth })) : await handler(request, params, { baseUrl, auth });
+      // Without a bearer the request still runs as an explicit (anonymous) actor, so auth() is null and never the cookie session.
+      return await runAsRequestActor(auth ?? ANONYMOUS_ACTOR, () => handler(request, params, { baseUrl, auth }));
     } catch {
       console.error(`[mobile-api] ${routeId} failed`);
       return mobileError("INTERNAL_ERROR");

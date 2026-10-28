@@ -68,6 +68,21 @@ describe("mobile sessions", () => {
     expect(await prisma.auditEvent.count({ where: { action: "MOBILE_REFRESH_TOKEN_REUSED", targetId: issued.sessionId } })).toBe(1);
   });
 
+  it("revokes on replay of any of the last rotated tokens, even inside the grace window", async () => {
+    const issued = await signIn();
+    const tokens = [issued.refreshToken];
+    for (let round = 0; round < 3; round += 1) {
+      const next = await refreshMobileSession(tokens.at(-1)!, device);
+      if (!next.ok) throw new Error("rotation failed");
+      tokens.push(next.session.refreshToken);
+    }
+    const row = await prisma.mobileSession.findUniqueOrThrow({ where: { id: issued.sessionId } });
+    expect(row.previousRefreshTokenHashes).toHaveLength(3);
+    // The first token is two rotations old: a replay, never a retry.
+    expect(await refreshMobileSession(tokens[1]!, device)).toEqual({ ok: false, reason: "reused" });
+    expect(await refreshMobileSession(tokens.at(-1)!, device)).toEqual({ ok: false, reason: "invalid" });
+  });
+
   it("binds refresh to the install that signed in", async () => {
     const issued = await signIn();
     expect(await refreshMobileSession(issued.refreshToken, null)).toEqual({ ok: false, reason: "invalid" });

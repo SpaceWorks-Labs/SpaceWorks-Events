@@ -128,3 +128,15 @@ services:
         sync: false
       - key: SMTP_PASSWORD
         sync: false
+
+      # --- Space Works mobile apps (optional; docs/MOBILE_API.md) ---
+      # Google sign-in in the app (Super admin > Settings overrides).
+      - key: GOOGLE_MOBILE_CLIENT_IDS
+        sync: false
+      # App links, read at runtime by /.well-known/* on this service.
+      - key: ANDROID_APP_PACKAGE_NAME
+        sync: false
+      - key: ANDROID_APP_SHA256_FINGERPRINTS
+        sync: false
+      - key: APPLE_APP_IDS
+        sync: false

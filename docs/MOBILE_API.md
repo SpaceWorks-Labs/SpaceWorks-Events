@@ -50,6 +50,18 @@ super admin are exempt. The permission helpers underneath fail closed too.
 
 ## Conventions
 
+- Request bodies are read with a hard cap whether or not `Content-Length` is
+  sent (256 KB for JSON, 16 MB for receipt uploads); past it the answer is 413
+  `PAYLOAD_TOO_LARGE`.
+- A request without a bearer runs as an explicit anonymous actor: it is
+  signed out, whatever cookies it carries, so a browser cookie never acts
+  through the mobile API.
+- Rate limits: signed-in calls are limited per user (300 a minute) rather than
+  per address, because phones at one venue often share a NAT address; sign-in
+  (10 a minute), refresh (60 a minute) and the proxy's global ceiling are per
+  address, so a crowded venue Wi-Fi can meet the sign-in limit. Ask people to
+  sign in before the event.
+
 - JSON in and out. Every response carries `Cache-Control: no-store`.
 - Authenticated routes need `Authorization: Bearer <accessToken>`.
 - Success: `{ "ok": true, "data": ... }`. Failure:
@@ -106,14 +118,17 @@ super admin are exempt. The permission helpers underneath fail closed too.
 
 Mobile sessions are rows in `MobileSession`; only SHA-256 digests of tokens are
 stored. Access tokens (`swa_…`) live 15 minutes, refresh tokens (`swr_…`) 60
-days and rotate on every refresh. A refresh token works only from the install
-that signed in (`deviceId`, stored as a SHA-256); presented from any other, it
-revokes the session. If a refresh succeeded but its response was
+days and rotate on every refresh. A refresh must send the same install id
+(`deviceId`, stored as a SHA-256) as the sign-in; presented with any other, it
+revokes the session. The id is client-supplied: it stops a refresh token
+replayed without it, not someone who copied both from the phone, so keep both
+in the platform keystore. If a refresh succeeded but its response was
 lost, retrying with the previous refresh token within 30 seconds of the
 rotation gets a plain `UNAUTHENTICATED` without revoking anything (the app
-should then use the newest tokens it holds, or sign in again). Presenting a
-rotated-away refresh token after that window revokes the whole session (it was
-copied). Each session is
+should then use the newest tokens it holds, or sign in again). The last three
+rotated-away refresh tokens are remembered: presenting any of them (the newest
+after that window, the older ones at any time) revokes the whole session (it
+was copied). Each session is
 bound to the user's `sessionVersion`: a password change, password reset, MFA
 enable/disable, "sign out everywhere" or operator recovery bumps it and
 invalidates every mobile session together with web sessions (the rows are also
@@ -166,9 +181,12 @@ Success → `Session`:
 the Google ID token's signature against Google's JWKS, the issuer
 (`accounts.google.com`), expiry, and that `aud` is the instance's web Google
 client id or one of the app client ids (Super admin → Settings → Google SSO →
-Mobile app client IDs, else `GOOGLE_MOBILE_CLIENT_IDS`). When `aud` is the web
-client id (the usual "server client id" flow) and app client ids are
-configured, the token's `azp` must be one of them. Staff then confirm an
+Mobile app client IDs, else `GOOGLE_MOBILE_CLIENT_IDS`). Mobile Google sign-in
+is off (`FORBIDDEN`, and `googleSignIn.enabled: false` in `/auth/config`) until
+app client ids are configured. When `aud` is the web client id (the usual
+"server client id" flow), the token's `azp` must be one of them. There is no
+server nonce yet: the token's short life and the `azp` check bound replay;
+apps should request a fresh token per sign-in. Staff then confirm an
 authenticator code with `POST /auth/mfa`, as on `/verify-mfa`. Requires `email_verified: true`. Applies the same linking and
 account-creation policy as web Google sign-in (`lib/googleSignIn.ts`); new
 Google links keep identity fields only. Success → `Session`.
@@ -198,8 +216,11 @@ Like the web it needs a sign-in within the last 10 minutes: otherwise
 `{ "code": "123456" }` (authenticator or recovery code) → `{ "mfaVerifiedAt" }`.
 Records the check on this app session for 12 hours of staff access
 (`MOBILE_MFA_VERIFIED`). `STAFF_MFA_ENROLMENT_REQUIRED` when the account has no
-authenticator; `INVALID_REQUEST` for a wrong code; rate limited per address and
-per account.
+authenticator; `INVALID_REQUEST` for a wrong code. Shares the web's `auth`
+limit (per address and per account) and has its own per-address limit. A
+recovery code is accepted, as on the website, and works once; failures and
+recovery-code use are audited (`MOBILE_MFA_FAILED`,
+`MOBILE_MFA_RECOVERY_CODE_USED`), never with the code.
 
 ### `GET /auth/config` (public)
 
@@ -536,8 +557,14 @@ with a member's `rsvpId` for contact details).
   same event only, listing their members). Rows carry `teamName`.
 - `GET …/check-in/stats` → `{ "confirmed", "checkedIn", "recent": [{ "rsvpId", "displayName", "checkedInAt" }] }` (ten latest).
 - `GET …/check-in/roster` → `{ "generatedAt", "rows": [Guest & { "ticketToken", "checkInDetails", "registrationDetails" }] }` (rows carry `teamName` like `Guest`)
-  (as `downloadOfflineCheckInRoster`: confirmed, waitlisted and pending). Keep it
-  in encrypted storage and delete it after the event.
+  (as `downloadOfflineCheckInRoster`: confirmed, waitlisted and pending). The
+  roster holds every guest's ticket token, so a lost phone holds working
+  tickets: keep it only in encrypted app storage (Android Keystore-backed
+  EncryptedFile, iOS Data Protection `complete`), never in backups or logs,
+  and delete it when the event ends, on sign-out and when a refresh fails.
+  "Sign out everywhere" (`POST /auth/logout-all`) is the remote wipe: the app
+  must delete its roster and tokens when its next call answers
+  `UNAUTHENTICATED`.
 - `POST …/check-in/sync` `{ "checkIns": [{ "rsvpId", "checkedInAt", "force", "clientMutationId"? }] }` (1–500)
   → `{ "syncedIds", "alreadyCheckedInIds", "failed": [{ "rsvpId", "error" }] }`
   (as `syncOfflineCheckIns`, same operating-window rule).

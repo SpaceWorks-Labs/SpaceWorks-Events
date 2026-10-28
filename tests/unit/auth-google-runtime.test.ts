@@ -72,4 +72,9 @@ describe("runtime Google SSO settings", () => {
     await expect(getMobileGoogleConfig()).resolves.toEqual({ webClientId: "web.apps.googleusercontent.com", mobileClientIds: ["1-android.apps.googleusercontent.com"] });
     await expect(getMobileGoogleConfig()).resolves.toBeNull();
   });
+
+  it("keeps mobile Google sign-in off until app client ids are configured", async () => {
+    mocks.find.mockResolvedValueOnce(saved("web.apps.googleusercontent.com")).mockResolvedValueOnce({ googleMobileClientIds: null });
+    await expect(getMobileGoogleConfig()).resolves.toBeNull();
+  });
 });

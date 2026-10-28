@@ -121,8 +121,12 @@ frontend's `/api` proxy is deliberately not opened to cookie-less mobile
 traffic. App-link files (`/.well-known/assetlinks.json` and
 `/.well-known/apple-app-site-association`) are served by the **website** host,
 read `ANDROID_APP_PACKAGE_NAME`, `ANDROID_APP_SHA256_FINGERPRINTS` and
-`APPLE_APP_IDS` at runtime, so set them on the frontend service too (Netlify
-environment, the Compose frontend, Helm values). See [Mobile API](MOBILE_API.md).
+`APPLE_APP_IDS` at runtime, so set them on the **frontend** service (Netlify
+environment, `frontend.env` on the VPS, which setup writes empty). Mobile Google
+sign-in is verified on the **API** host: `GOOGLE_MOBILE_CLIENT_IDS` (or the list
+saved in Super admin → Settings) belongs in the backend's `app.env`. In the
+single layout and on Render or Helm one container serves both, so all four go
+there. See [Mobile API](MOBILE_API.md).
 
 ## 4. Verification and operations
 

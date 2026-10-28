@@ -1,6 +1,6 @@
 import "server-only";
 
-import { currentRequestActor } from "@/lib/requestActor";
+import { currentMobileActor } from "@/lib/requestActor";
 
 /**
  * Run a Server Action body for `actorUserId`, who must be this request's
@@ -10,7 +10,7 @@ import { currentRequestActor } from "@/lib/requestActor";
  * apply unchanged. Anything else fails closed.
  */
 export async function forUser<T>(actorUserId: string | null, run: () => Promise<T>): Promise<T> {
-  const actor = currentRequestActor();
+  const actor = currentMobileActor();
   if (!actorUserId || !actor || actor.userId !== actorUserId) throw new Error("This request does not act for that user.");
   return run();
 }

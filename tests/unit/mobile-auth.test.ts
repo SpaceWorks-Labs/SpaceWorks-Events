@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
 vi.mock("@/lib/db", () => ({
   prisma: {
-    mobileSession: { findUnique: mocks.findUnique, updateMany: mocks.updateMany },
+    mobileSession: { findUnique: mocks.findUnique, findFirst: mocks.findUnique, updateMany: mocks.updateMany },
     $transaction: mocks.transaction,
   },
 }));
@@ -26,7 +26,7 @@ const DEVICE = "d".repeat(64);
 function liveSession(overrides: Record<string, unknown> = {}) {
   return {
     id: "ms_1", userId: "user_1", revokedAt: null, accessExpiresAt: future(), refreshExpiresAt: future(),
-    sessionVersion: 2, lastUsedAt: new Date(), mfaVerifiedAt: null, authenticatedAt: new Date(0), deviceHash: DEVICE, user: { sessionVersion: 2 }, ...overrides,
+    sessionVersion: 2, lastUsedAt: new Date(), mfaVerifiedAt: null, authenticatedAt: new Date(0), deviceHash: DEVICE, previousRefreshTokenHashes: [], user: { sessionVersion: 2 }, ...overrides,
   };
 }
 
@@ -80,21 +80,21 @@ describe("refreshMobileSession", () => {
     expect(outcome.session.refreshToken).not.toBe(REFRESH);
     const update = mocks.updateMany.mock.calls[0]![0];
     expect(update.where).toMatchObject({ id: "ms_1", refreshTokenHash: hashMobileToken(REFRESH), revokedAt: null });
-    expect(update.data.previousRefreshTokenHash).toBe(hashMobileToken(REFRESH));
+    expect(update.data.previousRefreshTokenHashes).toEqual([hashMobileToken(REFRESH)]);
     expect(update.data.rotatedAt).toBeInstanceOf(Date);
     expect(update.data.refreshTokenHash).toBe(hashMobileToken(outcome.session.refreshToken));
     expect(JSON.stringify(update)).not.toContain(outcome.session.refreshToken);
   });
 
   it("refuses, without revoking, a retry of the previous token inside the grace window", async () => {
-    mocks.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "ms_1", userId: "user_1", revokedAt: null, rotatedAt: new Date(Date.now() - 5_000), deviceHash: DEVICE });
+    mocks.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "ms_1", userId: "user_1", revokedAt: null, rotatedAt: new Date(Date.now() - 5_000), deviceHash: DEVICE, previousRefreshTokenHashes: [hashMobileToken(REFRESH)] });
     await expect(refreshMobileSession(REFRESH, DEVICE)).resolves.toEqual({ ok: false, reason: "invalid" });
     expect(mocks.updateMany).not.toHaveBeenCalled();
     expect(mocks.audit).not.toHaveBeenCalled();
   });
 
   it("revokes the whole session when an already-rotated refresh token is replayed", async () => {
-    mocks.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "ms_1", userId: "user_1", revokedAt: null, rotatedAt: new Date(Date.now() - REFRESH_REUSE_GRACE_MS - 1_000), deviceHash: DEVICE });
+    mocks.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "ms_1", userId: "user_1", revokedAt: null, rotatedAt: new Date(Date.now() - REFRESH_REUSE_GRACE_MS - 1_000), deviceHash: DEVICE, previousRefreshTokenHashes: [hashMobileToken(REFRESH)] });
     await expect(refreshMobileSession(REFRESH, DEVICE)).resolves.toEqual({ ok: false, reason: "reused" });
     expect(mocks.updateMany).toHaveBeenCalledWith({ where: { id: "ms_1", revokedAt: null }, data: { revokedAt: expect.any(Date) } });
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "MOBILE_REFRESH_TOKEN_REUSED" }));

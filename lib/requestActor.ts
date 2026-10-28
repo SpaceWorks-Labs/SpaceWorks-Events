@@ -22,7 +22,18 @@ export type MobileRequestActor = {
   checkInSource?: "mobile-scan" | "mobile-manual";
 };
 
-export type RequestActor = MobileRequestActor;
+/** A mobile API request without a bearer: nobody is signed in, whatever cookies came with it. */
+export type AnonymousRequestActor = { kind: "anonymous"; };
+
+export type RequestActor = MobileRequestActor | AnonymousRequestActor;
+
+export const ANONYMOUS_ACTOR: AnonymousRequestActor = Object.freeze({ kind: "anonymous" });
+
+/** The signed-in app session acting on this request, if any. */
+export function currentMobileActor(): MobileRequestActor | undefined {
+  const actor = store.getStore();
+  return actor?.kind === "mobile" ? actor : undefined;
+}
 
 const key = Symbol.for("spaceworks.requestActor");
 const globalStore = globalThis as typeof globalThis & { [key]?: AsyncLocalStorage<RequestActor>; };
@@ -34,4 +45,14 @@ export function runAsRequestActor<T>(actor: RequestActor, callback: () => Promis
 
 export function currentRequestActor(): RequestActor | undefined {
   return store.getStore();
+}
+
+/**
+ * Run `callback` with no request actor. Background work started during a
+ * request (the outbox worker's timers, Redis clients and their listeners,
+ * queued event dispatch) must never inherit the app session that happened to
+ * start it, so it is kicked off from here.
+ */
+export function outsideRequestActor<T>(callback: () => T): T {
+  return store.exit(callback);
 }

@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Session } from "next-auth";
 import { prisma } from "@/lib/db";
-import type { RequestActor } from "@/lib/requestActor";
+import type { MobileRequestActor as RequestActor } from "@/lib/requestActor";
 import { mobileMfaFresh } from "@/lib/staffMfaFresh";
 
 const loaded = new WeakMap<RequestActor, Promise<Session | null>>();

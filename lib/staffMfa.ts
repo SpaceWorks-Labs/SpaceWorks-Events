@@ -52,6 +52,11 @@ async function standing(userId: string) {
 export const staffMfaState = cache(async (userId: string): Promise<StaffMfaState> => {
   if (!isStaffMfaRequired()) return "ok";
   const actor = currentRequestActor();
+  if (actor?.kind === "anonymous") {
+    // Nobody is signed in on this request: a staff check fails closed.
+    const state = await standing(userId);
+    return state.exempt ? "ok" : state.user.mfaEnabledAt ? "verify" : "enrol";
+  }
   if (actor) {
     if (actor.userId !== userId) return "ok";
     const state = await standing(userId);

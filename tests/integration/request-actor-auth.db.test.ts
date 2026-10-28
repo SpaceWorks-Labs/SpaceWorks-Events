@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // Auth.js itself can't load under Vitest; the cookie session is "nobody".
-vi.mock("next-auth", () => ({ default: () => ({ auth: async () => null, handlers: {}, signIn: vi.fn(), signOut: vi.fn() }), CredentialsSignin: class extends Error {} }));
+const web = vi.hoisted(() => ({ session: null as null | { user: { id: string; }; } }));
+vi.mock("next-auth", () => ({ default: () => ({ auth: async () => web.session, handlers: {}, signIn: vi.fn(), signOut: vi.fn() }), CredentialsSignin: class extends Error {} }));
 vi.mock("next-auth/providers/google", () => ({ default: vi.fn() }));
 vi.mock("next-auth/providers/credentials", () => ({ default: vi.fn() }));
 vi.mock("@/lib/authAdapter", () => ({ authAdapter: {} }));
@@ -11,7 +12,7 @@ vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined })
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasRecentAuthentication } from "@/lib/reauth";
-import { runAsRequestActor } from "@/lib/requestActor";
+import { ANONYMOUS_ACTOR, runAsRequestActor } from "@/lib/requestActor";
 
 const suffix = randomUUID().replace(/-/g, "").slice(0, 12);
 let userId = "";
@@ -43,6 +44,16 @@ describe("auth() inside a mobile request", () => {
 
   it("falls back to the cookie session outside an actor", async () => {
     expect(await auth()).toBeNull();
+  });
+
+  it("is signed out under the anonymous actor, even with a cookie session", async () => {
+    web.session = { user: { id: userId } };
+    expect(await auth()).toMatchObject({ user: { id: userId } });
+    await runAsRequestActor(ANONYMOUS_ACTOR, async () => {
+      expect(await auth()).toBeNull();
+      expect(await hasRecentAuthentication()).toBe(false);
+    });
+    web.session = null;
   });
 
   it("has no session for a deleted user", async () => {

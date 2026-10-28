@@ -22,7 +22,7 @@ vi.mock("@/lib/outboxWorker", () => ({ startOutboxWorker: vi.fn() }));
 
 import * as OTPAuth from "otpauth";
 import { prisma } from "@/lib/db";
-import { createMfaEnrollment, encryptMfaSecret } from "@/lib/mfa";
+import { createMfaEnrollment, encryptMfaSecret, hashRecoveryCode } from "@/lib/mfa";
 import { deviceHash } from "@/lib/loginSecurity";
 import { issueMobileSession } from "@/lib/mobileAuth";
 import { getMembership } from "@/lib/permissions";
@@ -94,8 +94,9 @@ describe.sequential("mobile staff authenticator rule", () => {
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "STAFF_MFA_REQUIRED" } });
     }
-    // A wrong code changes nothing.
+    // A wrong code changes nothing, and is audited (never the code itself).
     expect((await mfa(post("/x", { code: "000000" }, admin.accessToken), none)).status).toBe(400);
+    await expect(prisma.auditEvent.count({ where: { action: "MOBILE_MFA_FAILED", actorUserId: ids.admin } })).resolves.toBe(1);
     expect((await eventDetail(get("/x", admin.accessToken), at())).status).toBe(403);
 
     const confirmed = await mfa(post("/x", { code: currentCode(adminSecret) }, admin.accessToken), none);
@@ -104,6 +105,15 @@ describe.sequential("mobile staff authenticator rule", () => {
     await expect(prisma.auditEvent.count({ where: { action: "MOBILE_MFA_VERIFIED", actorUserId: ids.admin } })).resolves.toBe(1);
     expect((await eventDetail(get("/x", admin.accessToken), at())).status).toBe(200);
     expect((await guestList(get("/x", admin.accessToken), at())).status).toBe(200);
+  });
+
+  it("accepts a recovery code once, and audits its use", async () => {
+    await prisma.user.update({ where: { id: ids.admin }, data: { recoveryCodeHashes: [hashRecoveryCode("ABCD-EFGH-IJKL")] } });
+    const first = await googleStyleSession(ids.admin);
+    expect((await mfa(post("/x", { code: "abcd efgh ijkl" }, first.accessToken), none)).status).toBe(200);
+    await expect(prisma.auditEvent.count({ where: { action: "MOBILE_MFA_RECOVERY_CODE_USED", actorUserId: ids.admin } })).resolves.toBe(1);
+    const second = await googleStyleSession(ids.admin);
+    expect((await mfa(post("/x", { code: "ABCD-EFGH-IJKL" }, second.accessToken), none)).status).toBe(400);
   });
 
   it("expires the app session's check after 12 hours", async () => {

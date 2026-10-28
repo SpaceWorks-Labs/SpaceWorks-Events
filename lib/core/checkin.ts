@@ -4,7 +4,7 @@ import {
   checkInByRsvpId, checkInByToken, downloadOfflineCheckInRoster, loadRecentCheckIns, lookupAttendeesForCheckIn,
   previewCheckInByRsvpId, previewCheckInByToken, syncOfflineCheckIns, undoCheckIn,
 } from "@/app/actions/checkin";
-import { currentRequestActor, runAsRequestActor } from "@/lib/requestActor";
+import { currentMobileActor, runAsRequestActor } from "@/lib/requestActor";
 import { forUser } from "./actor";
 
 export type { CheckInPreviewData, CheckInResultData, LookupRow, OfflineCheckInRosterRow } from "@/app/actions/checkin";
@@ -19,7 +19,7 @@ export type CheckInCoreOptions = { source?: "online" | "mobile-scan" | "mobile-m
 
 function withSource<T>(actorUserId: string | null, options: CheckInCoreOptions, run: () => Promise<T>) {
   return forUser(actorUserId, () => {
-    const actor = currentRequestActor()!;
+    const actor = currentMobileActor()!;
     const source = options.source === "mobile-scan" || options.source === "mobile-manual" ? options.source : undefined;
     return source ? runAsRequestActor({ ...actor, checkInSource: source }, run) : run();
   });

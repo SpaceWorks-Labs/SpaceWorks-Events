@@ -18,9 +18,10 @@ import type { MobileRequestActor } from "@/lib/requestActor";
  * users, not machine clients: every request resolves the user and then runs
  * as a request actor (lib/requestActor.ts) through the same permission
  * helpers as the website. Tokens are never logged or audited, and only their
- * SHA-256 digests are stored. A session is bound to the app install that
- * created it (`deviceHash`), so a refresh token copied off the phone is
- * useless elsewhere.
+ * SHA-256 digests are stored. A session records the install id the app sent
+ * (`deviceHash`) and refreshes must send the same one. The id is
+ * client-supplied: it stops a refresh token replayed without it, not one
+ * copied together with the id.
  */
 
 export type MobilePlatform = "android" | "ios";
@@ -42,6 +43,8 @@ const LAST_USED_THROTTLE_MS = 5 * 60_000;
  * revoking; afterwards a replay is treated as theft.
  */
 export const REFRESH_REUSE_GRACE_MS = 30_000;
+/** How many rotated-away refresh tokens are remembered; replaying any of them revokes the session. */
+export const MOBILE_REFRESH_HISTORY = 3;
 /** "Sign out everywhere" from the app needs a credential proved this recently. */
 export const MOBILE_RECENT_AUTH_MS = 10 * 60_000;
 
@@ -131,17 +134,19 @@ export async function refreshMobileSession(refreshToken: string, deviceHash: str
     where: { refreshTokenHash: presentedHash },
     select: {
       id: true, userId: true, revokedAt: true, accessExpiresAt: true, refreshExpiresAt: true,
-      sessionVersion: true, deviceHash: true, user: { select: { sessionVersion: true } },
+      sessionVersion: true, deviceHash: true, previousRefreshTokenHashes: true, user: { select: { sessionVersion: true } },
     },
   });
 
   if (!session) {
-    const replayed = await prisma.mobileSession.findUnique({
-      where: { previousRefreshTokenHash: presentedHash },
-      select: { id: true, userId: true, revokedAt: true, rotatedAt: true, deviceHash: true },
+    const replayed = await prisma.mobileSession.findFirst({
+      where: { previousRefreshTokenHashes: { has: presentedHash } },
+      select: { id: true, userId: true, revokedAt: true, rotatedAt: true, deviceHash: true, previousRefreshTokenHashes: true },
     });
     if (!replayed || replayed.revokedAt) return { ok: false, reason: "invalid" };
-    const withinGrace = replayed.rotatedAt && now.getTime() - replayed.rotatedAt.getTime() <= REFRESH_REUSE_GRACE_MS;
+    // Only the token rotated away last can be an innocent retry after a lost response.
+    const newest = replayed.previousRefreshTokenHashes[0] === presentedHash;
+    const withinGrace = newest && replayed.rotatedAt && now.getTime() - replayed.rotatedAt.getTime() <= REFRESH_REUSE_GRACE_MS;
     if (withinGrace && replayed.deviceHash === deviceHash) return { ok: false, reason: "invalid" };
     await revokeReplayed(replayed, now);
     return { ok: false, reason: "reused" };
@@ -162,7 +167,7 @@ export async function refreshMobileSession(refreshToken: string, deviceHash: str
     data: {
       accessTokenHash: tokens.accessTokenHash,
       refreshTokenHash: tokens.refreshTokenHash,
-      previousRefreshTokenHash: presentedHash,
+      previousRefreshTokenHashes: [presentedHash, ...session.previousRefreshTokenHashes].slice(0, MOBILE_REFRESH_HISTORY),
       rotatedAt: now,
       accessExpiresAt: tokens.accessExpiresAt,
       refreshExpiresAt: tokens.refreshExpiresAt,
