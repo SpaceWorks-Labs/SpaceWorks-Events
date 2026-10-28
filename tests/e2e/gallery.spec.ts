@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EventStatus, PrismaClient, RegistrationMode, RsvpStatus, SoloPolicy, SubmissionStatus } from "@prisma/client";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 // Public project gallery and results search (docs/HACKATHON.md): search,
 // the Award winners filter and sort as shareable URLs, award badges, a
@@ -26,7 +27,7 @@ const projectTitle = (index: number) => `Gizmo ${String(index).padStart(2, "0")}
 async function newPage(browser: Browser, options: Parameters<Browser["newContext"]>[0] = {}) {
   const context = await browser.newContext(options);
   // Its own TEST-NET-2 block, away from the other specs' per-IP limits.
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.51.100.${(ipCounter++ % 40) + 200}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.51.100.${(ipCounter++ % 40) + 200}` });
   return { context, page: await context.newPage() };
 }
 

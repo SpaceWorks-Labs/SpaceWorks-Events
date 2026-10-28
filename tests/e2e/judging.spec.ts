@@ -1,5 +1,6 @@
 import { EventStatus } from "@prisma/client";
 import { expect, test, type Locator } from "@playwright/test";
+import { appOrigin } from "./helpers/client";
 import {
   collectPageErrors,
   dashboard,
@@ -103,6 +104,7 @@ test("teams submit from their team page and a solo registrant through the emaile
   const context = await newContext(browser);
   for (const entry of Object.values(teams)) {
     const response = await context.request.post("/api/rsvp", {
+      headers: { origin: appOrigin },
       data: { orgSlug, eventSlug, guestEmail: entry.leader.email, name: entry.leader.name, answers: {}, team: { mode: "create", name: entry.team } },
     });
     expect(response.status(), await response.text()).toBe(200);
@@ -124,7 +126,7 @@ test("teams submit from their team page and a solo registrant through the emaile
     await page.close();
   }
 
-  const response = await context.request.post("/api/rsvp", { data: { orgSlug, eventSlug, guestEmail: solo.email, name: solo.name, answers: {}, team: { mode: "solo" } } });
+  const response = await context.request.post("/api/rsvp", { headers: { origin: appOrigin }, data: { orgSlug, eventSlug, guestEmail: solo.email, name: solo.name, answers: {}, team: { mode: "solo" } } });
   expect(response.status(), await response.text()).toBe(200);
   const rsvp = await prisma.rSVP.findFirstOrThrow({ where: { eventId, guestEmail: solo.email } });
   const ticket = await context.newPage();

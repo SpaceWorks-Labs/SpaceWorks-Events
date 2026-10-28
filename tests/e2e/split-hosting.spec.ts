@@ -46,7 +46,7 @@ test.describe("separate frontend and backend", () => {
     const readers = [
       ["app__account__page:loadAccountView", []],
       ["app__account__security__page:loadAccountSecurityView", []],
-      ["app__account__registrations__page:loadAccountRegistrationsView", []],
+      ["app__account__registrations__page:loadAccountRegistrationsView", [{ searchParams: {} }]],
       ["app__dashboard__orgSlug__page:loadOrgDashboardView", [{ params: { orgSlug: slug }, searchParams: {} }]],
       ["app__dashboard__orgSlug__settings__page:loadOrgSettingsView", [{ params: { orgSlug: slug } }]],
       ["app__dashboard__orgSlug__event__eventId__page:loadEventManageView", [{ params: { orgSlug: slug, eventId } }]],

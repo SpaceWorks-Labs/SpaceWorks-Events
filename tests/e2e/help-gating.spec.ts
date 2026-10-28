@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { MembershipRole, PrismaClient } from "@prisma/client";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { ipHeader } from "./helpers/client";
 
 // The guide's owner/admin section (content/help/sections/developers.ts) opens
 // for organisation owners and admins and stays a 404 for plain members. The
@@ -39,7 +40,7 @@ test.afterAll(async () => {
 async function signedIn(browser: Browser, email: string): Promise<Page> {
   const context = await browser.newContext();
   // Its own address block, so per-IP sign-in limits aren't shared with other specs.
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.18.11.${(ipCounter++ % 240) + 10}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.18.11.${(ipCounter++ % 240) + 10}` });
   const page = await context.newPage();
   await page.goto("/login");
   const emailInput = page.getByRole("textbox", { name: /^Email/ });

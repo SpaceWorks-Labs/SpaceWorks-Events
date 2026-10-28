@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { EventPrivacyType, EventStatus, MembershipRole, PrismaClient, RsvpStatus } from "@prisma/client";
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import { ipHeader } from "./client";
 
 // Shared setup for the event crew organiser smoke (docs/CREW.md,
 // tests/e2e/crew-smoke.spec.ts): an owner, a capacity-2 event, two seeded
@@ -40,7 +41,7 @@ export const dashboard = () => `/dashboard/${orgSlug}/event/${state.eventId}`;
 /** Each context gets its own client address so per-IP rate limits never couple steps. */
 export async function newContext(browser: Browser, options: Parameters<Browser["newContext"]>[0] = {}) {
   const context = await browser.newContext(options);
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.51.101.${state.ipCounter++}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.51.101.${state.ipCounter++}` });
   return context;
 }
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { EventPrivacyType, EventStatus, MembershipRole, PrismaClient, RsvpStatus } from "@prisma/client";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { ipHeader } from "./client";
 
 /*
  * Fixtures for tests/e2e/attendance-confirmation.spec.ts (docs/ATTENDANCE.md):
@@ -60,7 +61,7 @@ export async function discardQueuedTestEmail() {
 /** Each context gets its own client address so per-IP limits don't couple tests. */
 export async function newContext(browser: Browser, options: Parameters<Browser["newContext"]>[0] = {}) {
   const context = await browser.newContext(options);
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.51.100.${ipCounter++}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.51.100.${ipCounter++}` });
   return context;
 }
 

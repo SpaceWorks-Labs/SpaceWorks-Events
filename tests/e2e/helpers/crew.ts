@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { EventPrivacyType, EventStatus, MembershipRole, PrismaClient } from "@prisma/client";
 import { expect, test, type APIResponse, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { appOrigin, ipHeader } from "./client";
 
 // Shared setup for the event crew journeys (docs/CREW.md, tests/e2e/crew.spec.ts):
 // an owner, an organisation and a capacity-1 event with a crew sign-up link.
@@ -33,7 +34,7 @@ let ipCounter = 10;
 /** Each context gets its own client address so per-IP rate limits never couple steps. */
 export async function newContext(browser: Browser, options: Parameters<Browser["newContext"]>[0] = {}) {
   const context = await browser.newContext(options);
-  await context.setExtraHTTPHeaders({ "cf-connecting-ip": `198.51.100.${ipCounter++}` });
+  await context.setExtraHTTPHeaders({ [ipHeader]: `198.51.100.${ipCounter++}` });
   return context;
 }
 
@@ -120,6 +121,7 @@ export async function expectCapabilityHeaders(response: APIResponse, label: stri
 export async function registerAttendee(browser: Browser, person: { name: string; email: string }) {
   const context = await newContext(browser);
   const response = await context.request.post("/api/rsvp", {
+    headers: { origin: appOrigin },
     data: { orgSlug, eventSlug, guestEmail: person.email, name: person.name, answers: {} },
   });
   const result = { status: response.status(), text: await response.text() };

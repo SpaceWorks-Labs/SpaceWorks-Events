@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ANONYMOUS_ACTOR, currentMobileActor, currentRequestActor as anyActor, outsideRequestActor, runAsRequestActor, type MobileRequestActor } from "@/lib/requestActor";
 
 const currentRequestActor = currentMobileActor;
@@ -49,6 +49,8 @@ describe("request actors", () => {
   });
 
   it("delivers live check-in events to listeners without the publishing request's actor", async () => {
+    // In-process delivery: a configured but unreachable Redis (the Quality gate) delays it past the wait.
+    vi.stubEnv("REDIS_URL", "");
     const { publishTicketCheckedIn, subscribeTicketCheckedIn } = await import("@/lib/ticketCheckInEvents");
     const seen: unknown[] = [];
     const unsubscribe = subscribeTicketCheckedIn("rsvp-actor-test", () => seen.push(currentRequestActor()));
@@ -57,6 +59,7 @@ describe("request actors", () => {
     });
     await tick(5);
     unsubscribe();
+    vi.unstubAllEnvs();
     expect(seen).toEqual([undefined]);
   });
 });

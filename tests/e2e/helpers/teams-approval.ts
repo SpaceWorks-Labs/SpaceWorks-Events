@@ -1,5 +1,6 @@
 import { EventPrivacyType, RegistrationMode } from "@prisma/client";
 import { expect, test } from "@playwright/test";
+import { appOrigin } from "./client";
 import {
   approvalLeader,
   approvalMember,
@@ -34,6 +35,7 @@ export function teamsApprovalTests() {
     // Both people register through the same endpoint the public form posts to.
     const leaderContext = await newContext(browser);
     const created = await leaderContext.request.post("/api/rsvp", {
+      headers: { origin: appOrigin },
       data: { orgSlug, eventSlug: approvalSlug, guestEmail: approvalLeader.email, name: approvalLeader.name, answers: {}, team: { mode: "create", name: approvalTeamName } },
     });
     expect(created.status(), await created.text()).toBe(200);
@@ -41,6 +43,7 @@ export function teamsApprovalTests() {
     expect(team.status).toBe("PENDING_APPROVAL");
     const memberContext = await newContext(browser);
     const joined = await memberContext.request.post("/api/rsvp", {
+      headers: { origin: appOrigin },
       data: { orgSlug, eventSlug: approvalSlug, guestEmail: approvalMember.email, name: approvalMember.name, answers: {}, team: { mode: "join", joinToken: team.joinToken } },
     });
     expect(joined.status(), await joined.text()).toBe(200);
