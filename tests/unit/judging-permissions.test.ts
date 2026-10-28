@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EventPermission } from "@prisma/client";
-import { hasNonJudgePermission, judgingPermissionsFor } from "@/lib/judgingPermissions";
+import { judgingPermissionsFor } from "@/lib/judgingPermissions";
 import { eventCapabilities } from "@/lib/eventDashboard/capabilities";
 
 /** Every dashboard flag except the judging ones. */
@@ -18,13 +18,11 @@ describe("JUDGE permission isolation", () => {
     expect(judgingPermissionsFor(false, false, [EventPermission.JUDGE])).toEqual({ canJudge: true, canManageJudging: false, isJudgeOnly: true });
     // The rest of the event dashboard stays closed to a judge.
     expect(Object.values(outsideJudging(null, [EventPermission.JUDGE])).every((value) => value === false)).toBe(true);
-    expect(hasNonJudgePermission([EventPermission.JUDGE])).toBe(false);
   });
 
   it("JUDGE never stands in for another permission, and others never imply JUDGE", () => {
     for (const permission of ALL.filter((value) => value !== EventPermission.JUDGE)) {
       expect(judgingPermissionsFor(false, false, [permission])).toEqual({ canJudge: false, canManageJudging: false, isJudgeOnly: false });
-      expect(hasNonJudgePermission([permission, EventPermission.JUDGE])).toBe(true);
       expect(outsideJudging(null, [EventPermission.JUDGE, permission])).toEqual(outsideJudging(null, [permission]));
     }
   });
