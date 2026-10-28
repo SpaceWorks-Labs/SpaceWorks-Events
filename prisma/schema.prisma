@@ -484,7 +484,7 @@ model MobileIdempotencyKey {
   userId      String
   route       String
   keyHash     String
-  /// SHA-256 of the request body; the same key with another body is refused.
+  /// HMAC of the method, path and body; the same key on another path or with another body is refused.
   requestHash String
   /// 0 while the first request is still running.
   status      Int      @default(0)

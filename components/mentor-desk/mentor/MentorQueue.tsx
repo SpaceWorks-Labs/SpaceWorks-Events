@@ -69,9 +69,9 @@ function ClaimCard({ scope, claim, timeZone }: { scope: DeskScope; claim: NonNul
       {!claim.lapsed ? (
         <>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="primary" loading={pending} onClick={() => command("resolve", {}, "Resolved. Thank you.")}>Resolved</Button>
+            <Button size="sm" variant="primary" loading={pending} onClick={() => command("resolve", { claimId: claim.claimId, claimGeneration: claim.claimGeneration }, "Resolved. Thank you.")}>Resolved</Button>
             <Button size="sm" variant="secondary" loading={pending} onClick={() => command("renew", { claimId: claim.claimId, claimGeneration: claim.claimGeneration }, "More time.")}>More time</Button>
-            <Button size="sm" variant="ghost" loading={pending} onClick={() => command("release", {}, "Back in the queue.")}>Release</Button>
+            <Button size="sm" variant="ghost" loading={pending} onClick={() => command("release", { claimId: claim.claimId, claimGeneration: claim.claimGeneration }, "Back in the queue.")}>Release</Button>
           </div>
           <div className="flex flex-wrap gap-2">
             <Input aria-label="Comment" placeholder="Message the team" maxLength={HELP_COMMENT_MAX_LENGTH} value={body} onChange={(e) => setBody(e.target.value)} className="max-w-96" />

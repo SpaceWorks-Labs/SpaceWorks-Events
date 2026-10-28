@@ -16,7 +16,7 @@ import { bookOfficeHour, cancelOfficeHourBooking, createOfficeHourSlot, reschedu
 import { saveMentoringRound, setRoundMentorPool, transitionMentoringRound } from "@/lib/core/mentorDesk/rounds";
 import { visitCommand } from "@/lib/core/mentorDesk/visits";
 import { createTeam, organisationId, organiserId, register, setUpJudgingSuite, tearDownJudgingSuite } from "./helpers/judging";
-import { addCategory, addMentor, createDeskEvent, goLive, HOUR, local, organiserOf, requestVersion, teamParticipant } from "./helpers/mentorDesk";
+import { addCategory, addMentor, createDeskEvent, goLive, heldClaim, HOUR, local, organiserOf, requestVersion, teamParticipant } from "./helpers/mentorDesk";
 
 // docs/MENTOR_DESK.md "Tests": review follow-ups (grant removal, activation, conflicts, cancels, crew hook).
 describe.sequential("mentor desk follow-ups", () => {
@@ -117,7 +117,7 @@ describe.sequential("mentor desk follow-ups", () => {
     await prisma.helpRequest.update({ where: { id: first.data.id }, data: { claimExpiresAt: new Date(Date.now() - 1000) } });
     expect((await helpCommand(organiser, { requestId: first.data.id, action: "release", expectedVersion: await requestVersion(first.data.id) })).ok).toBe(true);
     await helpCommand(mentor, { requestId: first.data.id, action: "claim", expectedVersion: await requestVersion(first.data.id) });
-    await helpCommand(mentor, { requestId: first.data.id, action: "resolve", expectedVersion: await requestVersion(first.data.id) });
+    await helpCommand(mentor, { requestId: first.data.id, action: "resolve", ...(await heldClaim(first.data.id)) });
     const second = await raiseHelp(team, { categoryKey: "general", summary: "Two" });
     if (!second.ok) throw new Error(second.error);
     expect(await helpCommand(organiser, { requestId: first.data.id, action: "reopen", expectedVersion: await requestVersion(first.data.id), note: "Again" })).toEqual({ ok: false, error: "This team already has an open request in this category." });

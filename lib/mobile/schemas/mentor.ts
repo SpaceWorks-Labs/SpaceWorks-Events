@@ -12,6 +12,13 @@ import { iso } from "./core";
 const helpStatus = z.enum(["OPEN", "CLAIMED", "RESOLVED", "CANCELLED", "EXPIRED"]);
 const comment = z.object({ id: z.string(), origin: z.string(), body: z.string(), createdAt: iso }).strict();
 const localTime = z.string();
+/** A round check-in question (lib/mentorDesk/roundForm.ts), field by field. */
+const roundQuestion = z.object({
+  id: z.string(), label: z.string(), type: z.enum(["text", "rating", "yesno", "choice"]),
+  options: z.array(z.string()).optional(), required: z.boolean().optional(),
+}).strict();
+/** One of this mentor's own visit leases, keyed by team id. */
+const visitLease = z.object({ leaseId: z.string(), generation: z.number().int(), version: z.number().int(), expiresAt: iso }).strict();
 
 /* ---------- Participants ---------- */
 
@@ -77,10 +84,10 @@ export const mentorConsoleDtoSchema = z.object({
   round: z.object({
     id: z.string(), version: z.number().int(), label: z.string(), formVersion: z.number().int(), closesAt: iso, inPool: z.boolean(),
     allowFreshEyesOverride: z.boolean(), allowConflictOverride: z.boolean(),
-    form: z.array(z.record(z.string(), z.unknown())),
+    form: z.array(roundQuestion),
     board: z.array(z.object({ teamId: z.string(), teamName: z.string(), state: z.enum(["due", "seen", "busy", "done", "conflict"]) }).strict()),
     /** This mentor's own visit leases only. */
-    leases: z.record(z.string(), z.object({ leaseId: z.string(), generation: z.number().int(), version: z.number().int(), expiresAt: iso }).strict()),
+    leases: z.record(z.string(), visitLease),
   }).strict().nullable(),
 }).strict();
 
