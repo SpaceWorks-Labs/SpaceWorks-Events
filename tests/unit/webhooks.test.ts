@@ -246,6 +246,7 @@ describe("webhook payload DTOs", () => {
       "event.published",
       "event.cancelled",
       "feedback.submitted",
+      "application.status_changed",
     ]);
     expect(isWebhookEventType("ping")).toBe(false);
   });
