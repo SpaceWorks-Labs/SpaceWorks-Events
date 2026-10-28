@@ -96,6 +96,9 @@ install -d -m 0755 "$(status_dir)"
 compose config --quiet
 fetch_images "$version" "$(conf_get "$compose_env" SWE_LAYOUT)"
 compose run --rm --no-deps ops node docker/vps/check.mjs preflight
+# An organisation on an address this release reserves stops the update here,
+# before anything is migrated, and the previous release keeps serving.
+compose run --rm --no-deps ops node scripts/check-reserved-slugs.mjs
 compose run --rm migrator
 compose run --rm --no-deps ops node scripts/verify-production-schema.mjs
 compose up -d --wait --wait-timeout 300 --remove-orphans

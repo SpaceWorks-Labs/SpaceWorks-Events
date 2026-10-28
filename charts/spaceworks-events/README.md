@@ -59,7 +59,7 @@ helm lint charts/spaceworks-events
 helm upgrade --install spaceworks-events charts/spaceworks-events --namespace swevents --create-namespace --values /secure/path/values-production.yaml --wait --timeout 10m
 ```
 
-The migration Job is a Helm pre-install/pre-upgrade hook. A failed migration blocks the application rollout.
+The migration Job is a Helm pre-install/pre-upgrade hook. A failed migration blocks the application rollout. Before migrating, the Job runs `node scripts/check-reserved-slugs.mjs`: when an organisation already holds an address the new release reserves, the release fails with nothing migrated ([Reserved organisation addresses](../../docs/production-operations.md#reserved-organisation-addresses)).
 
 ## Email worker and beat
 

@@ -32,13 +32,16 @@ spec:
         - name: migrate
           image: "{{ .Values.migration.image.repository }}:{{ default .Chart.AppVersion .Values.migration.image.tag }}"
           imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
+          # The reserved-address check fails the release before anything is
+          # migrated when an organisation holds a slug this release reserves
+          # (docs/production-operations.md, "Reserved organisation addresses").
           {{- if .Values.migration.checkInstanceSecrets }}
-          # Fail the release (before any pod rolls) when MFA_ENCRYPTION_KEY in
+          # Also fail the release (before any pod rolls) when MFA_ENCRYPTION_KEY in
           # the runtime Secret cannot decrypt the Super admin -> Settings secrets.
-          command: ["sh", "-c", "docker-entrypoint.sh migrate && node scripts/check-instance-secrets.mjs"]
+          command: ["sh", "-c", "node scripts/check-reserved-slugs.mjs && docker-entrypoint.sh migrate && node scripts/check-instance-secrets.mjs"]
           {{- else }}
-          # The backend image's migrate role (docker-entrypoint.sh).
-          args: ["migrate"]
+          # Then the backend image's migrate role (docker-entrypoint.sh).
+          command: ["sh", "-c", "node scripts/check-reserved-slugs.mjs && docker-entrypoint.sh migrate"]
           {{- end }}
           envFrom:
             - secretRef:
