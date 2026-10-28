@@ -7,6 +7,9 @@ import "server-only";
  * exception reason when some fall short. Missing reviews are never counted
  * as zero; a short project simply has fewer counted judges. A finalised round
  * can't reopen or reset, and finalists advance only from a finalised round.
+ * Finalising freezes which reviews count (JudgingRoundCountedReview): the
+ * round's results, CSV and advancement read that snapshot from then on, so a
+ * later grant, panel or conflict change doesn't move a finalised ranking.
  * Finalising is separate from publishing results.
  */
 
@@ -54,7 +57,16 @@ export async function finalizeJudgingRound(ctx: JudgingOrganiserContext, roundId
       const message = `${short} ${short === 1 ? "project has" : "projects have"} fewer than ${target} counted reviews. Give a reason to finalise anyway.`;
       return fail(message, { reason: [message] });
     }
-    await tx.judgingRound.update({ where: { id: round.id }, data: { finalizedAt: new Date(), finalizeExceptionReason: short > 0 ? reason : null } });
+    const now = new Date();
+    await tx.judgingRound.update({ where: { id: round.id }, data: { finalizedAt: now, finalizeExceptionReason: short > 0 ? reason : null, countedFrozenAt: now } });
+    await tx.judgingRoundCountedReview.deleteMany({ where: { roundId: round.id } });
+    await tx.judgingRoundCountedReview.createMany({
+      data: results.countedReviewKeys.map((key) => {
+        const [submissionId, judgeUserId] = key.split("\u0000") as [string, string];
+        return { roundId: round.id!, submissionId, judgeUserId };
+      }),
+      skipDuplicates: true,
+    });
     await recordAuditEvent({
       client: tx,
       action: "JUDGING_ROUND_FINALIZED",
@@ -62,13 +74,13 @@ export async function finalizeJudgingRound(ctx: JudgingOrganiserContext, roundId
       organisationId: ctx.organisationId,
       targetType: "Event",
       targetId: event.id,
-      metadata: { round: round.position, projects: projects.length, short, exception: short > 0 },
+      metadata: { round: round.position, projects: projects.length, short, exception: short > 0, countedReviews: results.countedReviewKeys.length },
     });
     return ok(coverage);
   });
 }
 
-/** Undo finalising, while no later round holds finalists advanced from it. Audited. */
+/** Undo finalising, while no later round holds finalists advanced from it; its counted reviews go live again. Audited. */
 export async function unfinalizeJudgingRound(ctx: JudgingOrganiserContext, roundId: unknown): Promise<JudgingResult> {
   if (!isId(roundId)) return fail(ROUND_NOT_FOUND);
   return withOrganiserLock(ctx, async (tx, event) => {
@@ -77,7 +89,8 @@ export async function unfinalizeJudgingRound(ctx: JudgingOrganiserContext, round
     if (!round.finalizedAt) return okEmpty();
     const next = await tx.judgingRound.findFirst({ where: { eventId: event.id, position: round.position + 1 }, select: { status: true, _count: { select: { entries: true } } } });
     if (next && (next._count.entries > 0 || next.status !== JudgingRoundStatus.DRAFT)) return fail("Finalists have already advanced from this round, so it stays finalised.");
-    await tx.judgingRound.update({ where: { id: round.id }, data: { finalizedAt: null, finalizeExceptionReason: null } });
+    await tx.judgingRound.update({ where: { id: round.id }, data: { finalizedAt: null, finalizeExceptionReason: null, countedFrozenAt: null } });
+    await tx.judgingRoundCountedReview.deleteMany({ where: { roundId: round.id } });
     await recordAuditEvent({ client: tx, action: "JUDGING_ROUND_UNFINALIZED", actorUserId: ctx.userId, organisationId: ctx.organisationId, targetType: "Event", targetId: event.id, metadata: { round: round.position } });
     return okEmpty();
   });
