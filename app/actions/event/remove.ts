@@ -55,6 +55,8 @@ export async function deleteEvent(input: unknown): Promise<ActionResult> {
   try {
     await prisma.$transaction(async (tx) => {
       if (event.status === EventStatus.PUBLISHED && event.endDateTime > new Date()) await notifyEventCancelled(tx, { organisationId: org.id, eventId: event.id, title: event.title });
+      // Claims outlive the event; their policy terms stay in each claim's snapshot.
+      await tx.expenseClaim.updateMany({ where: { policy: { eventId: event.id } }, data: { policyId: null } });
       await tx.event.delete({ where: { id: event.id } });
     });
     await recordAuditEvent({

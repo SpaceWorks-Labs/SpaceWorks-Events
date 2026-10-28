@@ -49,7 +49,7 @@ export async function loadEventFinance(eventId: string, organisationId: string) 
       where: { eventId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: LIST_LIMIT,
-      select: { id: true, kind: true, status: true, payeeName: true, payeeEmail: true, category: true, description: true, amountMinor: true, approvedMinor: true, currency: true, decisionNote: true, createdAt: true, submittedByUserId: true, receipts: { select: { id: true } } },
+      select: { id: true, kind: true, status: true, payeeName: true, payeeEmail: true, category: true, description: true, amountMinor: true, approvedMinor: true, currency: true, decisionNote: true, createdAt: true, submittedByUserId: true, receipts: { select: { id: true } }, policy: { select: { id: true, name: true } } },
     }),
     prisma.refundRequest.findMany({
       where: { order: { eventId } },
@@ -106,6 +106,8 @@ export async function loadEventFinance(eventId: string, organisationId: string) 
       createdAt: claim.createdAt.toISOString(),
       submittedByUserId: claim.submittedByUserId,
       receiptIds: claim.receipts.map((receipt) => receipt.id),
+      policyId: claim.policy?.id ?? null,
+      policy: claim.policy?.name ?? null,
     })),
     payouts: claimPayouts.map((payout) => ({
       id: payout.id,

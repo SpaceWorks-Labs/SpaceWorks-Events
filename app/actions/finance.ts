@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth";
 import { approveClaim, recordClaimPayout, rejectClaim, reverseClaimPayout } from "@/lib/claims/decide";
 import { financeCurrency } from "@/lib/claims/shared";
 import { submitStaffClaim, withdrawClaim } from "@/lib/claims/submit";
+import { deletePolicy, savePolicy, setPolicyActive } from "@/lib/claims/policies/manage";
 import { prisma } from "@/lib/db";
 import { canViewEventDashboard } from "@/lib/eventAccess";
 import { parseMoneyToMinor } from "@/lib/payments/money";
@@ -94,6 +95,27 @@ export async function decideRefundRequestAction(scopeInput: unknown, input: unkn
   const scope = await resolveScope(scopeInput, true);
   if ("error" in scope) return { ok: false, error: scope.error };
   return done(scope, await decideRefundRequest(scope, input));
+}
+
+/** Create or edit a reimbursement policy (docs/FINANCE.md "Reimbursement policies"). */
+export async function saveReimbursementPolicyAction(scopeInput: unknown, input: unknown): Promise<ActionResult> {
+  const scope = await resolveScope(scopeInput, true);
+  if ("error" in scope) return { ok: false, error: scope.error };
+  return done(scope, await savePolicy(scope, input));
+}
+
+/** Close a reimbursement policy to new claims, or open it again. */
+export async function setReimbursementPolicyActiveAction(scopeInput: unknown, input: unknown): Promise<ActionResult> {
+  const scope = await resolveScope(scopeInput, true);
+  if ("error" in scope) return { ok: false, error: scope.error };
+  return done(scope, await setPolicyActive(scope, input));
+}
+
+/** Delete a reimbursement policy nobody has claimed under. */
+export async function deleteReimbursementPolicyAction(scopeInput: unknown, policyId: unknown): Promise<ActionResult> {
+  const scope = await resolveScope(scopeInput, true);
+  if ("error" in scope) return { ok: false, error: scope.error };
+  return done(scope, await deletePolicy(scope, policyId));
 }
 
 const settingsSchema = z.object({ budget: z.string().trim().max(20).default(""), participantClaimsEnabled: z.boolean(), participantCap: z.string().trim().max(20).default(""), crewClaimsEnabled: z.boolean().default(false) }).strict();

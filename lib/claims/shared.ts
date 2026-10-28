@@ -21,6 +21,8 @@ export const claimFieldsSchema = z.object({
   description: z.string().trim().min(1, "Say what the money was spent on.").max(1000),
   amount: z.string().trim().min(1, "Enter the amount.").max(20),
 }).strict();
+/** A participant's or crew member's claim; `policyId` files it under a reimbursement policy. */
+export const participantClaimSchema = claimFieldsSchema.extend({ policyId: z.string().trim().max(128).default("") }).strict();
 export const staffClaimSchema = claimFieldsSchema.extend({
   /** Someone else being paid back (a speaker or volunteer); blank is the person filing. */
   payeeName: z.string().trim().max(120).default(""),

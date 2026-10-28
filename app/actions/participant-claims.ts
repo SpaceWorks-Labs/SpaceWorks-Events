@@ -16,7 +16,7 @@ import { requestRefund } from "@/lib/refundRequests";
 
 const TOKEN = /^[A-Za-z0-9_-]{8,256}$/;
 
-/** File a claim from a ticket (multipart: `ticketToken`, the fields, up to three `receipts`). */
+/** File a claim from a ticket (multipart: `ticketToken`, the fields, an optional `policyId`, up to three `receipts`). */
 export async function submitParticipantClaimAction(formData: FormData): Promise<ActionResult> {
   const ticketToken = String(formData.get("ticketToken") ?? "");
   if (!TOKEN.test(ticketToken)) return { ok: false, error: "Registration not found." };
@@ -24,7 +24,7 @@ export async function submitParticipantClaimAction(formData: FormData): Promise<
   const session = await auth();
   const field = (name: string) => String(formData.get(name) ?? "");
   const files = formData.getAll("receipts").filter((value): value is File => value instanceof File);
-  const result = await submitParticipantClaim({ ticketToken, actorUserId: session?.user?.id ?? null }, { category: field("category"), description: field("description"), amount: field("amount") }, files);
+  const result = await submitParticipantClaim({ ticketToken, actorUserId: session?.user?.id ?? null }, { category: field("category"), description: field("description"), amount: field("amount"), policyId: field("policyId") }, files);
   return result.ok ? { ok: true } : result;
 }
 

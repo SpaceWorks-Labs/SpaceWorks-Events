@@ -95,6 +95,7 @@ export async function deleteJudgingRound(ctx: JudgingOrganiserContext, roundId: 
     if (round.position === 1) return fail("The first round can't be deleted.");
     if (round.status !== JudgingRoundStatus.DRAFT) return fail("Only a round that hasn't opened can be deleted.");
     if (round.finalistsPublishedAt) return fail("Unpublish this round's finalists before deleting it.");
+    if (await tx.reimbursementPolicy.count({ where: { judgingRoundId: round.id } })) return fail("A reimbursement policy is for this round. Delete that policy first (Finance tab).");
     await tx.judgingRound.delete({ where: { id: round.id } });
     const later = await tx.judgingRound.findMany({ where: { eventId: event.id, position: { gt: round.position } }, orderBy: { position: "asc" }, select: { id: true, position: true } });
     for (const row of later) await tx.judgingRound.update({ where: { id: row.id }, data: { position: row.position - 1 } });
