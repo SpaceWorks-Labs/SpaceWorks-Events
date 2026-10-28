@@ -162,6 +162,48 @@ try {
     ...["AttendanceCheck_rsvpId_fkey", "AttendanceCheck_eventId_fkey"].filter((name) => !attendanceConstraints.some((row) => row.conname === name && row.confdeltype === "c")).map((name) => `${name}:ON DELETE CASCADE`),
     ...["AttendanceCheck_rsvpId_key", "AttendanceCheck_tokenHash_key", "AttendanceCheck_eventId_response_idx", "AttendanceCheck_refundRequestId_idx"].filter((name) => !attendanceIndexNames.has(name)),
   );
+  // Webhooks, hackathon judging, payout ledgers, ticket designs, mobile sessions
+  // (20261103010000…20261115000300) and the audit fixes (20261119*).
+  const releaseTables = ["WebhookEndpoint", "WebhookDelivery"];
+  const releaseColumns = ["JudgeAssignment.recusedAt", "JudgingRound.countedFrozenAt", "AdmissionStage.freshEyes"];
+  const releaseConstraints = [
+    "CheckInList_name_shape", "CheckInList_sortOrder_range",
+    "WebhookEndpoint_url_length", "WebhookEndpoint_description_length", "WebhookEndpoint_event_types_bounded", "WebhookEndpoint_failures_nonnegative",
+    "WebhookDelivery_attempts_nonnegative", "WebhookDelivery_lease_shape", "WebhookDelivery_last_error_length",
+    "Submission_title_length", "Submission_summary_length", "Submission_disqualified_reason_length", "Submission_submitted_has_time",
+    "JudgingCriterion_name_length", "JudgingCriterion_description_length", "JudgingCriterion_position_nonnegative",
+    "EventAward_name_length", "EventAward_description_length", "EventAward_position_nonnegative",
+    "JudgeReview_comment_length", "Order_team_name_length", "JudgingRoundCountedReview_roundId_fkey",
+  ];
+  const releaseIndexes = ["WebhookDelivery_endpointId_eventId_key", "MobileIdempotencyKey_userId_route_keyHash_key", "MobileSession_accessTokenHash_key", "MobileSession_refreshTokenHash_key"];
+  const releaseTriggers = [
+    "prize_payout_guard", "prize_payout_reversal_guard", "prize_payout_no_delete",
+    "claim_payout_guard", "claim_payout_reversal_guard", "claim_payout_no_delete",
+    "event_ticket_design_owner", "ticket_type_design_owner", "organisation_ticket_design_owner",
+  ];
+  const [releaseTableRows, releaseColumnRows, releaseConstraintRows, releaseIndexRows, releaseTriggerRows] = await Promise.all([
+    prisma.$queryRaw`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY(${releaseTables}::text[])`,
+    prisma.$queryRaw`SELECT table_name || '.' || column_name AS name FROM information_schema.columns WHERE table_schema = 'public' AND table_name || '.' || column_name = ANY(${releaseColumns}::text[])`,
+    prisma.$queryRaw`SELECT conname, confdeltype FROM pg_constraint WHERE conname = ANY(${releaseConstraints}::text[])`,
+    prisma.$queryRaw`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY(${releaseIndexes}::text[])`,
+    prisma.$queryRaw`SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = 'public' AND trigger_name = ANY(${releaseTriggers}::text[])`,
+  ]);
+  const present = (rows, key) => new Set(rows.map((row) => row[key]));
+  const releaseFound = {
+    tables: present(releaseTableRows, "table_name"),
+    columns: present(releaseColumnRows, "name"),
+    constraints: present(releaseConstraintRows, "conname"),
+    indexes: present(releaseIndexRows, "indexname"),
+    triggers: present(releaseTriggerRows, "trigger_name"),
+  };
+  missing.push(
+    ...releaseTables.filter((name) => !releaseFound.tables.has(name)),
+    ...releaseColumns.filter((name) => !releaseFound.columns.has(name)),
+    ...releaseConstraints.filter((name) => !releaseFound.constraints.has(name)),
+    ...(releaseConstraintRows.some((row) => row.conname === "JudgingRoundCountedReview_roundId_fkey" && row.confdeltype === "c") ? [] : ["JudgingRoundCountedReview_roundId_fkey:ON DELETE CASCADE"]),
+    ...releaseIndexes.filter((name) => !releaseFound.indexes.has(name)),
+    ...releaseTriggers.filter((name) => !releaseFound.triggers.has(name)),
+  );
   if (missing.length > 0) {
     throw new Error(`Database schema contract failed; missing: ${missing.join(", ")}`);
   }
