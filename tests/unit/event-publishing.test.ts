@@ -29,6 +29,8 @@ describe("event publishing helpers", () => {
 
   it("sums up what guests experience", () => {
     expect(publishingSummary({ status: "DRAFT", privacyType: "PUBLIC", capacity: null, closing: "" }).headline).toBe("Draft.");
+    // A cancelled event is offline for the public, like a hidden one (lib/publicEventAccess.ts).
+    expect(publishingSummary({ status: "CANCELLED", privacyType: "PUBLIC", capacity: null, closing: "" }).detail).toBe("The event page is offline and guests can't sign up.");
     expect(publishingSummary({ status: "PUBLISHED", privacyType: "HIDDEN_LINK", capacity: 120, closing: "closes 2 hours before" })).toEqual({
       headline: "Live.",
       detail: "Link only, anyone can sign up · 120 spots · closes 2 hours before.",

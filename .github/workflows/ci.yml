@@ -26,6 +26,8 @@ jobs:
           DATABASE_URL: postgresql://build:build@localhost:5432/swevents
           DIRECT_URL: postgresql://build:build@localhost:5432/swevents
       - run: npm run lint
+      # The guide's generated index must match content/help (npm run help:index).
+      - run: node scripts/generate-help-index.mjs --check
       # Route types (RouteContext, typed routes) are generated, not committed.
       - run: npx next typegen
       - run: npx tsc --noEmit

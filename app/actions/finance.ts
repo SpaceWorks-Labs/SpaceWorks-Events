@@ -96,9 +96,9 @@ export async function decideRefundRequestAction(scopeInput: unknown, input: unkn
   return done(scope, await decideRefundRequest(scope, input));
 }
 
-const settingsSchema = z.object({ budget: z.string().trim().max(20).default(""), participantClaimsEnabled: z.boolean(), participantCap: z.string().trim().max(20).default("") }).strict();
+const settingsSchema = z.object({ budget: z.string().trim().max(20).default(""), participantClaimsEnabled: z.boolean(), participantCap: z.string().trim().max(20).default(""), crewClaimsEnabled: z.boolean().default(false) }).strict();
 
-/** The event budget, and whether participants may claim expenses (up to a cap each). */
+/** The event budget, whether participants may claim expenses (up to a cap each), and whether crew may (docs/CREW.md). */
 export async function saveFinanceSettingsAction(scopeInput: unknown, input: unknown): Promise<ActionResult> {
   const scope = await resolveScope(scopeInput, true);
   if ("error" in scope) return { ok: false, error: scope.error };
@@ -112,9 +112,9 @@ export async function saveFinanceSettingsAction(scopeInput: unknown, input: unkn
   if (budget === null || cap === null) return { ok: false, error: `Enter amounts in ${currency}, for example 50000.` };
   await prisma.event.update({
     where: { id: scope.eventId },
-    data: { budgetMinor: budget > BigInt(0) ? budget : null, participantClaimsEnabled: parsed.data.participantClaimsEnabled, participantClaimCapMinor: cap > BigInt(0) ? cap : null, ...(event.currency ? {} : budget > BigInt(0) || cap > BigInt(0) ? { currency } : {}) },
+    data: { budgetMinor: budget > BigInt(0) ? budget : null, participantClaimsEnabled: parsed.data.participantClaimsEnabled, participantClaimCapMinor: cap > BigInt(0) ? cap : null, crewClaimsEnabled: parsed.data.crewClaimsEnabled, ...(event.currency ? {} : budget > BigInt(0) || cap > BigInt(0) ? { currency } : {}) },
   });
-  await recordAuditEvent({ action: "EVENT_FINANCE_UPDATED", actorUserId: scope.userId, organisationId: scope.organisationId, targetType: "Event", targetId: scope.eventId, metadata: { budget: budget > BigInt(0), participantClaims: parsed.data.participantClaimsEnabled, cap: cap > BigInt(0) } });
+  await recordAuditEvent({ action: "EVENT_FINANCE_UPDATED", actorUserId: scope.userId, organisationId: scope.organisationId, targetType: "Event", targetId: scope.eventId, metadata: { budget: budget > BigInt(0), participantClaims: parsed.data.participantClaimsEnabled, crewClaims: parsed.data.crewClaimsEnabled, cap: cap > BigInt(0) } });
   revalidatePath(scope.path);
   return { ok: true };
 }

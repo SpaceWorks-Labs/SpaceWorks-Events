@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
 
 const allowedActionOrigins = process.env.ALLOWED_ACTION_ORIGINS
   ?.split(",")
@@ -82,6 +83,11 @@ const nextConfig: NextConfig = {
         source: "/submit/:token",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      // Crew sign-up links (docs/CREW.md) are bearer capabilities.
+      {
+        source: "/crew/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
       // Order links (docs/PAYMENTS.md), member ID verification, invitations,
       // password-reset and email-verification links carry a token in the URL too.
       {
@@ -108,4 +114,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// The in-app guide (content/help) is the only MDX. Plugin names are strings so
+// Turbopack can load them. frontend/next.config.ts keeps these rules when it
+// overrides the Turbopack root.
+const withMDX = createMDX({
+  options: { remarkPlugins: ["remark-gfm"] },
+});
+
+export default withMDX(nextConfig);

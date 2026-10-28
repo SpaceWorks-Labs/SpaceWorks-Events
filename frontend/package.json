@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node ../scripts/generate-frontend-catalog.mjs --check && node ../scripts/prepare-frontend.mjs && next build && node ../scripts/check-frontend-build.mjs",
+    "build": "node ../scripts/generate-frontend-catalog.mjs --check && node ../scripts/generate-help-index.mjs --check && node ../scripts/prepare-frontend.mjs && next build && node ../scripts/check-frontend-build.mjs",
     "dev": "node ../scripts/prepare-frontend.mjs && next dev --port 3100",
     "start": "next start --port 3100",
     "typecheck": "tsc --noEmit"

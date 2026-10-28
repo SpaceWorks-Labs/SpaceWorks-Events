@@ -4,14 +4,14 @@ import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { ChevronsUpDown, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { ChevronsUpDown, CircleHelp, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { ShellUser } from "@/lib/appShell";
 import { useAppColorMode } from "@/components/providers";
 import { Avatar } from "@/components/ui/display";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 
-/** The person's menu: account, light/dark mode and sign out. */
+/** The person's menu: account, the guide, light/dark mode and sign out. */
 export function AccountMenu({ user, collapsed, onNavigate }: { user: ShellUser; collapsed: boolean; onNavigate?: () => void }) {
   const pathname = usePathname() ?? "";
   const { mode, toggleColorMode } = useAppColorMode();
@@ -43,6 +43,9 @@ export function AccountMenu({ user, collapsed, onNavigate }: { user: ShellUser; 
         <MenuLabel>{name}</MenuLabel>
         <MenuItem asChild icon={<UserRound />}>
           <Link href="/account" onClick={onNavigate}>Account settings</Link>
+        </MenuItem>
+        <MenuItem asChild icon={<CircleHelp />}>
+          <Link href="/help" onClick={onNavigate}>Help and guide</Link>
         </MenuItem>
         <MenuItem
           icon={mode === "dark" ? <Sun /> : <Moon />}

@@ -1,6 +1,7 @@
 import { toEventClientDto } from "@/lib/eventDto";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { loadRegistrationFields } from "@/lib/eventDashboard/data";
+import { loadRegistrationLock } from "@/lib/eventDashboard/teams";
 import { formatDayShort, formatTime } from "@/lib/format/datetime";
 import { type EventPagePreviewData } from "@/components/event/EventWebsiteManager";
 import { htmlExcerpt, programmeCounts } from "@/components/event-dashboard/event-page/summary";
@@ -8,7 +9,13 @@ export async function loadEventPagePanel({ ctx }: { ctx: EventDashboardContext; 
   ctx = await loadEventDashboard(ctx.organisation.slug, ctx.event.id);
 
   const { event, permissions, organisation, now } = ctx;
-  const fields = await loadRegistrationFields(event.id);
+  // Registrations lock the registration mode in Details; the server refuses the change too.
+  const [fields, crewShown, registrations] = await Promise.all([
+    loadRegistrationFields(event.id),
+    // For the Crew section note only (docs/CREW.md): how many profiles the page would show.
+    permissions.canEditPageContent ? prisma.eventCrewMember.count({ where: { eventId: event.id, showOnPage: true } }) : Promise.resolve(0),
+    permissions.canEditEventDetails ? loadRegistrationLock(event.id) : Promise.resolve(undefined),
+  ]);
   const website = {
     page: event.page,
     highlights: event.highlights.map((x) => ({ id: x.id, title: x.title, description: x.description, visibility: x.visibility, values: { icon: x.icon, sortOrder: x.sortOrder } })),
@@ -35,8 +42,10 @@ export async function loadEventPagePanel({ ctx }: { ctx: EventDashboardContext; 
     sessionCount: counts.sessionCount,
     sessionLines,
     scheduleHref,
+    crewShown,
   };
 
-  return { event, permissions, organisation, now, fields, website, dto, scheduleHref, counts, publishedSessions, sessionLines, preview };
+  return { event, permissions, organisation, now, fields, registrations, website, dto, scheduleHref, counts, publishedSessions, sessionLines, preview };
 }
 import { loadEventDashboard } from "@/lib/eventDashboard/context";
+import { prisma } from "@/lib/db";

@@ -24,7 +24,7 @@ export async function loadEventBadgesView({ params }: Props) {
       where: { eventId: event.id, status: { in: LISTED_STATUSES } },
       orderBy: { createdAt: "asc" },
       take: BULK_BADGE_LIMIT,
-      select: { id: true, status: true, checkedInAt: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } } },
+      select: { id: true, status: true, isCrew: true, checkedInAt: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } } },
     }),
     prisma.rSVP.count({ where: { eventId: event.id, status: { in: LISTED_STATUSES } } }),
     prisma.eventRegistrationForm.findUnique({
@@ -38,6 +38,7 @@ export async function loadEventBadgesView({ params }: Props) {
     email: rsvp.user?.email ?? rsvp.guestEmail,
     status: rsvp.status,
     checkedIn: Boolean(rsvp.checkedInAt),
+    isCrew: rsvp.isCrew,
   }));
   return { access, event: eventForView(event), details, form, attendees, total };
 }

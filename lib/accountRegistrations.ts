@@ -45,7 +45,8 @@ export type AccountCertificateRow = {
 
 function toRow(item: NormalisedAccountRegistration, now: Date): AccountRegistrationRow {
   const { rsvp } = item;
-  const cancellable = canCancelRegistration({ status: rsvp.status, checkedInAt: rsvp.checkedInAt, end: item.end }, now);
+  // Crew tickets (docs/CREW.md) are removed only by the organisers, and never enter a team or project.
+  const cancellable = !rsvp.isCrew && canCancelRegistration({ status: rsvp.status, checkedInAt: rsvp.checkedInAt, end: item.end }, now);
   const showTicket = rsvp.status !== RsvpStatus.REJECTED;
   return {
     id: rsvp.id,
@@ -58,12 +59,12 @@ function toRow(item: NormalisedAccountRegistration, now: Date): AccountRegistrat
     isOnline: item.isOnline,
     isSeries: item.isSeries,
     eventCancelled: item.eventStatus === EventStatus.CANCELLED,
-    status: registrationStatus(rsvp.status, rsvp.checkedInAt),
+    status: rsvp.isCrew && !rsvp.checkedInAt ? { label: "Crew", tone: "success" } : registrationStatus(rsvp.status, rsvp.checkedInAt),
     ticketHref: showTicket ? `/ticket/${rsvp.checkInToken}` : null,
     eventHref: item.eventHref,
     cancelToken: cancellable ? rsvp.checkInToken : null,
-    team: teamView(rsvp),
-    submissionHref: submissionHref(rsvp),
+    team: rsvp.isCrew ? null : teamView(rsvp),
+    submissionHref: rsvp.isCrew ? null : submissionHref(rsvp),
   };
 }
 

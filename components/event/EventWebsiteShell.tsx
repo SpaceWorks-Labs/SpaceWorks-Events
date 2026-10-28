@@ -7,8 +7,10 @@ import { RegistrationCard } from "./RegistrationCard";
 import { SectionNav } from "./SectionNav";
 import type { Props } from "./EventWebsiteShell/types";
 import { duration, mapSearchQuery, Rich, SECTION_LABELS, TIER_LABELS } from "./EventWebsiteShell/helpers";
+import { CrewSection } from "./EventWebsiteShell/CrewSection";
 
 export function EventWebsiteShell(p: Props) {
+  const crew = p.crew ?? [];
   const shown = new Set(p.page.sections.filter((x) => x.isVisible).map((x) => x.type));
   const sectionContent: Array<[string, boolean]> = [
     ["ABOUT", true],
@@ -19,9 +21,10 @@ export function EventWebsiteShell(p: Props) {
     ["VENUE", Boolean(p.venue && !p.event.isOnline)],
     ["FAQ", p.faqs.length > 0],
     ["RESOURCES", p.resources.length > 0],
+    ["CREW", crew.length > 0],
   ];
   const rendered = new Set(sectionContent.filter(([type, hasContent]) => shown.has(type) && hasContent).map(([type]) => type));
-  const navItems = ["ABOUT", "SCHEDULE", "SPEAKERS", "SPONSORS", "VENUE", "FAQ", "RESOURCES"]
+  const navItems = ["ABOUT", "SCHEDULE", "SPEAKERS", "SPONSORS", "VENUE", "FAQ", "RESOURCES", "CREW"]
     .filter((type) => rendered.has(type))
     .map((type) => ({ id: type.toLowerCase(), label: SECTION_LABELS[type]! }));
 
@@ -33,6 +36,7 @@ export function EventWebsiteShell(p: Props) {
   const countLabel = [
     p.sessions.length > 0 ? `${p.sessions.length} ${p.sessions.length === 1 ? "session" : "sessions"}` : null,
     p.speakers.length > 0 ? `${p.speakers.length} ${p.speakers.length === 1 ? "speaker" : "speakers"}` : null,
+    rendered.has("CREW") ? `${crew.length} crew` : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -90,6 +94,7 @@ export function EventWebsiteShell(p: Props) {
               organisation={{ name: p.organisation.name, slug: p.orgSlug, logoUrl: p.organisation.logoUrl }}
               registrationFields={p.registrationFields}
               confirmedCount={p.confirmedCount}
+              crewCount={p.crewCount ?? null}
               capacity={p.event.capacity}
               state={{ cancelled: p.event.status === "CANCELLED", open: p.registrationOpen, full: p.registrationFull, approvalRequired: p.approvalRequired }}
               accentColor={p.page.accentColor}
@@ -302,6 +307,7 @@ export function EventWebsiteShell(p: Props) {
             </section>
           ) : null}
 
+          {rendered.has("CREW") ? <CrewSection crew={crew} eventTitle={p.event.title} /> : null}
         </div>
       </div>
     </div>

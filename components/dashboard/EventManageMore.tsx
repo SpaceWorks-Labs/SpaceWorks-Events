@@ -226,7 +226,7 @@ export function EventManageMore(props: {
           <div className="min-w-0 flex-1">
             <h2 id="event-cancel-title" className="text-h4 text-danger-fg">Cancel event</h2>
             <p className="mt-0.5 text-body-ui text-ink-secondary">
-              The event page shows it&apos;s cancelled and registration closes. Everyone who paid is refunded in full; everyone is emailed.
+              The event page goes offline and registration closes. Everyone who paid is refunded in full; everyone is emailed.
             </p>
           </div>
           <Button variant="danger" className="self-start md:self-auto" disabled={pending} onClick={() => setCancelOpen(true)}>Cancel event…</Button>
@@ -235,7 +235,7 @@ export function EventManageMore(props: {
       <ConfirmDialog
         open={cancelOpen}
         title={`Cancel ${event.title}?`}
-        message="Registration closes, every paid order is refunded in full, and all guests are emailed. This can't be undone."
+        message="The event page goes offline, registration closes, every paid order is refunded in full, and all guests are emailed. This can't be undone."
         confirmLabel="Cancel event and refund"
         loading={pending}
         onCancel={() => setCancelOpen(false)}

@@ -58,6 +58,8 @@ jobs:
       # The migrated database must match schema.prisma exactly (no drift).
       - run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
       - run: npm run lint
+      # The guide's generated index must match content/help (npm run help:index).
+      - run: node scripts/generate-help-index.mjs --check
       # Route types (RouteContext, typed routes) are generated, not committed.
       - run: npx next typegen
       - run: npx tsc --noEmit

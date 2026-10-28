@@ -1,5 +1,6 @@
 import "server-only";
 
+import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import crypto from "node:crypto";
 import { RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -65,6 +66,8 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     }
     const previous = ticket.user?.email?.trim() || ticket.guestEmail;
     if (previous?.toLowerCase() === email) throw new PaymentOperationError("That's already who holds this ticket.");
+    // A crew member already holds a free crew ticket for the event (docs/CREW.md).
+    if (order.eventId && (await hasCrewEmail(tx, order.eventId, [email]))) throw new PaymentOperationError(CREW_EMAIL_REFUSED);
     let firstToken: string | null = null;
     for (const seat of movable) {
       const token = newTicketToken();

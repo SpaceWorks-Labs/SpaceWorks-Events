@@ -1,0 +1,278 @@
+{
+  "account-ids-wallet": {
+    "width": 1024,
+    "height": 904
+  },
+  "account-organisations": {
+    "width": 960,
+    "height": 335
+  },
+  "account-profile": {
+    "width": 960,
+    "height": 1006
+  },
+  "account-security-two-step": {
+    "width": 960,
+    "height": 227
+  },
+  "analytics-money-card": {
+    "width": 960,
+    "height": 835
+  },
+  "analytics-tab": {
+    "width": 976,
+    "height": 1742
+  },
+  "badge-designer": {
+    "width": 1248,
+    "height": 768
+  },
+  "certificate-designer": {
+    "width": 1100,
+    "height": 1218
+  },
+  "check-in-desk": {
+    "width": 976,
+    "height": 1009
+  },
+  "check-in-list-desk": {
+    "width": 976,
+    "height": 1462
+  },
+  "check-in-offline-ready": {
+    "width": 976,
+    "height": 202
+  },
+  "checkout-ticket-picker": {
+    "width": 640,
+    "height": 768
+  },
+  "cover-photo-editor": {
+    "width": 1100,
+    "height": 768
+  },
+  "create-event-dialog-basics": {
+    "width": 640,
+    "height": 718
+  },
+  "create-organisation-form": {
+    "width": 608,
+    "height": 760
+  },
+  "create-series-dialog": {
+    "width": 640,
+    "height": 746
+  },
+  "discover-page": {
+    "width": 1280,
+    "height": 1186
+  },
+  "door-station-card": {
+    "width": 318,
+    "height": 437
+  },
+  "door-station-pin": {
+    "width": 1280,
+    "height": 800
+  },
+  "emails-composer": {
+    "width": 976,
+    "height": 1500
+  },
+  "event-dashboard-overview": {
+    "width": 976,
+    "height": 616
+  },
+  "event-details-form": {
+    "width": 976,
+    "height": 1015
+  },
+  "event-overview-readiness": {
+    "width": 960,
+    "height": 245
+  },
+  "event-overview-share-card": {
+    "width": 356,
+    "height": 339
+  },
+  "event-page-sections": {
+    "width": 976,
+    "height": 912
+  },
+  "event-page-speaker-form": {
+    "width": 934,
+    "height": 854
+  },
+  "event-publishing-section": {
+    "width": 960,
+    "height": 1097
+  },
+  "event-registration-dialog": {
+    "width": 640,
+    "height": 616
+  },
+  "event-settings-co-organisers": {
+    "width": 960,
+    "height": 460
+  },
+  "event-settings-tickets": {
+    "width": 960,
+    "height": 1581
+  },
+  "feedback-tab": {
+    "width": 976,
+    "height": 1112
+  },
+  "finance-overview": {
+    "width": 976,
+    "height": 1075
+  },
+  "finance-refund-request": {
+    "width": 960,
+    "height": 269
+  },
+  "guest-payment-dialog": {
+    "width": 640,
+    "height": 582
+  },
+  "guests-invites": {
+    "width": 976,
+    "height": 540
+  },
+  "guests-people": {
+    "width": 984,
+    "height": 973
+  },
+  "guests-people-exports": {
+    "width": 984,
+    "height": 357
+  },
+  "guests-teams": {
+    "width": 976,
+    "height": 1300
+  },
+  "guests-views-menu": {
+    "width": 992,
+    "height": 619
+  },
+  "judge-score-workspace": {
+    "width": 976,
+    "height": 1108
+  },
+  "judging-progress": {
+    "width": 976,
+    "height": 781
+  },
+  "judging-results": {
+    "width": 976,
+    "height": 1002
+  },
+  "judging-rubric": {
+    "width": 960,
+    "height": 405
+  },
+  "judging-setup": {
+    "width": 976,
+    "height": 1170
+  },
+  "judging-submissions": {
+    "width": 976,
+    "height": 520
+  },
+  "login-page": {
+    "width": 1280,
+    "height": 800
+  },
+  "member-id-programme-members": {
+    "width": 1024,
+    "height": 1008
+  },
+  "order-page": {
+    "width": 624,
+    "height": 805
+  },
+  "order-refund-request": {
+    "width": 592,
+    "height": 323
+  },
+  "organisation-chat-notifications": {
+    "width": 1024,
+    "height": 1336
+  },
+  "organisation-email-settings": {
+    "width": 1024,
+    "height": 800
+  },
+  "organisation-members": {
+    "width": 976,
+    "height": 452
+  },
+  "organisation-settings-profile": {
+    "width": 960,
+    "height": 661
+  },
+  "payment-settings": {
+    "width": 1024,
+    "height": 1700
+  },
+  "prize-payouts": {
+    "width": 976,
+    "height": 1311
+  },
+  "programme-live-delay": {
+    "width": 480,
+    "height": 1029
+  },
+  "programme-schedule": {
+    "width": 976,
+    "height": 1483
+  },
+  "public-results-page": {
+    "width": 1280,
+    "height": 1044
+  },
+  "publishing-sign-ups": {
+    "width": 901,
+    "height": 378
+  },
+  "registration-form-builder": {
+    "width": 976,
+    "height": 768
+  },
+  "settings-api-access": {
+    "width": 976,
+    "height": 1083
+  },
+  "settings-webhooks": {
+    "width": 976,
+    "height": 454
+  },
+  "super-admin-operations": {
+    "width": 1200,
+    "height": 1174
+  },
+  "super-admin-overview": {
+    "width": 1200,
+    "height": 1220
+  },
+  "super-admin-security": {
+    "width": 1200,
+    "height": 1407
+  },
+  "super-admin-settings": {
+    "width": 1200,
+    "height": 1273
+  },
+  "ticket-claim-expenses": {
+    "width": 432,
+    "height": 739
+  },
+  "ticket-designer": {
+    "width": 1280,
+    "height": 800
+  },
+  "ticket-page": {
+    "width": 480,
+    "height": 1201
+  }
+}

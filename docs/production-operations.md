@@ -39,6 +39,26 @@ production topology. Kubernetes operators should use the
 4. Verify the email worker and the beat have recorded fresh heartbeats after deployment (Super admin → Operations). Where the platform cannot keep them running, such as a sleeping free instance, configure a cron service to call `POST /api/internal/outbox` every minute with `Authorization: Bearer $CRON_SECRET`; also configure an authenticated readiness probe to call `GET /api/health/db` with `Authorization: Bearer $HEALTHCHECK_SECRET`.
 5. Verify readiness, error rate, email queue depth, database connections, and Redis health before shifting traffic.
 
+### Reserved organisation addresses
+
+A release can reserve a new top-level address, such as `/help` for the in-app
+guide. An organisation that already uses that slug would have its public page
+hidden behind the built-in route, so `npm run db:verify` (CI, the VPS update
+and `docker/vps/check.mjs`) fails and names each affected organisation. The
+reserved list is `scripts/reserved-slugs.mjs`; `lib/slug.ts` refuses those
+slugs for new and renamed organisations.
+
+To fix it before deploying: pick a free slug, rename the organisation in a
+transaction, and tell its owner that the public address changed (old shared
+links to `/<old-slug>` will open the built-in page instead):
+
+```sql
+UPDATE "Organisation" SET slug = 'help-centre-org' WHERE slug = 'help';
+```
+
+Check the new slug is unused first (`SELECT 1 FROM "Organisation" WHERE slug = '…'`),
+then re-run `npm run db:verify`.
+
 ### Recent schema migrations
 
 Apply these with `npm run db:deploy` before rolling out the matching application version. All are additive and safe for existing rows.

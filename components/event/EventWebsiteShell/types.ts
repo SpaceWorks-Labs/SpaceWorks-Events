@@ -52,8 +52,12 @@ export type Props = {
   venue: { location: string; mapLinkUrl: string | null } | null;
   faqs: Array<{ id: string; question: string; answerHtml: string }>;
   resources: Array<{ id: string; title: string; description: string; href: string }>;
+  /** Crew shown on the page (docs/CREW.md): only public profile fields, never email or food. */
+  crew?: Array<{ id: string; name: string; role: string; bio: string; photoUrl: string | null; linkedinUrl: string | null }>;
   registrationFields: RegistrationFieldDefinition[];
   confirmedCount: number | null;
+  /** Crew tickets, counted as "going" but never against capacity; null when counts are hidden. */
+  crewCount?: number | null;
   registrationOpen: boolean;
   /** At capacity: new registrations join the waitlist. Derived server-side. */
   registrationFull: boolean;

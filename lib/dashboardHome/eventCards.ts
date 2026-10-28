@@ -27,6 +27,9 @@ export async function loadNextUp(event: EventForRow, counts: RsvpCounts, canMana
     startDateTime: event.startDateTime,
     timezone: event.timezone,
     confirmed: countsFor(counts, event.id).confirmed,
+    // What fills capacity: attendees (never crew) or team units; crew are named beside them.
+    placesUsed: counts.units.get(event.id) ?? 0,
+    crew: counts.crew.get(event.id) ?? 0,
     capacity: event.capacity,
     capacityUnits: event.registrationMode === "TEAM" ? { used: counts.units.get(event.id) ?? 0, noun: teamUnitNoun(event.soloPolicy, event.capacity ?? 0) } : null,
     signupsLastDay,

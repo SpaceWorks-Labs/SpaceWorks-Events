@@ -10,12 +10,13 @@ export type EventClientDto = Omit<Event,
   // The entry fee is a BigInt and lives with the judging settings too.
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
   // Finance settings have their own view (lib/finance.ts).
-  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor"
+  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
 >;
 
-export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {
+/** Copies only the DTO fields, so a full Event record never reaches the browser. */
+export function toEventClientDto(event: EventClientDto): EventClientDto {
   return {
     id: event.id,
     organisationId: event.organisationId,

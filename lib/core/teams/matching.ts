@@ -47,7 +47,8 @@ export async function upsertSeekerProfile(holder: TicketHolder, input: unknown):
   return prisma.$transaction(async (tx): Promise<TeamResult> => {
     const event = await lockEvent(tx, holder.eventId);
     if (!event || !isMatchingEvent(event)) return fail("This event doesn't have a Looking for a team list.");
-    const rsvp = await tx.rSVP.findFirst({ where: { id: holder.rsvpId, eventId: event.id }, select: { id: true, teamId: true, status: true } });
+    // Crew tickets (docs/CREW.md) never list themselves, join or move into a team.
+    const rsvp = await tx.rSVP.findFirst({ where: { id: holder.rsvpId, eventId: event.id, isCrew: false }, select: { id: true, teamId: true, status: true } });
     if (!rsvp) return fail("Registration not found.");
     if (rsvp.teamId) return fail("You're already in a team.");
     if (rsvp.status === RsvpStatus.REJECTED) return fail("This registration was declined.");
@@ -88,7 +89,7 @@ export async function createJoinRequest(
         rsvpId = profile.rsvpId;
       } else {
         const rsvp = await tx.rSVP.findFirst({
-          where: { id: params.seeker.rsvpId, eventId: event.id },
+          where: { id: params.seeker.rsvpId, eventId: event.id, isCrew: false },
           select: { id: true, teamId: true, status: true, seekerProfile: { select: { visible: true } } },
         });
         if (!rsvp) return fail("Registration not found.");
@@ -167,7 +168,7 @@ export async function respondToJoinRequest(params: {
     if (event.registrationMode !== RegistrationMode.TEAM) return fail(NOT_A_TEAM_EVENT);
     const team = await tx.team.findFirst({ where: { id: request.teamId, eventId: event.id }, select: { id: true, name: true, status: true } });
     if (!team || team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");
-    const rsvp = await tx.rSVP.findFirst({ where: { id: request.rsvpId, eventId: event.id }, select: soloRsvpSelect });
+    const rsvp = await tx.rSVP.findFirst({ where: { id: request.rsvpId, eventId: event.id, isCrew: false }, select: soloRsvpSelect });
     if (!rsvp || rsvp.teamId) return fail("This person is already in a team.");
     if (rsvp.status === RsvpStatus.REJECTED) return fail("This registration was declined.");
     const moved = await moveSoloRsvpIntoTeamTx(tx, event, rsvp, team, webhooks, { acceptedRequestId: request.id });
@@ -271,7 +272,7 @@ export async function joinTeamWithExistingRsvp(
     }
     const team = await tx.team.findFirst({ where: { joinToken, eventId: event.id }, select: { id: true, name: true, status: true } });
     if (!team || team.status === RsvpStatus.REJECTED) return fail(JOIN_LINK_INVALID);
-    const rsvp = await tx.rSVP.findFirst({ where: { id: holder.rsvpId, eventId: event.id }, select: soloRsvpSelect });
+    const rsvp = await tx.rSVP.findFirst({ where: { id: holder.rsvpId, eventId: event.id, isCrew: false }, select: soloRsvpSelect });
     if (!rsvp) return fail("Registration not found.");
     if (rsvp.teamId === team.id) return fail("You're already in this team.");
     if (rsvp.teamId) return fail("You're already in a team. Leave it from your ticket page before joining another.");

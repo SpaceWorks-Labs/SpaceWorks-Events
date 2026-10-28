@@ -18,9 +18,10 @@ export function FinanceSettingsForm({ scope, settings, currency }: { scope: Fina
   const [budget, setBudget] = useState(settings.budget);
   const [claims, setClaims] = useState(settings.participantClaimsEnabled);
   const [cap, setCap] = useState(settings.participantCap);
+  const [crewClaims, setCrewClaims] = useState(settings.crewClaimsEnabled);
   const { pending, error, save } = useSave();
   return (
-    <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); save(() => saveFinanceSettingsAction(scope, { budget, participantClaimsEnabled: claims, participantCap: cap }), "Finance settings saved."); }}>
+    <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); save(() => saveFinanceSettingsAction(scope, { budget, participantClaimsEnabled: claims, participantCap: cap, crewClaimsEnabled: crewClaims }), "Finance settings saved."); }}>
       {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
       <Field label={`Budget (${currency})`} optional helperText="What the event may spend on claims and prizes. Leave blank for none.">
         <Input inputMode="decimal" value={budget} onChange={(event) => setBudget(event.target.value)} maxLength={20} placeholder="0" />
@@ -31,6 +32,7 @@ export function FinanceSettingsForm({ scope, settings, currency }: { scope: Fina
           <Input inputMode="decimal" value={cap} onChange={(event) => setCap(event.target.value)} maxLength={20} placeholder="0" />
         </Field>
       ) : null}
+      <CheckboxField checked={crewClaims} onCheckedChange={(checked) => setCrewClaims(checked === true)} label="Let crew claim expenses from their crew ticket page" description="No limit: owners and admins approve each claim." />
       <div><Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">Save</Button></div>
     </form>
   );

@@ -20,3 +20,8 @@ e668935 Skipped: Yuyu's own branching policy
 64117fc Deferred: mobile API (docs)
 7918e38 Deferred: mobile API (sign-up close, refresh grace)
 c005b96 Deferred: mobile API (Google azp, app links)
+
+# Third sync, help centre branch (feat/help-centre).
+f997fb8a Skipped: Yuyu's changelog line; dev keeps its own changelog
+671461ce Skipped: Yuyu's AGENTS.md refresh for its own release; dev's AGENTS.md names the guide itself
+0f0105ff Partly ported: the help-centre docs only; Yuyu's release notes, upgrade runbook and PDF manual removal are Yuyu's own (dev keeps docs/manual by owner decision)

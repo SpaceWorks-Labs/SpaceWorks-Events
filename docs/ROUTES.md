@@ -11,6 +11,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/` | Landing page |
 | `/about`, `/features` | Product story and feature overview |
 | `/privacy`, `/terms` | Privacy policy and terms of use |
+| `/help`, `/help/:section/:article` | The in-app guide (`content/help`, MDX): search, section navigation and articles. Sections for organisation owners and admins (`developers/*`) and for the super admin (`instance/*`, `installation/*`) are listed only for those readers and are a real 404 for everyone else; this is a reading convenience, not authorization. Unknown articles are a 404. Signed-in requests are `no-store` like every signed-in page |
 | `/discover` | Paginated public event discovery |
 | `/search` | Public event search UI |
 | `/:orgSlug` | Public organisation page |
@@ -23,8 +24,9 @@ Dynamic segments are shown as `:name` for readability.
 | `/:orgSlug/:eventSlug/check-in` | PIN-protected venue check-in station; usable by trusted on-site staff without an account |
 | `/:orgSlug/i/:instanceId` | Recurring-series instance and RSVP |
 | `/:shortCode` | Event short link: a 7-character code (letters and digits, always at least one uppercase letter, so it never matches a lowercase organisation slug) that temporarily redirects to the event's current public page. Unknown or unpublished codes return the same not-found page as an unknown organisation; lookups are rate-limited |
-| `/ticket/:token` | Attendee ticket status and QR page; tears off the QR stub live when the attendee is checked in. On a team event it also shows the team (name, leader, member names), leaving the team, **Join a team** with a pasted join link for a solo registration, and the *Looking for a team* profile and list |
+| `/ticket/:token` | Attendee ticket status and QR page; tears off the QR stub live when the attendee is checked in. On a team event it also shows the team (name, leader, member names), leaving the team, **Join a team** with a pasted join link for a solo registration, and the *Looking for a team* profile and list. A crew ticket ([Event crew](CREW.md)) shows a **Crew** chip and no cancel, payment, transfer, team or project controls, and **Claim expenses** when the event takes crew claims |
 | `/submit/:token` | A solo registrant's project page, opened by the emailed submission link (requested from the ticket page; stored only as a SHA-256 hash; requesting a new one retires the old link). Draft, submit, edit while the window is open, and withdraw. Unknown and retired tokens are a 404; `noindex`, `no-referrer`, never cached |
+| `/crew/:token` | Crew sign-up link ([Event crew](CREW.md)): the crew profile form for one event, showing only the event and organisation names and date. Malformed, rotated and disabled tokens are a 404; closed for cancelled and ended events. New members start hidden from the event page and get a free crew ticket by email; an email already on the crew or registered gets the same answer as a new sign-up and nothing changes. Generic metadata, `noindex`, `no-referrer`, never cached, disallowed in `robots.txt` |
 | `/team/:token` | Team page for the leader ([Team registration](TEAMS.md)), opened by the opaque management token (stored only as a SHA-256 hash; regenerating it retires the old link). A signed-in leader reaches the same page at `/account/teams/:teamId` without the token. `noindex`, private cache, `no-referrer`; the ticket's check-in token never opens it |
 | `/order/:token` | The buyer's order (opaque access token): lines, discount and total, payment state with "Pay now" while the tickets are held, refunds, the refund policy it was bought under with "Cancel order" while that policy allows it, and each ticket with its attendee's details |
 | `/:orgSlug/ids` | An organisation's ID programmes that are taking card requests |
@@ -60,7 +62,7 @@ Dynamic segments are shown as `:name` for readability.
 | `/dashboard/:orgSlug/members` | Members, roles, and invitations |
 | `/dashboard/:orgSlug/ids` | Member ID programmes (all members read; owners/admins create) |
 | `/dashboard/:orgSlug/ids/:programmeId` | Programme members (approve, reject, revoke, renew, email, download), import (CSV or public Google Sheet with column mapping), front/back card designer and settings; owners/admins only except the read-only member list |
-| `/dashboard/:orgSlug/event/:eventId` | Event overview, attendees, forms, invites, and feedback; plus **Judging** (`?tab=judging`) for hackathon submissions, rubric, rounds (`&sub=judging-rounds`), judges, progress and automatic assignment (`&sub=judging-progress`), awards and results, shown only once the event uses judging. A co-organiser whose only grant is `JUDGE` sees just the judging workspace. The paged lists keep their filters in the query string too (saved views, allow-listed per list: People `status`/`kind`/`team`/`q`, Teams `status`/`q`, Submissions `status`/`q`, Results `scored`/`q`, Progress `show`; e.g. `?tab=guests&sub=people&status=waitlist`); the filters never grant access |
+| `/dashboard/:orgSlug/event/:eventId` | Event overview, attendees, forms, invites, and feedback; plus **Judging** (`?tab=judging`) for hackathon submissions, rubric, rounds (`&sub=judging-rounds`), judges, progress and automatic assignment (`&sub=judging-progress`), awards and results, shown only once the event uses judging. A co-organiser whose only grant is `JUDGE` sees just the judging workspace. The paged lists keep their filters in the query string too (saved views, allow-listed per list: People `status`/`kind`/`team`/`q`, Teams `status`/`q`, Submissions `status`/`q`, Results `scored`/`q`, Progress `show`; e.g. `?tab=guests&sub=people&status=waitlist`); the filters never grant access. Guests → Crew (`?tab=guests&sub=crew`) manages the [event crew](CREW.md) and its sign-up link |
 | `/dashboard/:orgSlug/event/:eventId/schedule` | Standalone-event programme planning and live delay management |
 | `/dashboard/:orgSlug/event/:eventId/check-in` | Online/offline check-in station; organisation admin or exact event `CHECK_IN` grant. `?list=<id>` opens the desk for one open custom check-in list instead of entry |
 | `/dashboard/:orgSlug/series/:seriesId` | Recurring-series management |
@@ -86,6 +88,7 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/exports/account/ids/:memberId` | Session; the card's own holder | The signed-in user's own approved card as PDF or PNG |
 | `POST /api/check-in/station` | PIN-scoped station session, rate-limited | Open and operate a venue check-in station |
 | `GET /api/search?q=...` | Public, rate-limited | Return matching public events |
+| `GET /api/help/search-index` | Optional session, global API rate limit | Plain text of every guide article the viewer may read, searched in the browser; restricted sections only for owners/admins or the super admin; `private, no-store` |
 | `POST /api/client-errors` | Public, same-origin, rate-limited per IP (`clientError`, 10/min), 4 KB body cap | Browser crash report from the app error boundaries; forwarded (redacted) to the alert webhook when configured. Always an empty `204` |
 | `GET /api/ticket/:token/download` | Opaque token | Download the attendee ticket |
 | `POST /api/ticket/:token/checkout` | Opaque token, rate-limited per IP (`ticketCheckout`, 20/min) | "Pay now" for a held ticket: opens (or reuses) the hosted checkout for its whole order and returns only that address (`no-store`) |
@@ -110,7 +113,7 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/v1/events/:eventId/orders` | Machine bearer credential + `orders:read` | Paginated order totals for one event; no buyer contact data, links or provider IDs |
 | `GET /api/v1/events/:eventId/participants` | Machine bearer credential + `participants:read` | Paginated minimal confirmed-participant roster, with attendance filtering; `include=attendance` also requires `participants:attendance:read` |
 
-Opaque ticket, certificate, team join, team management, and submission URLs are bearer capabilities. Do not log them or place them in analytics payloads.
+Opaque ticket, certificate, team join, team management, submission, and crew sign-up URLs are bearer capabilities. Do not log them or place them in analytics payloads.
 
 ## Health and recovery APIs
 

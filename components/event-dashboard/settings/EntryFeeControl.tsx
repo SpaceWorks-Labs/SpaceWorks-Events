@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/choice";
 import { Callout, Card, CardHeader } from "@/components/ui/display";
 import { Field, Input } from "@/components/ui/field";
+import { HelpLink } from "@/components/help/HelpLink";
 
 /** The hackathon entry fee (docs/HACKATHON.md), charged when a project is submitted. */
 export function EntryFeeControl({ organisationSlug, eventId, currency, fee, refundOnDisqualify, paidBlockedReason }: {
@@ -28,6 +29,7 @@ export function EntryFeeControl({ organisationSlug, eventId, currency, fee, refu
     <Card as="section" className="rounded-xl" aria-labelledby="entry-fee-title">
       <CardHeader
         title={<span id="entry-fee-title">Project entry fee</span>}
+        action={<HelpLink article="hackathons/entry-fees" />}
         description="Entrants pay this once, on your payment page, when they submit a project. A project already paid for stays paid if it's withdrawn and submitted again."
       />
       {paidBlockedReason && !fee ? <Callout tone="info">{paidBlockedReason}</Callout> : null}
