@@ -31,7 +31,8 @@ badge generation (server-saved designs, colour and logos, PDF/PNG and bulk
 sheets in `lib/badge/`), feedback and layered certificates, designed broadcast and
 transactional email, optional paid tickets through each organisation's own
 Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), team registration
-with paid team places (`docs/TEAMS.md`), hackathon submissions, judging, results,
+with paid team places (`docs/TEAMS.md`), multi-stage applications and shortlisting on any one-off
+event with per-stage reviewer panels and offers (`docs/ADMISSION.md`), hackathon submissions, judging, results,
 entry fees and prize payouts (`docs/HACKATHON.md`), event finance with expense
 claims, refund requests and a budget (`docs/FINANCE.md`), a Canva-style ticket
 designer with designed PNG/PDF tickets (`docs/TICKET_DESIGNER.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged

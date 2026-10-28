@@ -28,6 +28,7 @@ Creating, editing, rotating, enabling, disabling, deleting and automatic disabli
 | `event.published` | An event goes live (create, edit, or the Overview **Publish event** button) |
 | `event.cancelled` | An event's status is set to cancelled |
 | `feedback.submitted` | Someone submits the event's feedback form |
+| `application.status_changed` | An application ([Applications](ADMISSION.md)) is offered a place, waitlisted, declined, accepted (a free place, or a paid place once paid), moves to the next stage (same status, new stage), expires, or is declined or withdrawn by the applicant. Its registrations also send `registration.status_changed` |
 | `ping` | **Send test**. Always delivered to the endpoint being tested; it cannot be subscribed to |
 
 Paid tickets raise the same registration events: `registration.created` when an order is placed (pending payment), `registration.status_changed` from `PENDING_PAYMENT` when it is paid (online, by hand or waived), and `CANCELLED` when an order's tickets are cancelled (by the buyer, an organiser, or an event cancellation), including the members of a team cancelled with its team ticket.
@@ -126,6 +127,18 @@ Example `registration.status_changed`:
   }
 }
 ```
+
+`application.status_changed` carries ids, status and stage only, never answers, scores, reviews or reviewers:
+
+```json
+"data": {
+  "event": { "kind": "event", "id": "cmevent123", "...": "..." },
+  "application": { "id": "cmapp123", "registrationId": "cmrsvp123", "teamId": null, "status": "OFFERED", "stage": { "id": "cmstage1", "position": 1, "name": "Review" } },
+  "previousStatus": "IN_REVIEW"
+}
+```
+
+`registrationId` is the solo registration, or the team leader's for a team application.
 
 The DTOs are strict Zod schemas (`lib/webhooks/payloads.ts`); `tests/unit/webhooks.test.ts` fails if a token, email, or answer field could appear.
 

@@ -675,3 +675,7 @@ audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
   lists, and no Progress view for a `JUDGE`-only collaborator.
   `tests/integration/saved-views.db.test.ts` and `tests/e2e/saved-views.spec.ts`
   cover the Not submitted, Unscored and Below target views.
+
+## Choosing participants with applications
+
+A hackathon can choose its teams or entrants with applications ([ADMISSION.md](ADMISSION.md)), like any other event: registrations are reviewed in stages by `REVIEW_APPLICATIONS` reviewers, and places are offered and accepted (and paid, with the leader paying once for a team). Judging projects stays in the Judging tab. Admission reviewer assignment uses the same seeded planner as judging (`lib/assignmentPlanner.ts`, shared; judging plans are pinned byte-identical by `tests/unit/assignment-planner-parity.test.ts`).

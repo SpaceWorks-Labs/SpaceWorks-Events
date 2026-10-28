@@ -17,6 +17,7 @@ New here? Start with [Features](FEATURES.md) for what it does, then [Local devel
 | [Features](FEATURES.md) | Current user-facing and administrative capabilities |
 | [Team registration](TEAMS.md) | Design contract for team events: settings, capacity units, team status, join links, the team page, looking for a team, and organiser team actions |
 | [Event crew](CREW.md) | Design contract for an event's organising team: free crew tickets outside capacity and payments, the crew sign-up link, the public Crew section, crew claims, and what the other flows refuse ([test conditions](CREW_TEST_CONDITIONS.md)) |
+| [Applications and shortlisting](ADMISSION.md) | Design contract for applications on any one-off event: stages with their own reviewer panels, seeded reviewer assignment, decision batches with review coverage, offers that are accepted (and paid) before a place is confirmed, the waitlist, and the guards behind them |
 | [Hackathon submissions, judging, and results](HACKATHON.md) | Design contract for hackathon events: project submissions and links, judges and conflicts of interest, the rubric and result score, awards, and published results |
 | [Paid tickets](PAYMENTS.md) | Turning paid events on, connecting Razorpay or Stripe, selling, refunds, receipts and reporting |
 | [Architecture](ARCHITECTURE.md) | System boundaries, request flows, data model, and background work |

@@ -97,6 +97,10 @@ One-off events can register people in teams (hackathons, game jams, competitions
 
 One-off events can list their organising team. The design contract is [Event crew](CREW.md).
 
+## Applications and shortlisting
+
+Any one-off event (free or paid, solo or teams) can make registration an application, reviewed in stages by reviewer panels and offered places that applicants accept (and pay for) before they are confirmed. The design contract is [Applications and shortlisting](ADMISSION.md).
+
 - Organisers add, edit, reorder, show or hide, and remove crew members (name, email, food preference, role, bio, photo, LinkedIn) in **Guests → Crew**, which also groups food preferences for catering.
 - Every crew member gets a free confirmed ticket by email ("You're on the crew", with the designed ticket), a **Crew** chip on the ticket page, at the check-in desk and on ID badges (with their role), and *Crew* on designed tickets. Crew count as going but never against the event's capacity or paid seat holds, never buy tickets, and never join teams or projects. Adding someone who registered for free turns their registration into the crew ticket and offers the freed place to the waitlist; bought tickets are never converted.
 - A crew sign-up link (`/crew/:token`) lets crew add themselves; they start hidden from the event page until an organiser reviews them. Organisers can create, replace, and turn off the link.
