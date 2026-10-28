@@ -27,6 +27,7 @@ try {
       data: { mfaSecretEncrypted: null, mfaEnabledAt: null, recoveryCodeHashes: [], sessionVersion: { increment: 1 } },
     });
     await tx.session.deleteMany({ where: { userId: found.id } });
+    await tx.mobileSession.updateMany({ where: { userId: found.id, revokedAt: null }, data: { revokedAt: new Date() } });
     // The same one-time, hashed token the reset-password page accepts.
     await tx.verificationToken.deleteMany({ where: { identifier: `reset:${email}` } });
     await tx.verificationToken.create({

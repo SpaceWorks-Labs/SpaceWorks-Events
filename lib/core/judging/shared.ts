@@ -6,11 +6,19 @@ import { EventStatus, Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { flattenZodErrors } from "@/app/actions/utils";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
+import type { ActionErrorCode } from "@/lib/actionErrorCode";
 import { judgingCriterionDto, type JudgingCriterionDto } from "@/lib/judgingDto";
 
 export type JudgingResult<T = undefined> =
   | { ok: true; data: T }
-  | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
+  | { ok: false; error: string; fieldErrors?: Record<string, string[]>; code?: JudgingRefusalCode };
+
+/** Machine-readable judge-side refusals, passed through by the mobile API; the web shows only `error`. */
+export type JudgingRefusalCode = Extract<ActionErrorCode, "JUDGING_CLOSED" | "INCOMPLETE_SCORES" | "NOT_VISIBLE">;
+
+export function refuse(error: string, code: JudgingRefusalCode): { ok: false; error: string; code: JudgingRefusalCode } {
+  return { ok: false, error, code };
+}
 
 /** How an entrant proved who they are. Re-verified in every transaction. */
 export type EntrantAuth =

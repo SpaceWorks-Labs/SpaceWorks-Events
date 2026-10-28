@@ -111,6 +111,33 @@ export async function getGoogleSsoSettings() {
   }
 }
 
+const GOOGLE_CLIENT_ID = /^[A-Za-z0-9._-]{1,200}\.apps\.googleusercontent\.com$/;
+
+/** Split a comma-separated list of Google OAuth client ids. */
+export function parseGoogleClientIdList(raw: string | null | undefined): string[] {
+  return Array.from(new Set((raw ?? "").split(",").map((value) => value.trim()).filter(Boolean)));
+}
+
+export function isGoogleClientIdList(raw: string) {
+  const ids = parseGoogleClientIdList(raw);
+  return ids.length > 0 && ids.length <= 10 && ids.every((id) => GOOGLE_CLIENT_ID.test(id));
+}
+
+export function getMobileGoogleClientIdsFromEnv() {
+  return parseGoogleClientIdList(envValue("GOOGLE_MOBILE_CLIENT_IDS")).filter((id) => GOOGLE_CLIENT_ID.test(id));
+}
+
+/**
+ * The OAuth client ids of the Android and iOS apps, accepted as Google
+ * ID-token audiences by the mobile API. A saved list overrides
+ * `GOOGLE_MOBILE_CLIENT_IDS`; read on every call like the web client.
+ */
+export async function getMobileGoogleClientIds(): Promise<string[]> {
+  const settings = await prisma.instanceSetting.findUnique({ where: { id: INSTANCE_SETTINGS_ID }, select: { googleMobileClientIds: true } });
+  const saved = parseGoogleClientIdList(settings?.googleMobileClientIds).filter((id) => GOOGLE_CLIENT_ID.test(id));
+  return saved.length > 0 ? saved : getMobileGoogleClientIdsFromEnv();
+}
+
 /** Secret-free description of where Google sign-in configuration comes from. */
 export async function getGoogleSsoStatus(): Promise<GoogleSsoStatus> {
   const settings = await prisma.instanceSetting.findUnique({ where: { id: INSTANCE_SETTINGS_ID }, select: GOOGLE_SELECT });

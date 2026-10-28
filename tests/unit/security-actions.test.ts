@@ -16,7 +16,7 @@ vi.mock("@/lib/mfa", () => ({
 
 const tx = {
   $queryRaw: vi.fn(),
-  user: { update: mocks.userUpdate, updateMany: mocks.userUpdate }, session: { deleteMany: mocks.sessionDelete },
+  user: { update: mocks.userUpdate, updateMany: mocks.userUpdate }, session: { deleteMany: mocks.sessionDelete }, mobileSession: { updateMany: vi.fn(async () => ({ count: 0 })) },
   verificationToken: { deleteMany: mocks.tokenDelete, create: mocks.tokenCreate }, auditEvent: { create: mocks.auditCreate },
 };
 vi.mock("@/lib/db", () => ({ prisma: {

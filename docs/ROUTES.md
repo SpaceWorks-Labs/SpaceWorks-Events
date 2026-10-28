@@ -108,6 +108,9 @@ The super admin signs in with email and password; there is no separate authentic
 | `GET /api/exports/account` | Authenticated user (own data only), rate limited per user (`dataExport`, 5/hour) | Audited (`ACCOUNT_DATA_EXPORTED`) personal JSON export; excludes secrets, hashes, and all bearer tokens |
 | `GET /api/uploads/:key` | Public application route | Stream an allowlisted organisation WebP derivative with immutable/nosniff response controls |
 | `/api/auth/*` | Auth.js | Session, provider, callback, and credential endpoints |
+| `/api/mobile/v1/*` | Mobile session bearer (user identity); `auth/login`, `auth/google`, `auth/refresh`, `auth/config`, `public/*` and `rsvp` work without one | The Space Works apps (Android and iOS): sign-in (new-device codes, authenticator), own registrations, orders, receipts, refunds, transfers, claims, projects, entry fees and prizes, public events, series dates, promo and access codes, and organiser guests, check-in and check-in lists, desk settlement, emails, programme delays, feedback, sign-ups, teams, judging and event finance. `orgs/*` routes need the staff authenticator check (`STAFF_MFA_REQUIRED`). Same permission checks and action bodies as the website; see [Mobile API](MOBILE_API.md) |
+| `GET /.well-known/assetlinks.json` | Public | Android App Links statement from `ANDROID_APP_PACKAGE_NAME` and `ANDROID_APP_SHA256_FINGERPRINTS` (`[]` when unset) |
+| `GET /.well-known/apple-app-site-association` | Public | iOS Universal Links association (JSON, no extension) from `APPLE_APP_IDS` (empty details when unset) |
 | `GET /api/v1/events` | Machine bearer credential + `events:read` | Paginated tenant event metadata |
 | `GET /api/v1/events/:eventId` | Machine bearer credential + `events:read` | Tenant-scoped event metadata |
 | `GET /api/v1/events/:eventId/orders` | Machine bearer credential + `orders:read` | Paginated order totals for one event; no buyer contact data, links or provider IDs |

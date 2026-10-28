@@ -341,6 +341,7 @@ model User {
 
   accounts          Account[]
   sessions          Session[]
+  mobileSessions    MobileSession[]
   devices           UserDevice[]
   memberships       Membership[]
   rsvps             RSVP[]
@@ -403,6 +404,48 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// A Space Works mobile app session (Android or iOS). Only SHA-256 digests of
+/// the bearer tokens are stored. Bumping the user's `sessionVersion` (password
+/// change or reset, signing out everywhere, authenticator changes) revokes it.
+model MobileSession {
+  id                       String    @id @default(cuid())
+  userId                   String
+  /// Hex SHA-256 of the current access token.
+  accessTokenHash          String    @unique
+  /// Hex SHA-256 of the current refresh token.
+  refreshTokenHash         String    @unique
+  /// Hex SHA-256s of the last refresh tokens this one replaced, newest first
+  /// (at most MOBILE_REFRESH_HISTORY). Presenting any of them again revokes the
+  /// session, except the newest within the retry grace window.
+  previousRefreshTokenHashes String[] @default([])
+  rotatedAt                DateTime?
+  sessionVersion           Int
+  /// SHA-256 (lib/loginSecurity.ts deviceHash) of the install id the app sends.
+  /// Refreshes must send the same id. It is client-supplied, so it catches a
+  /// token replayed by another install that doesn't know the id; it is not
+  /// proof against someone who copied both.
+  deviceHash               String
+  deviceName               String?
+  /// "android" or "ios"; informational only.
+  platform                 String?
+  /// When the credential (password or Google) was last proved on this session.
+  authenticatedAt          DateTime  @default(now())
+  /// When this session last passed an authenticator check; staff access needs
+  /// it within the last 12 hours.
+  mfaVerifiedAt            DateTime?
+  createdAt                DateTime  @default(now())
+  lastUsedAt               DateTime  @default(now())
+  accessExpiresAt          DateTime
+  refreshExpiresAt         DateTime
+  revokedAt                DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([refreshExpiresAt])
+  @@index([previousRefreshTokenHashes], type: Gin)
 }
 
 /// A browser this account signed in from with a password. A sign-in from a
@@ -677,6 +720,11 @@ model Event {
   listedPublicly        Boolean          @default(false)
   registrationClosesAt  DateTime?
   registrationLeadMinutes Int?
+  /// Set when sign-ups were closed from the mobile app; the cutoff before that
+  /// close is kept so reopening restores it. The dashboard event form clears it.
+  registrationManuallyClosedAt DateTime?
+  registrationCutoffBeforeManualClose DateTime?
+  registrationLeadBeforeManualClose Int?
   /// bcrypt hash for the public venue check-in station PIN. Incrementing the
   /// version invalidates all existing station proofs.
   checkInStationPinHash String?
@@ -1940,6 +1988,10 @@ model InstanceSetting {
   smtpAllowUnauthenticated Boolean @default(false)
   googleClientId        String?
   googleClientSecretEncrypted String?
+  /// Comma-separated Google OAuth client ids of the Android and iOS apps, accepted
+  /// as ID-token audiences by the mobile API. Overrides GOOGLE_MOBILE_CLIENT_IDS.
+  /// Client ids are public identifiers, not secrets.
+  googleMobileClientIds String?
   backupProvider        String?
   backupLastSuccessAt   DateTime?
   backupRetentionDays   Int?

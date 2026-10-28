@@ -109,6 +109,15 @@ matter, like prize payouts and payment settings. Every step is audited.
 - The PDF event report's Money section gains *Spending*: claims and prizes
   paid, approved but unpaid, the budget, and the net after spending.
 
+## In the mobile apps
+
+Participants file and withdraw claims from a registration with receipt photos
+and see their decisions; staff file and withdraw their own; owners and admins
+see every claim and refund request and approve, decline or decide them
+([Mobile API](MOBILE_API.md)). Payouts, the budget and participant-claim
+settings stay on the website. Decisions from the app are held to the event in
+the path.
+
 ## Tests
 
 - PostgreSQL suite `tests/integration/finance.db.test.ts`: a staff claim with

@@ -12,7 +12,7 @@ vi.mock("@/lib/opsAlerts", () => ({ logOpsError }));
 
 import {
   getEffectiveEmailConfigSource, getEmailSettings, getEmailSettingsStatus, getGoogleSsoSettings, getGoogleSsoStatus,
-  INSTANCE_SETTINGS_ID, isNewUserRegistrationEnabled, isValidSenderAddress, resolveBackupPosture,
+  getMobileGoogleClientIds, INSTANCE_SETTINGS_ID, isGoogleClientIdList, isNewUserRegistrationEnabled, isValidSenderAddress, resolveBackupPosture,
 } from "@/lib/instanceSettings";
 
 beforeEach(() => vi.clearAllMocks());
@@ -171,5 +171,22 @@ describe("sender address validation", () => {
   });
   it.each(["not-an-address", "Name <>", "<a@example.test>", "Name <a@example.test>\r\nBcc: x@example.test", "a@b@example.test"])("rejects %s", (value) => {
     expect(isValidSenderAddress(value)).toBe(false);
+  });
+});
+
+describe("mobile Google client ids", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("prefers saved ids over GOOGLE_MOBILE_CLIENT_IDS and ignores malformed entries", async () => {
+    vi.stubEnv("GOOGLE_MOBILE_CLIENT_IDS", "1-env.apps.googleusercontent.com, nonsense");
+    findUnique.mockResolvedValue(null);
+    await expect(getMobileGoogleClientIds()).resolves.toEqual(["1-env.apps.googleusercontent.com"]);
+    findUnique.mockResolvedValue({ googleMobileClientIds: "2-android.apps.googleusercontent.com,3-ios.apps.googleusercontent.com" });
+    await expect(getMobileGoogleClientIds()).resolves.toEqual(["2-android.apps.googleusercontent.com", "3-ios.apps.googleusercontent.com"]);
+  });
+
+  it("validates a saved list", () => {
+    expect(isGoogleClientIdList("2-a.apps.googleusercontent.com, 3-b.apps.googleusercontent.com")).toBe(true);
+    expect(isGoogleClientIdList("https://evil.example")).toBe(false);
   });
 });

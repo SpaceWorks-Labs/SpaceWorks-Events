@@ -30,6 +30,7 @@ const tx = {
   user: { update: mocks.userUpdate, updateMany: mocks.userUpdate },
   verificationToken: { deleteMany: vi.fn() },
   session: { deleteMany: mocks.sessionDelete },
+  mobileSession: { updateMany: vi.fn(async () => ({ count: 0 })) },
   auditEvent: { create: mocks.auditCreate },
 };
 vi.mock("@/lib/db", () => ({

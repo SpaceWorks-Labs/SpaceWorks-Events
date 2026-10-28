@@ -13,6 +13,8 @@ export type EventClientDto = Omit<Event,
   | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
+  // The mobile sign-up close snapshot only matters to lib/core/registrationWindow.ts.
+  | "registrationManuallyClosedAt" | "registrationCutoffBeforeManualClose" | "registrationLeadBeforeManualClose"
 >;
 
 /** Copies only the DTO fields, so a full Event record never reaches the browser. */

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { alertOnBackupProblems } from "@/lib/backupAlerts";
+import { outsideRequestActor } from "@/lib/requestActor";
 import { deliverOutboxBatchWithCount } from "@/lib/outbox";
 import {
   BEAT_HEARTBEAT_KEY,
@@ -199,6 +200,11 @@ function startBeatLoop() {
  * duplicate timers during dev HMR.
  */
 export function startOutboxWorker(role = processRole()) {
+  // Timers created here outlive the request that started them: never let them carry its actor.
+  return outsideRequestActor(() => startBackground(role));
+}
+
+function startBackground(role: ReturnType<typeof processRole>) {
   const runtime = backgroundState();
   if (runtime.__sweBackground?.started) return runtime.__sweBackground.role;
   const state: BackgroundState = { started: true, role, loops: [] };

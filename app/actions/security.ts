@@ -7,6 +7,7 @@ import { hasRecentAuthentication } from "@/lib/reauth";
 import { consumeMfaCode, createMfaEnrollment, decryptMfaSecret, encryptMfaSecret, generateRecoveryCodes, hashRecoveryCode, verifyMfaCode } from "@/lib/mfa";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import type { ActionResult } from "./org";
+import { revokeUserMobileSessions } from "@/lib/mobileAuth";
 
 const codeSchema = z.object({ code: z.string().trim().min(6).max(32) });
 
@@ -68,6 +69,7 @@ export async function confirmMfaEnrollment(input: unknown): Promise<ActionResult
     });
     if (updated.count !== 1) return false;
     await tx.verificationToken.deleteMany({ where: { identifier: `mfa:${session.user.id}` } });
+    await revokeUserMobileSessions(tx, session.user.id);
     await tx.auditEvent.create({ data: { action: "MFA_ENABLED", actorUserId: session.user.id, targetType: "User", targetId: session.user.id } });
     return true;
   });
@@ -93,6 +95,7 @@ export async function disableMfa(input: unknown): Promise<ActionResult> {
     const updated = await tx.user.updateMany({ where: { id: session.user.id, mfaSecretEncrypted: user.mfaSecretEncrypted, sessionVersion: user.sessionVersion, ...(!validTotp ? { recoveryCodeHashes: { has: hashRecoveryCode(parsed.data.code) } } : {}) }, data: { mfaSecretEncrypted: null, mfaEnabledAt: null, recoveryCodeHashes: [], sessionVersion: { increment: 1 } } });
     if (updated.count !== 1) return false;
     await tx.verificationToken.deleteMany({ where: { identifier: `mfa:${session.user.id}` } });
+    await revokeUserMobileSessions(tx, session.user.id);
     await tx.auditEvent.create({ data: { action: "MFA_DISABLED", actorUserId: session.user.id, targetType: "User", targetId: session.user.id } });
     return true;
   });
@@ -109,6 +112,7 @@ export async function revokeAllSessions(): Promise<ActionResult> {
     await tx.user.update({ where: { id: session.user.id }, data: { sessionVersion: { increment: 1 } } });
     await tx.verificationToken.deleteMany({ where: { identifier: `mfa:${session.user.id}` } });
     await tx.session.deleteMany({ where: { userId: session.user.id } });
+    await revokeUserMobileSessions(tx, session.user.id);
     await tx.auditEvent.create({ data: { action: "SESSIONS_REVOKED", actorUserId: session.user.id, targetType: "User", targetId: session.user.id } });
   });
   return { ok: true };

@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "STAFF_MFA_REQUIRED",
+    "message": "Confirm the code from your authenticator app to use organiser tools."
+  }
+}
