@@ -9,7 +9,7 @@ import { enqueueOrderEmail, enqueuePaymentEmail } from "../email";
 import { isActiveHold } from "../holds";
 import { effectiveOfflineRecord } from "../offlineRecord";
 import { hasFreeSeats, ORDER_SUBJECT_SELECT } from "../targets";
-import { attendeeEmail, lockOrder, PaymentOperationError, subjectTitle } from "./shared";
+import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, PaymentOperationError, subjectTitle } from "./shared";
 import { heldStatusWebhooks } from "../settlement";
 import { placePaidTeamOrder } from "../teamOrders";
 import { confirmEntryFeeTx } from "../entryFees";
@@ -33,6 +33,8 @@ export async function settleOrderByHand(params: {
   const now = params.now ?? new Date();
   const owned = await prisma.order.findFirst({ where: { id: params.orderId, organisationId: params.organisationId }, select: { id: true } });
   if (!owned) throw new PaymentOperationError("Order not found.");
+  // An applicant's place (docs/ADMISSION.md) is never confirmed unpaid; money taken at the desk can still be recorded.
+  if (params.mode === "waive" && (await isAdmissionOrder(prisma, owned.id))) throw new AdmissionManagedError("This order pays for an application's place, which can't be waived. Record the payment if they paid at the desk.");
   const pages = await closeOpenAttempts(owned.id, now);
   if (pages === "settled") return "already-paid";
   if (pages === "open") throw new PaymentOperationError("The buyer's payment page couldn't be closed yet. Try again in a minute.");

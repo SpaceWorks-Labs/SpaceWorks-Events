@@ -103,7 +103,12 @@ team gets a solo application.
   `admissionRegistrationRefusal`), whatever happened to that application.
 - Registrations and teams on admission events are created **pending only**:
   organiser-added paid guests (paid by hand, waived or sent a link) are
-  refused (`MANUAL_PAID_REFUSAL`), and nothing inserts a confirmed place.
+  refused (`MANUAL_PAID_REFUSAL`), and nothing inserts a confirmed place. An
+  applicant's held order is never waived (Guests → Payment and the app's
+  settle answer `ADMISSION_MANAGED`); money taken at the desk can be recorded.
+- On a TEAM event a paid solo applicant takes one unit: their offer is held
+  while confirmed units are below capacity and the ticket type has room
+  (teams count once, not per person).
 - A team takes new members (join link, matching, organiser move) only while
   its application is **in review**; an applicant whose own application is
   closed or holds an offer joins no team. There is no way to reopen a decided
