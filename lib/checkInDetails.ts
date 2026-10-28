@@ -57,8 +57,23 @@ export function getRegistrationDetails(answers: RegistrationAnswer[]): Registrat
   return Array.from(valuesByField.values());
 }
 
-export function getCheckInDetails(answers: RegistrationAnswer[]): CheckInDetail[] {
-  return getRegistrationDetails(answers)
+/** A crew ticket's own details (docs/CREW.md): pass `rsvp.crewMember` from a query that includes `crewDoorSelect`. */
+export type CrewDoorInfo = { foodPreference: string } | null | undefined;
+
+/** Include it as `crewMember: crewDoorSelect` in every desk lookup. */
+export const crewDoorSelect = { select: { foodPreference: true } } as const;
+
+export function getCheckInDetails(answers: RegistrationAnswer[], crew?: CrewDoorInfo): CheckInDetail[] {
+  const details = getRegistrationDetails(answers)
     .filter((detail) => isDoorDetailField(detail))
     .map(({ label, value }) => ({ label, value }));
+  // Crew give their food preference on the crew form, not as a registration answer.
+  const crewFood = crew?.foodPreference.trim();
+  if (crewFood) details.push({ label: "Crew food preference", value: crewFood });
+  return details;
+}
+
+/** The team name and crew flag every desk result carries. */
+export function doorExtras(rsvp: { team?: { name: string } | null; isCrew?: boolean }) {
+  return { teamName: rsvp.team?.name ?? null, isCrew: rsvp.isCrew === true };
 }

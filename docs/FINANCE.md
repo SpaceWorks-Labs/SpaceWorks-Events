@@ -11,7 +11,7 @@ event budget. Prize money for hackathon awards is in
 
 | | Owners and admins | Members and co-organisers (any grant) | Registered participants |
 | --- | --- | --- | --- |
-| File an expense claim | Yes | Yes (their own) | From the ticket page, when the event allows it |
+| File an expense claim | Yes | Yes (their own) | From the ticket page, when the event allows it (crew: with *Let crew claim expenses*) |
 | See claims | Every claim | Their own | Their own, on the ticket page |
 | Withdraw a claim before it is decided | Their own | Their own | Their own |
 | Approve, reject, record payment, reverse a payment | Yes | — | — |
@@ -38,6 +38,10 @@ matter, like prize payouts and payment settings. Every step is audited.
   approved; rejected and withdrawn ones don't count. The cap is checked under
   the event row lock, so two claims can't both slip under it. The ticket token
   is the proof; an account-owned ticket also needs that account signed in.
+- **Crew** ([Event crew](CREW.md)) claim from their crew ticket page when
+  the event turns on *Let crew claim expenses* (`Event.crewClaimsEnabled`,
+  off by default), as kind `CREW`, with no cap; the participant switch and
+  cap don't apply to them. The Finance list labels them *(crew)*.
 - Lifecycle: `SUBMITTED` → `APPROVED` (for the amount asked or less, with an
   optional note) or `REJECTED` (with a reason the claimant sees) →
   `PAID`. The claimant may withdraw (`WITHDRAWN`) while it waits. Each step

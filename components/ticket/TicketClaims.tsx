@@ -15,7 +15,7 @@ export function TicketClaims({ ticketToken, view }: { ticketToken: string; view:
     <section aria-labelledby="ticket-claims" className="flex flex-col gap-4 rounded-xl border border-line bg-panel p-4">
       <div>
         <h2 id="ticket-claims" className="text-h4 text-ink">Claim expenses</h2>
-        <p className="text-body-ui text-ink-secondary">The organisers pay back costs such as travel{view.cap ? `, up to ${view.cap} per person` : ""}. Add photos of your receipts.</p>
+        <p className="text-body-ui text-ink-secondary">{view.crew ? "The organisers pay back what you spend for the event as crew." : `The organisers pay back costs such as travel${view.cap ? `, up to ${view.cap} per person` : ""}.`} Add photos of your receipts.</p>
       </div>
       {withdraw.error ? <Callout tone="danger" role="alert">{withdraw.error}</Callout> : null}
       {view.claims.length > 0 ? (

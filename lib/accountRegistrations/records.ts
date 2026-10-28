@@ -50,6 +50,7 @@ const instanceSelect = {
 const rsvpSelect = {
   id: true,
   status: true,
+  isCrew: true,
   checkedInAt: true,
   checkInToken: true,
   // Team events (docs/TEAMS.md): the name, and whether this registration leads it.

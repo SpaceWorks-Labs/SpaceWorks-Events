@@ -3,6 +3,7 @@ import "server-only";
 import { OrderStatus, PaymentRefundStatus, PaymentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueSubmissionReceived } from "@/lib/outbox";
+import { shouldQueueSubmissionReceipt } from "@/lib/hackathonEmails";
 import { enqueuePaymentEmail } from "./email";
 import { createPendingRefund } from "./refunds";
 
@@ -37,7 +38,9 @@ export async function entryFeeOwed(tx: Prisma.TransactionClient, eventId: string
  * The fee was paid (online, by hand, or waived): confirm the order and
  * submit its project, unless it was disqualified or deleted meanwhile (the
  * money stays recorded; the organiser decides). The payment row is already
- * settled by the caller, which holds the event and order locks.
+ * settled by the caller, which holds the event and order locks. The submission receipt
+ * is opt-in per event (`emailSubmissionReceipts`, lib/hackathonEmails.ts),
+ * read in this transaction; the payment email is never gated.
  */
 export async function confirmEntryFeeTx(tx: Prisma.TransactionClient, order: { id: string; organisationId: string; submissionId: string; buyerEmail: string; buyerName: string; }, paymentId: string, now: Date, notifyPaid = true) {
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.CONFIRMED, holdExpiresAt: null, holdCapAt: null } });
@@ -45,7 +48,8 @@ export async function confirmEntryFeeTx(tx: Prisma.TransactionClient, order: { i
     where: { id: order.submissionId, status: { in: [SubmissionStatus.DRAFT, SubmissionStatus.WITHDRAWN] } },
     data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },
   });
-  if (submitted.count === 1) await enqueueSubmissionReceived(tx, { to: order.buyerEmail, submissionId: order.submissionId, ...(order.buyerName ? { recipientName: order.buyerName.slice(0, 200) } : {}) });
+  const receipts = submitted.count === 1 ? await tx.submission.findUnique({ where: { id: order.submissionId }, select: { event: { select: { emailSubmissionReceipts: true } } } }) : null;
+  if (receipts && shouldQueueSubmissionReceipt(receipts.event)) await enqueueSubmissionReceived(tx, { to: order.buyerEmail, submissionId: order.submissionId, ...(order.buyerName ? { recipientName: order.buyerName.slice(0, 200) } : {}) });
   if (notifyPaid) await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId, notice: "paid" });
   await recordAuditEvent({ action: "ENTRY_FEE_PAID", organisationId: order.organisationId, targetType: "Submission", targetId: order.submissionId, metadata: { orderId: order.id, submitted: submitted.count === 1 }, client: tx });
 }

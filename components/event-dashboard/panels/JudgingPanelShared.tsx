@@ -71,7 +71,13 @@ export function useJudgingAction() {
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
 
-  function run(key: string, action: () => Promise<Outcome>, success: string | null, after?: (result: Outcome) => void) {
+  /** `success` can read the server's answer, so the toast never relies on stale page props. */
+  function run(
+    key: string,
+    action: () => Promise<Outcome>,
+    success: string | null | ((data: unknown) => string | null),
+    after?: (result: Outcome) => void,
+  ) {
     setBusy(key);
     startTransition(async () => {
       let result: Outcome;
@@ -83,7 +89,8 @@ export function useJudgingAction() {
       setBusy(null);
       if (!result.ok) showToast(result.error, "error");
       else {
-        if (success) showToast(success, "success");
+        const message = typeof success === "function" ? success((result as { data?: unknown }).data) : success;
+        if (message) showToast(message, "success");
         router.refresh();
       }
       after?.(result);

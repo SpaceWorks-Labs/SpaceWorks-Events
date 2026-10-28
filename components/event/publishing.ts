@@ -103,7 +103,7 @@ function audienceLine(privacyType: string, listedPublicly: boolean): string {
 export function publishingSummary(input: { status: string; privacyType: string; listedPublicly?: boolean; capacity: number | null; closing: string; teamMode?: boolean }): { headline: string; detail: string } {
   if (input.status === "DRAFT") return { headline: "Draft.", detail: "Only your team can see this event. Make it live when you're ready." };
   if (input.status === "HIDDEN") return { headline: "Offline.", detail: "The event page is taken down and sign-ups are closed." };
-  if (input.status === "CANCELLED") return { headline: "Cancelled.", detail: "Guests can't sign up." };
+  if (input.status === "CANCELLED") return { headline: "Cancelled.", detail: "The event page is offline and guests can't sign up." };
   const spots = input.teamMode
     ? input.capacity ? `${input.capacity} places for teams and solo registrants` : "unlimited teams"
     : input.capacity ? `${input.capacity} spots` : "unlimited spots";

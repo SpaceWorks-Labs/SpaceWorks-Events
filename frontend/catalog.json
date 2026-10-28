@@ -51,6 +51,11 @@
       "id": "app__auth__login__page:loadLoginView"
     },
     {
+      "module": "lib/views/app__crew__token__page",
+      "name": "loadCrewJoinView",
+      "id": "app__crew__token__page:loadCrewJoinView"
+    },
+    {
       "module": "lib/views/app__dashboard__layout",
       "name": "loadDashboardShell",
       "id": "app__dashboard__layout:loadDashboardShell"
@@ -169,6 +174,11 @@
       "module": "lib/views/app__features__page",
       "name": "loadView",
       "id": "app__features__page:loadView"
+    },
+    {
+      "module": "lib/views/app__help__layout",
+      "name": "loadHelpAccess",
+      "id": "app__help__layout:loadHelpAccess"
     },
     {
       "module": "lib/views/app__join__event-collaborator__token__page",
@@ -798,6 +808,51 @@
       "id": "checkin:loadRecentCheckIns"
     },
     {
+      "module": "app/actions/crew",
+      "name": "addCrewMember",
+      "id": "crew:addCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "updateCrewMember",
+      "id": "crew:updateCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "setCrewMemberShown",
+      "id": "crew:setCrewMemberShown"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "deleteCrewMember",
+      "id": "crew:deleteCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "reorderCrewMember",
+      "id": "crew:reorderCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "manageCrewJoinLink",
+      "id": "crew:manageCrewJoinLink"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "uploadCrewPhoto",
+      "id": "crew:uploadCrewPhoto"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "uploadCrewPhotoWithLink",
+      "id": "crew:uploadCrewPhotoWithLink"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "joinCrew",
+      "id": "crew:joinCrew"
+    },
+    {
       "module": "app/actions/entry-fee",
       "name": "saveEntryFee",
       "id": "entry-fee:saveEntryFee"
@@ -831,6 +886,11 @@
       "module": "app/actions/event-website",
       "name": "uploadEventSponsorLogo",
       "id": "event-website:uploadEventSponsorLogo"
+    },
+    {
+      "module": "app/actions/event-website",
+      "name": "showCrewSection",
+      "id": "event-website:showCrewSection"
     },
     {
       "module": "app/actions/event-website",
@@ -1211,6 +1271,11 @@
       "module": "app/actions/judging-admin",
       "name": "publishJudgingResults",
       "id": "judging-admin:publishJudgingResults"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "sendResultsAnnouncement",
+      "id": "judging-admin:sendResultsAnnouncement"
     },
     {
       "module": "app/actions/judging-admin",

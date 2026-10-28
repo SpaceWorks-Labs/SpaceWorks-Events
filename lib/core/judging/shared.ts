@@ -111,6 +111,10 @@ export const judgingEventSelect = {
   judgesSeeAll: true,
   projectGalleryPublic: true,
   resultsPublishedAt: true,
+  resultsAnnouncedAt: true,
+  // Hackathon email switches (lib/hackathonEmails.ts), read under the Event lock.
+  emailEntrantsOnResults: true,
+  emailSubmissionReceipts: true,
 } satisfies Prisma.EventSelect;
 
 export type JudgingEvent = Prisma.EventGetPayload<{ select: typeof judgingEventSelect }>;

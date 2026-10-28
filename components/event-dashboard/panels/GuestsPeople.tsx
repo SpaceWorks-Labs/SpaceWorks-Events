@@ -32,6 +32,7 @@ import { viewParam, type SavedViewDto, type ViewParams } from "@/lib/savedViews"
 import { useInitialViewParams, useSyncViewToUrl } from "@/components/event-dashboard/views/useViewUrl";
 import { NO_COUNTS, SEARCH_DELAY_MS, type ActionResult, type GuestListTarget, type Meta, type View } from "./GuestsPeople/constants";
 import { GuestFilters, GuestsHeaderActions } from "./GuestsPeople/Toolbar";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export type { GuestListTarget } from "./GuestsPeople/constants";
 
@@ -174,7 +175,10 @@ export function GuestsPeople({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-h4 text-ink">{title}</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-h4 text-ink">{title}</h2>
+          <HelpLink article="guests/guest-list" />
+        </div>
         {target.kind === "event" ? (
           <GuestsHeaderActions
             organisationSlug={organisationSlug}

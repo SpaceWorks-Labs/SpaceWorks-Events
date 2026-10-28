@@ -44,7 +44,7 @@ export function ClaimsList({ scope, claims, admin, timezone, currency }: { scope
               <div className="min-w-0">
                 <p className="text-body-ui font-semibold text-ink">{claim.approved && claim.approved !== claim.amount ? `${claim.approved} of ${claim.amount}` : claim.amount} · {claim.category}</p>
                 <p className="text-caption text-ink-muted">
-                  {claim.payeeName ? `${claim.payeeName}${claim.kind === "PARTICIPANT" ? " (participant)" : ""} · ` : ""}{formatDayTime(claim.createdAt, timezone)}
+                  {claim.payeeName ? `${claim.payeeName}${claim.kind === "PARTICIPANT" ? " (participant)" : claim.kind === "CREW" ? " (crew)" : ""} · ` : ""}{formatDayTime(claim.createdAt, timezone)}
                 </p>
                 <p className="mt-1 whitespace-pre-line text-body-ui text-ink-secondary">{claim.description}</p>
                 {claim.note ? <p className="mt-1 text-caption text-ink-muted">Note: {claim.note}</p> : null}

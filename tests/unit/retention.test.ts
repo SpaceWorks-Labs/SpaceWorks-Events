@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
   webhooks: vi.fn(),
   webhookDeliveries: vi.fn(),
   mobileSessions: vi.fn(),
+  crewPhotos: vi.fn(),
 }));
+
+vi.mock("@/lib/core/crew/photos", () => ({ purgeUnusedCrewPhotos: mocks.crewPhotos }));
 
 vi.mock("@/lib/db", () => ({ prisma: {
   $transaction: mocks.transaction,
@@ -38,6 +41,7 @@ describe("operational retention", () => {
     for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries, mocks.mobileSessions]) {
       mock.mockResolvedValue({ count: 1 });
     }
+    mocks.crewPhotos.mockResolvedValue(2);
     mocks.transaction.mockImplementation((operations: Array<Promise<unknown>>) => Promise.all(operations));
   });
 
@@ -59,7 +63,9 @@ describe("operational retention", () => {
       processedWebhookEvents: 1,
       webhookDeliveries: 1,
       mobileSessions: 1,
+      unusedCrewPhotos: 2,
     });
+    expect(mocks.crewPhotos).toHaveBeenCalledWith(now);
     expect(mocks.orgInvite).toHaveBeenCalledWith({ where: { usedAt: null, expiresAt: { lt: now } } });
     expect(mocks.collaboratorInvite).toHaveBeenCalledWith({ where: { usedAt: null, expiresAt: { lt: now } } });
     expect(mocks.outbox).toHaveBeenNthCalledWith(1, { where: { status: OutboxStatus.SENT, sentAt: { lt: new Date("2030-01-30T00:00:00.000Z") } } });

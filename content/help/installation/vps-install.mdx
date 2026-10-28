@@ -1,0 +1,79 @@
+The quickest way to run your own Space Works Events is on one Linux server (a VPS) with the guided installer. One command checks the server, asks you every question up front, and then sets up the whole stack: the app, its database, Redis, file storage and HTTPS. This page is a short overview; the full runbook is `docs/DEPLOYMENT_VPS.md` in the repository.
+
+<Callout kind="permission">
+
+Whoever runs the server, with root or `sudo` on it. After installation, the super admin manages the app from `/super-admin`.
+
+</Callout>
+
+## Before you start
+
+You need:
+
+- A 64-bit (x86_64 or arm64) Linux server running Ubuntu or Debian, Fedora, RHEL, Alma or Rocky, Arch, or openSUSE. Start with 2 vCPU, 2 GB of memory and 30 GB of disk. The installer offers a swap file when memory is short, and installs Docker if it's missing.
+- A domain whose DNS records point at the server, with ports 80 and 443 open. The default layout uses two hostnames, such as `events.example.org` for the website and `api.events.example.org` for the API.
+- An SMTP relay on a verified sending domain (with SPF, DKIM and DMARC), such as Brevo, Amazon SES or Postmark.
+- The email address you'll use as the super admin.
+
+## Running the installer
+
+<Steps>
+
+1. Sign in to the server over SSH as root or a user with `sudo`.
+2. Run `curl -fsSL https://raw.githubusercontent.com/SpaceWorks-Labs/SpaceWorks-Events/main/install.sh | bash`.
+3. Answer the questions. Wrong answers are asked again.
+4. Read the summary of every answer and every change to the server, then confirm.
+5. When it finishes, follow the **Next steps** it prints, starting with setting the super admin password.
+
+</Steps>
+
+<Callout kind="note">
+
+**Nothing changes on the server before you confirm.** If you cancel at the summary, the installer leaves the server as it was.
+
+</Callout>
+
+## The questions it asks
+
+- **Hosting.** The default, `split`, runs the website and the API as two containers on this server, on two hostnames. You can instead run one app container on one hostname, or keep the API here and host the website on Netlify.
+- **Hostnames** for the layout you chose.
+- **Super admin email.** Its password is set from the server afterwards, never in the app.
+- **HTTPS.** Automatic HTTPS from Let's Encrypt through Caddy (the default, which needs public DNS); Caddy's own local certificate authority for a LAN or trial install, where browsers warn until you trust it; or your existing reverse proxy on the server.
+- **File storage.** Bundled storage on this server (the default), or an external S3-compatible bucket such as Cloudflare R2 or Amazon S3.
+- **Outgoing email.** Sender, relay host, port, login and password (hidden as you type).
+- **Automatic deploys.** Whether to install a GitHub Actions runner so new releases deploy themselves.
+- **Backups.** Nightly backups, encryption with a key you keep off the server, and off-site copies to another provider's bucket.
+- **Server security.** An optional firewall, automatic security updates and fail2ban.
+
+It also checks that the ports it needs are free and reports what your hostname resolves to.
+
+## What it sets up
+
+After you confirm, the installer installs Docker if needed, downloads the release's published images, and starts the website and API with PostgreSQL, Redis, file storage and Caddy. The same backend image runs the database migrations, the email worker and the beat that runs timed jobs. It then waits for every service to be healthy and runs its checks.
+
+The release lives in `/opt/spaceworks-events`, and the configuration, with every generated secret, in `/etc/spaceworks-events`. Secrets are generated once and never printed.
+
+<Callout kind="warning">
+
+Keep an encrypted copy of `/etc/spaceworks-events` somewhere off the server. It holds the keys that encrypt authenticators and saved passwords; without them a restored database can't be fully used.
+
+</Callout>
+
+If setup stops part way through, for example on a full disk, fix the cause and run the same command again. It offers to **resume** that release with the secrets it already made, rather than generating new ones.
+
+## After installing
+
+<Steps>
+
+1. Set the super admin password: run the recovery tool the installer names and open the link it prints. See [Recovery and support bundles](/help/installation/recovery-and-support).
+2. Sign in and open `/super-admin`. See [The super admin area](/help/instance/super-admin-access).
+3. Send a test email, upload an event cover and register for a private test event.
+4. Check your backup settings. See [Updates, backups and status](/help/installation/updates-backups-status).
+
+</Steps>
+
+## Good to know
+
+- Run the same command later for a menu to update, back up, check status, change settings, recover super admin access, collect a support bundle or uninstall.
+- Options include `--release` to pick a release, `--ref` to build a branch or commit from source (which needs about 4 GB of memory), and `--dir` for another installation directory. Pass them as `curl … | bash -s -- --dir /srv/spaceworks-events`.
+- Email settings saved later in [Instance settings](/help/instance/settings) override the ones you gave the installer.

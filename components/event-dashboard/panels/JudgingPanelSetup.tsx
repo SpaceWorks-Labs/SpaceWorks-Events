@@ -10,9 +10,11 @@ import { Callout, Card, CardHeader, Chip } from "@/components/ui/display";
 import { Field, Input } from "@/components/ui/field";
 import { formatDayTime, formatTimeZoneName } from "@/lib/format/datetime";
 import { zonedInputToIso } from "@/lib/timeZone";
+import { announcementCoversPublication } from "@/lib/hackathonEmails";
 import type { JudgingDashboardSettings } from "@/lib/eventDashboard/judging";
 import { OpenTabButton } from "../EventDashboardTabs";
 import { eventNotLiveWarning } from "./judgingCopy";
+import { JudgingEmailToggles } from "./JudgingEmailToggles";
 import {
   JUDGING_STATUS_LABELS,
   JUDGING_STATUS_TONES,
@@ -20,6 +22,7 @@ import {
   useJudgingAction,
   type JudgingScope,
 } from "./JudgingPanelShared";
+import { HelpLink } from "@/components/help/HelpLink";
 
 /**
  * Judging → Setup: submission settings (window shown and entered in the
@@ -74,6 +77,8 @@ function SettingsCard({ scope, settings, now, inSettingsTab = false }: { scope: 
   const [closesAt, setClosesAt] = useState(settings.closesAtLocal);
   const [seeAll, setSeeAll] = useState(settings.judgesSeeAll ? "all" : "assigned");
   const [galleryPublic, setGalleryPublic] = useState(settings.projectGalleryPublic);
+  const [emailOnResults, setEmailOnResults] = useState(settings.emailEntrantsOnResults);
+  const [emailReceipts, setEmailReceipts] = useState(settings.emailSubmissionReceipts);
   const [errors, setErrors] = useState<Record<string, string[]> | undefined>();
   const zone = formatTimeZoneName(settings.opensAt ?? now, settings.timezone);
   // Shown as soon as the switch is on, before saving, so nobody opens submissions on a draft unawares.
@@ -104,6 +109,8 @@ function SettingsCard({ scope, settings, now, inSettingsTab = false }: { scope: 
             submissionsCloseAt: closesIso ?? "",
             judgesSeeAll: seeAll === "all",
             projectGalleryPublic: galleryPublic,
+            // The Settings tab card doesn't show the email switches; leaving them out keeps their saved values.
+            ...(inSettingsTab ? {} : { emailEntrantsOnResults: emailOnResults, emailSubmissionReceipts: emailReceipts }),
           },
         }),
       judgingSettingsSavedMessage(enabled, inSettingsTab, settings.eventStatus === "PUBLISHED"),
@@ -116,6 +123,7 @@ function SettingsCard({ scope, settings, now, inSettingsTab = false }: { scope: 
       <CardHeader
         title="Project submissions"
         description="Confirmed teams and solo registrants submit a project during the window. Times are in the event's timezone."
+        action={<HelpLink article="hackathons/overview" />}
       />
       <form
         className="flex max-w-[640px] flex-col gap-5"
@@ -176,6 +184,15 @@ function SettingsCard({ scope, settings, now, inSettingsTab = false }: { scope: 
           checked={galleryPublic}
           onCheckedChange={setGalleryPublic}
         />
+        {inSettingsTab ? null : (
+          <JudgingEmailToggles
+            emailOnResults={emailOnResults}
+            onEmailOnResults={setEmailOnResults}
+            emailReceipts={emailReceipts}
+            onEmailReceipts={setEmailReceipts}
+            pendingAnnouncement={Boolean(settings.resultsPublishedAt) && !announcementCoversPublication(settings)}
+          />
+        )}
         <div>
           <Button type="submit" variant="primary" loading={busy === "settings"} loadingLabel="Saving…">
             Save settings

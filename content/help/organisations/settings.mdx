@@ -1,0 +1,88 @@
+Organisation settings control how your organisation looks to guests and how it connects to other tools. The profile (name, description and logo) shows on your public page and at the top of every event page. Owners also manage payments, email, API access and deleting the organisation from here.
+
+Open **Settings** in the sidebar.
+
+<Callout kind="permission">
+
+Owners and admins. **Payments**, **Email**, **API access** and **Delete organisation** are for the owner only.
+
+</Callout>
+
+## Edit your profile
+
+<Steps>
+
+1. Open **Settings**.
+2. In the **Profile** card, change the **Logo**, **Name** or **Description**.
+3. Check the **Preview · public page** beside the form. It updates as you type.
+4. Choose **Save changes**.
+
+</Steps>
+
+Nothing changes for guests until you save. **Discard** puts back what was saved. If you try to leave the page with unsaved changes, the app asks you first.
+
+- **Logo**: a JPEG, PNG or WebP image up to 5 MB.
+- **Name**: up to 120 characters.
+- **Description**: up to 2,000 characters, shown under your name on the public page.
+
+<Screenshot name="organisation-settings-profile" alt="The organisation Profile card with logo, name and description fields beside a live public page preview" />
+
+## Your public page
+
+The **Public page** card shows your organisation's address, such as `/riverside-coders`. This one link always lists your upcoming events that are published for everyone to find.
+
+- **Copy link** copies the full address so you can share it.
+- **Open** takes you to the page.
+
+The address is the web address you chose when you created the organisation. It can't be changed.
+
+## The other cards
+
+Below the profile, each card shows its current status and opens its own page.
+
+| Card | Who sees it | What it's for |
+| --- | --- | --- |
+| **API access** | Owner | Let another system read your events with a scoped, rotatable key. Choose **Manage API access**. |
+| **Payments** | Owner | Connect your own Razorpay or Stripe account to sell tickets. Choose **Manage payments**. See [Connecting Razorpay or Stripe](/help/payments/connect-a-provider). |
+| **Email** | Owner | The sender name and reply-to address on your guests' email, or your own mail server. Choose **Manage email**. See [Sending email from your organisation](/help/organisations/email-sending). |
+| **Chat notifications** | Owners and admins | Post registrations, payments, refunds and more to Slack, Discord, Mattermost, Telegram or WhatsApp. Choose **Manage chats**. See [Chat notifications](/help/organisations/chat-notifications). |
+| **Ticket designs** | Owners and admins | Design your tickets and pick the default for every event. Choose **Open designs**. See [The ticket designer](/help/check-in/ticket-designer). |
+| **Webhooks** | Owners and admins | Send registrations, check-ins and other activity to your own systems as they happen. Choose **Manage webhooks**. |
+
+API access and webhooks are covered in the *Connecting other tools* section of this guide, which owners and admins can see in the guide's sidebar.
+
+## Delete the organisation
+
+<Callout kind="permission">
+
+Only the owner.
+
+</Callout>
+
+<Callout kind="warning">
+
+Deleting an organisation permanently removes it with all of its events, recurring series, registrations and memberships. It can't be undone.
+
+</Callout>
+
+<Steps>
+
+1. Open **Settings** and scroll to **Delete organisation**.
+2. Choose **Delete organisation…**.
+3. Type the organisation's exact name to unlock the button.
+4. Choose **Delete**.
+
+</Steps>
+
+For security, this is only allowed within 10 minutes of signing in. If you see "For security, sign in again before deleting an organisation", sign out, sign back in and try again.
+
+What happens to your guests:
+
+- If anyone has paid for an upcoming event, you can't delete the organisation yet. Cancel those events (or their dates) first, which refunds the buyers. See [Cloning, cancelling and deleting](/help/events/clone-cancel-delete).
+- Everyone with a place at an upcoming published event or series date is emailed that it has been cancelled because the organisation closed its account.
+
+## Good to know
+
+- Members and co-organisers can't open organisation settings. If you can't see **Settings** in the sidebar, ask an owner or admin.
+- Each event can also have its own logo and accent colour on its event page. See [Building your event page](/help/event-page/building-your-page).
+- If you only want to step back yourself, you don't need to delete anything: leave from **Account** → **Organisations**. See [Your data and memberships](/help/account/your-data).

@@ -22,7 +22,7 @@ export async function loadSuperAdminActivityView() {
       where: { status: EventStatus.PUBLISHED, startDateTime: { gte: now, lt: nextWeek } },
       orderBy: { startDateTime: "asc" },
       take: 15,
-      select: { id: true, title: true, startDateTime: true, capacity: true, registrationMode: true, soloPolicy: true, organisation: { select: { id: true, name: true } }, _count: { select: { rsvps: { where: { status: RsvpStatus.CONFIRMED } } } } },
+      select: { id: true, title: true, startDateTime: true, capacity: true, registrationMode: true, soloPolicy: true, organisation: { select: { id: true, name: true } }, _count: { select: { rsvps: { where: { status: RsvpStatus.CONFIRMED, isCrew: false } } } } },
     }),
     prisma.organisation.count({ where: { events: { none: {} }, eventSeries: { none: {} } } }),
     prisma.organisation.findMany({

@@ -1,0 +1,67 @@
+Every email the app sends, from tickets and payment receipts to sign-in codes and organisers' broadcasts, goes through a queue called the outbox. This article explains how the queue works, whose mail server each message uses, where to watch it, and what to do when email stops arriving.
+
+<Callout kind="permission">
+
+The instance super admin only. See [The super admin area](/help/instance/super-admin-access).
+
+</Callout>
+
+## How sending works
+
+1. When something needs an email, the app adds a message to the outbox and carries on. The person's action never waits for the mail server.
+2. The **email worker** checks the outbox every few seconds and sends what's due in batches. Urgent email (sign-in codes, password resets, tickets, payment receipts, team email) always goes before bulk sends such as broadcasts, invitations and event reminders, so a large send never delays a sign-in code.
+3. If sending fails, the message waits and tries again: after 2, 4, 8, 16 and 32 minutes, then every hour. Password-reset, email-verification and sign-in-code messages wait at most 8 minutes between tries, because their codes and links expire.
+4. After 8 failed tries, the message is marked **Failed**.
+
+The **beat** runs the timed jobs (payment holds and reminders, waitlists, event reminders, organisation webhooks, backup alerts, clean-up) and queues their email for the worker. On the VPS installation both run as their own containers; on a one-container deployment they run inside the app. Where they can't run all the time, a scheduler can call `POST /api/internal/outbox` once a minute with `CRON_SECRET`.
+
+Messages that contain a private link or code, such as tickets, password resets, sign-in codes and invitations, are deleted as soon as they are sent, or once they fail for good. Other messages are kept for 30 days by default (`OUTBOX_RETENTION_DAYS`).
+
+<Callout kind="warning">
+
+Because failed ticket and reset emails are deleted, **Retry failed email** can't bring them back. A guest whose ticket never arrived can find it in their account if they registered while signed in, or an organiser can use **Copy ticket link** on the guest list and send it to them.
+
+</Callout>
+
+## Whose mail server sends it
+
+- **Account email** (sign-up, verification, password resets, sign-in codes, new sign-in alerts) and super admin notices always go through the platform server set in [Instance settings](/help/instance/settings#email-smtp).
+- **Organisation email** (tickets, reminders, updates, broadcasts, receipts) goes through the organisation's own mail server when its owner has connected and switched one on under the organisation's **Settings** → **Email**. Otherwise it goes through the platform server, under the organisation's name and reply-to address.
+
+So a guest's ticket can fail while password resets work, or the other way round.
+
+## Watching the queue
+
+The **Email** page shows **Queued now**, **Waiting over 15 min**, **Failed** and **Delivered (retained)**, daily charts for the last 14 days, messages grouped **By message type**, the **Top broadcasters** and the **Recent broadcasts**. Recipients and message contents are never shown.
+
+The **Operations** page is where you act. **Delivery and retention** shows how many messages are queued, failed and sent, the oldest queued message, and whether the **Email worker** and **Beat (timed jobs)** are healthy: each has to have run successfully in the last 3 minutes. **Failed email deliveries** lists recent failures with their kind, attempts, when they were created and a cleaned-up last error.
+
+<Screenshot name="super-admin-operations" alt="The Operations page showing backups, service prerequisites, queue counts and the maintenance buttons" />
+
+## When email isn't arriving
+
+<Steps>
+
+1. Open **Operations** and check **Service prerequisites**. If it says **Transactional email not configured**, set up SMTP in [Instance settings](/help/instance/settings#email-smtp).
+2. Check **Email worker healthy**. If it says stale or unknown, the worker isn't running; check the server logs and restart it.
+3. Choose **Send test email**. It goes through the outbox with the settings in effect, to your super admin address. If it doesn't arrive, look under **Failed email deliveries** for the reason.
+4. Choose **Deliver queued email** to send up to 50 due messages now. It doesn't skip a message's waiting time before its next retry.
+5. Once sending works, choose **Retry failed email (last 7 days)**. Failed messages from the last week go back in the queue with a fresh set of retries. Older failures are left alone, so guests don't get week-old broadcasts.
+
+</Steps>
+
+If only one organisation's email fails, the problem is likely its own mail server: ask its owner to check and test it in their email settings.
+
+If the test works but people still don't receive messages, the problem is usually after the app: spam filters, or a sender address your provider doesn't allow. The app only knows the mail server accepted the message. Check bounces and SPF, DKIM and DMARC with your provider.
+
+<Callout kind="tip">
+
+Turn on the [alerts webhook](/help/instance/settings#alerts-webhook) to hear about failed email in your team chat. With **Include warnings** on, you also hear about each failed try, not just messages that failed for good.
+
+</Callout>
+
+## Good to know
+
+- **Purge expired tokens** removes expired one-time tokens; the beat also cleans them up. **Record restore drill** notes in the audit log that you restored a backup somewhere separate and checked it. Every button on **Operations** is recorded in the audit log.
+- Images and links in emails need `NEXT_PUBLIC_BASE_URL` set to the server's public address. Without it, images are left out rather than pointing at the wrong address.
+- If `MFA_ENCRYPTION_KEY` differs between servers, the ones with the wrong key can't read saved mail server passwords, so sending fails only some of the time. Make sure every server uses the same key.

@@ -39,6 +39,26 @@ production topology. Kubernetes operators should use the
 4. Verify the email worker and the beat have recorded fresh heartbeats after deployment (Super admin → Operations). Where the platform cannot keep them running, such as a sleeping free instance, configure a cron service to call `POST /api/internal/outbox` every minute with `Authorization: Bearer $CRON_SECRET`; also configure an authenticated readiness probe to call `GET /api/health/db` with `Authorization: Bearer $HEALTHCHECK_SECRET`.
 5. Verify readiness, error rate, email queue depth, database connections, and Redis health before shifting traffic.
 
+### Reserved organisation addresses
+
+A release can reserve a new top-level address, such as `/help` for the in-app
+guide. An organisation that already uses that slug would have its public page
+hidden behind the built-in route, so `npm run db:verify` (CI, the VPS update
+and `docker/vps/check.mjs`) fails and names each affected organisation. The
+reserved list is `scripts/reserved-slugs.mjs`; `lib/slug.ts` refuses those
+slugs for new and renamed organisations.
+
+To fix it before deploying: pick a free slug, rename the organisation in a
+transaction, and tell its owner that the public address changed (old shared
+links to `/<old-slug>` will open the built-in page instead):
+
+```sql
+UPDATE "Organisation" SET slug = 'help-centre-org' WHERE slug = 'help';
+```
+
+Check the new slug is unused first (`SELECT 1 FROM "Organisation" WHERE slug = '…'`),
+then re-run `npm run db:verify`.
+
 ### Recent schema migrations
 
 Apply these with `npm run db:deploy` before rolling out the matching application version. All are additive and safe for existing rows.
@@ -55,6 +75,7 @@ Apply these with `npm run db:deploy` before rolling out the matching application
 | `20261103010000_org_webhooks` | New `WebhookEndpoint` and `WebhookDelivery` tables and the `WebhookDeliveryStatus` enum for organisation webhooks, cascading on `Organisation` (endpoints) and `WebhookEndpoint` (deliveries), with CHECKs on URL/description length, event-type count, failure counter, attempts, error length and the lease shape. Purely additive; no existing table or row changes |
 | `20261102000000_event_broadcast_drafts` | New `EventBroadcastDraft` table for saved Emails-tab drafts: one row per event and organiser (unique on `eventId`, `userId`), cascading on `Event` and `User`, with CHECKs bounding the subject to 150 characters and the audience to four statuses. Purely additive |
 | `20261103000000_check_in_lists` | New `CheckInList`, `CheckInListRecord` and `CheckInListEvent` tables for custom check-in lists: a partial unique index on (`eventId`, `lower(name)`) for non-archived lists, a unique (`listId`, `rsvpId`) record per guest, CHECKs on the name shape, sort order, sources and history actions, cascades from `Event` and `RSVP` (history keeps a null `rsvpId`), and `SET NULL` on the acting `User`. Purely additive; entry check-in tables and rows are unchanged, and no backfill runs. `db:verify` now checks the three tables and their key constraints |
+| `20261109000000_hackathon_email_toggles` | `Event.emailEntrantsOnResults` and `Event.emailSubmissionReceipts`, both `NOT NULL DEFAULT false` (a constant default, so no table rewrite; the `ALTER TABLE "Event"` still waits for a brief ACCESS EXCLUSIVE lock). Additive; `db:verify` checks both columns. **Behaviour change for existing events:** both switches start off, so publishing results and submitting a project (including one submitted once its entry fee is paid) send no email until an organiser turns the switch on in Judging → Setup ([HACKATHON.md](HACKATHON.md) → Hackathon emails). Payment emails are unaffected. Tell organisers who rely on those emails before upgrading |
 
 ## Instance-managed services
 

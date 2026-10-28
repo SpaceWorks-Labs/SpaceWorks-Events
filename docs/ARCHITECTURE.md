@@ -24,6 +24,7 @@
 | `prisma/` | Data model and ordered production migrations |
 | `scripts/` | Environment, schema, asset migration, and standalone-build helpers |
 | `tests/` | Unit, PostgreSQL integration, and browser suites |
+| `content/help/` | The in-app guide at `/help`: MDX articles, the section manifest, and generated indexes |
 | `docs/` | Product and operational documentation |
 
 ## Request flow
@@ -77,6 +78,10 @@ The super-admin boundary is separate: access requires an authenticated email mat
 ### Team registration and capacity units
 
 On a `TEAM` event `Event.capacity` counts units: each team and each solo RSVP is one unit. Every path that changes capacity (`reserveRsvp` in `lib/rsvpCore.ts`, `lib/rsvpCapacity.ts`, cancellation, organiser delete and restore, the capacity check in `updateEvent`) and every team mutation in `lib/core/teams.ts` takes the same `SELECT ... FOR UPDATE` lock on the `Event` row first, then counts with `countConfirmedUnits` (`lib/teamUnits.ts`). `INDIVIDUAL` events keep the plain confirmed-RSVP query. Team status changes update the `Team` row with a conditional `updateMany` guarded by the expected status and move every member RSVP in the same transaction, so each member's status always equals the team's. A team id from the browser is always re-read with its `eventId`, and leader authority (a management-token hash or the signed-in leader) is re-checked under the lock. Server Actions in `app/actions/teams.ts` and `app/actions/team-admin.ts` authenticate, rate limit, audit, and revalidate around these cores. The `team-created` and `team-member-added` outbox kinds carry capabilities and are deleted after delivery.
+### Event crew
+
+`lib/core/crew.ts` (parts in `lib/core/crew/`) owns the crew ([Event crew](CREW.md)); `app/actions/crew.ts` authenticates, rate limits, audits, and revalidates around it. Each crew member owns one free `CONFIRMED` RSVP with `isCrew` (database CHECK `RSVP_crew_shape`: event-bound, no team, no order, no ticket type). Adding a member takes the same `Event` row lock as capacity and payment changes, so converting a free solo registration cannot interleave with a registration; a place it frees is offered to the waitlist after the commit. Every capacity and seat-hold count spreads `takesCapacity` through `seatTakingWhere` (`lib/payments/holds.ts`) or `countConfirmedUnits` (`lib/teamUnits.ts`), so crew are confirmed but never use a place. Registration, checkout and transfers refuse an email already on the crew (`hasCrewEmail`). The crew ticket email is its own transactional outbox kind (`crew-ticket`, `lib/outbox/crew.ts`).
+
 ### Hackathon judging
 
 `lib/core/judging.ts` owns every submission, judging, and results rule; Server Actions (`app/actions/submissions.ts`, `app/actions/judging.ts`, `app/actions/judging-admin.ts`), the pages, and `GET /api/exports/events/:eventId/judging` authenticate, rate limit, and revalidate around it. Entrant authority is an `EntrantAuth` proof (a team management-token hash, a signed-in team member, the signed-in owner of a solo RSVP, or a submission-link hash) re-checked inside the write transaction. Entrant and judge writes take `FOR SHARE` on the `Event` row (entrants then lock their `Team` or `RSVP` row, so one entrant's writes serialise); organiser changes take `FOR UPDATE`. Closing the window, freezing the rubric, or closing judging therefore serialises with in-flight saves, and the window is compared with server time inside the transaction. Score and review writes are `INSERT ... ON CONFLICT` upserts on their unique keys.
@@ -107,6 +112,10 @@ The super admin can configure SMTP, Google SSO, backup posture, and an operation
 ## Storage
 
 Asset metadata lives in PostgreSQL. Production file bytes live in a private S3-compatible bucket and are served through the application-controlled upload route. Local development can retain database blobs as a fallback. Production startup requires S3 configuration.
+
+## In-app guide
+
+The guide at `/help` renders MDX from `content/help` through `@next/mdx` (`mdx-components.tsx`, `components/help/mdx.tsx`). Section order, titles, summaries and each section's audience live in `content/help/sections/*.ts`. `scripts/generate-help-index.mjs` writes `content/help/index.generated.ts` (headings and plain-text search sections, compiled with the same helpers as the pages, `lib/help/text.ts`) and `content/help/bodies.generated.ts` (one static import per article), so nothing reads files at runtime and the split frontend renders the guide from its copy of `content/help`; `--check` runs in CI and in the frontend build. Which sections a visitor sees comes from the view reader `loadHelpAccess` (`lib/views/app__help__layout.ts`, cached per request by `lib/help/access.ts`): owners and admins of any organisation add `org-admin`, the super admin adds everything. It is a reading convenience and never authorizes a feature. Search loads `GET /api/help/search-index` (`private, no-store`) and ranks in the browser. Screens link to articles with `components/help/HelpLink.tsx`, whose `article` is typed against the manifest.
 
 ## Security headers and rendering
 

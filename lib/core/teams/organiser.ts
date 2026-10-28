@@ -95,7 +95,8 @@ export async function organiserMoveMember(
     if (!event || event.organisationId !== ctx.organisationId) return fail("Event not found.");
     if (event.registrationMode !== RegistrationMode.TEAM) return fail(NOT_A_TEAM_EVENT);
     const rsvp = await tx.rSVP.findFirst({
-      where: { id: parsed.data.rsvpId, eventId: event.id },
+      // Crew tickets (docs/CREW.md) never join a team.
+      where: { id: parsed.data.rsvpId, eventId: event.id, isCrew: false },
       select: { id: true, teamId: true, status: true, checkedInAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } },
     });
     if (!rsvp) return fail("RSVP not found.");

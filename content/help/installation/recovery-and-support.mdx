@@ -1,0 +1,74 @@
+The installer menu also holds the operator tools you reach for when something needs fixing: getting back into the super admin account, changing the settings you gave at install time, tightening server security, collecting a support bundle, and uninstalling. Run them from the server; the full runbook is `docs/DEPLOYMENT_VPS.md` in the repository.
+
+<Callout kind="permission">
+
+Whoever runs the server, with root or `sudo`. These tools can't be reached from the app.
+
+</Callout>
+
+## Getting back into the super admin account
+
+The super admin's password can only be set from the server, so this is also how you set it the first time.
+
+<Steps>
+
+1. Sign in to the server and run the installer command again.
+2. Choose **8) Recover super-admin access**.
+3. Confirm the super admin email and continue.
+4. Open the link it prints within one hour and choose a new password.
+5. Sign in, then set up your authenticator app again from **Account** → **Security** if you use one.
+
+</Steps>
+
+The first time, the tool creates the super admin account. After that, it removes the account's authenticator and recovery codes and signs it out on every device before printing the link. Each run is recorded in the audit log. The link is printed only on the server, never emailed.
+
+<Callout kind="warning">
+
+Anyone with root on the server can take over the super admin account this way. Keep SSH access to people you trust with the whole instance.
+
+</Callout>
+
+## Changing settings
+
+Choose **5) Change settings** to change:
+
+- **Hostnames.** New website and API hostnames (one hostname in the single-container layout). Point DNS at the server first. Everyone is signed out, and links already sent keep the old hostname.
+- **Outgoing email.** A new sender, relay, login or password. The installer logs in to the relay to check it before keeping the change.
+- **Bucket credentials.** A new access key for an external storage bucket.
+
+Each change backs up the database and configuration first, recreates the services and runs the checks. **If anything fails, the previous settings are put back.** Moving between bundled storage and an external bucket is a data migration, not a setting; see the runbook.
+
+Email settings saved in [Instance settings](/help/instance/settings) override the installer's. Use **Send test email** on **Operations** to check which settings are in effect.
+
+## Server security
+
+Choose **6) Server security** to turn on any of:
+
+- **A firewall** allowing only SSH, HTTP and HTTPS. If it can't find your SSH port, it leaves the firewall alone so you aren't locked out.
+- **Automatic security updates**, for security fixes only.
+- **fail2ban**, which bans an address for an hour after five failed SSH logins.
+
+## Support bundles
+
+<Steps>
+
+1. Choose **9) Support bundle**.
+2. Wait while it collects the release, settings without secrets, service state, the checks, disk and memory, and the last 500 log lines of each service.
+3. Find the bundle in `/opt/spaceworks-events/support/`.
+4. Read it before sharing it with anyone.
+
+</Steps>
+
+Credentials, tokens and keys are redacted, but logs can still hold email addresses and IP addresses.
+
+## Uninstalling
+
+Choose **10) Uninstall** to remove the containers, timers, the automatic-deploy runner, the images and `/opt/spaceworks-events`.
+
+Your database, uploaded files, configuration and backups are **kept** unless you type `DELETE DATA` when asked. Docker, the swap file and any server hardening stay in place. If you keep the data, keep `/etc/spaceworks-events` with it: the data can't be fully used without the keys in it.
+
+## Good to know
+
+- In the menu, **0) Cancel** leaves everything as it is.
+- Without root on the server, nobody can reset the super admin password. Not even another account inside the app can.
+- To check the installation without changing it, use **3) Check status and health**. See [Updates, backups and status](/help/installation/updates-backups-status).

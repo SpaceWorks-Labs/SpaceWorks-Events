@@ -6,6 +6,7 @@ import { EventStatus, Prisma, RsvpStatus, SubmissionStatus } from "@prisma/clien
 import { prisma } from "@/lib/db";
 import { enqueueSubmissionLink, enqueueSubmissionReceived } from "@/lib/outbox";
 import { generateSubmissionLinkToken } from "@/lib/submissionToken";
+import { shouldQueueSubmissionReceipt } from "@/lib/hackathonEmails";
 import { entrantSubmissionView, type EntrantSubmissionDto } from "@/lib/judgingDto";
 import { submissionContentSchema } from "@/lib/validators";
 import {
@@ -44,11 +45,11 @@ async function writeSubmission(
   auth: EntrantAuth,
   input: unknown,
   mode: "draft" | "submit",
-): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; feeBuyer?: { email: string; name: string } }>> {
+): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; receiptQueued: boolean; feeBuyer?: { email: string; name: string } }>> {
   const parsed = submissionContentSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
   try {
-    return await prisma.$transaction(async (tx): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; feeBuyer?: { email: string; name: string } }>> => {
+    return await prisma.$transaction(async (tx): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; receiptQueued: boolean; feeBuyer?: { email: string; name: string } }>> => {
       const event = await lockEventShared(tx, auth.eventId);
       if (!event) return fail(EVENT_NOT_FOUND);
       await lockEntrantRow(tx, auth);
@@ -82,15 +83,19 @@ async function writeSubmission(
             data: { ...content, eventId: entrant.eventId, teamId: entrant.teamId, rsvpId: entrant.rsvpId },
             select: { id: true, status: true },
           });
-      if (feeOwed) return ok({ submissionId: saved.id, status: saved.status, feeBuyer: { email: entrant.submitter.email!, name: entrant.submitter.name ?? entrant.displayName } });
-      if (mode === "submit" && !wasSubmitted && entrant.submitter.email) {
+      if (feeOwed) return ok({ submissionId: saved.id, status: saved.status, receiptQueued: false, feeBuyer: { email: entrant.submitter.email!, name: entrant.submitter.name ?? entrant.displayName } });
+      // The receipt is opt-in per event (lib/hackathonEmails.ts); `event` was
+      // read under the Event lock, so it can't race a settings change.
+      const to = mode === "submit" && !wasSubmitted && shouldQueueSubmissionReceipt(event) ? entrant.submitter.email : null;
+      if (to) {
         await enqueueSubmissionReceived(tx, {
-          to: entrant.submitter.email,
+          to,
           submissionId: saved.id,
           ...(entrant.submitter.name ? { recipientName: entrant.submitter.name.slice(0, 200) } : {}),
         });
       }
-      return ok({ submissionId: saved.id, status: saved.status });
+      // The entrant is told about the email only when one was really queued.
+      return ok({ submissionId: saved.id, status: saved.status, receiptQueued: Boolean(to) });
     });
   } catch (error) {
     // A concurrent first save for the same entrant, or the team/RSVP was
@@ -107,18 +112,19 @@ export function saveSubmissionDraft(auth: EntrantAuth, input: unknown) {
 
 /**
  * Save and submit. Queues `submission-received` to the person acting when the
- * project becomes SUBMITTED. With an unpaid entry fee the project is saved as
+ * project becomes SUBMITTED, only if the event's `emailSubmissionReceipts` is
+ * on (`receiptQueued` says whether it was). With an unpaid entry fee the project is saved as
  * a draft and `checkoutUrl` opens the fee's payment page; it is submitted
  * once paid.
  */
-export async function submitSubmission(auth: EntrantAuth, input: unknown): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; checkoutUrl?: string }>> {
+export async function submitSubmission(auth: EntrantAuth, input: unknown): Promise<JudgingResult<{ submissionId: string; status: SubmissionStatus; receiptQueued: boolean; checkoutUrl?: string }>> {
   const written = await writeSubmission(auth, input, "submit");
   if (!written.ok || !written.data.feeBuyer) return written;
-  const { submissionId, status, feeBuyer } = written.data;
+  const { submissionId, status, receiptQueued, feeBuyer } = written.data;
   const userId = auth.kind === "team-member" || auth.kind === "solo-owner" ? auth.userId : null;
   const checkout = await openEntryFeeCheckout({ eventId: auth.eventId, submissionId, buyer: { userId, ...feeBuyer } });
   if ("error" in checkout) return fail(checkout.error);
-  return ok("url" in checkout ? { submissionId, status, checkoutUrl: checkout.url } : { submissionId, status });
+  return ok("url" in checkout ? { submissionId, status, receiptQueued, checkoutUrl: checkout.url } : { submissionId, status, receiptQueued });
 }
 
 /** Withdraw a draft or submitted project while the window is open. Withdrawn projects can be re-submitted. */
@@ -202,7 +208,7 @@ export async function requestSubmissionLink(holder: { rsvpId: string; eventId: s
       const event = await lockEventShared(tx, holder.eventId);
       if (!event?.submissionsEnabled || event.status !== EventStatus.PUBLISHED) return fail("This event is not taking project submissions.");
       const rsvp = await tx.rSVP.findFirst({
-        where: { id: holder.rsvpId, eventId: event.id },
+        where: { id: holder.rsvpId, eventId: event.id, isCrew: false },
         select: { id: true, teamId: true, status: true, ...personSelect, submissionLink: { select: { createdAt: true } } },
       });
       if (!rsvp) return fail(NOT_FOUND);

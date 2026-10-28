@@ -81,6 +81,8 @@ describe.sequential("hackathon judging integration", () => {
 
   it("keeps concurrent score, review, and submission writes unique", async () => {
     const event = await createEvent();
+    // Hackathon emails are opt-in (off by default); this test covers sending them.
+    await prisma.event.update({ where: { id: event.id }, data: { emailEntrantsOnResults: true, emailSubmissionReceipts: true } });
     const ctx = await organiser(event);
     await openWindow(ctx);
     const { teamId } = await createTeam(event, `Race ${suffix}`);

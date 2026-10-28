@@ -205,7 +205,9 @@ describe("webhook payload DTOs", () => {
 
   it("copies only allow-listed registration fields", () => {
     const registration = webhookRegistration(rsvpRow, "CONFIRMED");
-    expect(Object.keys(registration).sort()).toEqual(["checkedInAt", "displayName", "id", "registeredAt", "status"]);
+    expect(Object.keys(registration).sort()).toEqual(["checkedInAt", "crew", "displayName", "id", "registeredAt", "status"]);
+    expect(registration.crew).toBe(false);
+    expect(webhookRegistration({ ...rsvpRow, isCrew: true }, "CONFIRMED").crew).toBe(true);
     expect(registration.displayName).toBe("Ada Lovelace");
     expect(webhookRegistration({ ...rsvpRow, guestName: null }, "WAITLISTED").displayName).toBe("Participant");
     expect(Object.keys(eventRef).sort()).toEqual(["endDateTime", "id", "kind", "occurrenceId", "slug", "startDateTime", "timezone", "title"]);

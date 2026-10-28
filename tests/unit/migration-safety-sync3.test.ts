@@ -28,4 +28,12 @@ describe("third Yuyu sync migration contracts", () => {
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS "RSVP_eventId_createdAt_id_idx" ON "RSVP"("eventId", "createdAt", "id");');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS "Submission_eventId_status_submittedAt_id_idx" ON "Submission"("eventId", "status", "submittedAt", "id");');
   });
+
+  it("adds the hackathon email switches as NOT NULL DEFAULT false columns without rewriting rows", () => {
+    const statements = statementsOf(migration("20261109000000_hackathon_email_toggles"));
+    expect(statements).toEqual([
+      'ALTER TABLE "Event" ADD COLUMN "emailEntrantsOnResults" BOOLEAN NOT NULL DEFAULT false',
+      'ALTER TABLE "Event" ADD COLUMN "emailSubmissionReceipts" BOOLEAN NOT NULL DEFAULT false',
+    ]);
+  });
 });

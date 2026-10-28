@@ -38,6 +38,9 @@ export type JudgingSettingsDto = {
   judgesSeeAll: boolean;
   projectGalleryPublic: boolean;
   resultsPublishedAt: Date | null;
+  resultsAnnouncedAt: Date | null;
+  emailEntrantsOnResults: boolean;
+  emailSubmissionReceipts: boolean;
   timezone: string;
 };
 
@@ -50,6 +53,9 @@ function settingsDto(event: JudgingEvent): JudgingSettingsDto {
     judgesSeeAll: event.judgesSeeAll,
     projectGalleryPublic: event.projectGalleryPublic,
     resultsPublishedAt: event.resultsPublishedAt,
+    resultsAnnouncedAt: event.resultsAnnouncedAt,
+    emailEntrantsOnResults: event.emailEntrantsOnResults,
+    emailSubmissionReceipts: event.emailSubmissionReceipts,
     timezone: event.timezone,
   };
 }
@@ -63,7 +69,9 @@ export function submissionsLockedOnReason(event: { submissionsEnabled: boolean; 
 }
 
 /**
- * Save submission and judging settings. Audited (JUDGING_SETTINGS_UPDATED).
+ * Save submission and judging settings, including the hackathon email
+ * switches (left out, they keep their saved value). Audited
+ * (JUDGING_SETTINGS_UPDATED, with both email switches and which changed).
  * `submissionsEnabled` switches the whole feature (judge workspace, results,
  * gallery), so it can't be turned off once judging has started or results are
  * published; closing the window is how an organiser stops new projects.
@@ -84,9 +92,12 @@ export async function updateJudgingSettings(ctx: JudgingOrganiserContext, input:
         submissionsCloseAt: parsed.data.submissionsCloseAt,
         judgesSeeAll: parsed.data.judgesSeeAll,
         projectGalleryPublic: parsed.data.projectGalleryPublic,
+        ...(parsed.data.emailEntrantsOnResults === undefined ? {} : { emailEntrantsOnResults: parsed.data.emailEntrantsOnResults }),
+        ...(parsed.data.emailSubmissionReceipts === undefined ? {} : { emailSubmissionReceipts: parsed.data.emailSubmissionReceipts }),
       },
       select: judgingEventSelect,
     });
+    const emailTogglesChanged = (["emailEntrantsOnResults", "emailSubmissionReceipts"] as const).filter((name) => event[name] !== updated[name]);
     await recordAuditEvent({
       client: tx,
       action: "JUDGING_SETTINGS_UPDATED",
@@ -98,6 +109,9 @@ export async function updateJudgingSettings(ctx: JudgingOrganiserContext, input:
         submissionsEnabled: updated.submissionsEnabled,
         judgesSeeAll: updated.judgesSeeAll,
         projectGalleryPublic: updated.projectGalleryPublic,
+        emailEntrantsOnResults: updated.emailEntrantsOnResults,
+        emailSubmissionReceipts: updated.emailSubmissionReceipts,
+        emailTogglesChanged: emailTogglesChanged.join(",") || null,
       },
     });
     return ok(settingsDto(updated));

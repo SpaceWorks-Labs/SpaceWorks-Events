@@ -62,6 +62,7 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Overview: "See how it went" (ended) | Analytics visibility | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: list, filters, ticket links | `loadAttendeesFirstPage` / `loadAttendeesPage` only for `canManageRegistrations` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: approve, decline, give spot, add, edit, remove, undo remove | `app/actions/rsvp-lifecycle`, `app/actions/rsvp-admin.ts`: `canManageRegistrationsFor` | Yes | — | — | Yes | — | — | — | — | Yes |
+| Guests · Crew ([Event crew](CREW.md)): list and food summary, add, edit, show/hide, reorder, remove, photo upload, sign-up link create/replace/turn off (`canManageCrew`) | `app/actions/crew.ts` via `resolveOrganiserEvent` (`lib/core/teams.ts`): `canManageRegistrationsFor` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: undo check-in | `app/actions/checkin.ts`: `CHECK_IN` | Yes | — | — | — | — | — | — | — | Yes |
 | Guests · People: Export CSV / Export emails (current filters) | `GET /api/exports/events/:id/attendees`, `…/attendee-emails`: admin or `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · Teams: Export CSV (current filters) | `GET /api/exports/events/:id/teams` via `resolveOrganiserEvent`: admin or `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |
@@ -95,8 +96,9 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Check-in page (`…/check-in`) | page and check-in actions: `CHECK_IN` | Yes | 404 | 404 | 404 | 404 | Yes | 404 | 404 | Yes |
 | Judging tab: shown | page render; `canJudge` or `canManageJudging`, and the event uses judging (`eventUsesJudging`) | Yes | — | — | — | — | — | — | Yes | Yes |
 | Judging: workspace (submissions to judge, scores, private review, Score next project) | `lib/judgingAccess.ts` `resolveJudgeContext`, `lib/core/judging.ts` (`nextSubmissionForJudge` uses the list's visibility query): admin or `JUDGE`; conflict-of-interest entries hidden | Yes | — | — | — | — | — | — | Yes | Yes |
-| Judging: settings, window, rubric, assignments, judging status | `resolveJudgingOrganiser`: admin (`canManageJudging`) | Yes | — | — | — | — | — | — | — | — |
+| Judging: settings, window, rubric, assignments, judging status, Hackathon emails switches | `resolveJudgingOrganiser`: admin (`canManageJudging`) | Yes | — | — | — | — | — | — | — | — |
 | Judging: disqualify, reinstate, awards, Adjust for harsh/generous judges, publish and unpublish results | `resolveJudgingOrganiser`: admin | Yes | — | — | — | — | — | — | — | — |
+| Judging: Send results email now (`sendResultsAnnouncement`) | `resolveJudgingOrganiser`: admin (same as publishing results); broadcast rate-limit bucket | Yes | — | — | — | — | — | — | — | — |
 | Judging: Progress, review target, automatic assignment (preview and apply) | `resolveJudgingOrganiser` (`app/actions/judging-ops.ts`, `lib/core/judgingOps.ts`): admin | Yes | — | — | — | — | — | — | — | — |
 | Judging: Submissions and Results Export CSV (current filters) | `GET /api/exports/events/:id/judging`: admin | Yes | — | — | — | — | — | — | — | — |
 | Saved views on Guests · People and Teams: apply, save, rename, share, delete own; the URL filters | `app/actions/saved-views.ts` via `resolveSavedViewAccess` (`lib/core/savedViews.ts`): `canManageRegistrationsFor` (Teams: TEAM events) | Yes | — | — | Yes | — | — | — | — | Yes |

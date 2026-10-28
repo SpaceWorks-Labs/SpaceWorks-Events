@@ -4,6 +4,7 @@ import { ApiClientManagement } from "@/components/api-clients/ApiClientManagemen
 import { ApiDeveloperReference } from "@/components/api-clients/ApiDeveloperReference";
 import { isApiScope } from "@/lib/api/v1/scopes";
 import { PageHeader } from "@/components/ui/display";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export const metadata: Metadata = { title: "API access", description: "Manage machine-to-machine access." };
 
@@ -11,7 +12,7 @@ export default async function ApiAccessPage({ params }: { params: Promise<{ orgS
   const { organisation, clients, apiBaseUrl } = await loadApiAccessView({ params });
   return (
     <div className="flex flex-col gap-8 pb-6">
-      <PageHeader title="API access" description="Create tenant-bound machine identities and rotate their credentials." />
+      <PageHeader title="API access" description="Create tenant-bound machine identities and rotate their credentials." actions={<HelpLink article="developers/api" />} />
       <ApiClientManagement
         organisationSlug={organisation.slug}
         referenceTime={new Date().toISOString()}

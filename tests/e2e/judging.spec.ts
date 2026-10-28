@@ -78,6 +78,10 @@ test("the organiser turns submissions on in Settings and is pointed to the new J
   await page.goto(`${dashboard()}?tab=judging&sub=judging-setup`);
   await waitForHydration(page, "button");
   await expect(page.getByText("This event is still a draft.")).toHaveCount(0);
+  // Hackathon emails are opt-in: both switches start off.
+  const hackathonEmails = page.getByRole("group", { name: "Hackathon emails" });
+  await expect(hackathonEmails.getByRole("switch", { name: /Email entrants when results are published/ })).not.toBeChecked();
+  await expect(hackathonEmails.getByRole("switch", { name: /Email a receipt when a project is submitted/ })).not.toBeChecked();
   for (const criterion of [
     { name: "Impact", weight: "2", max: "10" },
     { name: "Execution", weight: "1", max: "5" },
@@ -115,7 +119,8 @@ test("teams submit from their team page and a solo registrant through the emaile
     await expect(card.getByText("Use a full https:// link")).toBeVisible();
     await card.getByLabel(/^Code repository/).fill("https://example.com/code");
     await card.getByRole("button", { name: "Submit project" }).click();
-    await expect(card.getByText(/Project submitted/)).toBeVisible();
+    // Receipts are off by default, so the confirmation promises no email.
+    await expect(card.getByText("Project submitted. You can keep editing until submissions close.")).toBeVisible();
     await page.close();
   }
 
@@ -225,21 +230,52 @@ test("the organiser closes judging, ranks, awards and publishes once", async ({ 
   await picker.getByRole("button", { name: "Save winner" }).click();
   await expect.poll(() => prisma.eventAwardWinner.count({ where: { award: { eventId } } })).toBe(1);
 
-  const publish = async () => {
+  const publish = async (emailCopy: RegExp) => {
     await page.getByRole("button", { name: /^Publish results/ }).click();
-    await page.getByRole("alertdialog").or(page.getByRole("dialog")).getByRole("button", { name: /^Publish results$/ }).click();
+    const dialog = page.getByRole("alertdialog").or(page.getByRole("dialog"));
+    await expect(dialog.getByText(emailCopy)).toBeVisible();
+    await dialog.getByRole("button", { name: /^Publish results$/ }).click();
     await expect.poll(async () => Boolean((await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).resultsPublishedAt)).toBe(true);
   };
   const recipients = async () =>
     (await prisma.outboxMessage.findMany({ where: { kind: "results-published", payload: { path: ["eventId"], equals: eventId } }, select: { payload: true } })).map((row) => String((row.payload as Payload).to));
+  // Receipts were off, so no project got a submission-received email.
+  const projects = (await prisma.submission.findMany({ where: { eventId }, select: { id: true } })).map((row) => ({ payload: { path: ["submissionId"], equals: row.id } }));
+  expect(await prisma.outboxMessage.count({ where: { kind: "submission-received", OR: projects } })).toBe(0);
   await page.goto(`${dashboard()}?tab=judging&sub=judging-results`);
   await waitForHydration(page, "button");
-  await publish();
+  // The results email is off by default: publishing says so and queues nothing.
+  await expect(page.getByText("Publishing won't email entrants. You can turn that on in Judging → Setup.")).toBeVisible();
+  await publish(/Results will be published without emailing entrants\./);
+  await expect(page.getByText(/Entrants weren't emailed\./)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Send results email now/ })).toHaveCount(0);
+  expect(await recipients()).toEqual([]);
+  expect((await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).resultsAnnouncedAt).toBeNull();
+
+  // Turning the switch on afterwards offers "Send results email now", which emails each entrant once.
+  await page.goto(`${dashboard()}?tab=judging&sub=judging-setup`);
+  await waitForHydration(page, 'button[role="switch"]');
+  await page.getByRole("group", { name: "Hackathon emails" }).getByRole("switch", { name: /Email entrants when results are published/ }).click();
+  await expect(page.getByText(/Results are already published\. After saving, send the email from the Results tab/)).toBeVisible();
+  await page.locator("section", { has: page.getByRole("heading", { name: "Project submissions" }) }).getByRole("button", { name: "Save settings" }).click();
+  await expect.poll(async () => (await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).emailEntrantsOnResults).toBe(true);
+  expect(await recipients()).toEqual([]);
+  await page.goto(`${dashboard()}?tab=judging&sub=judging-results`);
+  await waitForHydration(page, "button");
+  await expect(page.getByText("Entrants haven't been emailed yet.")).toBeVisible();
+  await page.getByRole("button", { name: /^Send results email now/ }).click();
+  const sendDialog = page.getByRole("alertdialog").or(page.getByRole("dialog"));
+  await expect(sendDialog.getByText(/3 entrants will be emailed that the results are out\./)).toBeVisible();
+  await expect(sendDialog.getByText(/sending limits/)).toBeVisible();
+  await sendDialog.getByRole("button", { name: /^Send results email$/ }).click();
   await expect.poll(async () => (await recipients()).sort()).toEqual([teams.alpha.leader.email, teams.beta.leader.email, solo.email].sort());
+  await expect(page.getByText("Entrants were emailed that the results are out.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Send results email now/ })).toHaveCount(0);
   await page.getByRole("button", { name: /^Unpublish/ }).click();
   await page.getByRole("alertdialog").or(page.getByRole("dialog")).getByRole("button", { name: /^Unpublish$/ }).click();
   await expect.poll(async () => Boolean((await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).resultsPublishedAt)).toBe(false);
-  await publish();
+  // Republishing with the switch on emails only those whose copy the unpublish withdrew, never anyone twice.
+  await publish(/will be emailed/);
   const again = await recipients();
   expect(new Set(again).size).toBe(again.length);
 

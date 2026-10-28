@@ -6,17 +6,19 @@ export type EventClientDto = Omit<Event,
   // Judging settings have their own DTOs (lib/core/judging.ts).
   | "submissionsEnabled" | "submissionsOpenAt" | "submissionsCloseAt" | "judgingStatus" | "judgesSeeAll"
   | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization"
+  | "emailEntrantsOnResults" | "emailSubmissionReceipts"
   // The entry fee is a BigInt and lives with the judging settings too.
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
   // Finance settings have their own view (lib/finance.ts).
-  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor"
+  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
   // The mobile sign-up close snapshot only matters to lib/core/registrationWindow.ts.
   | "registrationManuallyClosedAt" | "registrationCutoffBeforeManualClose" | "registrationLeadBeforeManualClose"
 >;
 
-export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {
+/** Copies only the DTO fields, so a full Event record never reaches the browser. */
+export function toEventClientDto(event: EventClientDto): EventClientDto {
   return {
     id: event.id,
     organisationId: event.organisationId,

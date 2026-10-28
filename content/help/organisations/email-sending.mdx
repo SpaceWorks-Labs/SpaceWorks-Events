@@ -1,0 +1,65 @@
+Every email your guests get about your events, such as tickets, reminders, updates and receipts, goes out under your organisation's name. On the **Email** settings page you choose the sender name guests see and where their replies go. If you'd rather send from your own domain, you can also connect your own mail server.
+
+<Callout kind="permission">
+
+Only the owner. Every change needs a sign-in within the last 10 minutes.
+
+</Callout>
+
+## Set the sender name and reply-to
+
+<Steps>
+
+1. Open **Settings** and choose **Manage email** in the **Email** card.
+2. Under **Sender**, enter a **Sender name**. Leave it empty to use your organisation's name.
+3. Enter a **Reply-to address** if replies should go somewhere specific, such as `hello@example.org`. Leave it empty and replies go to the sending address.
+4. Choose **Save email settings**.
+5. Choose **Send me a test** to get an example in your own inbox.
+
+</Steps>
+
+Below the fields, **Guests see** shows exactly how the sender will look in your guests' inbox. Without your own server, mail goes out from the platform's address with your sender name on it.
+
+The sender name can be up to 100 characters, without line breaks, quotes or angle brackets.
+
+<Screenshot name="organisation-email-settings" alt="The Email settings page with the Sender card and the Your own mail server switch" />
+
+## Send through your own mail server
+
+Use your own server when you want mail to come from your domain, for example through Google Workspace, Microsoft 365, Brevo, Amazon SES or Mailgun. You'll need the server details from your email provider.
+
+<Steps>
+
+1. Under **Your own mail server**, turn on **Send through our own server**.
+2. Enter the **Sending address**, such as `events@example.org`. Your provider must allow sending from it.
+3. Enter the **Server host**, such as `smtp.example.com`, and the **Port**: 587 or 2525 for STARTTLS, 465 for TLS. Port 25 is also accepted.
+4. Enter the **Username** and **Password**. Use an app password if your provider offers one.
+5. Choose **Save email settings**.
+
+</Steps>
+
+The app connects and signs in to your server before switching to it. If that works, you see "Saved. Connected to your server: your event email now goes through it." and the status chip changes to **Sending through your server**, with the date it was tested.
+
+If the connection fails, your details are saved but email keeps going through the platform. The message tells you to check the host, port, security setting, username and password. Fix them and save again.
+
+<Callout kind="note">
+
+The password is stored encrypted and is never shown again. To keep the saved one, leave the field blank when you save. If you change the host, port, address, username or password, the server is tested again before any mail goes through it.
+
+</Callout>
+
+### Go back to the platform
+
+Choose **Stop using it** next to the status chip. Email goes back to the platform's server straight away, and your server details are kept in case you want to switch back later.
+
+## What goes through your settings
+
+- **Your organisation's email**: tickets, reminders, updates, receipts and other messages about your events use your sender name and reply-to, and your own server when it's switched on.
+- **Account email**: sign-in codes, password resets and other account messages always come from the platform, whatever you set here. They aren't about your organisation, so they never go through your server.
+
+## Good to know
+
+- Your mail server must be reachable on the public internet. Servers on a private network are refused.
+- The test email goes to the owner's own account address and arrives within a minute or so. Reply to it to check where replies land.
+- If your provider asks you to set up SPF, DKIM or DMARC records for your domain, do that first, or guests' mail providers may treat your email as spam.
+- To email guests about an event, see [Emailing your guests](/help/guests/emailing-guests) and [Automatic emails](/help/guests/automatic-emails).

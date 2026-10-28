@@ -8,6 +8,7 @@ import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { lockSeriesDates } from "@/lib/payments/targets";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import { RsvpTargetClosedError } from "./shared";
 import { placeTeamRegistration, TeamRegistrationError, type TeamEventSettings } from "./team";
 
@@ -63,6 +64,8 @@ export async function reserveRsvp(params: {
       capacity = current.capacity;
       privacyType = current.privacyType;
       if (current.registrationMode === RegistrationMode.TEAM) teamEvent = current;
+      // A crew member already holds a free crew ticket (docs/CREW.md); a second registration would take a place.
+      if (await hasCrewEmail(tx, params.target.eventId, [params.notification.to])) throw new TeamRegistrationError(CREW_EMAIL_REFUSED);
     } else {
       // The series row, then the date: the same order every series path locks in.
       const date = await tx.eventInstance.findUnique({ where: { id: params.target.eventInstanceId }, select: { eventSeriesId: true } });

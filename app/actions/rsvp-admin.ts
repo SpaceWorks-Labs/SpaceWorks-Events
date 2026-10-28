@@ -1,5 +1,6 @@
 "use server";
 
+import { CREW_EMAIL_REFUSED, CREW_REGISTRATION_ERROR, lockedHasCrewEmail } from "@/lib/core/crew/shared";
 import { Prisma, RsvpStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -81,6 +82,8 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
+  // Crew name and email live on the crew record (docs/CREW.md).
+  if (rsvp.isCrew) return { ok: false, error: CREW_REGISTRATION_ERROR };
 
   const formFields = rsvp.event?.registrationForm?.fields ?? [];
   const validated = validateAndNormalizeAnswers({
@@ -94,8 +97,11 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
     guestEmail: parsed.data.guestEmail?.trim().toLowerCase() || rsvp.guestEmail,
   };
   const guestEmail = "guestEmail" in guestUpdate ? guestUpdate.guestEmail : rsvp.guestEmail;
+  // Moving a ticket to a crew member's email would give them a second, capacity-taking place.
+  const toCrewEmail = Boolean(rsvp.eventId && guestEmail && guestEmail !== rsvp.guestEmail);
   try {
-    await prisma.$transaction(async (tx) => {
+    const refused = await prisma.$transaction(async (tx) => {
+      if (toCrewEmail && rsvp.eventId && (await lockedHasCrewEmail(tx, rsvp.eventId, [guestEmail]))) return CREW_EMAIL_REFUSED;
       await tx.rSVP.update({
         where: { id: rsvp.id },
         data: {
@@ -121,7 +127,9 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
           })),
         });
       }
+      return null;
     });
+    if (refused) return { ok: false, error: refused };
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && (error as { code?: string; }).code === "P2002") {
       return { ok: false, error: "This email is already registered for this event." };
@@ -167,6 +175,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
+  if (rsvp.isCrew) return { ok: false, error: CREW_REGISTRATION_ERROR };
   // Paid tickets keep their money trail: they're cancelled (and refunded) as an order.
   if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead.", code: "PAID_ORDER" };
 

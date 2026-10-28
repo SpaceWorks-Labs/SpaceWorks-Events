@@ -74,7 +74,7 @@ beforeEach(() => {
   mocks.setStatus.mockResolvedValue({ ok: true, data: { judgingStatus: "OPEN" } });
   mocks.disqualify.mockResolvedValue({ ok: true, data: undefined });
   mocks.setWinner.mockResolvedValue({ ok: true, data: undefined });
-  mocks.publish.mockResolvedValue({ ok: true, data: { publishedAt: new Date(), queued: 3, alreadyPublished: false } });
+  mocks.publish.mockResolvedValue({ ok: true, data: { publishedAt: new Date(), queued: 3, alreadyPublished: false, emailed: true } });
 });
 
 describe("organiser judging actions", () => {
@@ -130,7 +130,7 @@ describe("organiser judging actions", () => {
 
   it("publishes results under the broadcast rate-limit bucket", async () => {
     const res = await publishJudgingResults(scope);
-    expect(res).toEqual({ ok: true, data: { queued: 3, alreadyPublished: false } });
+    expect(res).toEqual({ ok: true, data: { queued: 3, alreadyPublished: false, emailed: true } });
     expect(mocks.rateLimit).toHaveBeenCalledWith("broadcast", "user_1");
   });
 
