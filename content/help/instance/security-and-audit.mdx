@@ -1,0 +1,77 @@
+Two super admin pages help you check that the instance is being used safely. **Security** sums up how well accounts are protected and which systems can read data through the machine API. **Audit log** is the searchable record of important actions, from role changes and data exports to settings changes in the super admin area itself.
+
+<Callout kind="permission">
+
+The instance super admin only. See [The super admin area](/help/instance/super-admin-access).
+
+</Callout>
+
+## Sign-in protections
+
+These protections run for every account on the instance; there's nothing to switch on:
+
+- **Organisation staff must use an authenticator app.** Anyone with an organisation membership, of any role, or a co-organiser grant must set one up and pass a check each session before they can reach organisation data. Attendees and the super admin are exempt.
+- **Failure limits.** Several wrong passwords on one account mean the next sign-in also needs a code emailed to that account. An address with many failed sign-ins in an hour is blocked from signing in for a while.
+- **New-device codes and alerts.** A password sign-in from a browser the account hasn't used before needs a six-digit emailed code, unless an authenticator code is given. A sign-in from a new device also sends the account a "New sign-in to your account" email.
+- **Breached-password check.** On sign-up, password reset and password change, the app checks whether the new password has appeared in a known data breach, and refuses it if so. Only the first five characters of a fingerprint of the password leave the server. If the check service can't be reached, the password is allowed.
+
+The Security page shows how this is working out across the instance.
+
+## The Security page
+
+<Screenshot name="super-admin-security" alt="The super admin Security page with MFA counts, sign-in methods, sensitive actions and machine API clients" />
+
+At the top are four counts:
+
+| Count | What it tells you |
+| --- | --- |
+| **Users with MFA** | How many accounts have two-step verification, and what share of all users that is. |
+| **Owners and admins without MFA** | People who can manage an organisation but haven't set up an authenticator yet. They can't open organisation data until they do. |
+| **Unverified email** | Accounts that haven't confirmed their address yet. |
+| **Active API clients** | Machine API clients that are switched on, across all organisations. |
+
+Below them:
+
+- **Sign-in methods:** how many users have a password, how many accounts are linked to each sign-in provider such as Google, and how many sessions are still valid.
+- **Sensitive actions (last 7 days):** counts of access changes, exports and credential activity, such as role changes, removed members, guest list, order, feedback, judging, finance and team exports, report downloads, badge and ID card downloads, personal data downloads, API credential changes, door station PINs shown or changed, two-step verification turned on or off, and "sign out everywhere".
+- **Recent sensitive activity:** the latest 25 of those actions, with their details redacted.
+- **Machine API clients:** every client with its organisation, status, scopes, credentials and when it was last used. Secrets are never shown.
+
+### Following up
+
+The Security page reports; it doesn't change anyone's account. To act on what you see:
+
+- Use **Users** with the **Without MFA** filter to find people.
+- If an API client looks wrong, for example it has broad scopes and hasn't been used in months, ask that organisation's owner to disable it. Only an organisation owner can disable clients or revoke credentials. See [The machine API](/help/developers/api).
+
+## The audit log
+
+**Audit log** lists every recorded action, newest first, 50 to a page. Each row shows **When**, the **Action** (a short code such as `MEMBERSHIP_ROLE_CHANGED`), the **Actor** who did it, the **Organisation** it belongs to, the **Target** affected, and **Metadata** with anything sensitive removed.
+
+<Steps>
+
+1. Open **Audit log**.
+2. Type part of an action code, the actor's email, an organisation's name, or a target type into the search box, then search. For example, `EXPORT` finds exports and `API_` finds machine API changes.
+3. Use the page controls at the bottom to go further back.
+
+</Steps>
+
+You'll also see a user's latest 20 actions on their page under **Users**, and each organisation's latest 25 on its page under **Organisations**.
+
+### What gets recorded
+
+Among other things, the log records:
+
+- Organisation changes: invitations created and accepted, role changes, members removed, organisations deleted, co-organisers invited and their permissions changed.
+- Data leaving the app: guest list, team, order, feedback, finance and judging exports, event reports, badge and ID card downloads, and personal data downloads.
+- Machine API and webhook changes, without secrets or full URLs.
+- Account security: sign-ins from a new device, two-step verification turned on or off, signing out everywhere, and each run of the server's super admin recovery tool.
+- Super admin activity: changes to instance settings, account creation and paid events, test emails, alert webhook changes, and every maintenance button on **Operations**, including recorded restore drills.
+
+Everyday reads, such as viewing a page or an API request, aren't recorded.
+
+## Good to know
+
+- The log is append-only: there's no way to edit or delete entries from the app.
+- Passwords, tokens, ticket links, credential secrets and registration answers are never written to the log, and the display redacts email addresses and links that turn up in metadata.
+- The audit log is part of the database, so it is covered by your database backups.

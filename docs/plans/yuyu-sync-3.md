@@ -72,6 +72,8 @@ commit names its upstream hash on a "cherry picked from Yuyu <hash>" line.
    - `/help` from MDX, generated search index, role-gated sections, screenshots.
    - Rewritten in Space Works wording, with articles for every Space Works-only feature and for 2–8.
    - `docs/manual/` stays as it is.
+   - Phase 9a (done on `feat/help-centre`): the guide, the generated index with `--check` in CI and the frontend build, role gating from a view reader, contextual Help links, the disposable-database screenshot pipeline, every upstream article topic rewritten for dev, and new articles for payments, finance, prizes, entry fees, team places, ticket designs, member IDs, chat, organisation email, webhooks, the machine API and VPS installation.
+   - Phase 9b (pending, once 2–8 land on `dev`): articles for event crew, attendance confirmation ("still coming"), hackathon email switches, judging rounds, the Mentor Desk, volunteer shifts and the mobile app. That includes Yuyu `9adc9c51`'s `attending/joining-the-crew`, `attending/still-coming`, `guests/attendance-confirmation` and `guests/event-crew`, and its edits to existing articles. `content/help/README.md` says which section file each one goes in.
 
 ## Decisions
 

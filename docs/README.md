@@ -4,6 +4,8 @@
 
 Everything you need to understand, run and change Space Works Events, the free, open-source event platform from Space Works. These pages describe what the product does today, how to operate it, and what's planned. If a page and the code ever disagree, the code and Prisma migrations win, and the page needs fixing.
 
+Using the app rather than changing it? The in-app guide at `/help` (written in `content/help`, see its README) explains every feature for guests, organisers and the person running the server; this folder is the technical handbook.
+
 New here? Start with [Features](FEATURES.md) for what it does, then [Local development](DEVELOPMENT.md) to run it. To host everything on one server, follow [Complete Docker VPS deployment](DEPLOYMENT_VPS.md). To go live on free plans, follow [Free-tier cloud deployment](DEPLOYMENT_CLOUD.md).
 
 ## Product and engineering

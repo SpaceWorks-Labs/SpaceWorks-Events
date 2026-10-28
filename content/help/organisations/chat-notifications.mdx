@@ -1,0 +1,80 @@
+Chat notifications post a short message to your team's chat when something happens in your organisation: someone registers, asks to join, pays, cancels or asks for a refund. Connect Slack, Discord, Mattermost, Telegram or WhatsApp, and choose what each chat hears about, so the right people notice without watching the dashboard.
+
+<Callout kind="permission">
+
+Owners and admins. Connecting a chat and sending a test need a sign-in within the last 10 minutes.
+
+</Callout>
+
+## Connect a chat
+
+<Steps>
+
+1. Open **Settings** and choose **Manage chats** in the **Chat notifications** card.
+2. Under **Connect a chat**, pick the **Chat app**.
+3. Give it a **Name** so your team can tell chats apart, for example "#events".
+4. Fill in the connection details for that app (see below). The page shows a short hint for each one.
+5. Tick the notifications this chat should receive. All of them are ticked to start with.
+6. Choose **Connect chat**.
+7. In the list above, choose **Send test** on the new chat and check the message arrives.
+
+</Steps>
+
+<Screenshot name="organisation-chat-notifications" alt="The Chat notifications page with one connected Slack chat, its notification choices, and the Connect a chat form" />
+
+### What each app needs
+
+| Chat app | What to paste |
+| --- | --- |
+| **Slack** | The **Webhook URL** of an incoming webhook added to a channel. |
+| **Discord** | The **Webhook URL** from the channel's settings, under Integrations, then Webhooks. |
+| **Mattermost** | The **Webhook URL** of an incoming webhook. Your Mattermost server must be reachable on the internet. |
+| **Telegram** | The **Bot token** from @BotFather, and the **Chat id** of the group (a number, negative for groups) or `@channelname` for a channel where the bot is an admin. Add the bot to the group first. |
+| **WhatsApp** | The **Phone number ID** and **Access token** from Meta's WhatsApp Manager, and up to five numbers to **Send to** in international form. |
+
+For WhatsApp, messages outside a 24-hour conversation need an approved **Message template** with one body variable. Without a template, only numbers that have messaged you in the last 24 hours receive notifications.
+
+<Callout kind="note">
+
+Webhook addresses, bot tokens and access tokens are stored encrypted and never shown again. The list shows only where a chat posts, such as the webhook's host, the Telegram chat id, or the last four digits of each WhatsApp number. To change the secret, remove the chat and connect it again.
+
+</Callout>
+
+## What can be posted
+
+Each chat chooses from these notifications:
+
+| Notification | When it's sent |
+| --- | --- |
+| **New registrations** | Someone registers, joins a waitlist or is given a place. |
+| **Join requests** | Someone asks to join an approval-only event. |
+| **Payments** | An order is paid for, online or at the desk. |
+| **Refunds** | A refund is sent, or the payment provider refuses one. |
+| **Guest cancellations** | A guest cancels their own place. |
+| **Chargebacks** | A buyer disputes a payment with their bank. |
+| **Cancelled events** | An event, series or date is cancelled. |
+| **Payouts** | Prize money or an expense claim is paid out, or a payout is reversed. |
+| **Expense claims** | Someone claims expenses, or a claim or refund request is decided. |
+
+A message is only sent once the change it describes has been saved, so a registration that fails never shows up in chat.
+
+<Callout kind="warning">
+
+Messages can include guests' names, and refund messages include the buyer's email address. Post them to a private channel or group that only your team can read.
+
+</Callout>
+
+## Manage a connected chat
+
+Each connected chat shows its name, app and where it posts, with a status: **Not tested yet**, **Working**, or **Last message failed**.
+
+- **Send test** posts a test message straight away and tells you whether it worked. If the service refuses it, check the webhook address or token, and that the bot can post there.
+- **Send notifications** turns the chat off without disconnecting it. Turn it back on whenever you like.
+- To change what a chat hears about, tick or untick notifications and choose **Save notifications**.
+- **Remove** disconnects the chat after you confirm. It stops receiving notifications.
+
+## Good to know
+
+- An organisation can connect up to 20 chats. Connect the same app more than once to send different notifications to different channels.
+- Chat notifications are for people. To feed activity into another system automatically, owners and admins can use webhooks instead, from **Settings** → **Webhooks**.
+- Guests aren't told anything by chat notifications; they still get their usual emails.

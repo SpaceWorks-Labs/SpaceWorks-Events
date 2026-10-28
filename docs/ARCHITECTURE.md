@@ -24,6 +24,7 @@
 | `prisma/` | Data model and ordered production migrations |
 | `scripts/` | Environment, schema, asset migration, and standalone-build helpers |
 | `tests/` | Unit, PostgreSQL integration, and browser suites |
+| `content/help/` | The in-app guide at `/help`: MDX articles, the section manifest, and generated indexes |
 | `docs/` | Product and operational documentation |
 
 ## Request flow
@@ -111,6 +112,10 @@ The super admin can configure SMTP, Google SSO, backup posture, and an operation
 ## Storage
 
 Asset metadata lives in PostgreSQL. Production file bytes live in a private S3-compatible bucket and are served through the application-controlled upload route. Local development can retain database blobs as a fallback. Production startup requires S3 configuration.
+
+## In-app guide
+
+The guide at `/help` renders MDX from `content/help` through `@next/mdx` (`mdx-components.tsx`, `components/help/mdx.tsx`). Section order, titles, summaries and each section's audience live in `content/help/sections/*.ts`. `scripts/generate-help-index.mjs` writes `content/help/index.generated.ts` (headings and plain-text search sections, compiled with the same helpers as the pages, `lib/help/text.ts`) and `content/help/bodies.generated.ts` (one static import per article), so nothing reads files at runtime and the split frontend renders the guide from its copy of `content/help`; `--check` runs in CI and in the frontend build. Which sections a visitor sees comes from the view reader `loadHelpAccess` (`lib/views/app__help__layout.ts`, cached per request by `lib/help/access.ts`): owners and admins of any organisation add `org-admin`, the super admin adds everything. It is a reading convenience and never authorizes a feature. Search loads `GET /api/help/search-index` (`private, no-store`) and ranks in the browser. Screens link to articles with `components/help/HelpLink.tsx`, whose `article` is typed against the manifest.
 
 ## Security headers and rendering
 

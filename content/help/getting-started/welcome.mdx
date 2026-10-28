@@ -1,0 +1,66 @@
+Space Works Events is where clubs, meetups, campus groups, makerspaces and volunteer teams run their events. You publish an event page, take registrations, email the people coming, check them in at the door, and follow up afterwards with feedback and certificates. It also handles team registration and hackathon judging, event budgets and expense claims, and ID cards for your members.
+
+Events are free by default. When the person who runs this server turns paid events on, an organisation can sell tickets through its own Razorpay or Stripe account. The money goes straight to the organisation, and buyers pay on the payment provider's own page.
+
+## Who this guide is for
+
+The guide is for everyone who uses the app. Start with the part that fits you:
+
+- **Going to an event?** Read [Registering for an event](/help/attending/registering). The *Going to events* section also covers paying, your ticket, teams, projects, member IDs and certificates.
+- **Running events?** Start with [Run your first event](/help/getting-started/organiser-quick-start). Then use the sections on creating events, registration, guests, check-in and paid events when you need them.
+- **Looking after an organisation?** [Roles and permissions](/help/organisations/roles) explains owners, admins, members and co-organisers.
+- **Owner or admin of an organisation?** When you're signed in, an extra *Connecting other tools* section appears in the guide. It covers the machine API and webhooks.
+- **Running this server?** If you're the server's super admin, two more sections appear when you sign in: *Instance administration* and *Installing and maintaining*.
+
+Other people never see the sections meant for owners, admins or the super admin. The rest of the guide is open to everyone, including visitors who aren't signed in.
+
+## How it fits together
+
+Everything you run belongs to an **organisation**, such as your club, group or team. An organisation has members, and each member has a role that decides what they can change.
+
+Organisations run **events**. Each event has its own public page, registration form, guest list, emails, check-in desk and feedback form. An event can also take ticket payments, track its money and run judging. A meetup that repeats can be a **recurring series**, where every date has its own guest list.
+
+When someone registers, they get a **ticket** with a QR code. At the door you scan it from the check-in desk on any phone, tablet or laptop, even without Wi-Fi.
+
+```text
+Organisation
+ ├── Members (owners, admins, members)
+ ├── Settings: payments, email, chat notifications, webhooks
+ ├── Member ID programmes
+ ├── Events ── page · registration · tickets · guests · emails · check-in · finance · feedback
+ └── Recurring series ── one guest list per date
+```
+
+[Key terms](/help/getting-started/key-terms) explains the words used throughout the app.
+
+## Finding your way around
+
+| Where | What you do there |
+| --- | --- |
+| **Discover** | Browse public events on this server. |
+| **Dashboard** | Your organisations, their events and series. Organisers spend most of their time here. |
+| **Event dashboard** | Everything about one event, in tabs: **Overview**, **Guests**, **Event page**, **Emails**, **Check-in**, **Feedback**, **Analytics**, **Finance** and **Settings**. Hackathons also get a **Judging** tab. |
+| **Account** | Your profile, registrations and tickets, ID cards, organisations, and security settings. |
+| **Guide** | This guide. Open it from **Help** in the site header, or from **Help and guide** in your account menu. |
+
+<Callout kind="tip" title="Search from anywhere in the guide">
+
+Press <Kbd>/</Kbd> on any guide page to jump to the search box.
+
+</Callout>
+
+## Organisation staff use an authenticator app
+
+Anyone who helps run an organisation, whatever their role, and anyone made a co-organiser on an event, must use an authenticator app on their phone. You set it up once. After that, the app asks for a code each time you sign in before it opens your dashboards. Guests who only register for events don't need one. See [Two-step verification](/help/account/two-step-verification).
+
+## A note on permissions
+
+Some features are only for certain roles. For example, only owners and admins can publish an event. When a page covers something not everyone can do, you'll see a **Who can do this** box like this one:
+
+<Callout kind="permission">
+
+Owners and admins of the organisation. Co-organisers can also do this if they were given the matching permission for the event.
+
+</Callout>
+
+If a button described in the guide is missing for you, you probably don't have that permission. Ask an owner or admin of your organisation.
