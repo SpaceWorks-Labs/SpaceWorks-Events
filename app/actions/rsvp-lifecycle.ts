@@ -10,7 +10,7 @@ import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { declineRequestedOrder, offerRequestedOrder, refundWholeOrderTx, submitRefunds } from "@/lib/payments/operations";
+import { declineRequestedOrder, lockOrder, offerRequestedOrder, refundWholeOrderTx, submitRefunds } from "@/lib/payments/operations";
 import { attendeeEmail, attendeeName, loadRsvpContext, paidRequest, paymentOperation, revalidateRsvpPaths } from "./rsvp-lifecycle/helpers";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { reacceptRsvpFor, type ReacceptStatus } from "./rsvp-lifecycle/reaccept";
@@ -167,6 +167,8 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
   const to = attendeeEmail(rsvp);
   const refundIds: string[] = [];
   const rejected = await prisma.$transaction(async (tx) => {
+    // A paid place is refunded below: take the locks in the payment order (Event, then Order, then RSVP).
+    if (rsvp.orderId) await lockOrder(tx, rsvp.orderId);
     const result = await tx.rSVP.updateMany({
       // `teamId: null`: an RSVP that joined a team meanwhile moves only with its team.
       where: { id: rsvp.id, teamId: null, status: { in: [RsvpStatus.PENDING_APPROVAL, RsvpStatus.WAITLISTED] } },
