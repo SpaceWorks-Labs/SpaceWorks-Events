@@ -38,6 +38,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://build:build@localhost:5432/swevents
           AUTH_SECRET: ci-placeholder-not-used-at-build
+      # The split frontend refuses database code at build time, so a stray
+      # import from a server core is caught here, not at release.
+      - run: npm run build:frontend
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/swevents
+          AUTH_SECRET: ci-placeholder-not-used-at-build
       - name: npm audit --omit=dev --audit-level=high
         run: node scripts/npm-audit.mjs --omit=dev --audit-level=high
 

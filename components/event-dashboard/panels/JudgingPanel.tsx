@@ -11,8 +11,7 @@ import {
   JUDGING_TEXT_DESCRIPTION_MAX_LENGTH,
   JUDGING_WEIGHT_MAX,
 } from "@/lib/validators";
-import { JUDGING_ROUND_NAME_MAX_LENGTH, JUDGING_ROUNDS_LIMIT } from "@/lib/validators/judgingRounds";
-import { FINALIZE_REASON_MAX_LENGTH } from "@/lib/core/judgingRounds";
+import { FINALIZE_REASON_MAX_LENGTH, JUDGING_ROUND_NAME_MAX_LENGTH, JUDGING_ROUNDS_LIMIT } from "@/lib/validators/judgingRounds";
 import { JudgeWorkspace } from "@/components/event-dashboard/judging/JudgeWorkspace";
 import { SubTabs, type SubTab } from "../SubTabs";
 import { JudgingPanelAwards } from "./JudgingPanelAwards";
