@@ -27,6 +27,7 @@ import {
 import { toDashboardTeam, type DashboardTeam } from "@/lib/eventDashboard/teams";
 import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
+import { ADMISSION_MANAGED, isApplicationTeam } from "@/lib/admission/guards";
 
 /*
  * Organiser actions on whole teams (Guests → Teams, docs/TEAMS.md). The
@@ -70,6 +71,8 @@ async function transition(input: unknown, action: TeamTransition): Promise<Actio
   if (!parsed.success) return { ok: false, error: "Invalid input.", fieldErrors: flattenZodErrors(parsed.error) };
   const gate = await organiserGate(parsed.data.organisationSlug, parsed.data.eventId);
   if (!gate.ok) return gate;
+  // Applications are decided only through released decisions (docs/ADMISSION.md).
+  if (await isApplicationTeam(parsed.data.teamId)) return { ok: false, error: ADMISSION_MANAGED };
   const result = await transitionTeamStatus(gate.ctx, parsed.data.teamId, action);
   if (!result.ok) return result;
   await recordAuditEvent({

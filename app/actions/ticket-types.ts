@@ -9,6 +9,7 @@ import { isValidPromoCode, promoCodeDigest, promoCodeHint } from "@/lib/payments
 import { isAtLeastAsGenerous, type RefundPolicySnapshot } from "@/lib/payments/refundPolicy";
 import { configuredProvider } from "@/lib/payments/settings";
 import { access, revalidateOwner, setOwnerCurrency } from "./ticket-types/access";
+import { perMemberRefusal, PER_MEMBER_PAID_REFUSAL } from "@/lib/admission/settings";
 import { addOnSchema, archiveAddOnSchema, archivePromoSchema, archiveSchema, promoSchema, refundPolicySchema, saveSchema, teamTicketModeSchema, transferSchema } from "./ticket-types/schemas";
 
 const MAX_TICKET_TYPES = 20;
@@ -308,9 +309,11 @@ export async function saveTeamTicketMode(input: unknown): Promise<ActionResult> 
   const eventId = context.owner.eventId;
   const saved = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
-    const event = await tx.event.findUnique({ where: { id: eventId }, select: { registrationMode: true, teamTicketMode: true } });
+    const event = await tx.event.findUnique({ where: { id: eventId }, select: { registrationMode: true, teamTicketMode: true, admissionEnabled: true } });
     if (event?.registrationMode !== "TEAM") return "This event doesn't register teams.";
     if (event.teamTicketMode === parsed.data.mode) return null;
+    // Applications (docs/ADMISSION.md): paid team places are paid once by the leader for now.
+    if (event.admissionEnabled && parsed.data.mode === "PER_MEMBER" && (await perMemberRefusal(tx, { id: eventId, registrationMode: "TEAM", teamTicketMode: "PER_MEMBER" }))) return PER_MEMBER_PAID_REFUSAL;
     if (await tx.order.count({ where: { eventId, totalMinor: { gt: 0 } } }) > 0) return "Who pays can't change once tickets have been sold.";
     await tx.event.update({ where: { id: eventId }, data: { teamTicketMode: parsed.data.mode } });
     await recordAuditEvent({ action: "TEAM_TICKET_MODE_UPDATED", actorUserId: context.userId, organisationId: context.organisation.id, targetType: "Event", targetId: eventId, metadata: { mode: parsed.data.mode }, client: tx });

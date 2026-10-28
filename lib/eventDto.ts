@@ -13,6 +13,8 @@ export type EventClientDto = Omit<Event,
   | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
   // The ticket design is read by the ticket designer (lib/ticketDesign/).
   | "ticketDesignId"
+  // Applications have their own view (lib/admission/).
+  | "admissionEnabled" | "admissionMode" | "admissionRsvpDays" | "admissionOfferCapacity" | "emailApplicantsOnStageAdvance"
 >;
 
 /** Copies only the DTO fields, so a full Event record never reaches the browser. */

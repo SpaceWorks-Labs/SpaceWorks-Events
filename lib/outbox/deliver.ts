@@ -22,6 +22,7 @@ import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload,
 import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
 import { deliverCrewMessage, isCrewMessageKind } from "./crew";
+import { ADMISSION_NOTICE_KIND, deliverAdmissionNotice } from "./admission";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
 import { dueOutboxMessages } from "./due";
@@ -206,8 +207,10 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind)) {
-        const outcome = isTeamMessageKind(message.kind)
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || message.kind === ADMISSION_NOTICE_KIND) {
+        const outcome = message.kind === ADMISSION_NOTICE_KIND
+          ? await deliverAdmissionNotice(message.payload, stableMessageId)
+          : isTeamMessageKind(message.kind)
           ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
           : isCrewMessageKind(message.kind)
             ? await deliverCrewMessage(message.payload, stableMessageId)

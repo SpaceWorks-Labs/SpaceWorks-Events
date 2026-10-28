@@ -67,7 +67,9 @@ export async function declineRequestedOrder(params: { orderId: string; organisat
 export async function offerNextWaitlisted(target: SeatTarget, now = new Date()): Promise<boolean> {
   let owner: { organisationId: string; privacyType: EventPrivacyType; title: string; seriesId: string | null; } | null = null;
   if ("eventId" in target) {
-    const event = await prisma.event.findUnique({ where: { id: target.eventId }, select: { organisationId: true, privacyType: true, title: true, registrationMode: true } });
+    const event = await prisma.event.findUnique({ where: { id: target.eventId }, select: { organisationId: true, privacyType: true, title: true, registrationMode: true, admissionEnabled: true } });
+    // Applications have their own waitlist, offered first in, first offered (lib/admission/promotion.ts).
+    if (event?.admissionEnabled) return false;
     if (event?.registrationMode === RegistrationMode.TEAM) return promoteNextTeamUnit(target.eventId);
     owner = event ? { organisationId: event.organisationId, privacyType: event.privacyType, title: event.title, seriesId: null } : null;
   } else {

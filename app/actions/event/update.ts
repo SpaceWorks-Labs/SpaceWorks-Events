@@ -24,6 +24,7 @@ const EVENT_UPDATE_REFUSALS = {
   mode: "Team registration can't be turned on or off once people have registered.",
   teamSize: "Maximum team size cannot be lower than the largest current team.",
   groupTickets: "Group tickets can't be used with team registration: each person registers for themselves. Take them off sale first.",
+  admissionPrivacy: "This event takes applications, so it stays approval-only. Turn applications off first (Applications tab).",
 } as const;
 
 export async function updateEvent(input: unknown): Promise<ActionResult> {
@@ -109,8 +110,10 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
   try {
     const saved = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
-      const locked = await tx.event.findUnique({ where: { id: event.id }, select: { status: true, registrationMode: true } });
+      const locked = await tx.event.findUnique({ where: { id: event.id }, select: { status: true, registrationMode: true, admissionEnabled: true } });
       if (!locked) return "missing" as const;
+      // Applications (docs/ADMISSION.md) keep the event approval-only.
+      if (locked.admissionEnabled && data.privacyType !== EventPrivacyType.APPROVAL_REQUIRED) return "admissionPrivacy" as const;
       if (data.capacity != null) {
         // TEAM events count units (docs/TEAMS.md); INDIVIDUAL events keep the
         // confirmed-RSVP count.

@@ -1,5 +1,6 @@
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import { CREW_REGISTRATION_ERROR } from "@/lib/core/crew/shared";
+import { ADMISSION_MANAGED, isApplicationRsvp } from "@/lib/admission/guards";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { prisma } from "@/lib/db";
 import { canManageRegistrationsFor } from "@/lib/eventAccess";
@@ -55,6 +56,8 @@ export async function loadRsvpContext(
     if (!rsvp) return { error: "RSVP not found." as const };
     // Crew tickets are confirmed by the crew list, never approved, declined or promoted here (docs/CREW.md).
     if (rsvp.isCrew) return { error: CREW_REGISTRATION_ERROR } as const;
+    // Applications are decided only through released decisions (docs/ADMISSION.md).
+    if (event.admissionEnabled && (await isApplicationRsvp(rsvp.id))) return { error: ADMISSION_MANAGED } as const;
     return { org, event, rsvp, instance: null as null };
   }
 
