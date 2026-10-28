@@ -11,6 +11,7 @@ import { emitTeamWebhooks, promoteOldestWaitlistedUnit, settleTeamAfterMemberLef
 import { NOT_FROM_PAID_ORDER } from "@/lib/rsvpCapacity";
 import { fillFromWaitlist } from "@/lib/payments/operations";
 import { lockSeriesDates, seatTargetOf } from "@/lib/payments/targets";
+import { leadsPaidTeam } from "@/lib/payments/teamOrders";
 import { noticeEach, noticeSubject, personEmail } from "@/lib/notices";
 import { emitWebhookEvent, type RsvpWebhookSnapshot } from "@/lib/webhooks/emit";
 import { notifyChat } from "@/lib/chat/notify";
@@ -95,12 +96,18 @@ export async function cancelRegistrationByToken(
     } else if (rsvp.eventInstanceId && rsvp.eventInstance) {
       await lockSeriesDates(tx, rsvp.eventInstance.eventSeriesId, [rsvp.eventInstanceId], new Date());
     }
-    const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, include: { user: { select: { email: true } }, order: { select: { id: true, status: true, buyerEmail: true, payments: { where: { status: { in: ["PAID_ONLINE", "PAID_OFFLINE"] } }, select: { id: true } } } } } });
+    const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, include: { user: { select: { email: true } }, order: { select: { id: true, status: true, buyerEmail: true, totalMinor: true, payments: { where: { status: { in: ["PAID_ONLINE", "PAID_OFFLINE", "PENDING"] } }, select: { id: true, status: true } } } } } });
     if (!current) return { error: "RSVP not found." };
     if (current.isCrew) return { error: "You're on this event's crew. Ask an organiser to remove you from the crew." };
     if (current.checkedInAt) return { error: "Cannot cancel — you have already checked in." };
     // Money was taken: refunds follow the order's policy, from the order page.
-    if (current.order && current.order.payments.length > 0) return { error: "Paid tickets are cancelled from the order page, under the event's refund policy.", code: "PAID_ORDER" as const };
+    if (current.order?.payments.some((payment) => payment.status !== "PENDING")) return { error: "Paid tickets are cancelled from the order page, under the event's refund policy.", code: "PAID_ORDER" as const };
+    // Money still owed (reserved to pay at the desk), or a PER_TEAM leader's
+    // team ticket: cancelled as a whole order, so the payment owed and the
+    // team go with it (docs/TEAMS.md).
+    if (current.order?.status === "CONFIRMED" && ((current.order.totalMinor > BigInt(0) && current.order.payments.length > 0) || (await leadsPaidTeam(tx, current.id)))) {
+      return { error: "This ticket is still to be paid for at the desk, or pays for the whole team. Cancel it from the order page, which cancels the whole order.", code: "PAID_ORDER" as const };
+    }
     const title = rsvp.event?.title ?? rsvp.eventInstance!.series.title;
     const organisationId = rsvp.event?.organisation.id ?? rsvp.eventInstance!.series.organisation.id;
     if (current.order?.status === "REQUESTED") {

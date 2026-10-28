@@ -151,7 +151,9 @@ to 30 characters).
   cancels their RSVP.
 - If the leader cancels their own registration, leadership passes to the
   longest-standing member; with no members left the team is deleted and its
-  unit freed.
+  unit freed. A PER_TEAM leader whose order pays for the team, or anyone whose
+  ticket is still owed at the desk, cancels from the order page instead
+  (`PAID_ORDER`), which cancels the whole order and the team with it.
 - Removing a member or disbanding cancels those RSVPs (they can register again
   solo or in another team). Disbanding frees the unit.
 
