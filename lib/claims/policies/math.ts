@@ -42,9 +42,9 @@ export function windowState(window: ClaimWindow, now: Date): "upcoming" | "open"
   return "open";
 }
 
-/** An approval keeps the person within the cap frozen at submission and the policy within its current budget. */
-export function approvalProblem(params: { approvedMinor: bigint; frozenCap: bigint; personDecided: bigint; budget: bigint | null; budgetDecided: bigint }): "cap" | "budget" | null {
-  if (params.personDecided + params.approvedMinor > params.frozenCap) return "cap";
+/** An approval keeps the person within their cap (see checkPolicyApproval) and the policy within its current budget. */
+export function approvalProblem(params: { approvedMinor: bigint; cap: bigint; personDecided: bigint; budget: bigint | null; budgetDecided: bigint }): "cap" | "budget" | null {
+  if (params.personDecided + params.approvedMinor > params.cap) return "cap";
   if (params.budget != null && params.budgetDecided + params.approvedMinor > params.budget) return "budget";
   return null;
 }

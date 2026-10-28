@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { approveClaim } from "@/lib/claims/decide";
 import { savePolicy } from "@/lib/claims/policies/manage";
 import { readSnapshot } from "@/lib/claims/policies/snapshot";
+import { eligibilityChanges } from "@/lib/claims/policies/claims";
 import { submitParticipantClaim, withdrawClaim } from "@/lib/claims/submit";
 import { loadTicketClaims } from "@/lib/claims/ticketView";
 import { loadMyParticipantClaims, loadMyReimbursements } from "@/lib/mobile/attendee";
@@ -115,6 +116,47 @@ describe.sequential("claims under a reimbursement policy", () => {
     expect(await approveClaim(approver(), { claimId: second!.id })).toMatchObject({ ok: true });
   });
 
+  it("approves the same total whichever order claims are approved in after a cap change", async () => {
+    for (const order of ["early-first", "late-first"] as const) {
+      const event = await freeEvent();
+      const travel = await policy(event, { cap: "500" });
+      const hana = await person(event);
+      expect(await claim(hana.checkInToken, "500", travel)).toMatchObject({ ok: true });
+      expect(await savePolicy(admin(event), { policyId: travel, name: "Travel", eligibility: "CONFIRMED_PARTICIPANT", cap: "1000", categories: ["TRAVEL"] })).toMatchObject({ ok: true });
+      expect(await claim(hana.checkInToken, "500", travel)).toMatchObject({ ok: true });
+      const [early, late] = await prisma.expenseClaim.findMany({ where: { rsvpId: hana.id }, orderBy: { createdAt: "asc" } });
+      const ids = order === "early-first" ? [early!.id, late!.id] : [late!.id, early!.id];
+      for (const id of ids) expect(await approveClaim(approver(), { claimId: id })).toMatchObject({ ok: true });
+      // Lowering the cap again never lets the person past the highest cap they claimed under.
+      expect(await savePolicy(admin(event), { policyId: travel, name: "Travel", eligibility: "CONFIRMED_PARTICIPANT", cap: "200", categories: ["TRAVEL"] })).toMatchObject({ ok: true });
+      expect(await prisma.expenseClaim.aggregate({ where: { rsvpId: hana.id, status: ExpenseClaimStatus.APPROVED }, _sum: { approvedMinor: true } })).toMatchObject({ _sum: { approvedMinor: BigInt(100000) } });
+    }
+    const event = await freeEvent();
+    const travel = await policy(event, { cap: "1000" });
+    const ines = await person(event);
+    expect(await claim(ines.checkInToken, "600", travel)).toMatchObject({ ok: true });
+    expect(await claim(ines.checkInToken, "400", travel)).toMatchObject({ ok: true });
+    expect(await savePolicy(admin(event), { policyId: travel, name: "Travel", eligibility: "CONFIRMED_PARTICIPANT", cap: "300", categories: ["TRAVEL"] })).toMatchObject({ ok: true });
+    for (const row of await prisma.expenseClaim.findMany({ where: { rsvpId: ines.id }, orderBy: { createdAt: "desc" } })) {
+      expect(await approveClaim(approver(), { claimId: row.id })).toMatchObject({ ok: true });
+    }
+  });
+
+  it("flags waiting claims whose person no longer qualifies, batched per policy", async () => {
+    const event = await freeEvent();
+    const attended = await policy(event, { attendanceRequired: true });
+    const people = await Promise.all([person(event, { checkedIn: true }), person(event, { checkedIn: true }), person(event, { checkedIn: true })]);
+    for (const row of people) expect(await claim(row.checkInToken, "100", attended)).toMatchObject({ ok: true });
+    await prisma.rSVP.update({ where: { id: people[1]!.id }, data: { checkedInAt: null } });
+    await prisma.rSVP.update({ where: { id: people[2]!.id }, data: { status: RsvpStatus.REJECTED } });
+    const rows = await prisma.expenseClaim.findMany({ where: { policyId: attended }, select: { id: true, status: true, eventId: true, rsvpId: true, policyId: true, eligibilitySnapshot: true } });
+    const changed = await eligibilityChanges(prisma, rows);
+    const byPerson = (index: number) => changed.get(rows.find((row) => row.rsvpId === people[index]!.id)!.id);
+    expect(byPerson(0)).toBeUndefined();
+    expect(byPerson(1)).toContain("checked in");
+    expect(byPerson(2)).toContain("no longer confirmed");
+  });
+
   it("refuses an approval that would overspend the current budget", async () => {
     const event = await freeEvent();
     const pool = await policy(event, { cap: "1000", budget: "1500" });
@@ -149,7 +191,7 @@ describe.sequential("claims under a reimbursement policy", () => {
     expect(await loadMyReimbursements(ctx.ownerId, mine.id)).toBeUndefined();
     expect(await loadMyReimbursements(ctx.memberId, mine.id)).toEqual({ currency: "INR", general: null, policies: [expect.objectContaining({ id: travel, left: expect.stringContaining("1,000") })] });
     expect(await submitParticipantClaim({ ticketToken: mine.checkInToken, actorUserId: ctx.memberId }, claimInput("250", travel), [])).toMatchObject({ ok: true });
-    expect((await loadMyParticipantClaims(ctx.memberId, mine.id))?.claims[0]).toMatchObject({ policy: "Travel", status: "SUBMITTED" });
+    expect(await loadMyParticipantClaims(ctx.memberId, mine.id)).toMatchObject({ general: false, claims: [{ policy: "Travel", status: "SUBMITTED" }] });
     const list = await loadEventPolicies(event.id);
     expect(list.policies).toHaveLength(2);
     expect(list.policies[0]).toMatchObject({ id: travel, eligibility: "CONFIRMED_PARTICIPANT", used: expect.stringContaining("250"), budgetLeft: expect.stringContaining("4,750"), claims: 1, window: "open" });

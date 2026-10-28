@@ -3,7 +3,7 @@ import "server-only";
 import { ExpenseClaimStatus, type ExpenseCategory, type Prisma } from "@prisma/client";
 import { formatMoney } from "@/lib/payments/money";
 import { fail, ok, type ClaimResult } from "../shared";
-import { evaluateEligibility, loadClaimant, type Claimant } from "./eligibility";
+import { eligibleRegistrationIds, evaluateEligibility, loadClaimant, type Claimant, type EligibilityTerms } from "./eligibility";
 import { approvalProblem, remaining, sumCounted, sumDecided, windowState } from "./math";
 import { eligibilityTerms, freezeTerms, readSnapshot, recordCheck, snapshotJson, type EligibilitySnapshot } from "./snapshot";
 
@@ -51,14 +51,21 @@ export async function checkPolicyClaim(tx: Prisma.TransactionClient, params: { c
   return ok({ policyId: policy.id, policyName: policy.name, snapshot: snapshotJson(snapshot) });
 }
 
+/** The highest of the caps the counted claims were filed under and the policy's current cap. */
+function personCap(snapshots: Array<EligibilitySnapshot | null>, currentCap: bigint | null) {
+  return snapshots.reduce((cap, row) => (row && BigInt(row.terms.capPerPersonMinor) > cap ? BigInt(row.terms.capPerPersonMinor) : cap), currentCap ?? BigInt(0));
+}
+
 type ClaimForApproval = { id: string; eventId: string | null; rsvpId: string | null; policyId: string; currency: string; eligibilitySnapshot: Prisma.JsonValue | null };
 
 /**
  * Approving a policy claim: the person must still qualify under the terms
- * frozen when they filed (eligibility is checked at decision time), stay
- * within that frozen cap with everything else decided for them, and the
- * policy within its current budget. Returns the snapshot with the approval
- * check added.
+ * frozen when they filed (eligibility is checked at decision time), and
+ * everything decided for them under the policy, this approval included, must
+ * stay within the highest of the caps those claims were filed under and the
+ * policy's current cap, so the order of approvals never matters. The policy
+ * must stay within its current budget. Returns the snapshot with the
+ * approval check added.
  */
 export async function checkPolicyApproval(tx: Prisma.TransactionClient, claim: ClaimForApproval, approvedMinor: bigint, now = new Date()): Promise<ClaimResult<{ snapshot: Prisma.InputJsonValue }>> {
   const snapshot = readSnapshot(claim.eligibilitySnapshot);
@@ -68,14 +75,14 @@ export async function checkPolicyApproval(tx: Prisma.TransactionClient, claim: C
   const evaluation = await evaluateEligibility(tx, claimant, eligibilityTerms(snapshot.terms));
   if (!evaluation.eligible) return fail(`No longer eligible under ${snapshot.terms.name}: ${evaluation.reason ?? "the rules aren't met."} Reject the claim instead.`);
   const [mine, all, policy] = await Promise.all([
-    tx.expenseClaim.findMany({ where: { policyId: claim.policyId, rsvpId: claimant.rsvpId, status: { in: DECIDED }, id: { not: claim.id } }, select: usageSelect }),
+    tx.expenseClaim.findMany({ where: { policyId: claim.policyId, rsvpId: claimant.rsvpId, status: { in: DECIDED }, id: { not: claim.id } }, select: { ...usageSelect, eligibilitySnapshot: true } }),
     tx.expenseClaim.findMany({ where: { policyId: claim.policyId, status: { in: DECIDED }, id: { not: claim.id } }, select: usageSelect }),
-    tx.reimbursementPolicy.findUnique({ where: { id: claim.policyId }, select: { budgetMinor: true } }),
+    tx.reimbursementPolicy.findUnique({ where: { id: claim.policyId }, select: { budgetMinor: true, capPerPersonMinor: true } }),
   ]);
-  const frozenCap = BigInt(snapshot.terms.capPerPersonMinor);
+  const frozenCap = personCap([snapshot, ...mine.map((row) => readSnapshot(row.eligibilitySnapshot))], policy?.capPerPersonMinor ?? null);
   const personDecided = sumDecided(mine);
   const budgetDecided = sumDecided(all);
-  const problem = approvalProblem({ approvedMinor, frozenCap, personDecided, budget: policy?.budgetMinor ?? null, budgetDecided });
+  const problem = approvalProblem({ approvedMinor, cap: frozenCap, personDecided, budget: policy?.budgetMinor ?? null, budgetDecided });
   if (problem === "cap") return fail(`That would take this person over ${snapshot.terms.name}'s cap of ${formatMoney(frozenCap, claim.currency)}; approve up to ${formatMoney(frozenCap > personDecided ? frozenCap - personDecided : BigInt(0), claim.currency)}.`);
   if (problem === "budget") {
     const budget = policy?.budgetMinor ?? BigInt(0);
@@ -87,20 +94,35 @@ export async function checkPolicyApproval(tx: Prisma.TransactionClient, claim: C
 /**
  * For approvers: waiting policy claims whose person no longer qualifies under
  * the frozen terms (a check-in undone, a project disqualified), by claim id,
- * with the reason. Read-only.
+ * with the reason. Read-only. Claims are grouped by their frozen terms and
+ * each group is checked with one query (the resolvers' `candidates`); only
+ * claims that fail are evaluated one by one, for the reason.
  */
 export async function eligibilityChanges(client: Prisma.TransactionClient, claims: Array<{ id: string; status: string; eventId: string | null; rsvpId: string | null; policyId: string | null; eligibilitySnapshot: Prisma.JsonValue | null }>) {
   const changed = new Map<string, string>();
+  const groups = new Map<string, { eventId: string; terms: EligibilityTerms; claims: Array<{ id: string; rsvpId: string }> }>();
   for (const claim of claims) {
     if (claim.status !== ExpenseClaimStatus.SUBMITTED || !claim.policyId) continue;
     const snapshot = readSnapshot(claim.eligibilitySnapshot);
-    const claimant = snapshot && claim.rsvpId && claim.eventId ? await loadClaimant(client, claim.rsvpId, claim.eventId) : null;
-    if (!snapshot || !claimant) {
+    if (!snapshot || !claim.rsvpId || !claim.eventId) {
       changed.set(claim.id, "The registration no longer exists.");
       continue;
     }
-    const evaluation = await evaluateEligibility(client, claimant, eligibilityTerms(snapshot.terms));
-    if (!evaluation.eligible) changed.set(claim.id, evaluation.reason ?? "The rules are no longer met.");
+    const terms = eligibilityTerms(snapshot.terms);
+    const key = JSON.stringify([claim.eventId, terms]);
+    const group = groups.get(key) ?? { eventId: claim.eventId, terms, claims: [] };
+    group.claims.push({ id: claim.id, rsvpId: claim.rsvpId });
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    const rsvpIds = [...new Set(group.claims.map((claim) => claim.rsvpId))];
+    const eligible = new Set(await eligibleRegistrationIds(client, group.eventId, group.terms, rsvpIds.length, { id: { in: rsvpIds } }));
+    for (const claim of group.claims) {
+      if (eligible.has(claim.rsvpId)) continue;
+      const claimant = await loadClaimant(client, claim.rsvpId, group.eventId);
+      const evaluation = claimant ? await evaluateEligibility(client, claimant, group.terms) : null;
+      if (!evaluation?.eligible) changed.set(claim.id, evaluation?.reason ?? "The registration no longer exists.");
+    }
   }
   return changed;
 }

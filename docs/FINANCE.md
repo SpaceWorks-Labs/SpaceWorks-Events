@@ -105,9 +105,12 @@ create, edit, close (**Close to new claims**) and delete them
   eligibility facts (ids, statuses and flags only), so a later policy edit
   never rewrites them. Policy claims are kind `PARTICIPANT` or `CREW`.
 - **Approving** re-checks, under the event lock: the person must still
-  qualify by the frozen terms (eligibility is decided at decision time), stay
-  within the frozen cap with everything else decided for them, and the policy
-  within its current budget. The approval check is added to the snapshot.
+  qualify by the frozen terms (eligibility is decided at decision time); the
+  total approved for them under the policy, this approval included, must not
+  exceed the highest of the caps those approved claims were filed under and
+  the policy's current cap (so the order in which claims are approved never
+  changes the outcome after a cap change); and the policy must stay within its
+  current budget. The approval check is added to the snapshot.
   Waiting claims whose person no longer qualifies (a check-in undone, a
   project disqualified or withdrawn) show **Eligibility changed since
   submission** with the reason; they can be rejected. The claims list shows
@@ -117,11 +120,20 @@ create, edit, close (**Close to new claims**) and delete them
   `reimbursement-available` once per person and policy
   (`ReimbursementNotice`, row lock per policy) when the policy is open and
   the person qualifies, for example once finalists are published or their
-  team has been mentored. The payload holds ids only; at send time the policy
-  and the person's eligibility are checked again and the ticket link is built.
+  team has been mentored. Each pass takes up to 50 policies, those checked
+  longest ago first (`noticesCheckedAt`), so every policy gets its turn. The
+  payload holds ids only; at send time the policy and the person's
+  eligibility are checked again and the ticket link is built. A message
+  dropped then (the policy closed, the person no longer qualifies) clears its
+  notice, so they are told if it applies to them again.
 - General participant claims (`participantClaimsEnabled`, its cap) and crew
   claims (`crewClaimsEnabled`) work exactly as before; the general cap counts
-  only claims without a policy. Deleting the event keeps its claims (their
+  only claims without a policy. Policy claims don't need either switch, and
+  general and policy caps add up: a person may claim up to the general cap and,
+  separately, up to each policy's cap.
+- Caps are per registration, as for general claims: a person who cancels and
+  registers again, or holds both a guest and an account registration, starts
+  each registration's caps afresh. Policy budgets still bound the total. Deleting the event keeps its claims (their
   policy link is cleared; the terms stay in the snapshot).
 - Webhook: `expense_claim.status_changed` ([Webhooks](WEBHOOKS.md)) on filing,
   withdrawal, approval, rejection, payment and reversal, with ids and amounts

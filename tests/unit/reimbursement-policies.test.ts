@@ -41,9 +41,9 @@ describe("reimbursement cap and budget math", () => {
   });
 
   it("keeps an approval within the frozen cap and the current budget", () => {
-    expect(approvalProblem({ approvedMinor: n(300), frozenCap: n(1000), personDecided: n(700), budget: null, budgetDecided: n(0) })).toBeNull();
-    expect(approvalProblem({ approvedMinor: n(301), frozenCap: n(1000), personDecided: n(700), budget: null, budgetDecided: n(0) })).toBe("cap");
-    expect(approvalProblem({ approvedMinor: n(300), frozenCap: n(1000), personDecided: n(0), budget: n(1000), budgetDecided: n(800) })).toBe("budget");
+    expect(approvalProblem({ approvedMinor: n(300), cap: n(1000), personDecided: n(700), budget: null, budgetDecided: n(0) })).toBeNull();
+    expect(approvalProblem({ approvedMinor: n(301), cap: n(1000), personDecided: n(700), budget: null, budgetDecided: n(0) })).toBe("cap");
+    expect(approvalProblem({ approvedMinor: n(300), cap: n(1000), personDecided: n(0), budget: n(1000), budgetDecided: n(800) })).toBe("budget");
   });
 });
 
