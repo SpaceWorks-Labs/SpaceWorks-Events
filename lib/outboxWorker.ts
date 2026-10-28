@@ -1,7 +1,8 @@
 import "server-only";
 
 import { alertOnBackupProblems } from "@/lib/backupAlerts";
-import { deliverOutboxBatch } from "@/lib/outbox";
+import { outsideRequestActor } from "@/lib/requestActor";
+import { deliverOutboxBatchWithCount } from "@/lib/outbox";
 import {
   BEAT_HEARTBEAT_KEY,
   OUTBOX_SCHEDULER_HEARTBEAT_KEY,
@@ -12,16 +13,21 @@ import {
 import { purgeExpiredOperationalData } from "@/lib/retention";
 import { runPaymentMaintenance } from "@/lib/payments/maintenance";
 import { fillWaitlists } from "@/lib/payments/operations";
+import { runAdmissionMaintenance } from "@/lib/admission/maintenance";
 import { sendEventReminders } from "@/lib/eventReminders";
 import { logOpsError } from "@/lib/opsAlerts";
+import { deliverWebhookBatch } from "@/lib/webhooks/delivery";
+import { expireHelpRequests } from "@/lib/core/mentorDesk/helpExpiry";
+import { queueReimbursementNotices } from "@/lib/claims/policies/notices";
 
 /**
  * What this Node.js process does besides serving requests, from
  * `SWE_PROCESS_ROLE`:
  * - `web`: serves requests only; mail and timed jobs run elsewhere.
  * - `worker`: sends queued email within seconds of it being queued.
- * - `beat`: runs the timed jobs (payment holds and reminders, waitlists,
- *   event reminders, retention, backup alerts). Its jobs queue email; the worker sends it.
+ * - `beat`: runs the timed jobs (payment holds and reminders, waitlists, applications,
+ *   event reminders, organisation webhooks, retention, backup alerts). Its jobs
+ *   queue email; the worker sends it. Webhook requests go out from the beat.
  * - `all` (the default): all three in one process, for one-container installs.
  */
 export type ProcessRole = "all" | "web" | "worker" | "beat";
@@ -34,8 +40,15 @@ export function processRole(value = process.env.SWE_PROCESS_ROLE): ProcessRole {
 const DEFAULT_POLL_MS = 3_000;
 const BEAT_TICK_MS = 15_000;
 const HEARTBEAT_EVERY_MS = 60_000;
-const DELIVERY_BATCH = 50;
-const MAX_BATCHES_PER_TICK = 20;
+/** Messages claimed per batch inside one delivery pass. */
+export const OUTBOX_DRAIN_BATCH = 50;
+/**
+ * How long one pass keeps draining. Well under the one-minute cadence and a
+ * typical proxy timeout for `POST /api/internal/outbox`; overlapping passes
+ * (the worker and the external scheduler, or several replicas) are safe
+ * because each message is claimed individually.
+ */
+export const OUTBOX_DRAIN_BUDGET_MS = 40_000;
 
 type Job = { name: string; everyMs: number; run: (now: Date) => Promise<unknown>; };
 
@@ -45,8 +58,16 @@ export const SCHEDULED_JOBS: Job[] = [
   { name: "payments", everyMs: 60_000, run: (now) => runPaymentMaintenance(now) },
   // Free seats (a raised capacity, a removed guest) go to whoever is waiting.
   { name: "waitlists", everyMs: 60_000, run: (now) => fillWaitlists(now) },
+  // Applications (docs/ADMISSION.md): ended holds and offers, offer reminders, AUTO decisions, waitlist offers.
+  { name: "admission", everyMs: 60_000, run: (now) => runAdmissionMaintenance(now) },
   // A reminder about a day before each event or series date.
   { name: "event-reminders", everyMs: 5 * 60_000, run: (now) => sendEventReminders(now) },
+  // Organisation webhooks: due deliveries and retries (row claims make it safe on every replica).
+  { name: "webhooks", everyMs: 15_000, run: () => deliverWebhookBatch() },
+  // Mentor Desk: lapsed help claims go back to the queue, past-deadline requests expire (SKIP LOCKED, idempotent).
+  { name: "help-queue-expiry", everyMs: 60_000, run: (now) => expireHelpRequests(now) },
+  // Reimbursement policies with the email on: queue "you can claim" once per person (row lock per policy, unique notice rows).
+  { name: "reimbursement-notices", everyMs: 5 * 60_000, run: (now) => queueReimbursementNotices(now) },
   { name: "backup-alerts", everyMs: 5 * 60_000, run: () => alertOnBackupProblems() },
   { name: "retention", everyMs: 60 * 60_000, run: () => purgeExpiredOperationalData() },
 ];
@@ -56,15 +77,26 @@ function pollMs() {
   return Number.isFinite(value) && value >= 500 ? Math.min(value, 60_000) : DEFAULT_POLL_MS;
 }
 
-/** Send what's queued, batch after batch, until the queue is empty or the tick's budget is used. */
-export async function drainOutbox() {
+/**
+ * Deliver batches until nothing is due, the time budget is spent, or a batch
+ * failed without a single send (the mail server is likely down: wait for the
+ * next pass rather than burn through the retry schedule of the entire queue).
+ * Messages dropped on purpose count as neither sent nor failed, so the loop
+ * goes by how many due messages each batch picked up.
+ */
+export async function drainOutbox(options: { batch?: number; budgetMs?: number; now?: () => number } = {}) {
+  const batch = options.batch ?? OUTBOX_DRAIN_BATCH;
+  const now = options.now ?? Date.now;
+  const deadline = now() + (options.budgetMs ?? OUTBOX_DRAIN_BUDGET_MS);
   let sent = 0;
   let failed = 0;
-  for (let batch = 0; batch < MAX_BATCHES_PER_TICK; batch += 1) {
-    const result = await deliverOutboxBatch(DELIVERY_BATCH);
+  for (;;) {
+    const result = await deliverOutboxBatchWithCount(batch);
     sent += result.sent;
     failed += result.failed;
-    if (result.sent + result.failed < DELIVERY_BATCH) break;
+    if (result.due < batch) break;
+    if (result.sent === 0 && result.failed > 0) break;
+    if (now() >= deadline) break;
   }
   return { sent, failed };
 }
@@ -177,6 +209,11 @@ function startBeatLoop() {
  * duplicate timers during dev HMR.
  */
 export function startOutboxWorker(role = processRole()) {
+  // Timers created here outlive the request that started them: never let them carry its actor.
+  return outsideRequestActor(() => startBackground(role));
+}
+
+function startBackground(role: ReturnType<typeof processRole>) {
   const runtime = backgroundState();
   if (runtime.__sweBackground?.started) return runtime.__sweBackground.role;
   const state: BackgroundState = { started: true, role, loops: [] };

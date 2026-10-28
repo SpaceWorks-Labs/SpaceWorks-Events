@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { RsvpStatus } from "@prisma/client";
 import { ArrowRight, Share2 } from "lucide-react";
 import { RsvpForm } from "@/components/rsvp/RsvpForm";
 import type { RegistrationFieldDefinition } from "@/components/rsvp/registrationTypes";
+import type { TeamRegistrationConfig } from "@/components/rsvp/TeamRegistrationFields";
 import { Button } from "@/components/ui/button";
 import { Callout, Chip, OrgLogo, ProgressBar } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { accentStyle } from "@/lib/theme/accent";
+import { registrationActionLabel } from "@/lib/registrationLabel";
 import { formatMoney } from "@/lib/payments/money";
 import type { PublicTicketType } from "@/lib/payments/tickets";
 import type { TicketingInfo } from "@/components/rsvp/PromoCodeField";
@@ -20,6 +23,8 @@ type RegistrationState = {
   /** At or over capacity: new registrations join the waitlist. */
   full: boolean;
   approvalRequired: boolean;
+  /** Registering means applying (docs/ADMISSION.md). */
+  applications?: boolean;
 };
 
 const statusLabels: Partial<Record<RsvpStatus, { chip: string; tone: "success" | "warning" | "neutral"; action: string }>> = {
@@ -69,11 +74,18 @@ export function RegistrationCard(props: {
   organisation: { name: string; slug: string; logoUrl: string | null };
   registrationFields: RegistrationFieldDefinition[];
   confirmedCount: number | null;
+  /**
+   * Crew tickets (docs/CREW.md): added to "N going" only. Spots left and the
+   * progress bar keep the attendee count, because crew never take capacity.
+   */
+  crewCount?: number | null;
   capacity: number | null;
   state: RegistrationState;
   title?: string;
   /** The event's accent. The sign-up dialog renders in a portal outside the page's accent scope, so it re-applies it. */
   accentColor?: string | null;
+  /** Team event settings (docs/TEAMS.md): counts become places (one per team or solo entrant). */
+  team?: TeamRegistrationConfig | null;
   /** The signed-in viewer's own registration from the server. */
   viewerRsvp?: { token: string; status: RsvpStatus } | null;
   /** Ticket types; empty for an event without them (free registration). */
@@ -84,7 +96,8 @@ export function RegistrationCard(props: {
   paidSalesOpen?: boolean;
   ticketing?: TicketingInfo | null;
 }) {
-  const { orgSlug, eventSlug, eventInstanceId, eventTitle, organisation, registrationFields, confirmedCount, capacity, state, accentColor, viewerRsvp = null, tickets = [], heldCount = 0, paidSalesOpen = false, ticketing = null } = props;
+  const { orgSlug, eventSlug, eventInstanceId, eventTitle, organisation, registrationFields, confirmedCount, crewCount, capacity, state, accentColor, team, viewerRsvp = null, tickets = [], heldCount = 0, paidSalesOpen = false, ticketing = null } = props;
+  const router = useRouter();
   const prices = tickets.filter((ticket) => ticket.priceMinor > 0);
   const cheapest = prices.length > 0 ? prices.reduce((low, ticket) => (ticket.priceMinor < low.priceMinor ? ticket : low)) : null;
   // Hidden tickets, pay what you want, fees and paid extras count as tickets too.
@@ -114,9 +127,17 @@ export function RegistrationCard(props: {
     }
   };
 
-  const savedLabel = saved ? statusLabels[saved.status ?? "CONFIRMED"] ?? { chip: "Registered", tone: "neutral" as const, action: "View registration" } : null;
-  const registerLabel = state.full ? "Join the waitlist" : state.approvalRequired ? "Request to join" : allFree ? "Register — it's free" : "Get tickets";
-  const registerNote = !allFree
+  const savedLabel = saved && state.applications && saved.status === "PENDING_APPROVAL"
+    ? { chip: "Application sent", tone: "warning" as const, action: "View your application" }
+    : saved ? statusLabels[saved.status ?? "CONFIRMED"] ?? { chip: "Registered", tone: "neutral" as const, action: "View registration" } : null;
+  const registerLabel = team || state.applications ? registrationActionLabel(state, team ?? null) : state.full ? "Join the waitlist" : state.approvalRequired ? "Request to join" : allFree ? "Register — it's free" : "Get tickets";
+  const registerNote = state.applications
+    ? `Apply with the form below. Every application is reviewed; if you're offered a place, you accept it${allFree ? "" : " (and pay)"} from your ticket page. Nothing is charged now.`
+    : team
+    ? team.soloPolicy === "TEAMS_ONLY"
+      ? "Create a team or join one with its link. Each team takes one place. We'll email your ticket."
+      : "Create a team, join one with its link, or take part on your own. We'll email your ticket."
+    : !allFree
     ? state.approvalRequired
       ? "Choose a ticket and send your request. Nothing is charged now; if the organiser approves it, we'll email you a link to pay."
       : state.full
@@ -153,10 +174,11 @@ export function RegistrationCard(props: {
         {confirmedCount != null ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="font-semibold text-ink">{confirmedCount} going</span>
-              {spotsLeft != null ? <span className="text-ink-muted">{spotsLeft} {spotsLeft === 1 ? "spot" : "spots"} left</span> : null}
+              <span className="font-semibold text-ink">{team ? `${confirmedCount} ${confirmedCount === 1 ? "place" : "places"} taken` : `${confirmedCount + (crewCount ?? 0)} going`}</span>
+              {spotsLeft != null ? <span className="text-ink-muted">{spotsLeft} {team ? (spotsLeft === 1 ? "place" : "places") : spotsLeft === 1 ? "spot" : "spots"} left</span> : null}
             </div>
             {capacity != null ? <ProgressBar value={confirmedCount} max={capacity} label="Places taken" /> : null}
+            {team ? <p className="text-caption text-ink-muted">{team.soloPolicy === "TEAMS_ONLY" ? "Each team takes one place." : "Each team, and each solo entrant, takes one place."}</p> : null}
           </div>
         ) : null}
         {cheapest ? (
@@ -192,7 +214,7 @@ export function RegistrationCard(props: {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent size="md" style={accentStyle(accentColor)} className="yy-accent-scope">
-          <DialogHeader title={`Register for ${eventTitle}`} description={registerNote} />
+          <DialogHeader title={state.full ? `Join the waitlist for ${eventTitle}` : `Register for ${eventTitle}`} description={registerNote} />
           <DialogBody className="pb-6">
             <RsvpForm
               orgSlug={orgSlug}
@@ -202,11 +224,18 @@ export function RegistrationCard(props: {
               tickets={tickets}
               paidSalesOpen={paidSalesOpen}
               ticketing={ticketing}
-              paidRequest={state.approvalRequired ? "approval" : state.full ? "waitlist" : null}
-              onRsvpSaved={({ ticketToken, status }) => {
-                // Same as before: close the dialog and let the card switch to the ticket link.
+              // Team places are paid for up front (docs/TEAMS.md), never requested first.
+              paidRequest={team ? null : state.approvalRequired ? "approval" : state.full ? "waitlist" : null}
+              team={team}
+              onRsvpSaved={({ ticketToken, status, teamMode }) => {
                 if (ticketToken) setSaved({ token: ticketToken, status });
-                setDialogOpen(false);
+                // A new team leader needs the form's done message (the team page
+                // link is on its way by email), so that dialog stays open.
+                // Otherwise close it and let the card switch to the ticket link.
+                if (teamMode !== "create") setDialogOpen(false);
+                // `/api/rsvp` revalidates this page; refresh so the going/places
+                // count updates now. Client state (an open dialog) is kept.
+                router.refresh();
               }}
             />
           </DialogBody>

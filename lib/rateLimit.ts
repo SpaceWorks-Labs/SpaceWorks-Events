@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import Redis from "ioredis";
+import { REDIS_FAIL_FAST_OPTIONS } from "@/lib/redisOptions";
 
 export type Bucket =
   | "global"
@@ -13,10 +14,15 @@ export type Bucket =
   | "rsvp"
   | "feedback"
   | "upload"
+  | "eventPageUpload"
+  | "crewPhotoUpload"
+  | "crewPhotoUploadEvent"
   | "invite"
   | "broadcast"
   | "broadcastTest"
   | "broadcastDraft"
+  | "designAutosave"
+  | "ticketRender"
   | "checkin"
   | "checkinStationPin"
   | "search"
@@ -33,7 +39,17 @@ export type Bucket =
   | "paymentSettings"
   | "paymentStatus"
   | "ticketCheckout"
-  | "clientError";
+  | "clientError"
+  | "webhookManage"
+  | "webhookTest"
+  | "attendanceCheckSend"
+  | "attendanceCheckSettings"
+  | "attendanceCheckLink"
+  | "attendanceCheckReply"
+  | "attendanceCheckView"
+  | "mobileAuth"
+  | "mobileRefresh"
+  | "mobileApi";
 
 const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   global: { max: 300, windowMs: 60_000 },
@@ -46,7 +62,16 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   passwordReset: { max: 5, windowMs: 60 * 60_000 },
   rsvp: { max: 10, windowMs: 60_000 },
   feedback: { max: 8, windowMs: 60_000 },
+  // Certificates, member IDs, ticket designs, organisation and profile images.
   upload: { max: 12, windowMs: 60 * 60_000 },
+  // Event page images (cover, page logo, speaker photos, sponsor logos):
+  // building one event page can take dozens, so they have their own budget.
+  eventPageUpload: { max: 60, windowMs: 60 * 60_000 },
+  // Crew photos uploaded through the public crew sign-up link (docs/CREW.md),
+  // counted per IP and per link (hashed), apart from the shared upload budget.
+  crewPhotoUpload: { max: 60, windowMs: 60 * 60_000 },
+  // ...and at most 200 a day per event, whoever holds the link.
+  crewPhotoUploadEvent: { max: 200, windowMs: 24 * 60 * 60_000 },
   invite: { max: 30, windowMs: 60 * 60_000 },
   broadcast: { max: 10, windowMs: 60 * 60_000 },
   // Tests only reach the organiser's own inbox; kept apart so testing never blocks the real send.
@@ -54,6 +79,10 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   // Draft autosave and discard in the Emails tab. Saves fire about 1.5s after
   // typing stops, so a steady writer stays well under this.
   broadcastDraft: { max: 60, windowMs: 60_000 },
+  // Ticket designer autosave (docs/TICKET_DESIGNER.md): about 1.5s after each edit stops.
+  designAutosave: { max: 90, windowMs: 60_000 },
+  // Designed ticket images and PDFs (docs/TICKET_DESIGNER.md): each is a fresh server render.
+  ticketRender: { max: 20, windowMs: 60_000 },
   checkin: { max: 180, windowMs: 60_000 },
   checkinStationPin: { max: 5, windowMs: 60_000 },
   search: { max: 60, windowMs: 60_000 },
@@ -85,11 +114,35 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   ticketCheckout: { max: 20, windowMs: 60_000 },
   // Browser crash reports forwarded to the operator alert webhook.
   clientError: { max: 10, windowMs: 60_000 },
+  // Organisation webhook endpoint changes (create, edit, rotate, enable, delete).
+  webhookManage: { max: 30, windowMs: 60_000 },
+  // Webhook test sends and manual redeliveries each make an outbound request.
+  webhookTest: { max: 20, windowMs: 60 * 60_000 },
+  // Attendance confirmation (docs/ATTENDANCE.md): organiser sends and reminders
+  // queue one email per guest, so they share a tight hourly budget.
+  attendanceCheckSend: { max: 10, windowMs: 60 * 60_000 },
+  // The release-on-decline switch in the Emails tab.
+  attendanceCheckSettings: { max: 30, windowMs: 60_000 },
+  // Guests · People "Share attendance link": one guest per click, no email.
+  attendanceCheckLink: { max: 60, windowMs: 10 * 60_000 },
+  // Public replies on /attend/{token}, per link and per client address.
+  attendanceCheckReply: { max: 10, windowMs: 60_000 },
+  // Opening /attend/{token}, per client address: links are unguessable, this only blunts scraping.
+  attendanceCheckView: { max: 60, windowMs: 60_000 },
+  // Mobile app sign-in (password, Google) and authenticator checks, per IP.
+  mobileAuth: { max: 10, windowMs: 60_000 },
+  // Mobile token refreshes, per IP. Phones at one venue often share a NAT.
+  mobileRefresh: { max: 60, windowMs: 60_000 },
+  // Signed-in mobile requests, per app session (not per IP: venue NAT).
+  mobileApi: { max: 300, windowMs: 60_000 },
 };
 
 // Local fallback store
 type Entry = { count: number; resetAt: number; };
 const memoryStore = new Map<string, Entry>();
+
+/** Connection states in which Redis is known to be unavailable right now. */
+const UNAVAILABLE_STATES = new Set(["reconnecting", "close", "end"]);
 
 let redisClient: Redis | null = null;
 let isRedisDisabled = false;
@@ -113,11 +166,7 @@ function getRedisClient(): Redis | null {
   }
 
   try {
-    redisClient = new Redis(redisUrl, {
-      maxRetriesPerRequest: 1,
-      connectTimeout: 1000,
-      lazyConnect: true,
-    });
+    redisClient = new Redis(redisUrl, REDIS_FAIL_FAST_OPTIONS);
 
     redisClient.on("error", () => {
       console.warn("[rateLimit] Redis client error");
@@ -202,6 +251,13 @@ export async function checkRateLimitById(bucket: Bucket, id: string): Promise<bo
 
   const k = keyFor(bucket, id);
   const { max, windowMs } = limits[bucket];
+
+  // While ioredis is between reconnect attempts, answer at once instead of
+  // queueing behind the backoff (production fails closed, as below).
+  if (UNAVAILABLE_STATES.has(redis.status)) {
+    if (process.env.NODE_ENV === "production" && !allowTestMemoryFallback()) return false;
+    return checkRateLimitMemory(bucket, id);
+  }
 
   try {
     // Increment and expiry must be one Redis operation. A pipeline can leave

@@ -1,0 +1,55 @@
+import type { EventPermission, MembershipRole } from "@prisma/client";
+import { eventCapabilities } from "@/lib/eventDashboard/capabilities";
+import { isOrgAdmin } from "@/lib/permissionRoles";
+import type { EventPermissionsDto } from "@/lib/mobile/schemas";
+
+/*
+ * Pure permission flags for the mobile organiser UI, derived from the same
+ * source as the web dashboard (lib/eventDashboard/capabilities.ts), so a
+ * control the website shows is the control the app shows. Every action still
+ * re-checks on the server. `role` is the caller's organisation role (null for
+ * a collaborator who is not a member); `grant` their event grant.
+ */
+export function eventPermissionsFor(
+  role: MembershipRole | null,
+  grant: readonly EventPermission[],
+  options: { submissionsEnabled?: boolean; admissionEnabled?: boolean } = {},
+): EventPermissionsDto {
+  const can = eventCapabilities(role, grant);
+  return {
+    checkIn: can.canCheckIn,
+    // Space Works lets the MANAGE_REGISTRATIONS grant manage guests, as on the web.
+    manageRegistrations: can.canManageRegistrations,
+    sendEmails: can.canSendEmails,
+    schedule: can.canManageSchedule,
+    manageFeedback: can.canManageFeedback,
+    // The same rule as the core (canPublishEvents: organisation OWNER/ADMIN).
+    manageRegistrationWindow: role !== null && isOrgAdmin(role),
+    // The judging workspace, once the event takes submissions.
+    judge: Boolean(options.submissionsEnabled) && can.canJudge,
+    checkInToLists: can.canCheckInToLists,
+    manageOrders: can.canManageRegistrations,
+    manageCrew: can.canManageCrew,
+    // Members and any event collaborator file their own claims (docs/FINANCE.md).
+    fileClaims: role !== null || grant.length > 0,
+    manageFinance: can.isAdmin,
+    // Applications (docs/ADMISSION.md): the same rules as the Applications tab, on events taking them.
+    manageApplications: Boolean(options.admissionEnabled) && can.canManageApplications,
+    reviewApplications: Boolean(options.admissionEnabled) && can.canReviewApplications,
+  };
+}
+
+/**
+ * Whether a grant opens the organiser surfaces. JUDGE, MENTOR and
+ * REVIEW_APPLICATIONS are isolated (lib/eventDashboard/capabilities.ts): they
+ * open only the judging workspace, the mentor console and the review
+ * workspace (lib/mobile/admission.ts resolves reviewers separately).
+ */
+export function hasOrganiserGrant(grant: readonly EventPermission[]): boolean {
+  return grant.some((permission) => permission !== "JUDGE" && permission !== "MENTOR" && permission !== "REVIEW_APPLICATIONS");
+}
+
+/** Guests and counts are visible to registration managers and to the check-in desk (which already sees the roster). */
+export function canSeeGuests(permissions: EventPermissionsDto) {
+  return permissions.manageRegistrations || permissions.checkIn;
+}

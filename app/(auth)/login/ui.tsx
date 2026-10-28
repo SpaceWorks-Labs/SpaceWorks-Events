@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
+import { refreshAuthSession } from "@/components/auth/useAuthSession";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,9 @@ import { Field, Input, PasswordInput } from "@/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { safeAuthRedirect } from "@/lib/authRedirect";
 import { resendEmailVerification, signUpWithPassword } from "@/app/actions/auth";
-import { GoogleMark } from "@/components/auth/GoogleMark";
 import { SignInCodeStep } from "@/components/auth/SignInCodeStep";
 import { deviceId, useAutofillSync } from "@/components/auth/signInBrowser";
+import { GoogleSignInSection } from "./_ui/GoogleSignInSection";
 
 type Mode = "signin" | "signup";
 
@@ -118,6 +119,8 @@ export function LoginForm({ accountCreationEnabled, googleSsoConfigured }: { acc
       setError(emailCodeRequired ? "That code isn't right, or it has expired." : mfaRequired ? "Invalid authenticator or recovery code." : "Invalid email or password.");
       return;
     }
+    // Client chrome reads the session from a store; refresh it for the next page.
+    void refreshAuthSession();
     router.push(callbackUrl);
     router.refresh();
   }
@@ -231,33 +234,7 @@ export function LoginForm({ accountCreationEnabled, googleSsoConfigured }: { acc
           </Button>
         ) : null}
 
-        {googleSsoConfigured ? (
-          <Button
-            variant="secondary"
-            size="lg"
-            fullWidth
-            disabled={!!loading}
-            onClick={() => {
-              resetStatus();
-              setLoading("google");
-              void signIn("google", { callbackUrl }).catch(() => {
-                setLoading(null);
-                setError("Google sign-in is temporarily unavailable. Please try again.");
-              });
-            }}
-          >
-            <GoogleMark />
-            Continue with Google
-          </Button>
-        ) : (
-          <Callout tone="info">Google sign-in is not configured for this instance.</Callout>
-        )}
-
-        <div className="flex items-center gap-3 text-sm text-ink-muted">
-          <span aria-hidden className="h-px flex-1 bg-line" />
-          or with email
-          <span aria-hidden className="h-px flex-1 bg-line" />
-        </div>
+        <GoogleSignInSection googleSsoConfigured={googleSsoConfigured} loading={loading} callbackUrl={callbackUrl} resetStatus={resetStatus} setLoading={setLoading} setError={setError} />
 
         <form className="flex flex-col gap-4" onSubmit={isSignUp ? handleSignUp : handleSignIn}>
           {isSignUp ? (

@@ -24,3 +24,67 @@ describe("embedding response headers", () => {
     expect(eventPage.headers.get("cache-control")).toContain("no-transform");
   });
 });
+
+describe("capability page caching", () => {
+  it("marks ticket, team, and submission pages no-store and leaves other pages alone", async () => {
+    for (const path of ["/ticket/abc123", "/team/" + "t".repeat(43), "/acme/launch/team/" + "j".repeat(43), "/submit/" + "s".repeat(43), "/attend/" + "a".repeat(43), "/account/submissions/evt_123"]) {
+      const response = await proxy(new NextRequest(`https://events.example.test${path}`));
+      expect(response.headers.get("cache-control"), path).toContain("no-store");
+      expect(response.headers.get("cache-control"), path).toContain("private");
+      expect(response.headers.get("cache-control"), path).toContain("no-transform");
+    }
+    for (const path of ["/acme/launch", "/acme/launch/team", "/acme/launch/schedule", "/acme/launch/results", "/acme/launch/projects", "/accounting", "/joined", "/orders", "/discover"]) {
+      const response = await proxy(new NextRequest(`https://events.example.test${path}`));
+      expect(response.headers.get("cache-control"), path).toBe("no-transform");
+    }
+  });
+
+  it("marks signed-in areas, invitations, orders, and reset/verify links no-store", async () => {
+    for (const path of [
+      "/dashboard/acme",
+      "/dashboard",
+      "/account",
+      "/super-admin/users",
+      "/verify-mfa",
+      "/join/org/" + "o".repeat(43),
+      "/join/event-collaborator/" + "c".repeat(43),
+      "/order/" + "r".repeat(43),
+      "/verify/" + "v".repeat(32),
+      "/reset-password?token=x",
+      "/verify-email?token=x",
+      "/login",
+    ]) {
+      const response = await proxy(new NextRequest(`https://events.example.test${path}`));
+      expect(response.headers.get("cache-control"), path).toContain("private");
+      expect(response.headers.get("cache-control"), path).toContain("no-store");
+    }
+  });
+
+  it("marks any page no-store for a signed-in request", async () => {
+    for (const cookie of ["swe.session-token.v1=abc", "__Secure-swe.session-token.v1.0=abc"]) {
+      const response = await proxy(new NextRequest("https://events.example.test/acme/launch", { headers: { cookie } }));
+      expect(response.headers.get("cache-control"), cookie).toContain("no-store");
+    }
+    const other = await proxy(new NextRequest("https://events.example.test/acme/launch", { headers: { cookie: "theme=dark" } }));
+    expect(other.headers.get("cache-control")).toBe("no-transform");
+  });
+});
+
+describe("split-hosting view reads", () => {
+  const view = "https://api.example.test/api/frontend/view/app__account__page%3AloadAccountView";
+  const globalChecks = () => mocks.checkRateLimit.mock.calls.filter(([, bucket]) => bucket === "global").length;
+
+  it("lets the website's authenticated view reads skip the global bucket, like a single-server render", async () => {
+    vi.stubEnv("FRONTEND_GATEWAY_SECRET", "g".repeat(64));
+    mocks.checkRateLimit.mockClear();
+    await proxy(new NextRequest(view, { method: "POST", headers: { "x-swe-frontend-key": "g".repeat(64) } }));
+    expect(globalChecks()).toBe(0);
+    // Actions and every other API path still count.
+    await proxy(new NextRequest("https://api.example.test/api/frontend/action/x", { method: "POST", headers: { "x-swe-frontend-key": "g".repeat(64) } }));
+    await proxy(new NextRequest(view, { method: "POST" }));
+    expect(globalChecks()).toBe(2);
+    // A wrong key never reaches the limiter or the reader.
+    expect((await proxy(new NextRequest(view, { method: "POST", headers: { "x-swe-frontend-key": "x".repeat(64) } }))).status).toBe(404);
+    vi.unstubAllEnvs();
+  });
+});

@@ -13,11 +13,16 @@ export const certificateMergeTags = {
   eventDate: { label: "Event date", sample: "14 Oct 2026" },
   organisation: { label: "Organisation", sample: "Your organisation" },
   issueDate: { label: "Issue date", sample: "15 Oct 2026" },
+  /** Contributor certificates only (docs/VOLUNTEERS.md); empty on attendee certificates. */
+  role: { label: "Contributor role", sample: "Volunteer · Registration desk" },
+  hours: { label: "Hours contributed", sample: "6.5 hours" },
 } as const;
 export type CertificateMergeTag = keyof typeof certificateMergeTags;
 export type CertificateMergeValues = Record<CertificateMergeTag, string>;
+/** Tags only contributor certificates fill. */
+export const CONTRIBUTOR_MERGE_TAGS: readonly CertificateMergeTag[] = ["role", "hours"];
 
-const MERGE_TAG = /\{\{\s*(name|event|eventDate|organisation|issueDate)\s*\}\}/g;
+const MERGE_TAG = /\{\{\s*(name|event|eventDate|organisation|issueDate|role|hours)\s*\}\}/g;
 
 /** Replaces merge tags with plain values. The result is plain text, never markup. */
 export function fillCertificateText(text: string, values: CertificateMergeValues): string {

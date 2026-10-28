@@ -1,15 +1,23 @@
 import "server-only";
 
-import type { RsvpStatus } from "@prisma/client";
+import { AdmissionStatus, type Prisma, type RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { publishTicketCheckedIn } from "@/lib/ticketCheckInEvents";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { currentMobileActor } from "@/lib/requestActor";
 
-type CheckInSource = "online" | "offline-sync" | "venue-station";
+/** A mobile app's dashboard-style check-in records how the app reached it. */
+function recordedSource<T extends CheckInSource>(source: T): T | "mobile-scan" | "mobile-manual" {
+  const actor = currentMobileActor();
+  return source === "online" && actor?.checkInSource ? actor.checkInSource : source;
+}
+
+export type CheckInSource = "online" | "offline-sync" | "venue-station" | "mobile-scan" | "mobile-manual";
 
 export type CheckInCommitResult =
   | { state: "checked-in"; checkedInAt: Date }
   | { state: "already-checked-in"; checkedInAt: Date }
-  | { state: "ineligible"; status: RsvpStatus }
+  | { state: "ineligible"; status: RsvpStatus; applicant: boolean }
   | { state: "missing" };
 
 /**
@@ -21,7 +29,28 @@ export type CheckInCommitResult =
  * venue station) goes through here, so the realtime ticket notification is
  * published once, only for a real transition, and only after the transaction
  * has committed.
+ *
+ * An override (`force`) never admits an admission application that isn't
+ * ACCEPTED (its own, or its team's): such a registration has no place
+ * (docs/ADMISSION.md), so it is `ineligible` with `applicant`.
  */
+const notAccepted = { status: { not: AdmissionStatus.ACCEPTED } } satisfies Prisma.AdmissionApplicationWhereInput;
+/** A registration whose own (solo) or team's admission application isn't ACCEPTED. */
+const unacceptedApplicant = { OR: [{ admissionApplication: { is: notAccepted } }, { team: { is: { admissionApplication: { is: notAccepted } } } }] } satisfies Prisma.RSVPWhereInput;
+
+/** The registration's own and its team's application status, for `isUnacceptedApplicant`. */
+export const applicationStatusSelect = {
+  admissionApplication: { select: { status: true } },
+  team: { select: { admissionApplication: { select: { status: true } } } },
+} as const satisfies Prisma.RSVPSelect;
+
+type ApplicationStatusRow = { admissionApplication?: { status: AdmissionStatus } | null; team?: { admissionApplication?: { status: AdmissionStatus } | null } | null };
+
+export function isUnacceptedApplicant(row: ApplicationStatusRow): boolean {
+  const status = row.admissionApplication?.status ?? row.team?.admissionApplication?.status;
+  return status != null && status !== AdmissionStatus.ACCEPTED;
+}
+
 export async function commitCheckInProjection(params: {
   rsvpId: string;
   actorUserId: string | null;
@@ -34,7 +63,7 @@ export async function commitCheckInProjection(params: {
       ? ["CONFIRMED", "WAITLISTED", "PENDING_APPROVAL"] as const
       : ["CONFIRMED"] as const;
     const updated = await tx.rSVP.updateMany({
-      where: { id: params.rsvpId, checkedInAt: null, status: { in: [...allowedStatuses] } },
+      where: { id: params.rsvpId, checkedInAt: null, status: { in: [...allowedStatuses] }, ...(params.force ? { NOT: unacceptedApplicant } : {}) },
       data: { checkedInAt: params.checkedInAt },
     });
     if (updated.count === 1) {
@@ -43,29 +72,30 @@ export async function commitCheckInProjection(params: {
           rsvpId: params.rsvpId,
           actorUserId: params.actorUserId,
           action: "CHECKED_IN",
-          source: params.source,
+          source: recordedSource(params.source),
           occurredAt: params.checkedInAt,
         },
       });
       return { state: "checked-in", checkedInAt: params.checkedInAt };
     }
-    const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { checkedInAt: true, status: true } });
+    const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { checkedInAt: true, status: true, ...applicationStatusSelect } });
     if (!current) return { state: "missing" };
     if (current.checkedInAt) return { state: "already-checked-in", checkedInAt: current.checkedInAt };
-    return { state: "ineligible", status: current.status };
+    return { state: "ineligible", status: current.status, applicant: current.status !== "CONFIRMED" && isUnacceptedApplicant(current) };
   });
   if (result.state === "checked-in") {
     publishTicketCheckedIn({ rsvpId: params.rsvpId, checkedInAt: result.checkedInAt });
+    emitWebhookEvent({ type: "checkin.created", rsvpId: params.rsvpId, checkedInAt: result.checkedInAt });
   }
   return result;
 }
 
-export function commitUndoCheckInProjection(params: {
+export async function commitUndoCheckInProjection(params: {
   rsvpId: string;
   actorUserId: string | null;
-  source: "online" | "venue-station";
+  source: "online" | "venue-station" | "mobile-scan" | "mobile-manual";
 }) {
-  return prisma.$transaction(async (tx) => {
+  const undone = await prisma.$transaction(async (tx) => {
     const changed = await tx.rSVP.updateMany({
       where: { id: params.rsvpId, checkedInAt: { not: null } },
       data: { checkedInAt: null },
@@ -76,9 +106,11 @@ export function commitUndoCheckInProjection(params: {
         rsvpId: params.rsvpId,
         actorUserId: params.actorUserId,
         action: "CHECK_IN_UNDONE",
-        source: params.source,
+        source: recordedSource(params.source),
       },
     });
     return true;
   });
+  if (undone) emitWebhookEvent({ type: "checkin.undone", rsvpId: params.rsvpId, undoneAt: new Date() });
+  return undone;
 }

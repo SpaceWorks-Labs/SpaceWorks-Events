@@ -1,4 +1,4 @@
-import { RsvpStatus, TicketTypeKind } from "@prisma/client";
+import { RegistrationMode, RsvpStatus, TeamTicketMode, TicketTypeKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { ActionResult } from "@/app/actions/org";
 import { isPaidEventsEnabled } from "@/lib/instanceSettings";
@@ -6,7 +6,10 @@ import { startCheckout } from "@/lib/payments/checkout";
 import { OrderError, reserveOrder, type PaymentContext } from "@/lib/payments/orders";
 import type { OrderTarget } from "@/lib/payments/targets";
 import { loadPaymentAccount } from "@/lib/payments/settings";
+import type { TeamRegistrationIntent } from "@/lib/validators";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { requestedItems, type AnswerRow, type OrderRequest } from "./shared";
+import { TeamRegistrationError, teamRegistrationFailure, isUniqueViolationOn } from "./team";
 
 /**
  * Who collects the order if it costs money: the organisation's connected
@@ -35,7 +38,9 @@ export async function submitTicketOrder(params: {
   buyer: { userId: string | null; email: string; name: string; attendeeKey: string; };
   answers: AnswerRow[];
   setUserName?: string | null;
-}): Promise<ActionResult<{ count: number; status: RsvpStatus; ticketToken: string; orderToken: string; checkoutUrl: string | null }>> {
+  /** TEAM events (docs/TEAMS.md): solo, create a team, or join one by paying for a ticket. */
+  team?: TeamRegistrationIntent;
+}): Promise<ActionResult<{ count: number; status: RsvpStatus; ticketToken: string; orderToken: string; checkoutUrl: string | null; teamId: string | null }> & { code?: "TEAM_REQUIRED" }> {
   const items = requestedItems(params.request);
   if (items.length === 0) return { ok: false, error: "Choose a ticket." };
   try {
@@ -55,6 +60,7 @@ export async function submitTicketOrder(params: {
         accessCode: params.request.accessCode || undefined,
         addOns: params.request.addOns,
         payAtDesk: params.request.payAtDesk,
+        team: params.team,
       });
       if (params.setUserName && params.buyer.userId) await tx.user.update({ where: { id: params.buyer.userId }, data: { name: params.setUserName } });
       if (params.answers.length > 0) {
@@ -64,6 +70,7 @@ export async function submitTicketOrder(params: {
       }
       return reserved;
     });
+    for (const rsvpId of order.rsvpIds) emitWebhookEvent({ type: "registration.created", rsvpId });
     const checkout = order.paymentId ? await startCheckout(order.orderId).catch(() => null) : null;
     return {
       ok: true,
@@ -73,16 +80,24 @@ export async function submitTicketOrder(params: {
         ticketToken: order.buyerTicketToken,
         orderToken: order.accessToken,
         checkoutUrl: checkout && "url" in checkout ? checkout.url : null,
+        teamId: order.teamId,
       },
     };
   } catch (error: unknown) {
     if (error instanceof OrderError) return { ok: false, error: error.message };
+    if (error instanceof TeamRegistrationError) return teamRegistrationFailure(error);
+    if (isUniqueViolationOn(error, "nameKey")) return { ok: false, error: "That team name is already taken for this event." };
     if (typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "P2002") {
       return { ok: false, error: "Someone on this order is already registered for this event." };
     }
     console.error("[rsvp] ticket order failed");
     return { ok: false, error: "Could not save your order." };
   }
+}
+
+/** On a PER_TEAM event members join free, without a ticket; every other registration is an order. */
+export function joinsFree(event: { registrationMode: RegistrationMode; teamTicketMode: TeamTicketMode; }, intent: TeamRegistrationIntent | undefined) {
+  return intent?.mode === "join" && event.registrationMode === RegistrationMode.TEAM && event.teamTicketMode === TeamTicketMode.PER_TEAM;
 }
 
 /** Events and series with active ticket types register through orders. */

@@ -8,13 +8,14 @@ import { effectiveEventProgram } from "@/lib/eventProgram";
 import { plainTextToSafeHtml, sanitizeRichText } from "@/lib/richText";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { toFieldDefinition } from "@/lib/registrationFields";
+import { publicTeamRegistrationConfig } from "@/lib/publicTeamConfig";
 
 type Props = { params: Promise<{ orgSlug: string; eventSlug: string; }>; };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function EventPage({ params }: Props) {
-  const { org, preview, event, page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing } = await loadEventView({ params });
+  const { judging, mentors, org, preview, event, page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing, crew, crewCount } = await loadEventView({ params });
   return (
     <EventWebsiteShell
       orgSlug={org.slug}
@@ -75,8 +76,10 @@ export default async function EventPage({ params }: Props) {
         description: resource.description,
         href: resource.externalUrl!,
       }))}
+      crew={crew}
       registrationFields={(form?.fields ?? []).map(toFieldDefinition)}
       confirmedCount={event.showRegistrationCount ? confirmed : null}
+      crewCount={crewCount}
       registrationOpen={
         event.status === "PUBLISHED" &&
         event.endDateTime > new Date() &&
@@ -89,7 +92,11 @@ export default async function EventPage({ params }: Props) {
       paidSalesOpen={paidSalesOpen}
       ticketing={ticketing}
       approvalRequired={event.privacyType === EventPrivacyType.APPROVAL_REQUIRED}
+      applications={event.admissionEnabled}
       viewerRsvp={viewerRsvp ? { token: viewerRsvp.checkInToken, status: viewerRsvp.status } : null}
+      team={publicTeamRegistrationConfig(event)}
+      judging={judging}
+      mentors={mentors}
     />
   );
 }

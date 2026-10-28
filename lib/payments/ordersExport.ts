@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Prisma } from "@prisma/client";
-import { buildCsv } from "@/lib/csv";
+import { csvByteStream } from "@/lib/csvExport";
 import { prisma } from "@/lib/db";
 import { minorToDecimalString } from "./money";
 
@@ -72,21 +72,17 @@ function row(order: ExportOrder, timeZone: string) {
 
 /** Every order of an event or series as CSV, streamed in batches. Amounts are in major units. */
 export function ordersCsvStream(owner: { eventId: string; } | { eventSeriesId: string; }, timeZone: string) {
-  const encoder = new TextEncoder();
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        controller.enqueue(encoder.encode(`﻿${buildCsv([ORDER_EXPORT_HEADER])}\n`));
-        let cursor: string | undefined;
-        while (true) {
-          const orders = await prisma.order.findMany({ where: owner, orderBy: { id: "asc" }, take: BATCH, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), select });
-          if (!orders.length) break;
-          controller.enqueue(encoder.encode(`${buildCsv(orders.map((order) => row(order, timeZone)))}\n`));
-          cursor = orders.at(-1)?.id;
-        }
-        controller.close();
-      } catch {
-        controller.error(new Error("Unable to export orders."));
+  // Pull-based: the next batch is read only once the download has taken the last one.
+  return csvByteStream({
+    header: ORDER_EXPORT_HEADER,
+    errorMessage: "Unable to export orders.",
+    async *batches() {
+      let cursor: string | undefined;
+      while (true) {
+        const orders = await prisma.order.findMany({ where: owner, orderBy: { id: "asc" }, take: BATCH, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), select });
+        if (!orders.length) return;
+        yield orders.map((order) => row(order, timeZone));
+        cursor = orders.at(-1)?.id;
       }
     },
   });

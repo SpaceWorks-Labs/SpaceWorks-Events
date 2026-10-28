@@ -4,6 +4,8 @@
 
 Everything you need to understand, run and change Space Works Events, the free, open-source event platform from Space Works. These pages describe what the product does today, how to operate it, and what's planned. If a page and the code ever disagree, the code and Prisma migrations win, and the page needs fixing.
 
+Using the app rather than changing it? The in-app guide at `/help` (written in `content/help`, see its README) explains every feature for guests, organisers and the person running the server; this folder is the technical handbook.
+
 New here? Start with [Features](FEATURES.md) for what it does, then [Local development](DEVELOPMENT.md) to run it. To host everything on one server, follow [Complete Docker VPS deployment](DEPLOYMENT_VPS.md). To go live on free plans, follow [Free-tier cloud deployment](DEPLOYMENT_CLOUD.md).
 
 ## Product and engineering
@@ -13,6 +15,13 @@ New here? Start with [Features](FEATURES.md) for what it does, then [Local devel
 | [Design system](DESIGN.md) | V1 visual design brief: tokens, the dot-sign brand (§2.3), typography, components, motion, page patterns, dark mode, and voice |
 | [Contributing](../CONTRIBUTING.md) | How to report bugs, suggest ideas, and prepare a pull request |
 | [Features](FEATURES.md) | Current user-facing and administrative capabilities |
+| [Mobile API v1](MOBILE_API.md) | User-authenticated API for the Space Works apps (Android and iOS), with an [OpenAPI 3.1 spec](mobile-api.openapi.yaml) and [fixtures](mobile-api-fixtures/) |
+| [Team registration](TEAMS.md) | Design contract for team events: settings, capacity units, team status, join links, the team page, looking for a team, and organiser team actions |
+| [Volunteer shifts](VOLUNTEERS.md) | Volunteer shifts and contributor hours for the crew, after the Space Works contributions design: FIFO waitlist, shift attendance separate from check-in, second-person hours verification with append-only history, contributor certificates, and parity notes |
+| [Attendance confirmation](ATTENDANCE.md) | "Are you still coming?": who is asked, sending and reminders, the guest's form, what a No releases on free and paid tickets, and what organisers see |
+| [Event crew](CREW.md) | Design contract for an event's organising team: free crew tickets outside capacity and payments, the crew sign-up link, the public Crew section, crew claims, and what the other flows refuse ([test conditions](CREW_TEST_CONDITIONS.md)) |
+| [Applications and shortlisting](ADMISSION.md) | Design contract for applications on any one-off event: stages with their own reviewer panels, seeded reviewer assignment, decision batches with review coverage, offers that are accepted (and paid) before a place is confirmed, the waitlist, and the guards behind them |
+| [Hackathon submissions, judging, and results](HACKATHON.md) | Design contract for hackathon events: project submissions and links, judges and conflicts of interest, the rubric and result score, awards, and published results |
 | [Paid tickets](PAYMENTS.md) | Turning paid events on, connecting Razorpay or Stripe, selling, refunds, receipts and reporting |
 | [Architecture](ARCHITECTURE.md) | System boundaries, request flows, data model, and background work |
 | [Local development](DEVELOPMENT.md) | Installation, database setup, and everyday commands |
@@ -21,6 +30,8 @@ New here? Start with [Features](FEATURES.md) for what it does, then [Local devel
 | [Security](SECURITY.md) | Authentication, authorization, privacy, abuse protection, and known boundaries |
 | [Permissions](PERMISSIONS.md) | Event and series dashboard matrix: every control, its server check, and what owners, admins, members and each co-organiser grant see |
 | [Machine API v1](API.md) | Server-to-server authentication, scopes, contracts, and credential lifecycle |
+| [Organisation webhooks](WEBHOOKS.md) | Outgoing signed webhooks: event types, payloads, signature verification, retries, auto-disable, and SSRF rules |
+| [Large-event performance](PERFORMANCE.md) | Indexes, set-based reads and streamed exports that keep large hackathons fast, and the judging equivalence test |
 | [Testing](TESTING.md) | Test suites, CI checks, coverage, and release verification |
 
 ## Deployment and operations

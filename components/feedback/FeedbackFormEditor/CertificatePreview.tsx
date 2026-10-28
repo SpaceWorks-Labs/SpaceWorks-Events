@@ -11,6 +11,8 @@ export function CertificatePreview({ template, eventTitle, eventDateLabel, organ
     eventDate: eventDateLabel || certificateMergeTags.eventDate.sample,
     organisation: organisationName || certificateMergeTags.organisation.sample,
     issueDate: certificateMergeTags.issueDate.sample,
+    role: "",
+    hours: "",
   };
   return (
     <div aria-hidden className={cn("overflow-hidden rounded-xl border border-line bg-panel transition-opacity", muted && "opacity-50")}>

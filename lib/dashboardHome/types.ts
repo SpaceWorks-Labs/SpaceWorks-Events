@@ -55,7 +55,7 @@ export type DashboardHome = {
   organisations: HomeOrganisation[];
   adminOrganisations: { slug: string; name: string }[];
   needsYou: { pendingApprovals: number; approvalsHref: string | null; drafts: number; draftHref: string | null } | null;
-  next: (HomeEventRow & { location: string; startDateTime: Date; timezone: string; confirmed: number; capacity: number | null; signupsLastDay: number; checkInHref: string | null; recentNames: string[]; publicPath: string | null }) | null;
+  next: (HomeEventRow & { location: string; startDateTime: Date; timezone: string; confirmed: number; placesUsed: number; crew: number; capacity: number | null; capacityUnits: { used: number; noun: string } | null; signupsLastDay: number; checkInHref: string | null; recentNames: string[]; publicPath: string | null }) | null;
   stats: HomeStat[];
   upcoming: HomeEventRow[];
   drafts: HomeEventRow[];

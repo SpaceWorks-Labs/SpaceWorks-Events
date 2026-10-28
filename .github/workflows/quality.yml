@@ -55,7 +55,11 @@ jobs:
         run: node scripts/npm-audit.mjs --omit=dev
       - run: npm run db:deploy
       - run: npm run db:verify
+      # The migrated database must match schema.prisma exactly (no drift).
+      - run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
       - run: npm run lint
+      # The guide's generated index must match content/help (npm run help:index).
+      - run: node scripts/generate-help-index.mjs --check
       # Route types (RouteContext, typed routes) are generated, not committed.
       - run: npx next typegen
       - run: npx tsc --noEmit
@@ -92,6 +96,9 @@ jobs:
           # The specs give each browser context its own client IP through
           # cf-connecting-ip, so per-IP limits (10 sign-ins/min) don't couple tests.
           TRUSTED_PROXY_IP_HEADER: cf-connecting-ip
+          # tests/e2e/webhooks.spec.ts posts to a local receiver; honoured by the
+          # production build only with CI=true and ALLOW_INSECURE_PRODUCTION_TESTS=1.
+          WEBHOOKS_ALLOW_PRIVATE_TARGETS: "1"
       # The payment flows drive a local fake Razorpay/Stripe, which the app
       # refuses in production builds, so they run against a dev server.
       - name: Payment browser flows against the fake provider

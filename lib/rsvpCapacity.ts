@@ -1,13 +1,20 @@
-import { EventStatus, Prisma, RsvpStatus } from "@prisma/client";
+import { EventStatus, Prisma, RegistrationMode, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { countConfirmedForCapacity, countConfirmedUnits } from "@/lib/teamUnits";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { enqueueRsvpConfirmation, enqueueRsvpStatusNotification } from "@/lib/outbox";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { lockDate } from "@/lib/payments/targets";
 
-export async function countConfirmedForEvent(eventId: string): Promise<number> {
-  return prisma.rSVP.count({
-    where: { eventId, status: RsvpStatus.CONFIRMED },
-  });
+export { countConfirmedUnits };
+
+/**
+ * Confirmed count shown against `Event.capacity`. Pass the event's
+ * `registrationMode` so TEAM events count registration units (teams plus solo
+ * registrants); INDIVIDUAL events count confirmed RSVPs as before.
+ */
+export async function countConfirmedForEvent(eventId: string, registrationMode?: RegistrationMode): Promise<number> {
+  return countConfirmedForCapacity(prisma, eventId, registrationMode);
 }
 
 /** Paid-ticket seats currently held while buyers pay. */
@@ -36,11 +43,15 @@ export async function hasCapacityToRestoreConfirmedRsvp(
 ): Promise<boolean> {
   let capacity: number | null;
   if ("eventId" in target) {
-    const rows = await tx.$queryRaw<Array<{ capacity: number | null }>>`
-      SELECT "capacity" FROM "Event" WHERE "id" = ${target.eventId} FOR UPDATE
+    const rows = await tx.$queryRaw<Array<{ capacity: number | null; registrationMode?: RegistrationMode }>>`
+      SELECT "capacity", "registrationMode" FROM "Event" WHERE "id" = ${target.eventId} FOR UPDATE
     `;
     if (!rows[0]) return false;
     capacity = rows[0].capacity;
+    // TEAM events count registration units; a restored solo RSVP is one unit.
+    if (rows[0].registrationMode === RegistrationMode.TEAM) {
+      return capacity == null || (await countConfirmedUnits(tx, target.eventId)) < capacity;
+    }
   } else {
     const date = await lockDate(tx, target.eventInstanceId, new Date());
     if (!date) return false;
@@ -69,17 +80,19 @@ export async function confirmRsvpWithinCapacity(params: {
   whenFull?: "reject" | "waitlist";
 }): Promise<"confirmed" | "waitlisted" | "full" | "changed" | "closed"> {
   const target = params.eventId ? { eventId: params.eventId } : { eventInstanceId: params.eventInstanceId! };
-  return prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx): Promise<"confirmed" | "waitlisted" | "full" | "changed" | "closed"> => {
     let capacity: number | null;
     let isOpen: boolean;
+    let teamMode = false;
     if (params.eventId) {
-      const events = await tx.$queryRaw<Array<{ capacity: number | null; status: EventStatus; endDateTime: Date }>>`
-        SELECT "capacity", "status", "endDateTime" FROM "Event" WHERE "id" = ${params.eventId} FOR UPDATE
+      const events = await tx.$queryRaw<Array<{ capacity: number | null; status: EventStatus; endDateTime: Date; registrationMode?: RegistrationMode }>>`
+        SELECT "capacity", "status", "endDateTime", "registrationMode" FROM "Event" WHERE "id" = ${params.eventId} FOR UPDATE
       `;
       const event = events[0];
       if (!event) return "changed";
       capacity = event.capacity;
       isOpen = event.status === EventStatus.PUBLISHED && event.endDateTime > new Date();
+      teamMode = event.registrationMode === RegistrationMode.TEAM;
     } else {
       // The series, then the date: the same lock order as every series path.
       const date = await lockDate(tx, params.eventInstanceId!, new Date());
@@ -88,11 +101,16 @@ export async function confirmRsvpWithinCapacity(params: {
       isOpen = date.open;
     }
     if (params.requireOpen && !isOpen) return "closed";
-    const taken = await tx.rSVP.count({ where: { ...target, ...seatTakingWhere(new Date()) } });
+    // TEAM events count units, and only solo RSVPs are confirmed one by one:
+    // team members change status with their whole team (lib/core/teams.ts).
+    const taken = teamMode
+      ? await countConfirmedUnits(tx, params.eventId!)
+      : await tx.rSVP.count({ where: { ...target, ...seatTakingWhere(new Date()) } });
+    const soloOnly = teamMode ? { teamId: null } : {};
     if (capacity != null && taken >= capacity) {
       if (params.whenFull !== "waitlist") return "full";
       const waitlisted = await tx.rSVP.updateMany({
-        where: { id: params.rsvpId, ...target, status: { in: params.expectedStatuses }, ...NOT_FROM_PAID_ORDER },
+        where: { id: params.rsvpId, ...target, status: { in: params.expectedStatuses }, ...NOT_FROM_PAID_ORDER, ...soloOnly },
         data: { status: RsvpStatus.WAITLISTED },
       });
       if (waitlisted.count === 1 && params.notification) {
@@ -101,7 +119,7 @@ export async function confirmRsvpWithinCapacity(params: {
       return waitlisted.count === 1 ? "waitlisted" : "changed";
     }
     const updated = await tx.rSVP.updateMany({
-      where: { id: params.rsvpId, ...target, status: { in: params.expectedStatuses }, ...NOT_FROM_PAID_ORDER },
+      where: { id: params.rsvpId, ...target, status: { in: params.expectedStatuses }, ...NOT_FROM_PAID_ORDER, ...soloOnly },
       data: { status: RsvpStatus.CONFIRMED },
     });
     if (updated.count === 1 && params.notification) {
@@ -112,4 +130,13 @@ export async function confirmRsvpWithinCapacity(params: {
     }
     return updated.count === 1 ? "confirmed" : "changed";
   });
+  if (outcome === "confirmed" || outcome === "waitlisted") {
+    emitWebhookEvent({
+      type: "registration.status_changed",
+      rsvpId: params.rsvpId,
+      status: outcome === "confirmed" ? RsvpStatus.CONFIRMED : RsvpStatus.WAITLISTED,
+      previousStatus: params.expectedStatuses.length === 1 ? params.expectedStatuses[0]! : null,
+    });
+  }
+  return outcome;
 }

@@ -1,6 +1,7 @@
 import { loadRevenue } from "@/lib/payments/revenue";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
-import { loadRsvpStatusCounts } from "@/lib/eventDashboard/data";
+import { loadCapacityUsed, loadRsvpStatusCounts } from "@/lib/eventDashboard/data";
+import { teamCapacityLabel } from "@/lib/teamCapacityDisplay";
 import { loadAllSignupDates, loadFeedbackCount } from "@/lib/eventDashboard/overview";
 import { type MixPart } from "@/components/event-dashboard/analytics/AnalyticsSections";
 import { arrivalWindows, busiestDay, capacityStatus, clickSeries, funnelSentence, funnelSteps, localDateKey, percentOf, signupsLastWeek, signupTimeline } from "@/components/event-dashboard/analytics/metrics";
@@ -12,7 +13,14 @@ export async function loadAnalyticsPanel({ ctx }: { ctx: EventDashboardContext; 
   const { event, permissions, now } = ctx;
   if (!permissions.canViewAnalytics) notFound();
 
-  const [counts, feedback, signupDates] = await Promise.all([loadRsvpStatusCounts(event.id), loadFeedbackCount(event.id), loadAllSignupDates(event.id)]);
+  // TEAM events fill capacity in units (teams plus solo registrants), not people.
+  const teamMode = event.registrationMode === "TEAM";
+  const [counts, feedback, signupDates, units] = await Promise.all([
+    loadRsvpStatusCounts(event.id),
+    loadFeedbackCount(event.id),
+    loadAllSignupDates(event.id),
+    teamMode ? loadCapacityUsed(event.id, event.registrationMode) : null,
+  ]);
   const ended = event.endDateTime < now;
   const steps = funnelSteps({ responded: counts.total, going: counts.confirmed, checkedIn: counts.checkedIn, feedback, ended });
   const checkedIn = steps.find((step) => step.key === "checkedIn")!.value;
@@ -25,7 +33,15 @@ export async function loadAnalyticsPanel({ ctx }: { ctx: EventDashboardContext; 
     { key: "declined", label: "Declined", hint: "Declined by an organiser", value: counts.rejected, tone: "bg-danger-solid" },
   ];
 
-  const capacity = capacityStatus(counts.confirmed, event.capacity);
+  // Crew (docs/CREW.md) are going but never take a place.
+  const capacity = capacityStatus(units ?? counts.confirmed - counts.crew, event.capacity);
+  const capacityDetail = !capacity
+    ? "No capacity limit set"
+    : units != null
+      ? `${teamCapacityLabel(units, event.capacity, event.soloPolicy)}${capacity.full ? " · full" : ""}`
+      : capacity.full
+        ? `Full · all ${event.capacity} places taken`
+        : `${capacity.left} of ${event.capacity} places left`;
   const turnout = checkedIn != null ? percentOf(checkedIn, counts.confirmed) : null;
   const keyNumbers = [
     {
@@ -34,7 +50,7 @@ export async function loadAnalyticsPanel({ ctx }: { ctx: EventDashboardContext; 
       value: String(counts.confirmed),
       tone: "bg-accent-text",
       bar: capacity ? capacity.percent / 100 : undefined,
-      detail: capacity ? (capacity.full ? `Full · all ${event.capacity} places taken` : `${capacity.left} of ${event.capacity} places left`) : "No capacity limit set",
+      detail: capacityDetail,
     },
     {
       key: "waitlist",

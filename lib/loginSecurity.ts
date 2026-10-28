@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { enqueueOperatorNotice, enqueueSignInCode } from "@/lib/outbox";
 import { checkRateLimitById, failureCount, isOverLimit, recordFailure } from "@/lib/rateLimit";
+import { isSuperAdminEmail } from "@/lib/superAdminEmail";
 
 /**
  * Sign-in protections, like large sites use:
@@ -83,10 +84,24 @@ export async function consumeSignInCode(userId: string, code: string) {
   return used.count === 1;
 }
 
-function describeBrowser(userAgent: string) {
+/** The Space Works mobile app sends `SpaceWorksEvents/<version> (<Android|iOS> …)`. */
+export function describeBrowser(userAgent: string) {
+  if (/^SpaceWorksEvents\//.test(userAgent)) return `the Space Works app on ${/iOS|iPhone|iPad/.test(userAgent) ? "iOS" : /Android/.test(userAgent) ? "Android" : "a phone"}`;
   const browser = /Edg\//.test(userAgent) ? "Edge" : /Firefox\//.test(userAgent) ? "Firefox" : /Chrome\//.test(userAgent) ? "Chrome" : /Safari\//.test(userAgent) ? "Safari" : "A browser";
   const system = /Windows/.test(userAgent) ? "Windows" : /Android/.test(userAgent) ? "Android" : /iPhone|iPad/.test(userAgent) ? "iOS" : /Mac OS X/.test(userAgent) ? "macOS" : /Linux/.test(userAgent) ? "Linux" : "an unknown system";
   return `${browser} on ${system}`;
+}
+
+/**
+ * What to do about a sign-in that wasn't you. The super admin can't reset
+ * their password in the app (it is set only from the server), so they are
+ * pointed to the server tools instead.
+ */
+export function newSignInAdvice(email: string): string {
+  if (isSuperAdminEmail(email)) {
+    return "If it wasn't, set a new password on the server now (sudo bash scripts/vps-recover.sh on the VPS, or recover-super-admin.mjs with database access), then use “Sign out everywhere” under Account security.";
+  }
+  return "If it wasn't, reset your password from the sign-in page now, then use “Sign out everywhere” under Account security.";
 }
 
 /**
@@ -112,7 +127,7 @@ export async function rememberSignIn(params: { userId: string; email: string; ha
         lines: [
           `Your Space Works Events account was signed in to from ${userAgent}${lastIp ? ` (network address ${lastIp})` : ""} at ${new Date().toUTCString()}.`,
           "If this was you, there's nothing to do.",
-          "If it wasn't, reset your password from the sign-in page now, then use “Sign out everywhere” under Account security.",
+          newSignInAdvice(params.email),
         ],
       });
     }

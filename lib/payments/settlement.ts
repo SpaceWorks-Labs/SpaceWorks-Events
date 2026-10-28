@@ -10,12 +10,23 @@ import type { PaidNotification } from "./providers/types";
 import { createPendingRefund } from "./refunds";
 import { formatMoney } from "./money";
 import { notifyChat } from "@/lib/chat/notify";
+import { noticeOrganisersOfRequest } from "@/lib/notices";
+import type { WebhookEmission } from "@/lib/webhooks/emit";
+import { placePaidTeamOrder, releaseUnpaidTeam } from "./teamOrders";
+import { settleEntryFeePayment } from "./entryFees";
 
 export type SettlementResult = {
   outcome: "confirmed" | "refunding" | "duplicate" | "already-settled" | "mismatch" | "unmatched";
   /** Refunds to submit to the provider after the transaction commits. */
   refundIds: string[];
+  /** Organisation webhooks to emit after the transaction commits. */
+  webhooks?: WebhookEmission[];
 };
+
+/** The status changes of registrations a payment confirmed, as organisation webhooks. */
+export function heldStatusWebhooks(rsvpIds: string[], status: RsvpStatus): WebhookEmission[] {
+  return rsvpIds.map((rsvpId) => ({ type: "registration.status_changed", rsvpId, status, previousStatus: RsvpStatus.PENDING_PAYMENT }));
+}
 
 const SETTLED: PaymentStatus[] = [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE, PaymentStatus.WAIVED];
 const ID = /^[a-z0-9]{20,40}$/;
@@ -77,7 +88,7 @@ export async function settlePaidNotification(
       id: true, organisationId: true, status: true, amountMinor: true, currency: true, testMode: true, description: true, externalPaymentId: true,
       order: {
         select: {
-          id: true, status: true, holdExpiresAt: true, buyerEmail: true, ...ORDER_SUBJECT_SELECT,
+          id: true, status: true, holdExpiresAt: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, teamJoin: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
           rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true, status: true, holdExpiresAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } },
         },
       },
@@ -106,15 +117,26 @@ export async function settlePaidNotification(
     return { outcome: "duplicate", refundIds: [refund.id] };
   }
 
+  // A project entry fee (docs/HACKATHON.md) holds no places: it is always accepted.
+  if (order.submissionId && order.rsvps.length === 0) {
+    const refundId = await settleEntryFeePayment(tx, payment, { id: order.id, submissionId: order.submissionId, buyerEmail: order.buyerEmail, buyerName: order.buyerName }, paid, now);
+    return refundId ? { outcome: "duplicate", refundIds: [refundId] } : { outcome: "confirmed", refundIds: [] };
+  }
+
   const held = order.rsvps.filter((rsvp) => rsvp.status === RsvpStatus.PENDING_PAYMENT);
   const holdActive = order.status === OrderStatus.PENDING && Boolean(order.holdExpiresAt && order.holdExpiresAt > now);
-  const seats = held.length > 0 && (holdActive || await hasFreeSeats(tx, held, now));
+  // TEAM events place the one registration in its team or unit (docs/TEAMS.md).
+  const team = held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, now) : null;
+  const seats = team ? team !== "gone" : held.length > 0 && (holdActive || await hasFreeSeats(tx, held, now));
+  const placed = team && team !== "gone" ? team : null;
+  const status = placed?.status ?? RsvpStatus.CONFIRMED;
   await tx.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.PAID_ONLINE, externalPaymentId: paid.paymentId, paidAt: now } });
 
   if (seats) {
     await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.CONFIRMED, holdExpiresAt: null, holdCapAt: null } });
-    await tx.rSVP.updateMany({ where: { id: { in: held.map((rsvp) => rsvp.id) } }, data: { status: RsvpStatus.CONFIRMED, holdExpiresAt: null } });
+    await tx.rSVP.updateMany({ where: { id: { in: held.map((rsvp) => rsvp.id) } }, data: { status, holdExpiresAt: null } });
     await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: payment.id, notice: "paid" });
+    if (status === RsvpStatus.PENDING_APPROVAL && order.eventId) await noticeOrganisersOfRequest(tx, { eventId: order.eventId });
     await notifyChat(tx, payment.organisationId, "payment", `Payment received: ${formatMoney(payment.amountMinor, payment.currency)} for ${payment.description}, ${held.length} ${held.length === 1 ? "ticket" : "tickets"}${payment.testMode ? " (test)" : ""}.`);
     // Each attendee with an address gets their own ticket, once (a pass's
     // ticket page lists its other dates).
@@ -123,15 +145,17 @@ export async function settlePaidNotification(
       const to = rsvp.user?.email?.trim() || rsvp.guestEmail;
       if (!to || emailed.has(to)) continue;
       emailed.add(to);
-      await enqueueRsvpConfirmation(tx, { to, eventTitle: orderSubject(order)?.title ?? payment.description, status: RsvpStatus.CONFIRMED, checkInToken: rsvp.checkInToken });
+      await enqueueRsvpConfirmation(tx, { to, eventTitle: orderSubject(order)?.title ?? payment.description, status, checkInToken: rsvp.checkInToken, ...(placed?.teamName ? { teamName: placed.teamName } : {}) });
     }
     if (held.some((rsvp) => !(rsvp.user?.email || rsvp.guestEmail))) await enqueueOrderEmail(tx, { to: order.buyerEmail, orderId: order.id, notice: "attendee-details" });
     await recordAuditEvent({ action: "PAYMENT_SETTLED", organisationId: payment.organisationId, targetType: "Payment", targetId: payment.id, metadata: { testMode: payment.testMode, tickets: held.length }, client: tx });
-    return { outcome: "confirmed", refundIds: [] };
+    return { outcome: "confirmed", refundIds: [], webhooks: heldStatusWebhooks(held.map((rsvp) => rsvp.id), status) };
   }
 
   // The seats were released and taken: keep the money's record, return it all.
   if (order.status === OrderStatus.PENDING) await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.EXPIRED, holdExpiresAt: null, holdCapAt: null } });
+  // A leader's team that was never placed goes too, freeing its name.
+  await releaseUnpaidTeam(tx, order.id);
   const refund = await createPendingRefund(tx, { paymentId: payment.id, amountMinor: payment.amountMinor, reason: "Paid after the hold ended and the places were gone", automatic: true });
   await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: payment.id, notice: "late-refund" });
   for (const owner of await organisationOwnerEmails(tx, payment.organisationId)) {

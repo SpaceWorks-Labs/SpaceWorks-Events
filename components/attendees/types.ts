@@ -1,5 +1,6 @@
 import type { RsvpStatus } from "@prisma/client";
 import type { ManualRsvpField } from "@/components/attendees/ManualRsvpDialog";
+import type { AttendanceReleaseOutcome, AttendanceState } from "@/lib/attendanceCheck";
 
 /** One registration as the dashboard guest list and its dialogs receive it. */
 export type AttendeeRow = {
@@ -10,10 +11,18 @@ export type AttendeeRow = {
   guestName?: string | null;
   user: { id: string; name: string | null; email: string | null } | null;
   checkedInAt: string | null;
+  /** An event crew ticket (docs/CREW.md): free, outside capacity, managed in Guests → Crew. */
+  isCrew?: boolean;
+  /** Custom check-in lists ("Swag", "Lunch") this guest has been checked into. */
+  listCheckIns?: { listName: string; checkedInAt: string }[];
   ticketUrl: string;
   /** Paid events: the ticket bought and the order it belongs to. */
   ticketName?: string | null;
   order?: AttendeeOrder | null;
+  /** TEAM events: the registration's team (null when solo; absent elsewhere). */
+  team?: { id: string; name: string; isLeader: boolean } | null;
+  /** One-off events: the attendance confirmation badge (state null: no badge), the guest's note, and a paid "No" kept. */
+  attendance?: { state: AttendanceState | null; note: string | null; respondedAt: string | null; outcome: AttendanceReleaseOutcome | null };
   answers?: { label: string; value: string }[];
   rawAnswers?: Array<{
     fieldId: string;

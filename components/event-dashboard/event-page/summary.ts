@@ -6,8 +6,9 @@
  */
 
 import { normalizeAccentHex } from "@/lib/theme/accent";
+import { registrationActionLabel, type RegistrationLabelTeam } from "@/lib/registrationLabel";
 
-export const SECTION_TYPES = ["HERO", "ABOUT", "HIGHLIGHTS", "SCHEDULE", "SPEAKERS", "SPONSORS", "VENUE", "FAQ", "RESOURCES"] as const;
+export const SECTION_TYPES = ["HERO", "ABOUT", "HIGHLIGHTS", "SCHEDULE", "SPEAKERS", "SPONSORS", "VENUE", "FAQ", "RESOURCES", "CREW"] as const;
 export type SectionType = (typeof SECTION_TYPES)[number];
 
 export const SECTION_LABELS: Record<SectionType, string> = {
@@ -20,7 +21,11 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   VENUE: "Venue",
   FAQ: "FAQ",
   RESOURCES: "Resources",
+  CREW: "Crew",
 };
+
+/** Sections that start switched off until an organiser turns them on (docs/CREW.md). */
+const DEFAULT_HIDDEN: ReadonlySet<string> = new Set<SectionType>(["CREW"]);
 
 export type PageSection = { type: string; isVisible: boolean; sortOrder: number };
 
@@ -33,12 +38,12 @@ export function countLabel(count: number, singular: string, plural = `${singular
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-/** Every known section exactly once, saved ones first in their saved order, missing ones appended visible. */
+/** Every known section exactly once, saved ones first in their saved order, missing ones appended (visible, except CREW). */
 export function normalizeSections(saved: readonly PageSection[] | null | undefined): PageSection[] {
   const known = (saved ?? [])
     .filter((section, index, list) => (SECTION_TYPES as readonly string[]).includes(section.type) && list.findIndex((other) => other.type === section.type) === index)
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  const missing = SECTION_TYPES.filter((type) => !known.some((section) => section.type === type)).map((type) => ({ type, isVisible: true, sortOrder: 0 }));
+  const missing = SECTION_TYPES.filter((type) => !known.some((section) => section.type === type)).map((type) => ({ type, isVisible: !DEFAULT_HIDDEN.has(type), sortOrder: 0 }));
   return [...known, ...missing].map((section, sortOrder) => ({ type: section.type, isVisible: section.isVisible, sortOrder }));
 }
 
@@ -63,6 +68,8 @@ export type SectionNoteData = {
   resources: readonly Item[];
   faqs: readonly Item[];
   sessionCount: number;
+  /** Crew members shown on the page (`showOnPage`). */
+  crewShown?: number;
   location: string;
   isOnline: boolean;
 };
@@ -96,6 +103,8 @@ export function sectionNote(type: string, data: SectionNoteData): string {
       return itemsNote(data.faqs, "question");
     case "RESOURCES":
       return itemsNote(data.resources, "resource");
+    case "CREW":
+      return data.crewShown ? `${data.crewShown} crew shown` : "No crew shown yet";
     default:
       return "";
   }
@@ -135,10 +144,10 @@ export function unsavedLabel(count: number): string {
 }
 
 /** The public register button label for an event's audience (matches RegistrationCard). */
-export function registerLabelFor(privacyType: string): string {
-  if (privacyType === "APPROVAL_REQUIRED") return "Request to join";
+export function registerLabelFor(privacyType: string, team: RegistrationLabelTeam | null = null): string {
   if (privacyType === "INVITE_ONLY") return "Register with your invite";
-  return "Register — it's free";
+  // TEAM events use the public card's team wording (docs/TEAMS.md).
+  return registrationActionLabel({ full: false, approvalRequired: privacyType === "APPROVAL_REQUIRED" }, team);
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", apos: "'", nbsp: " " };

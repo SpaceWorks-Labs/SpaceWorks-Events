@@ -16,6 +16,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
 vi.mock("@/lib/rateLimit", () => ({ checkRateLimitById: mocks.rateLimit }));
+vi.mock("@/lib/admission/accountExport", () => ({ loadAccountApplications: async () => [] }));
+vi.mock("@/lib/accountDataExport/participation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/accountDataExport/participation")>()),
+  loadParticipationSource: async () => ({ crew: [], expenseClaims: [], volunteerSignups: [], contributorCertificates: [], mentorProfiles: [], helpRequests: [], helpComments: [], officeHourBookings: [], teamSeekerProfiles: [], teamJoinRequests: [], prizePayouts: [] }),
+}));
 vi.mock("@/lib/db", () => ({ prisma: {
   user: { findUnique: mocks.user },
   account: { findMany: mocks.accounts },
@@ -93,6 +98,18 @@ function pollutedSource(): AccountExportSource {
 }
 
 describe("account data export shaping", () => {
+  it("includes the user's own attendance confirmation reply, never its token hash", () => {
+    const source = pollutedSource();
+    // A loader that over-selected the token hash must still not leak it.
+    (source.registrations[0] as unknown as { attendanceCheck: unknown }).attendanceCheck = {
+      sentAt: new Date("2030-02-27T09:00:00Z"), response: "NOT_ATTENDING", respondedAt: new Date("2030-02-27T10:00:00Z"), note: "Train strike", tokenHash: "a".repeat(64),
+    };
+    const data = buildAccountDataExport(source, new Date("2030-04-01T00:00:00Z"));
+    expect(data.registrations[0]!.attendanceConfirmation).toEqual({ askedAt: "2030-02-27T09:00:00.000Z", response: "NOT_ATTENDING", respondedAt: "2030-02-27T10:00:00.000Z", note: "Train strike" });
+    expect(JSON.stringify(data)).not.toContain("a".repeat(64));
+    expect(buildAccountDataExport(pollutedSource()).registrations[0]!.attendanceConfirmation).toBeNull();
+  });
+
   it("includes the user's own data", () => {
     const data = buildAccountDataExport(pollutedSource(), new Date("2030-04-01T00:00:00Z"));
     expect(data.profile).toEqual({
@@ -188,9 +205,11 @@ describe("account data export route", () => {
     expect(mocks.user.mock.calls[0][0].select).not.toHaveProperty("recoveryCodeHashes");
     expect(mocks.accounts.mock.calls[0][0].select).toEqual({ provider: true });
     expect(mocks.rsvps.mock.calls[0][0].select).not.toHaveProperty("checkInToken");
+    expect(mocks.rsvps.mock.calls[0][0].select.attendanceCheck).toEqual({ select: { sentAt: true, response: true, respondedAt: true, note: true } });
 
     expect(mocks.audit).toHaveBeenCalledWith({ action: "ACCOUNT_DATA_EXPORTED", actorUserId: "user_1", targetType: "User", targetId: "user_1" });
     const body = JSON.parse(await response.text());
     expect(body.profile.email).toBe("ada@example.test");
+    expect(body).toMatchObject({ applications: [], crewPlaces: [], expenseClaims: [], volunteerShifts: [], mentorProfiles: [], helpRequests: [], officeHourBookings: [], teamJoinRequests: [], prizePayouts: [] });
   });
 });

@@ -3,9 +3,30 @@ import type { Event } from "@prisma/client";
 /** Event data that is safe to serialize into browser component props. */
 export type EventClientDto = Omit<Event,
   "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion"
+  // Judging settings have their own DTOs (lib/core/judging.ts).
+  | "submissionsEnabled" | "submissionsOpenAt" | "submissionsCloseAt" | "judgingStatus" | "judgesSeeAll"
+  | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization" | "currentJudgingRoundId"
+  | "emailEntrantsOnResults" | "emailSubmissionReceipts"
+  // The entry fee is a BigInt and lives with the judging settings too.
+  | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
+  // Finance settings have their own view (lib/finance.ts).
+  | "budgetMinor" | "participantClaimsEnabled" | "participantClaimCapMinor" | "crewClaimsEnabled"
+  // The ticket design is read by the ticket designer (lib/ticketDesign/).
+  | "ticketDesignId"
+  // Applications have their own view (lib/admission/).
+  | "admissionEnabled" | "admissionMode" | "admissionRsvpDays" | "admissionOfferCapacity" | "emailApplicantsOnStageAdvance"
+  // Volunteer shifts have their own view (lib/eventDashboard/volunteerShifts.ts).
+  | "volunteerShiftsEnabled" | "contributorCertificateTemplate"
+  // Attendance confirmation has its own status DTO (lib/eventDashboard/attendanceCheckCard.ts).
+  | "attendanceCheckReleaseOnDecline"
+  // The mobile sign-up close snapshot only matters to lib/core/registrationWindow.ts.
+  | "registrationManuallyClosedAt" | "registrationCutoffBeforeManualClose" | "registrationLeadBeforeManualClose"
+  // Mentor Desk settings have their own view (lib/core/mentorDesk/).
+  | "mentorDeskEnabled" | "mentorHelpClaimedEmail" | "mentorsGetCrewTicket"
 >;
 
-export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {
+/** Copies only the DTO fields, so a full Event record never reaches the browser. */
+export function toEventClientDto(event: EventClientDto): EventClientDto {
   return {
     id: event.id,
     organisationId: event.organisationId,
@@ -35,6 +56,11 @@ export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "c
     allowTransfers: event.allowTransfers,
     transferCutoffHours: event.transferCutoffHours,
     shortCode: event.shortCode,
+    registrationMode: event.registrationMode,
+    teamMinSize: event.teamMinSize,
+    teamMaxSize: event.teamMaxSize,
+    soloPolicy: event.soloPolicy,
+    teamTicketMode: event.teamTicketMode,
     createdAt: event.createdAt,
   };
 }

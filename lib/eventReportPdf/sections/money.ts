@@ -4,6 +4,7 @@ import type { EventReportMetrics } from "@/lib/eventReport";
 import { hasRevenue } from "@/lib/payments/revenueMetrics";
 import type { ReportLayout } from "../layout";
 import { plural } from "../style";
+import { cachedNumberFormat } from "@/lib/format/intlCache";
 
 /** What tickets brought in, when the event took any money. */
 export function drawMoney(L: ReportLayout, metrics: EventReportMetrics) {
@@ -13,7 +14,7 @@ export function drawMoney(L: ReportLayout, metrics: EventReportMetrics) {
   const money = metrics.money;
   if (money && hasRevenue(money)) {
     // Currency codes rather than symbols: the report's fonts may not carry every sign.
-    const amount = (minor: number) => `${money.currency} ${new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)}`;
+    const amount = (minor: number) => `${money.currency} ${cachedNumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)}`;
     section("Money", "Money", money.testOnly
       ? "Every payment was a test, so no real money moved."
       : metrics.targetType === "occurrence" ? "Tickets bought for this date. Passes cover several dates and are in the series' own figures." : "What tickets brought in, after refunds.");
@@ -40,4 +41,20 @@ export function drawMoney(L: ReportLayout, metrics: EventReportMetrics) {
       facts(money.byMethod.map((row) => [row.label, `${amount(row.amountMinor)} · ${plural(row.payments, "payment")}`]));
     }
   }
+  drawSpending(L, metrics);
+}
+
+/** Expense claims and prize money paid out, against the budget (docs/FINANCE.md). */
+function drawSpending(L: ReportLayout, metrics: EventReportMetrics) {
+  const spending = metrics.spending;
+  if (!spending) return;
+  const amount = (minor: number) => `${spending.currency} ${cachedNumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)}`;
+  const spent = spending.expensesPaidMinor + spending.prizesPaidMinor;
+  if (metrics.money && hasRevenue(metrics.money)) L.subheading("Spending", "Expense claims and prize money paid out by hand.");
+  else L.section("Money", "Spending", "Expense claims and prize money paid out by hand.");
+  const rows: Array<[string, string]> = [["Expense claims paid", amount(spending.expensesPaidMinor)], ["Prize money paid", amount(spending.prizesPaidMinor)]];
+  if (spending.approvedUnpaidMinor > 0) rows.push(["Approved, not yet paid", amount(spending.approvedUnpaidMinor)]);
+  if (spending.budgetMinor != null) rows.push(["Budget", `${amount(spending.budgetMinor)}, ${amount(Math.abs(spending.budgetMinor - spent - spending.approvedUnpaidMinor))} ${spending.budgetMinor >= spent + spending.approvedUnpaidMinor ? "left" : "over"}`]);
+  if (metrics.money && hasRevenue(metrics.money) && metrics.money.currency === spending.currency) rows.push(["Net after spending", amount(metrics.money.netMinor - spent)]);
+  L.facts(rows);
 }

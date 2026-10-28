@@ -1,13 +1,14 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import { Check, Info } from "lucide-react";
+import { BadgeCheck, Check, Info, Users } from "lucide-react";
 import type { CheckInResultData, LookupRow } from "@/app/actions/checkin";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/display";
 import { Input } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
-import { CheckInDetailsList, CheckInTimestamp, StatusChip } from "./parts";
+import { CheckInDetailsList, CheckInTimestamp, CrewChip, StatusChip } from "./parts";
+import { AttendanceChip } from "@/components/attendance/AttendanceChip";
 import type { LastResult } from "./types";
 
 /** The big confirmation card for the last guest checked in at this desk. */
@@ -39,6 +40,8 @@ export function LastResultCard({
       <div>
         <p className="text-[15px] font-semibold">{lastResult.kind === "already" ? "Already checked in" : "Checked in"}</p>
         <p className="break-words font-display text-[34px] font-semibold leading-none tracking-[-0.02em]">{lastResult.displayName}</p>
+        {lastResult.teamName ? <p className="mt-1.5 flex items-center gap-1.5 text-[15px] font-semibold"><Users aria-hidden className="size-4 shrink-0" /><span className="sr-only">Team: </span>{lastResult.teamName}</p> : null}
+        {lastResult.isCrew ? <p className="mt-1.5 flex items-center gap-1.5 text-[15px] font-semibold"><BadgeCheck aria-hidden className="size-4 shrink-0" />Event crew</p> : null}
         <p className="mt-2 text-sm opacity-90">
           {lastResult.email ?? ""}
           {lastResult.email && lastResult.checkedInAt ? " · " : ""}
@@ -72,6 +75,7 @@ export function AttendeeSearch({
   isOnline,
   checkInRow,
   override,
+  teamEvent = false,
 }: {
   lookupQuery: string;
   setLookupQuery: (value: string) => void;
@@ -83,15 +87,17 @@ export function AttendeeSearch({
   isOnline: boolean;
   checkInRow: (row: LookupRow, force: boolean) => void;
   override: boolean;
+  /** TEAM events: the lookup also matches team names (docs/TEAMS.md), so say so. */
+  teamEvent?: boolean;
 }) {
   return (
   <section aria-labelledby="search-title" className="flex flex-col gap-3 rounded-lg border border-line bg-canvas p-4">
     <h2 id="search-title" className="text-title text-ink">Search attendees</h2>
     <div className="flex gap-2">
-      <label htmlFor="check-in-search" className="sr-only">Name or email</label>
+      <label htmlFor="check-in-search" className="sr-only">{teamEvent ? "Name, email or team" : "Name or email"}</label>
       <Input
         id="check-in-search"
-        placeholder="Name or email"
+        placeholder={teamEvent ? "Name, email or team" : "Name or email"}
         value={lookupQuery}
         onChange={(e) => setLookupQuery(e.target.value)}
         onKeyDown={(e) => {
@@ -114,13 +120,16 @@ export function AttendeeSearch({
                 {row.displayName}
               </button>
               {row.email ? <p className="truncate text-sm text-ink-muted">{row.email}</p> : null}
+              {row.teamName ? <p className="truncate text-sm text-ink-secondary"><span className="sr-only">Team: </span>{row.teamName}</p> : null}
               <div className="mt-1 flex flex-wrap gap-1">
                 <StatusChip status={row.status} />
+                <CrewChip data={row} />
+                <AttendanceChip state={row.attendance} />
                 {row.checkedInAt ? <Chip size="sm" tone="success" icon={<Check />}>Checked in</Chip> : null}
               </div>
             </div>
             {row.checkedInAt ? (
-              <Button size="sm" variant="quiet" onClick={() => onUndo(row.rsvpId)} disabled={pending || !isOnline}>Undo</Button>
+              <Button size="sm" variant="quiet" onClick={() => onUndo(row.rsvpId)} disabled={pending || !isOnline} aria-label={`Undo check-in for ${row.displayName}`}>Undo</Button>
             ) : (
               <Button size="sm" variant="primary" onClick={() => checkInRow(row, override)} disabled={pending}>Check in</Button>
             )}

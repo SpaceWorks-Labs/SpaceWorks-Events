@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
 
 const allowedActionOrigins = process.env.ALLOWED_ACTION_ORIGINS
   ?.split(",")
@@ -62,8 +63,72 @@ const nextConfig: NextConfig = {
         source: "/api/feedback/certificate/:token",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      // Contributor certificates (docs/VOLUNTEERS.md) are bearer downloads too.
+      {
+        source: "/api/crew/certificate/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      // Ticket, team management and join links are bearer capabilities too
+      // (docs/TEAMS.md); the pages also set a no-referrer meta tag, but the
+      // header covers the request before the document is parsed.
+      {
+        source: "/ticket/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/team/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/:orgSlug/:eventSlug/team/:joinToken",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      // Solo submission links (docs/HACKATHON.md) are bearer capabilities.
+      {
+        source: "/submit/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      // Attendance confirmation links ("Are you still coming?", docs/ATTENDANCE.md).
+      {
+        source: "/attend/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      // Crew sign-up links (docs/CREW.md) are bearer capabilities.
+      {
+        source: "/crew/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      // Order links (docs/PAYMENTS.md), member ID verification, invitations,
+      // password-reset and email-verification links carry a token in the URL too.
+      {
+        source: "/order/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/verify/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/join/:kind/:token",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/reset-password",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/verify-email",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
     ];
   },
 };
 
-export default nextConfig;
+// The in-app guide (content/help) is the only MDX. Plugin names are strings so
+// Turbopack can load them. frontend/next.config.ts keeps these rules when it
+// overrides the Turbopack root.
+const withMDX = createMDX({
+  options: { remarkPlugins: ["remark-gfm"] },
+});
+
+export default withMDX(nextConfig);

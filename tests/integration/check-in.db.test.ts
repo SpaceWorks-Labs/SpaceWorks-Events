@@ -61,7 +61,7 @@ describe.sequential("check-in projection integration", () => {
       status: RsvpStatus.REJECTED,
     } });
     await expect(commitCheckInProjection({ rsvpId: rsvp.id, actorUserId: null, source: "online", checkedInAt: new Date(), force: true }))
-      .resolves.toEqual({ state: "ineligible", status: RsvpStatus.REJECTED });
+      .resolves.toEqual({ state: "ineligible", status: RsvpStatus.REJECTED, applicant: false });
     await expect(prisma.checkInEvent.count({ where: { rsvpId: rsvp.id } })).resolves.toBe(0);
   });
 });

@@ -1,14 +1,17 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ChevronDown, Copy, CreditCard, MoreHorizontal, Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
+import { ArrowRightLeft, BadgeCheck, CalendarCheck, Check, ChevronDown, Copy, CreditCard, MoreHorizontal, Pencil, RotateCcw, Trash2, Users, UserX } from "lucide-react";
 import { Button, IconButton } from "@/components/ui/button";
 import { Avatar, Chip, type ChipTone } from "@/components/ui/display";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import type { AttendeeRow } from "@/components/attendees/types";
 import { orderPaymentChip } from "@/components/attendees/PaymentDialog";
+import { AttendanceChip } from "@/components/attendance/AttendanceChip";
+import { ATTENDANCE_RELEASE_OUTCOME_LABELS } from "@/lib/attendanceCheck";
 import { cn } from "@/lib/cn";
-import { GUEST_STATUS_LABELS, describeCheckIn, describeGuestWhen, guestDisplayName, guestEmail } from "./guestList";
+import { formatTime } from "@/lib/format/datetime";
+import { GUEST_STATUS_LABELS, describeCheckIn, describeGuestWhen, guestDisplayName, guestEmail, isManagedByTeam } from "./guestList";
 
 const CHIP_TONES: Record<AttendeeRow["status"], ChipTone> = {
   CONFIRMED: "success",
@@ -33,10 +36,16 @@ export type GuestRowActions = {
   /** Reverses a decline: confirmed, waitlisted, or (paid) sent a payment link. */
   reaccept: (guest: AttendeeRow) => void;
   copyTicket: (guest: AttendeeRow) => void;
+  /** One-off events, for people who may email guests, before the start: share this guest's attendance link by hand. */
+  shareAttendanceLink?: (guest: AttendeeRow) => void;
   edit: (guest: AttendeeRow) => void;
   /** Omitted where no undo-check-in action exists for the target (series dates). */
   undoCheckIn?: (guest: AttendeeRow) => void;
   remove: (guest: AttendeeRow) => void;
+  /** TEAM events: opens Guests → Teams, where a member's team is approved or declined as a whole. */
+  openTeams?: () => void;
+  /** TEAM events: move this registration into a team (solo) or another team. */
+  moveToTeam?: (guest: AttendeeRow) => void;
   /** Paid tickets: refunds, payments taken in person, complimentary tickets and payment links. */
   payment?: (guest: AttendeeRow) => void;
 };
@@ -49,7 +58,12 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
   const when = describeGuestWhen(guest, timeZone, now);
   const checkIn = describeCheckIn(guest, timeZone, now);
   const answers = guest.answers ?? [];
+  // Team members are approved, declined and promoted only with their whole team.
+  const teamManaged = isManagedByTeam(guest);
+  // Crew tickets are edited and removed only in Guests → Crew (the server refuses it here too).
+  const crew = guest.isCrew === true;
   const payment = orderPaymentChip(guest.order);
+  const attendance = guest.attendance;
 
   return (
     <li className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-xl border border-line bg-panel px-4 py-3">
@@ -63,6 +77,15 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
         <Chip size="sm" tone={CHIP_TONES[guest.status]}>{GUEST_STATUS_LABELS[guest.status]}</Chip>
+        {crew ? <Chip size="sm" tone="accent" icon={<BadgeCheck />}>Crew</Chip> : null}
+        <AttendanceChip state={attendance?.state} outcome={attendance?.outcome} />
+        {guest.team ? (
+          <Chip size="sm" tone="neutral" icon={<Users />} className="max-w-[200px]">
+            <span className="sr-only">Team: </span>
+            {guest.team.name}
+            {guest.team.isLeader ? " · leader" : ""}
+          </Chip>
+        ) : null}
         {payment ? <Chip size="sm" tone={payment.tone}>{payment.label}</Chip> : null}
         <span className={cn("text-caption sm:w-[150px]", guest.checkedInAt ? "font-semibold text-success-fg" : "text-ink-muted")}>
           {checkIn ?? <span aria-label="Not applicable">—</span>}
@@ -81,7 +104,16 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             Answers <span className="text-ink-muted">{answers.length}</span>
           </Button>
         ) : null}
-        {guest.status === "PENDING_APPROVAL" ? (
+        {teamManaged && (guest.status === "PENDING_APPROVAL" || guest.status === "WAITLISTED") ? (
+          actions.openTeams ? (
+            <Button size="sm" variant="quiet" disabled={disabled} onClick={actions.openTeams} aria-label={`Manage ${name}'s team in Teams`}>
+              Manage in Teams
+            </Button>
+          ) : (
+            <span className="text-caption text-ink-muted">Managed with their team</span>
+          )
+        ) : null}
+        {!teamManaged && guest.status === "PENDING_APPROVAL" ? (
           <>
             <Button size="sm" variant="secondary" disabled={disabled} loading={busy} onClick={() => actions.approve(guest)} aria-label={`Approve ${name}`}>
               Approve
@@ -91,7 +123,7 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             </Button>
           </>
         ) : null}
-        {guest.status === "WAITLISTED" ? (
+        {!teamManaged && guest.status === "WAITLISTED" ? (
           <Button size="sm" variant="secondary" disabled={disabled} loading={busy} onClick={() => actions.promote(guest)} aria-label={`Give ${name} a spot`}>
             Give a spot
           </Button>
@@ -111,31 +143,66 @@ export function GuestRow({ guest, timeZone, now, busy, disabled, actions }: { gu
             <MenuItem icon={<Copy />} onSelect={() => actions.copyTicket(guest)}>
               Copy ticket link
             </MenuItem>
+            {actions.shareAttendanceLink && guest.status === "CONFIRMED" && !crew ? (
+              <MenuItem icon={<CalendarCheck />} onSelect={() => actions.shareAttendanceLink?.(guest)}>
+                Share attendance link
+              </MenuItem>
+            ) : null}
             {payment && actions.payment ? (
               <MenuItem icon={<CreditCard />} onSelect={() => actions.payment?.(guest)}>
                 Payment
               </MenuItem>
             ) : null}
-            <MenuItem icon={<Pencil />} onSelect={() => actions.edit(guest)}>
-              {guest.user ? "View registration" : "Edit registration or transfer ticket"}
-            </MenuItem>
+            {!crew ? (
+              <MenuItem icon={<Pencil />} onSelect={() => actions.edit(guest)}>
+                {guest.user ? "View registration" : "Edit registration or transfer ticket"}
+              </MenuItem>
+            ) : null}
+            {actions.moveToTeam && !crew ? (
+              <MenuItem icon={<ArrowRightLeft />} onSelect={() => actions.moveToTeam?.(guest)}>
+                {guest.team ? "Move to another team" : "Add to a team"}
+              </MenuItem>
+            ) : null}
             {guest.checkedInAt && actions.undoCheckIn ? (
               <MenuItem icon={<RotateCcw />} onSelect={() => actions.undoCheckIn?.(guest)}>
                 Undo check-in
               </MenuItem>
             ) : null}
-            {guest.status === "WAITLISTED" ? (
+            {!teamManaged && guest.status === "WAITLISTED" ? (
               <MenuItem danger icon={<UserX />} onSelect={() => actions.decline(guest)}>
                 Decline
               </MenuItem>
             ) : null}
-            <MenuSeparator />
-            <MenuItem danger icon={<Trash2 />} onSelect={() => actions.remove(guest)}>
-              Remove RSVP
-            </MenuItem>
+            {!crew ? (
+              <>
+                <MenuSeparator />
+                <MenuItem danger icon={<Trash2 />} onSelect={() => actions.remove(guest)}>
+                  Remove RSVP
+                </MenuItem>
+              </>
+            ) : null}
           </MenuContent>
         </Menu>
       </div>
+      {guest.listCheckIns && guest.listCheckIns.length > 0 ? (
+        <ul aria-label={`Check-in lists for ${name}`} className="flex basis-full flex-wrap gap-1.5">
+          {guest.listCheckIns.map((entry) => (
+            <li key={entry.listName}>
+              <Chip size="sm" tone="success" icon={<Check />}>
+                {entry.listName} · {formatTime(entry.checkedInAt, timeZone)}
+              </Chip>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {attendance?.note || (attendance?.state === "notComing" && attendance.outcome) ? (
+        <div className="basis-full text-caption text-ink-secondary">
+          {attendance.note ? (
+            <p className="whitespace-pre-wrap break-words"><span className="font-semibold text-ink">Attendance note: </span>{attendance.note}</p>
+          ) : null}
+          {attendance.state === "notComing" && attendance.outcome ? <p>{ATTENDANCE_RELEASE_OUTCOME_LABELS[attendance.outcome]}</p> : null}
+        </div>
+      ) : null}
       {answers.length > 0 ? (
         <div id={answersId} hidden={!answersOpen} className="basis-full">
           <dl className="grid gap-3 rounded-lg bg-subtle px-4 py-3 sm:grid-cols-2">

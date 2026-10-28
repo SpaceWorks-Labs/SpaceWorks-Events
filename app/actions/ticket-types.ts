@@ -9,7 +9,8 @@ import { isValidPromoCode, promoCodeDigest, promoCodeHint } from "@/lib/payments
 import { isAtLeastAsGenerous, type RefundPolicySnapshot } from "@/lib/payments/refundPolicy";
 import { configuredProvider } from "@/lib/payments/settings";
 import { access, revalidateOwner, setOwnerCurrency } from "./ticket-types/access";
-import { addOnSchema, archiveAddOnSchema, archivePromoSchema, archiveSchema, promoSchema, refundPolicySchema, saveSchema, transferSchema } from "./ticket-types/schemas";
+import { perMemberRefusal, PER_MEMBER_PAID_REFUSAL } from "@/lib/admission/settings";
+import { addOnSchema, archiveAddOnSchema, archivePromoSchema, archiveSchema, promoSchema, refundPolicySchema, saveSchema, teamTicketModeSchema, transferSchema } from "./ticket-types/schemas";
 
 const MAX_TICKET_TYPES = 20;
 const ZERO = BigInt(0);
@@ -22,6 +23,8 @@ export async function saveTicketType(input: unknown): Promise<ActionResult<{ id:
   const { organisation, userId, owner } = context;
   const data = parsed.data;
   if ("eventId" in owner && data.kind === "PASS") return { ok: false, error: "Passes are for series." };
+  // On a team event each person (or each team, docs/TEAMS.md) holds one ticket.
+  if ("eventId" in owner && data.seatsPerTicket > 1 && (await prisma.event.count({ where: { id: owner.eventId, registrationMode: "TEAM" } })) > 0) return { ok: false, error: "Group tickets aren't available on team events: each person registers for themselves." };
 
   const existing = data.ticketTypeId
     ? await prisma.ticketType.findFirst({ where: { id: data.ticketTypeId, ...owner, archivedAt: null }, select: { id: true, accessCodeDigest: true, accessCodeHint: true } })
@@ -64,6 +67,8 @@ export async function saveTicketType(input: unknown): Promise<ActionResult<{ id:
   // Anything that can take money needs paid events on and a connected account.
   if (priceMinor > ZERO || flexible || feeMinor > ZERO) {
     if (!(await isPaidEventsEnabled())) return { ok: false, error: "Paid tickets are turned off on this installation." };
+    // Applications (docs/ADMISSION.md): a team's paid place is paid once by its leader.
+    if ("eventId" in owner && (await prisma.event.count({ where: { id: owner.eventId, admissionEnabled: true, registrationMode: "TEAM", teamTicketMode: "PER_MEMBER" } })) > 0) return { ok: false, error: PER_MEMBER_PAID_REFUSAL };
     const provider = configuredProvider(settings);
     if (!provider) return { ok: false, error: "Connect a payment account in Settings → Payments before adding a paid ticket." };
     const minimum = providerMinimumMinor(provider, currency);
@@ -293,6 +298,30 @@ export async function saveTransferPolicy(input: unknown): Promise<ActionResult> 
   if ("eventId" in context.owner) await prisma.event.update({ where: { id: context.owner.eventId }, data });
   else await prisma.eventSeries.update({ where: { id: context.owner.eventSeriesId }, data });
   await recordAuditEvent({ action: "TRANSFER_POLICY_UPDATED", actorUserId: context.userId, organisationId: context.organisation.id, targetType: "eventId" in context.owner ? "Event" : "EventSeries", targetId: "eventId" in context.owner ? context.owner.eventId : context.owner.eventSeriesId, metadata: data });
+  revalidateOwner(context);
+  return { ok: true };
+}
+
+/** Who pays on a team event (docs/TEAMS.md): every member, or the leader once for the team. Fixed after the first sale. */
+export async function saveTeamTicketMode(input: unknown): Promise<ActionResult> {
+  const parsed = teamTicketModeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Choose who pays." };
+  const context = await access(parsed.data);
+  if ("error" in context || !("eventId" in context.owner)) return { ok: false, error: "error" in context ? context.error : "Event not found." };
+  const eventId = context.owner.eventId;
+  const saved = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+    const event = await tx.event.findUnique({ where: { id: eventId }, select: { registrationMode: true, teamTicketMode: true, admissionEnabled: true } });
+    if (event?.registrationMode !== "TEAM") return "This event doesn't register teams.";
+    if (event.teamTicketMode === parsed.data.mode) return null;
+    // Applications (docs/ADMISSION.md): paid team places are paid once by the leader for now.
+    if (event.admissionEnabled && parsed.data.mode === "PER_MEMBER" && (await perMemberRefusal(tx, { id: eventId, registrationMode: "TEAM", teamTicketMode: "PER_MEMBER" }))) return PER_MEMBER_PAID_REFUSAL;
+    if (await tx.order.count({ where: { eventId, totalMinor: { gt: 0 } } }) > 0) return "Who pays can't change once tickets have been sold.";
+    await tx.event.update({ where: { id: eventId }, data: { teamTicketMode: parsed.data.mode } });
+    await recordAuditEvent({ action: "TEAM_TICKET_MODE_UPDATED", actorUserId: context.userId, organisationId: context.organisation.id, targetType: "Event", targetId: eventId, metadata: { mode: parsed.data.mode }, client: tx });
+    return null;
+  });
+  if (saved) return { ok: false, error: saved };
   revalidateOwner(context);
   return { ok: true };
 }

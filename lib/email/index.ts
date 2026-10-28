@@ -5,23 +5,23 @@ import { safeTimeZone } from "@/lib/timeZone";
 import { EMAIL_BUTTON_STYLE, EMAIL_COLORS, emailLayout } from "./brand";
 import { DEFAULT_BROADCAST_DESIGN, inlineBroadcastStyles, isBroadcastDesign, renderBroadcastDesign, type BroadcastBrand, type BroadcastDesignId } from "./broadcastDesigns";
 
-const HEADING_STYLE = `margin-top: 0; color: ${EMAIL_COLORS.ink}; font-size: 20px; font-weight: 600;`;
-const BODY_STYLE = `font-size: 16px; line-height: 1.5; color: ${EMAIL_COLORS.inkMuted}; margin-bottom: 24px;`;
+export const HEADING_STYLE = `margin-top: 0; color: ${EMAIL_COLORS.ink}; font-size: 20px; font-weight: 600;`;
+export const BODY_STYLE = `font-size: 16px; line-height: 1.5; color: ${EMAIL_COLORS.inkMuted}; margin-bottom: 24px;`;
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]!);
 }
 
-function headerText(value: string) {
+export function headerText(value: string) {
   return value.replace(/[\u0000-\u001F\u007F]+/g, " ").trim().slice(0, 240);
 }
 
-function greeting(name?: string) {
+export function greeting(name?: string) {
   const safeName = name?.replace(/[\u0000-\u001F\u007F]+/g, " ").trim().slice(0, 200);
   return safeName ? { html: `Hello ${escapeHtml(safeName)},`, text: `Hello ${safeName},` } : { html: "Hello,", text: "Hello," };
 }
 
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 
@@ -51,6 +51,12 @@ export async function sendRSVPConfirmation(params: {
   };
   messageId?: string;
   recipientName?: string;
+  /** Names the team for a registration on a TEAM event. */
+  teamName?: string;
+  /** The event takes applications (docs/ADMISSION.md): a pending registration is an application in review. */
+  application?: boolean;
+  /** The designed ticket as a PDF (docs/TICKET_DESIGNER.md), for confirmed registrations. */
+  ticketPdf?: { filename: string; content: Buffer };
 }): Promise<void> {
   const { transporter, from } = await getEmailTransport();
   const baseUrl = getBaseUrl();
@@ -77,6 +83,9 @@ export async function sendRSVPConfirmation(params: {
   if (params.status === "WAITLISTED") {
     statusText = "Waitlisted";
     statusMessage = "The event is currently at capacity, so you've been placed on the waitlist. We will notify you if a spot opens up!";
+  } else if (params.status === "PENDING_APPROVAL" && params.application) {
+    statusText = "Application received";
+    statusMessage = "Your application is in. The organisers review every application and will email you with a decision. Nothing is charged now.";
   } else if (params.status === "PENDING_APPROVAL") {
     statusText = "Pending Approval";
     statusMessage = "Your RSVP is pending organizer approval. We will let you know once it's reviewed.";
@@ -86,7 +95,7 @@ export async function sendRSVPConfirmation(params: {
             <h2 style="${HEADING_STYLE}">RSVP Status: ${statusText}</h2>
             <p style="${BODY_STYLE}">
               ${salutation.html}<br><br>
-              Thank you for registering for <strong>${safeTitle}</strong>. ${statusMessage}
+              Thank you for registering for <strong>${safeTitle}</strong>${params.teamName ? ` with team <strong>${escapeHtml(params.teamName)}</strong>` : ""}. ${statusMessage}
             </p>
             ${eventDetails ? `
               <div style="margin: 24px 0; padding: 20px; border: 1px solid ${EMAIL_COLORS.line}; border-radius: 16px; background-color: ${EMAIL_COLORS.cream};">
@@ -120,7 +129,7 @@ export async function sendRSVPConfirmation(params: {
                 : ""
             }`);
 
-  const text = `RSVP ${statusText}: ${params.eventTitle}\n\n${salutation.text}\n\nThank you for registering for "${params.eventTitle}". ${statusMessage}${eventDetails ? `\n\nEvent details\nStarts: ${eventDetails.startsAt}\nEnds: ${eventDetails.endsAt}${eventDetails.location ? `\nLocation: ${eventDetails.location}` : ""}` : ""}${calendarUrl ? `\n\nAdd to Google Calendar: ${calendarUrl}\nAn .ics calendar invite is also attached for other calendar apps.` : ""}${ticketUrl && params.status === "CONFIRMED" ? `\n\nView your ticket here: ${ticketUrl}` : ""}\n\nBest regards,\nSpace Works Events`;
+  const text = `RSVP ${statusText}: ${params.eventTitle}\n\n${salutation.text}\n\nThank you for registering for "${params.eventTitle}"${params.teamName ? ` with team "${params.teamName}"` : ""}. ${statusMessage}${eventDetails ? `\n\nEvent details\nStarts: ${eventDetails.startsAt}\nEnds: ${eventDetails.endsAt}${eventDetails.location ? `\nLocation: ${eventDetails.location}` : ""}` : ""}${calendarUrl ? `\n\nAdd to Google Calendar: ${calendarUrl}\nAn .ics calendar invite is also attached for other calendar apps.` : ""}${ticketUrl && params.status === "CONFIRMED" ? `\n\nView your ticket here: ${ticketUrl}` : ""}\n\nBest regards,\nSpace Works Events`;
 
   if (!transporter) {
     // Email bodies can contain attendee PII and bearer ticket links. Mock
@@ -149,6 +158,7 @@ export async function sendRSVPConfirmation(params: {
         method: "PUBLISH",
       }
       : undefined,
+    ...(params.status === "CONFIRMED" && params.ticketPdf ? { attachments: [{ filename: params.ticketPdf.filename, content: params.ticketPdf.content, contentType: "application/pdf" }] } : {}),
   });
 }
 
@@ -158,6 +168,8 @@ export async function sendApprovalNotification(params: {
   approved: boolean;
   messageId?: string;
   recipientName?: string;
+  /** Team status changes name the team the decision applied to. */
+  teamName?: string;
 }): Promise<void> {
   const { transporter, from } = await getEmailTransport();
 
@@ -165,9 +177,11 @@ export async function sendApprovalNotification(params: {
   const safeTitle = escapeHtml(params.eventTitle);
   const subjectTitle = headerText(params.eventTitle);
   const salutation = greeting(params.recipientName);
+  const safeTeam = params.teamName ? ` (team <strong>${escapeHtml(params.teamName)}</strong>)` : "";
+  const textTeam = params.teamName ? ` (team "${params.teamName}")` : "";
   const statusMessage = params.approved
-    ? `Great news! Your RSVP request for <strong>${safeTitle}</strong> has been approved by the organizer.`
-    : `We regret to inform you that your RSVP request for <strong>${safeTitle}</strong> has been declined by the organizer.`;
+    ? `Great news! Your RSVP request for <strong>${safeTitle}</strong>${safeTeam} has been approved by the organizer.`
+    : `We regret to inform you that your RSVP request for <strong>${safeTitle}</strong>${safeTeam} has been declined by the organizer.`;
 
   const html = emailLayout(`RSVP Update: ${statusText}`, `
             <h2 style="${HEADING_STYLE}">RSVP Update: ${statusText}</h2>
@@ -176,7 +190,7 @@ export async function sendApprovalNotification(params: {
               ${statusMessage}
             </p>`);
 
-  const text = `RSVP Update: ${statusText}\n\n${salutation.text}\n\n${params.approved ? `Your RSVP for "${params.eventTitle}" was approved!` : `Your RSVP for "${params.eventTitle}" was declined.`}\n\nBest regards,\nSpace Works Events`;
+  const text = `RSVP Update: ${statusText}\n\n${salutation.text}\n\n${params.approved ? `Your RSVP for "${params.eventTitle}"${textTeam} was approved!` : `Your RSVP for "${params.eventTitle}"${textTeam} was declined.`}\n\nBest regards,\nSpace Works Events`;
 
   if (!transporter) {
     console.log("[EMAIL MOCK] RSVP update queued");
@@ -191,53 +205,6 @@ export async function sendApprovalNotification(params: {
     text,
     html,
   });
-}
-
-export async function sendEventInvitation(params: {
-  to: string;
-  eventTitle: string;
-  organisationName: string;
-  orgSlug: string;
-  eventSlug: string;
-  /** Validated by the outbox: a series invite's date page. */
-  eventPath?: string;
-  messageId?: string;
-}): Promise<void> {
-  const { transporter, from } = await getEmailTransport();
-  const eventUrl = params.eventPath
-    ? `${getBaseUrl()}${params.eventPath}`
-    : `${getBaseUrl()}/${encodeURIComponent(params.orgSlug)}/${encodeURIComponent(params.eventSlug)}`;
-  const safeTitle = escapeHtml(params.eventTitle);
-  const safeOrganisationName = escapeHtml(params.organisationName);
-  const safeEventUrl = escapeHtml(eventUrl);
-  const subject = `You’re invited: ${headerText(params.eventTitle)}`;
-  const text = `You’re invited to "${params.eventTitle}" by ${params.organisationName}.\n\nOpen the event and register with this email address:\n${eventUrl}\n\nSpace Works Events`;
-  const html = emailLayout(escapeHtml(subject), `
-          <h2 style="${HEADING_STYLE}">You’re invited</h2>
-          <p style="${BODY_STYLE}"><strong>${safeOrganisationName}</strong> invited you to <strong>${safeTitle}</strong>.<br><br>Open the event and register with this email address.</p>
-          <p style="margin:28px 0;"><a href="${safeEventUrl}" style="${EMAIL_BUTTON_STYLE}">View event</a></p>
-          <p style="font-size:13px; color:${EMAIL_COLORS.inkMuted}; overflow-wrap:anywhere;">${safeEventUrl}</p>`);
-
-  if (!transporter) {
-    console.log("[EMAIL MOCK] event invitation queued");
-    return;
-  }
-
-  await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
-}
-
-export async function sendCollaboratorInvitation(params: { to: string; eventTitle: string; inviteUrl: string; messageId?: string }) {
-  const { transporter, from } = await getEmailTransport();
-  const subject = `Co-organiser invitation: ${headerText(params.eventTitle)}`;
-  const safeUrl = escapeHtml(params.inviteUrl);
-  const text = `You have been invited to help organise "${params.eventTitle}" as a co-organiser.\n\nSign in with this email address to accept:\n${params.inviteUrl}\n\nSpace Works Events`;
-  const html = emailLayout(escapeHtml(subject), `
-          <h2 style="${HEADING_STYLE}">You’re invited to co-organise</h2>
-          <p style="${BODY_STYLE}">You have been invited to help organise <strong>${escapeHtml(params.eventTitle)}</strong>.<br><br>Sign in with this email address to accept.</p>
-          <p style="margin:28px 0;"><a href="${safeUrl}" style="${EMAIL_BUTTON_STYLE}">Accept invitation</a></p>
-          <p style="font-size:13px; color:${EMAIL_COLORS.inkMuted}; overflow-wrap:anywhere;">${safeUrl}</p>`);
-  if (!transporter) { console.log("[EMAIL MOCK] collaborator invitation queued"); return; }
-  await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
 }
 
 export async function sendReminder(params: {
@@ -337,3 +304,7 @@ export async function sendEventBroadcast(params: {
 
   await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
 }
+
+export { sendTeamCreatedEmail, sendTeamMemberAddedEmail } from "./team";
+export { sendCollaboratorInvitation, sendEventInvitation } from "./invitations";
+export { sendFinalistsAnnouncedEmail, sendResultsPublishedEmail, sendSubmissionLinkEmail, sendSubmissionReceivedEmail } from "./judging";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EventPrivacyType, EventStatus, type Event } from "@prisma/client";
+import { EventPrivacyType, EventStatus, JudgingStatus, RegistrationMode, SoloPolicy, type Event } from "@prisma/client";
 import { toEventClientDto } from "@/lib/eventDto";
 
 describe("event browser DTO", () => {
@@ -18,6 +18,9 @@ describe("event browser DTO", () => {
       timezone: "UTC",
       location: "Venue",
       mapLinkUrl: null,
+      registrationManuallyClosedAt: null,
+      registrationCutoffBeforeManualClose: null,
+      registrationLeadBeforeManualClose: null,
       isOnline: false,
       capacity: null,
       status: EventStatus.PUBLISHED,
@@ -32,6 +35,42 @@ describe("event browser DTO", () => {
       refundPolicyText: "",
       allowTransfers: false,
       transferCutoffHours: 24,
+      registrationMode: RegistrationMode.INDIVIDUAL,
+      teamMinSize: null,
+      teamMaxSize: null,
+      soloPolicy: SoloPolicy.SOLO_ALLOWED,
+      teamTicketMode: "PER_MEMBER",
+      submissionFeeMinor: BigInt(500),
+      submissionFeeRefundOnDisqualify: true,
+      budgetMinor: BigInt(100000),
+      participantClaimsEnabled: true,
+      participantClaimCapMinor: null,
+      crewClaimsEnabled: true,
+      admissionEnabled: true,
+      admissionMode: "MANUAL",
+      admissionRsvpDays: 7,
+      admissionOfferCapacity: null,
+      emailApplicantsOnStageAdvance: false,
+      volunteerShiftsEnabled: true,
+      contributorCertificateTemplate: null,
+      ticketDesignId: null,
+      submissionsEnabled: true,
+      submissionsOpenAt: null,
+      submissionsCloseAt: null,
+      judgingStatus: JudgingStatus.OPEN,
+      judgesSeeAll: false,
+      projectGalleryPublic: false,
+      resultsPublishedAt: null,
+      resultsAnnouncedAt: new Date("2034-01-03T00:00:00Z"),
+      reviewsPerProject: 3,
+      scoreNormalization: "ZSCORE",
+      currentJudgingRoundId: "round-secret",
+      emailEntrantsOnResults: true,
+      emailSubmissionReceipts: true,
+      attendanceCheckReleaseOnDecline: true,
+      mentorDeskEnabled: true,
+      mentorHelpClaimedEmail: true,
+      mentorsGetCrewTicket: true,
       shortCode: null,
       checkInStationPinHash: "bcrypt-secret",
       checkInStationPinEncrypted: "encrypted-secret",
@@ -45,5 +84,17 @@ describe("event browser DTO", () => {
     expect(serialized).not.toContain("encrypted-secret");
     expect(serialized).not.toContain("ticket-secret");
     expect(serialized).not.toContain("checkInStation");
+    expect(serialized).not.toContain("judgingStatus");
+    expect(serialized).not.toContain("judgesSeeAll");
+    expect(serialized).not.toContain("resultsAnnouncedAt");
+    expect(serialized).not.toContain("emailEntrantsOnResults");
+    expect(serialized).not.toContain("emailSubmissionReceipts");
+    expect(serialized).not.toContain("attendanceCheckReleaseOnDecline");
+    expect(serialized).not.toContain("mentorDesk");
+    expect(serialized).not.toContain("reviewsPerProject");
+    expect(serialized).not.toContain("scoreNormalization");
+    expect(serialized).not.toContain("currentJudgingRoundId");
+    expect(serialized).not.toContain("submissionFee");
+    expect(serialized).not.toContain("budgetMinor");
   });
 });

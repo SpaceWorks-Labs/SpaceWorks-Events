@@ -1,24 +1,28 @@
 "use server";
 
+import { CREW_EMAIL_REFUSED, CREW_REGISTRATION_ERROR, lockedHasCrewEmail } from "@/lib/core/crew/shared";
 import { Prisma, RsvpStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { canManageRegistrationsFor } from "@/lib/eventAccess";
-import { deleteRsvpSchema, manualRsvpSchema, restoreRsvpSchema, updateRsvpRegistrationSchema } from "@/lib/validators";
+import { deleteRsvpSchema, manualRsvpSchema, updateRsvpRegistrationSchema } from "@/lib/validators";
 import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { recordAuditEvent } from "@/lib/audit";
 import { submitManualGuestRsvpCore } from "@/lib/rsvpCore";
 import { validateAndNormalizeAnswers } from "@/lib/rsvpCore";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { hasCapacityToRestoreConfirmedRsvp } from "@/lib/rsvpCapacity";
 import { noticeSubject, personEmail } from "@/lib/notices";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
-import { revalidatePath, revalidateRsvpPaths, snapshotSchema, UNDO_TTL_MS } from "./rsvp-admin/helpers";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { revalidatePath, revalidateRsvpPaths, settleTeamAfterRemoval, teamDeletionPayload, UNDO_TTL_MS } from "./rsvp-admin/helpers";
+import { restoreRsvp as restoreRsvpAction } from "./rsvp-admin/restore";
+import { captureSubmissionSnapshotTx, type SubmissionSnapshot } from "@/lib/core/submissionLifecycle";
+import { emitTeamWebhooks, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 
 export async function addManualRsvp(
   input: unknown,
-): Promise<ActionResult<{ count: number; status: RsvpStatus; }>> {
+): Promise<ActionResult<{ count: number; status: RsvpStatus; rsvpId: string; }>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "You must be signed in." };
   if (await isActionRateLimited("rsvp", session.user.id)) {
@@ -48,7 +52,7 @@ export async function addManualRsvp(
   });
   revalidateRsvpPaths(org.slug, { eventId: parsed.data.eventId, eventInstanceId: null });
   revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}/check-in`);
-  return { ok: true, data: { count: result.data.count, status: result.data.status } };
+  return { ok: true, data: { count: result.data.count, status: result.data.status, rsvpId: result.data.rsvpId } };
 }
 
 export async function updateRsvpRegistration(input: unknown): Promise<ActionResult> {
@@ -78,6 +82,8 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
+  // Crew name and email live on the crew record (docs/CREW.md).
+  if (rsvp.isCrew) return { ok: false, error: CREW_REGISTRATION_ERROR };
 
   const formFields = rsvp.event?.registrationForm?.fields ?? [];
   const validated = validateAndNormalizeAnswers({
@@ -91,8 +97,11 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
     guestEmail: parsed.data.guestEmail?.trim().toLowerCase() || rsvp.guestEmail,
   };
   const guestEmail = "guestEmail" in guestUpdate ? guestUpdate.guestEmail : rsvp.guestEmail;
+  // Moving a ticket to a crew member's email would give them a second, capacity-taking place.
+  const toCrewEmail = Boolean(rsvp.eventId && guestEmail && guestEmail !== rsvp.guestEmail);
   try {
-    await prisma.$transaction(async (tx) => {
+    const refused = await prisma.$transaction(async (tx) => {
+      if (toCrewEmail && rsvp.eventId && (await lockedHasCrewEmail(tx, rsvp.eventId, [guestEmail]))) return CREW_EMAIL_REFUSED;
       await tx.rSVP.update({
         where: { id: rsvp.id },
         data: {
@@ -118,7 +127,9 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
           })),
         });
       }
+      return null;
     });
+    if (refused) return { ok: false, error: refused };
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && (error as { code?: string; }).code === "P2002") {
       return { ok: false, error: "This email is already registered for this event." };
@@ -157,16 +168,20 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
     include: {
       answers: true,
       user: { select: { email: true } },
-      event: { select: { slug: true, title: true, endDateTime: true } },
+      event: { select: { slug: true, title: true, endDateTime: true, registrationMode: true } },
       eventInstance: { select: { endDateTime: true, series: { select: { title: true } } } },
       order: { select: { totalMinor: true } },
+      checkInListRecords: { select: { listId: true, checkedInAt: true, source: true } },
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
+  if (rsvp.isCrew) return { ok: false, error: CREW_REGISTRATION_ERROR };
   // Paid tickets keep their money trail: they're cancelled (and refunded) as an order.
-  if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead." };
+  if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead.", code: "PAID_ORDER" };
 
-  const snapshot = {
+  const teamEvent = rsvp.eventId && rsvp.event?.registrationMode === "TEAM" ? rsvp.eventId : null;
+  const snapshot: Record<string, unknown> & { teamId?: string | null; submission?: SubmissionSnapshot | null; } = {
+    ...(teamEvent ? { teamId: rsvp.teamId } : {}),
     eventId: rsvp.eventId,
     eventInstanceId: rsvp.eventInstanceId,
     userId: rsvp.userId,
@@ -184,9 +199,25 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
       valueNumber: answer.valueNumber,
       valueDate: answer.valueDate?.toISOString() ?? null,
     })),
+    listCheckIns: rsvp.checkInListRecords.map((record) => ({
+      listId: record.listId,
+      checkedInAt: record.checkedInAt.toISOString(),
+      source: record.source,
+    })),
   };
 
+  const promotedWebhooks: RegistrationStatusWebhook[] = [];
   const undo = await prisma.$transaction(async (tx) => {
+    const team = teamEvent ? await teamDeletionPayload(tx, { eventId: teamEvent, rsvpId: rsvp.id, snapshot }) : null;
+    // Same lock order as entrant submission writes (Event, then RSVP).
+    if (!teamEvent && rsvp.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${rsvp.eventId} FOR UPDATE`;
+    // A solo registration's project (and its scores) cascades with the RSVP;
+    // keep it in the undo snapshot so restoring brings it back.
+    let payload = team?.payload ?? (snapshot as Prisma.InputJsonValue);
+    if (rsvp.eventId && !team?.teamId) {
+      snapshot.submission = await captureSubmissionSnapshotTx(tx, { eventId: rsvp.eventId, rsvpId: rsvp.id });
+      payload = snapshot as Prisma.InputJsonValue;
+    }
     // Keep the short-lived undo table bounded even when no scheduled cleanup is
     // configured. Expired snapshots are never eligible for restoration.
     await tx.rsvpDeletionUndo.deleteMany({ where: { expiresAt: { lte: new Date() } } });
@@ -194,12 +225,13 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
       data: {
         organisationId: org.id,
         deletedByUserId: session.user.id,
-        payload: snapshot as Prisma.InputJsonValue,
+        payload,
         expiresAt: new Date(Date.now() + UNDO_TTL_MS),
       },
       select: { id: true },
     });
     await tx.rSVP.delete({ where: { id: rsvp.id } });
+    if (teamEvent && team?.teamId) promotedWebhooks.push(...await settleTeamAfterRemoval(tx, { eventId: teamEvent, teamId: team.teamId, rsvpId: rsvp.id }));
     return created;
   });
   // The guest is told once the undo window has passed, unless the removal was undone.
@@ -215,6 +247,14 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
     });
   }
 
+  emitWebhookEvent({
+    type: "registration.status_changed",
+    rsvpId: rsvp.id,
+    status: "REMOVED",
+    previousStatus: rsvp.status,
+    snapshot: { id: rsvp.id, eventId: rsvp.eventId, eventInstanceId: rsvp.eventInstanceId, userId: rsvp.userId, guestName: rsvp.guestName, createdAt: rsvp.createdAt, checkedInAt: rsvp.checkedInAt },
+  });
+  emitTeamWebhooks(promotedWebhooks);
   await recordAuditEvent({ action: "RSVP_DELETED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
 
   revalidateRsvpPaths(org.slug, { eventId: rsvp.eventId, eventInstanceId: rsvp.eventInstanceId, eventSlug: rsvp.event?.slug });
@@ -223,90 +263,5 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
 
 /** Restore only a short-lived snapshot created by this server for this organiser. */
 export async function restoreRsvp(input: unknown): Promise<ActionResult> {
-  const session = await auth();
-  if (!session?.user?.id) return { ok: false, error: "You must be signed in." };
-  if (await isActionRateLimited("rsvp", session.user.id)) return { ok: false, error: "Too many attendee updates. Try again shortly." };
-  const parsed = restoreRsvpSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid restore request." };
-
-  const org = await prisma.organisation.findUnique({ where: { slug: parsed.data.organisationSlug } });
-  if (!org) return { ok: false, error: "Organisation not found." };
-
-  const undo = await prisma.rsvpDeletionUndo.findFirst({
-    where: {
-      id: parsed.data.undoId,
-      organisationId: org.id,
-      deletedByUserId: session.user.id,
-      expiresAt: { gt: new Date() },
-    },
-  });
-  if (!undo) return { ok: false, error: "This undo has expired or is unavailable." };
-  const snapshot = snapshotSchema.safeParse(undo.payload);
-  if (!snapshot.success) return { ok: false, error: "Could not restore this RSVP safely." };
-  // Re-checked against the snapshot's own event or occurrence: the undo row is
-  // the deleter's, but their access may have changed since.
-  if (!(await canManageRegistrationsFor({ userId: session.user.id, organisationId: org.id, eventId: snapshot.data.eventId, eventInstanceId: snapshot.data.eventInstanceId }))) {
-    return { ok: false, error: "You do not have permission to restore RSVPs." };
-  }
-
-  const targetExists = snapshot.data.eventId
-    ? await prisma.event.findFirst({ where: { id: snapshot.data.eventId, organisationId: org.id }, select: { id: true, slug: true } })
-    : await prisma.eventInstance.findFirst({ where: { id: snapshot.data.eventInstanceId!, series: { organisationId: org.id } }, select: { id: true } });
-  if (!targetExists) return { ok: false, error: "The original event no longer exists." };
-
-  let restoredId: string;
-  try {
-    const restored = await prisma.$transaction(async (tx) => {
-      if (snapshot.data.status === RsvpStatus.CONFIRMED) {
-        const target = snapshot.data.eventId ? { eventId: snapshot.data.eventId } : { eventInstanceId: snapshot.data.eventInstanceId! };
-        if (!(await hasCapacityToRestoreConfirmedRsvp(tx, target))) return null;
-      }
-      const created = await tx.rSVP.create({
-        data: {
-          eventId: snapshot.data.eventId,
-          eventInstanceId: snapshot.data.eventInstanceId,
-          userId: snapshot.data.userId,
-          guestEmail: snapshot.data.guestEmail,
-          guestName: snapshot.data.guestName,
-          status: snapshot.data.status,
-          attendeeKey: snapshot.data.attendeeKey,
-          checkInToken: snapshot.data.checkInToken,
-          checkedInAt: snapshot.data.checkedInAt ? new Date(snapshot.data.checkedInAt) : null,
-          createdAt: new Date(snapshot.data.createdAt),
-          answers: {
-            create: snapshot.data.answers.map((answer) => ({
-              fieldId: answer.fieldId,
-              valueText: answer.valueText,
-              valueBool: answer.valueBool,
-              valueNumber: answer.valueNumber,
-              valueDate: answer.valueDate ? new Date(answer.valueDate) : null,
-            }))
-          },
-        },
-      });
-      await tx.rsvpDeletionUndo.delete({ where: { id: undo.id } });
-      // The removal notice waiting out the undo window is no longer true.
-      await tx.outboxMessage.deleteMany({ where: { kind: "operator-notice", status: "PENDING", payload: { path: ["undoId"], equals: undo.id } } });
-      return created;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (!restored) return { ok: false, error: "This RSVP cannot be restored because the event is now at capacity." };
-    restoredId = restored.id;
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && (error as { code?: string; }).code === "P2002") {
-      return { ok: false, error: "This RSVP can no longer be restored because a conflicting registration exists." };
-    }
-    console.error("[rsvp] restore failed");
-    return { ok: false, error: "Could not restore the RSVP." };
-  }
-
-  const eventSlug = snapshot.data.eventId && "slug" in targetExists
-    ? String(targetExists.slug)
-    : undefined;
-  revalidateRsvpPaths(org.slug, {
-    eventId: snapshot.data.eventId,
-    eventInstanceId: snapshot.data.eventInstanceId,
-    eventSlug,
-  });
-  await recordAuditEvent({ action: "RSVP_RESTORED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: restoredId });
-  return { ok: true };
+  return restoreRsvpAction(input);
 }

@@ -6,6 +6,7 @@
 import { dailyCounts, relativeDayPhrase, toDotLevels, weekOverWeek } from "@/lib/dashboardHomeMetrics";
 import { formatRelativeDay } from "@/lib/format/datetime";
 import type { EventCapabilities } from "@/lib/eventDashboard/capabilities";
+import { describeAttendanceReplies, type AttendanceSummary } from "@/lib/attendanceCheck";
 
 export type ReadinessAction =
   | { kind: "tab"; label: string; tab: string; sub?: string }
@@ -23,7 +24,19 @@ export type ReadinessInput = {
   stationPinSet: boolean;
   approvalRequired: boolean;
   pendingApprovals: number;
+  /** TEAM events: pending requests are counted as units (each team once, each solo registrant once). */
+  teamMode?: boolean;
+  /**
+   * TEAM events: how many of `pendingApprovals` are teams. Teams are reviewed
+   * in Guests → Teams and solo registrants in Guests → People.
+   */
+  pendingTeams?: number;
   emailsSent: number;
+  /**
+   * Attendance confirmation replies, or null/undefined when nobody has been
+   * asked yet. Loaded only for viewers who may email guests.
+   */
+  attendanceReplies?: Pick<AttendanceSummary, "coming" | "notComing" | "noReply"> | null;
   permissions: Pick<
     EventCapabilities,
     "canPublish" | "canEditEventDetails" | "canManageSchedule" | "canEditRegistrationForm" | "canManageCheckInStation" | "canManageRegistrations" | "canSendEmails"
@@ -32,6 +45,12 @@ export type ReadinessInput = {
 
 function plural(count: number, one: string, many = `${one}s`) {
   return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Where pending approvals are reviewed: Teams only when every pending unit is a team. */
+function approvalsSubTab(input: ReadinessInput): "teams" | "people" {
+  const teams = input.pendingTeams ?? 0;
+  return input.teamMode && teams > 0 && teams >= input.pendingApprovals ? "teams" : "people";
 }
 
 /**
@@ -91,7 +110,7 @@ export function readinessItems(input: ReadinessInput): ReadinessItem[] {
         key: "approvals",
         label: `${input.pendingApprovals} waiting for approval`,
         done: false,
-        action: { kind: "tab", label: "Review", tab: "guests", sub: "people" },
+        action: { kind: "tab", label: "Review", tab: "guests", sub: approvalsSubTab(input) },
       });
     } else if (input.approvalRequired) {
       items.push({ key: "approvals", label: "No one waiting for approval", done: true });
@@ -104,6 +123,11 @@ export function readinessItems(input: ReadinessInput): ReadinessItem[] {
         ? { key: "email", label: `${plural(input.emailsSent, "email")} sent to guests`, done: true }
         : { key: "email", label: "No email sent yet", done: false, action: { kind: "tab", label: "Write one", tab: "emails" } },
     );
+    // Informational once guests have been asked "Are you still coming?": never a to-do.
+    const replies = input.attendanceReplies;
+    if (replies && replies.coming + replies.notComing + replies.noReply > 0) {
+      items.push({ key: "attendance", label: describeAttendanceReplies(replies), done: true, action: { kind: "tab", label: "Details", tab: "emails" } });
+    }
   }
 
   return items;

@@ -4,8 +4,8 @@ import { checkInByRsvpIdSchema } from "@/lib/validators";
 import type { ActionResult } from "../org";
 import { flattenZodErrors } from "../utils";
 import { commitCheckInProjection } from "@/lib/checkInMutations";
-import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
-import { attendeeLabel, requireOrgMemberForEvent, revalidateAfterCheckIn } from "./access";
+import { requireOrgMemberForEvent, revalidateAfterCheckIn } from "./access";
+import { DESK_EXTRAS_INCLUDE, deskResult } from "./result";
 import type { CheckInPreviewData, CheckInResultData } from "../checkin";
 
 /**
@@ -33,24 +33,15 @@ export async function previewCheckInByRsvpId(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
+      team: { select: { name: true } },
+      ...DESK_EXTRAS_INCLUDE,
     },
   });
   if (!rsvp) return { ok: false, error: "RSVP not found." };
 
   return {
     ok: true,
-    data: {
-      rsvpId: rsvp.id,
-      displayName: attendeeLabel(rsvp),
-      email: rsvp.user?.email ?? rsvp.guestEmail,
-      status: rsvp.status,
-      alreadyCheckedIn: Boolean(rsvp.checkedInAt),
-      checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
-      checkInQrToken: rsvp.checkInToken,
-      checkInDetails: getCheckInDetails(rsvp.answers),
-      registrationDetails: getRegistrationDetails(rsvp.answers),
-      gate: gateCheckInForStatus(rsvp.status, Boolean(force)),
-    },
+    data: { ...deskResult(rsvp, { alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt }), gate: gateCheckInForStatus(rsvp.status, Boolean(force)) },
   };
 }
 
@@ -76,6 +67,8 @@ export async function checkInByRsvpId(
     include: {
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
+      team: { select: { name: true } },
+      ...DESK_EXTRAS_INCLUDE,
       event: { select: { slug: true } },
       eventInstance: { select: { id: true } },
     },
@@ -97,17 +90,7 @@ export async function checkInByRsvpId(
   if (rsvp.checkedInAt) {
     return {
       ok: true,
-      data: {
-        rsvpId: rsvp.id,
-        displayName: attendeeLabel(rsvp),
-        email: rsvp.user?.email ?? rsvp.guestEmail,
-        status: rsvp.status,
-        alreadyCheckedIn: true,
-        checkedInAt: rsvp.checkedInAt.toISOString(),
-        checkInQrToken: rsvp.checkInToken,
-        checkInDetails: getCheckInDetails(rsvp.answers),
-        registrationDetails: getRegistrationDetails(rsvp.answers),
-      },
+      data: { ...deskResult(rsvp, { alreadyCheckedIn: true, checkedInAt: rsvp.checkedInAt }) },
     };
   }
 
@@ -122,22 +105,12 @@ export async function checkInByRsvpId(
   if (committed.state !== "checked-in") {
     if (committed.state === "missing") return { ok: false, error: "RSVP not found." };
     if (committed.state === "ineligible") {
-      const currentGate = gateCheckInForStatus(committed.status, Boolean(force));
+      const currentGate = gateCheckInForStatus(committed.status, Boolean(force), committed.applicant);
       return { ok: false, error: currentGate.ok ? "Check-in could not be completed." : currentGate.reason };
     }
     return {
       ok: true,
-      data: {
-        rsvpId: rsvp.id,
-        displayName: attendeeLabel(rsvp),
-        email: rsvp.user?.email ?? rsvp.guestEmail,
-        status: rsvp.status,
-        alreadyCheckedIn: true,
-        checkedInAt: committed.checkedInAt.toISOString(),
-        checkInQrToken: rsvp.checkInToken,
-        checkInDetails: getCheckInDetails(rsvp.answers),
-        registrationDetails: getRegistrationDetails(rsvp.answers),
-      },
+      data: { ...deskResult(rsvp, { alreadyCheckedIn: true, checkedInAt: committed.checkedInAt }) },
     };
   }
 
@@ -149,16 +122,6 @@ export async function checkInByRsvpId(
 
   return {
     ok: true,
-    data: {
-      rsvpId: rsvp.id,
-      displayName: attendeeLabel(rsvp),
-      email: rsvp.user?.email ?? rsvp.guestEmail,
-      status: rsvp.status,
-      alreadyCheckedIn: false,
-      checkedInAt: now.toISOString(),
-      checkInQrToken: rsvp.checkInToken,
-      checkInDetails: getCheckInDetails(rsvp.answers),
-      registrationDetails: getRegistrationDetails(rsvp.answers),
-    },
+    data: { ...deskResult(rsvp, { alreadyCheckedIn: false, checkedInAt: now }) },
   };
 }

@@ -5,6 +5,7 @@ import { titleWith } from "@/lib/noticeText";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { seatTakingWhere } from "./holds";
 import type { RefundPolicySnapshot } from "./refundPolicy";
+import { sqlUtcTimestamp } from "@/lib/sqlTimestamp";
 
 /**
  * What an order is for: an event, one date of a series, or a pass that holds
@@ -22,6 +23,8 @@ export type Sellable = {
   organisationId: string;
   title: string;
   privacyType: EventPrivacyType;
+  /** One-off events taking applications (docs/ADMISSION.md). */
+  admission?: boolean;
   currency: string | null;
   refundPolicy: RefundPolicySnapshot;
   open: boolean;
@@ -54,7 +57,7 @@ export async function lockSellable(tx: Prisma.TransactionClient, target: OrderTa
     const event = await tx.event.findUnique({
       where: { id: target.eventId },
       select: {
-        id: true, organisationId: true, title: true, capacity: true, privacyType: true, status: true, currency: true,
+        id: true, organisationId: true, title: true, capacity: true, privacyType: true, status: true, currency: true, admissionEnabled: true,
         startDateTime: true, endDateTime: true, registrationClosesAt: true, registrationLeadMinutes: true, page: { select: { isPublished: true } },
         refundPolicyKind: true, refundPolicyHours: true, refundPolicyPercent: true, refundPolicyText: true,
       },
@@ -64,6 +67,7 @@ export async function lockSellable(tx: Prisma.TransactionClient, target: OrderTa
       organisationId: event.organisationId,
       title: event.title,
       privacyType: event.privacyType,
+      admission: event.admissionEnabled,
       currency: event.currency,
       refundPolicy: { kind: event.refundPolicyKind, hours: event.refundPolicyHours, percent: event.refundPolicyPercent, text: event.refundPolicyText },
       open: event.status === EventStatus.PUBLISHED && event.page?.isPublished === true && event.endDateTime > now && !isRegistrationClosed(event),
@@ -123,7 +127,7 @@ export async function lockSeriesDates(tx: Prisma.TransactionClient, seriesId: st
   if (ids) {
     if (ids.length > 0) await tx.$queryRaw`SELECT "id" FROM "EventInstance" WHERE "id" = ANY(${ids}) AND "eventSeriesId" = ${seriesId} ORDER BY "id" FOR UPDATE`;
   } else {
-    await tx.$queryRaw`SELECT "id" FROM "EventInstance" WHERE "eventSeriesId" = ${seriesId} AND "endDateTime" > ${now} ORDER BY "id" FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "EventInstance" WHERE "eventSeriesId" = ${seriesId} AND "endDateTime" > ${sqlUtcTimestamp(now)} ORDER BY "id" FOR UPDATE`;
   }
 }
 

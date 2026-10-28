@@ -19,6 +19,10 @@ Blank values (for example `SMTP_HOST=""` left over from `.env.example`) are trea
 | `NEXT_PUBLIC_BASE_URL` | Required | Public link origin; must exactly match `AUTH_URL`. Sent emails also use it to make site-relative images and links (event cover, organisation logo, event page) absolute; without it those are left out of delivered broadcasts, while the dashboard preview still renders them |
 | `AUTH_GOOGLE_ID` | Legacy fallback | Google OAuth client ID; configure new instances in Super admin → Settings |
 | `AUTH_GOOGLE_SECRET` | Legacy fallback | Google OAuth client secret; configure new instances in Super admin → Settings |
+| `ANDROID_APP_PACKAGE_NAME` | Optional, **website** container | Android application id published in `/.well-known/assetlinks.json` (default `in.spaceworks.events`). Read at runtime; nothing is compiled into the images |
+| `ANDROID_APP_SHA256_FINGERPRINTS` | Optional, **website** container | Comma-separated SHA-256 signing-certificate fingerprints (`AA:BB:…`) for Android App Links; unset serves `[]` |
+| `APPLE_APP_IDS` | Optional, **website** container | Comma-separated `TEAMID.bundle.id` values for iOS Universal Links (`/.well-known/apple-app-site-association`); unset serves empty details |
+| `GOOGLE_MOBILE_CLIENT_IDS` | Fallback, **API** (backend) container | Comma-separated Google OAuth client IDs of the Space Works Android and iOS apps, accepted by the mobile API's Google sign-in; a list saved in Super admin → Settings overrides it. Public identifiers, not secrets |
 | `SUPER_ADMIN_EMAIL` | Recommended | Sole email allowed into the instance administration area. Its password is set only from the server (`scripts/vps-recover.sh` or `docker/vps/recover-super-admin.mjs`): the app refuses its sign-up, never emails it a reset link and hides its password form |
 | `STAFF_MFA_REQUIRED` | Optional | On unless set to `false`. Organisation staff (any membership or co-organiser grant) must set up an authenticator app and confirm it each session. `false` is for local development and tests only |
 | `LOGIN_NEW_DEVICE_CHECK` | Optional | On unless set to `false`. A password sign-in from a device the account hasn't used before needs a code emailed to the account. `false` is for tests only |
@@ -53,7 +57,7 @@ Keep an HTTPS redirect from the old hostname to the new one for as long as invit
 | Variable | Production | Purpose |
 | --- | --- | --- |
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | Required | Stable base64 AES key shared by the build and every replica; 16, 24, or 32 decoded bytes |
-| `MFA_ENCRYPTION_KEY` | Required | Independent base64 key used to encrypt TOTP seeds; exactly 32 decoded bytes. A domain-separated subkey also encrypts the SMTP password, Google client secret, and alert webhook URL saved in Super admin → Settings. Must be identical on every replica and job (app pods, migration job, any one-off container) and stable |
+| `MFA_ENCRYPTION_KEY` | Required | Independent base64 key used to encrypt TOTP seeds; exactly 32 decoded bytes. A domain-separated subkey also encrypts the SMTP password, Google client secret, and alert webhook URL saved in Super admin → Settings, and others the organisation webhook signing secrets and organisations' own secrets. Two more subkeys are HMAC keys, not encryption: the mobile API's `Idempotency-Key` and request-body digests, and the signature on payment return links. Must be identical on every replica and job (app pods, migration job, any one-off container) and stable |
 | `CRON_SECRET` | Required | Bearer secret for `POST /api/internal/outbox` (one full pass of timed jobs and email delivery, for cron services and recovery), at least 32 characters |
 | `SWE_PROCESS_ROLE` | Optional | `all` (default): serve requests, send email (worker) and run timed jobs (beat) in one process. `web`, `worker` or `beat`: one part only, for installs that run them as separate containers. The image's `worker` and `beat` commands set it |
 | `OUTBOX_POLL_MS` | Optional | How often the worker checks for queued email, in milliseconds (default 3000, 500 to 60000) |
@@ -61,7 +65,7 @@ Keep an HTTPS redirect from the old hostname to the new one for as long as invit
 
 Generate independent keys with `openssl rand -base64 32`. Rotating the Server Action key invalidates outstanding action forms. Rotating the MFA key without re-encrypting stored seeds prevents enrolled users from validating TOTP codes.
 
-**`MFA_ENCRYPTION_KEY` mismatch or rotation.** The server validates only the key's format at startup, so a replica with a different key still starts and passes health checks — it does not crash-loop — but on that replica every use of a value encrypted with the original key fails: outbox delivery fails and is retried until the outbox gives up, Google sign-in fails, alerts are not sent, and TOTP verification fails. Behind a load balancer this looks intermittent. Detect it with the same environment the application receives:
+**`MFA_ENCRYPTION_KEY` mismatch or rotation.** The server validates only the key's format at startup, so a replica with a different key still starts and passes health checks — it does not crash-loop — but on that replica every use of a value encrypted with the original key fails: outbox delivery fails and is retried until the outbox gives up, Google sign-in fails, alerts are not sent, and TOTP verification fails. The two HMAC subkeys fail silently instead: a mobile write retried onto a replica with another key no longer matches its `Idempotency-Key` record, so it runs a second time (or is refused as a conflict) instead of replaying the first answer, and a buyer coming back from Razorpay or Stripe through a return link signed on another replica gets a 404 instead of the order page (the payment itself still settles through the provider webhook). Rotating the key has the same effect once: return links and idempotency records from before the rotation stop matching (both expire within a day). Behind a load balancer this looks intermittent. Detect it with the same environment the application receives:
 
 ```bash
 node --env-file=/secure/path/swevents.env scripts/check-instance-secrets.mjs
@@ -82,7 +86,7 @@ It checks the panel's SMTP password, Google client secret and alert webhook, enr
 
 Do not expose the application directly while trusting a client-controlled forwarding header.
 
-Rate-limit windows are defined in code (`lib/rateLimit.ts`), not configured by environment. Recent buckets: `dataExport` (5 personal data exports per user per hour), `broadcastDraft` (60 email draft saves or discards per minute, per user and per IP), `ticketStatus` (120 ticket status reads per IP per minute), `ticketEvents` (60 ticket event-stream connections per IP per minute), `shortLink` (30 short-link lookups per IP per minute), `loginFailureIp` (20 failed sign-ins per address per hour, then that address is blocked), `loginFailureAccount` (5 failed sign-ins per account in 15 minutes, then an emailed code is needed), and `loginCode` (5 sign-in codes emailed per account per hour). Without a trusted proxy header every client reads as "unknown", and "unknown" is never blocked. The ticket buckets are generous because attendees at one venue often share a NAT address.
+Rate-limit windows are defined in code (`lib/rateLimit.ts`), not configured by environment. Recent buckets: `dataExport` (5 personal data exports per user per hour), `broadcastDraft` (60 email draft saves or discards per minute, per user and per IP), `ticketStatus` (120 ticket status reads per IP per minute), `ticketEvents` (60 ticket event-stream connections per IP per minute), `shortLink` (30 short-link lookups per IP per minute), `loginFailureIp` (20 failed sign-ins per address per hour, then that address is blocked), `loginFailureAccount` (5 failed sign-ins per account in 15 minutes, then an emailed code is needed), and `loginCode` (5 sign-in codes emailed per account per hour). Without a trusted proxy header every client reads as "unknown", and "unknown" is never blocked. The ticket buckets are generous because attendees at one venue often share a NAT address. Organisation webhooks add `webhookManage` (30 webhook endpoint changes per minute) and `webhookTest` (20 webhook test sends or redeliveries per hour).
 
 The live ticket stream at `/api/ticket/:token/events` is a long-lived `text/event-stream` response. Any reverse proxy in front of the application must not buffer it (for nginx, `proxy_buffering off`; the route also sends `X-Accel-Buffering: no`) and must allow idle reads of at least 30 seconds.
 
@@ -103,7 +107,7 @@ Configure SMTP, Google SSO, paid events, backup status, and operational alerts u
 - **Google SSO** uses a saved client ID only with the saved secret. If that secret is missing or cannot be decrypted, Google sign-in is off rather than paired with an environment secret, and password sign-in keeps working. With no saved client ID, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` (or the legacy `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`) apply, and the panel cannot switch those off; remove the variables instead. Register `${AUTH_URL}/api/auth/callback/google` with Google.
 - **Backup posture:** any saved backup field replaces the `BACKUP_*` values together; the last successful backup is entered in UTC.
 - **Not required in the environment.** Neither the startup check nor `npm run production:check` requires `EMAIL_FROM`, `SMTP_*`, or `AUTH_GOOGLE_*`; the preflight only notes when no SMTP fallback exists. Until SMTP is saved in the panel (or provided as a fallback), production email stays queued. Keeping an environment SMTP fallback is still recommended for bootstrap and disaster recovery (for example, a lost `MFA_ENCRYPTION_KEY`).
-- **Operational alerts** are configured only in the panel. Every application process posts them directly to the webhook (for example Mattermost) over outbound HTTPS, so app containers/pods need egress to the webhook host on port 443, in addition to SMTP (typically 465/587), PostgreSQL, Redis, and object storage. Browser crash reports reach the app at `/api/client-errors` and are forwarded the same way. The webhook host must resolve only to public addresses, checked when it is saved and before every post (including **Send test message**), so it cannot be used to probe this host, its network or cloud metadata. Set `OPS_WEBHOOK_ALLOW_PRIVATE=1` to allow a chat server on a private network.
+- **Operational alerts** are configured only in the panel. Every application process posts them directly to the webhook (for example Mattermost) over outbound HTTPS, so app containers/pods need egress to the webhook host on port 443, in addition to SMTP (typically 465/587), PostgreSQL, Redis, and object storage. Browser crash reports reach the app at `/api/client-errors` and are forwarded the same way. The webhook host must resolve only to public addresses, checked when it is saved and before every post (including **Send test message**), so it cannot be used to probe this host, its network or cloud metadata. Set `OPS_WEBHOOK_ALLOW_PRIVATE=1` to allow a chat server on a private network. Ordinary sign-in outcomes (a wrong password, the authenticator or new-device code step, an unverified email, too many attempts, a missing CSRF token, a declined or expired sign-in) are not alerts; provider and configuration failures still raise "Sign-in failed (…)" (`lib/authLogger.ts`).
 
 ## Object storage
 
@@ -123,11 +127,19 @@ The bucket must remain private. Existing database-backed assets can be moved wit
 | --- | --- |
 | `BACKUP_*` | Legacy fallback | Backup status metadata; configure new instances in Super admin → Settings |
 
+## Organisation webhooks
+
+| Variable | Production | Purpose |
+| --- | --- | --- |
+| `WEBHOOKS_ALLOW_PRIVATE_TARGETS` | **Never** (development/test only) | `1` lets organisation webhooks use `http://` and private or loopback receivers on any port, for a local test receiver. A production server ignores it except in the CI-only test mode below, and `npm run production:check` fails when it is set |
+
+Webhook signing secrets are encrypted with a domain-separated key derived from `MFA_ENCRYPTION_KEY`; no new secret is needed. App processes need outbound HTTPS (ports 443 and 8443) to the receivers organisations configure. See [Organisation webhooks](WEBHOOKS.md).
+
 ## Test-only bypass
 
 `PAYMENTS_FAKE_PROVIDER_URL` points every Razorpay and Stripe API call at a local fake provider for tests (a loopback `http://127.0.0.1:<port>` origin only). It is refused when `NODE_ENV=production`: startup validation fails and provider calls throw. Organisations' payment keys are not environment variables; owners enter them in Settings → Payments, encrypted with a subkey of `MFA_ENCRYPTION_KEY`.
 
-`ALLOW_INSECURE_PRODUCTION_TESTS=1` has an effect only when `CI=true`. Together they permit local HTTP, non-TLS test services, and the controlled in-memory Redis fallback while exercising a production build. Never configure this pair in a deployed environment.
+`ALLOW_INSECURE_PRODUCTION_TESTS=1` has an effect only when `CI=true`. Together they permit local HTTP, non-TLS test services, the controlled in-memory Redis fallback, and `WEBHOOKS_ALLOW_PRIVATE_TARGETS` while exercising a production build. Never configure this pair in a deployed environment.
 
 Validate production configuration with:
 

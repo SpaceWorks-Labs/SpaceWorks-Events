@@ -7,19 +7,17 @@ import type { EventClientDto } from "@/lib/eventDto";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Callout, Chip } from "@/components/ui/display";
-import { Field, Input } from "@/components/ui/field";
+import { Callout } from "@/components/ui/display";
 import { updateEvent, uploadEventCoverImage } from "@/app/actions/event";
 import { uploadEventPageLogo } from "@/app/actions/media";
 import { CoverImagePicker } from "@/components/event/CoverImagePicker";
 import { PublishingSection } from "@/components/event/PublishingSection";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
-import { ImageUploadPicker } from "@/components/forms/ImageUploadPicker";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "@/components/forms/useUnsavedChangesGuard";
 import { zonedDatetimeLocalValue, zonedInputToIso } from "@/lib/timeZone";
 import { UnsavedChangesBar } from "@/components/event-dashboard/event-page/UnsavedChangesBar";
 import { FormCard, LocationCard, ScheduleCard, zonedInputValue } from "./EditEventForm/cards";
+import { BasicsCard } from "./EditEventForm/BasicsCard";
 
 export function EditEventForm(props: {
   organisationSlug: string;
@@ -29,8 +27,10 @@ export function EditEventForm(props: {
     logoUrl: string | null;
     aboutHtml: string;
   } | null;
+  /** Existing registrations lock the registration mode; the largest team bounds the maximum size. */
+  registrations?: { total: number; largestTeam: number };
 }) {
-  const { organisationSlug, event, page } = props;
+  const { organisationSlug, event, page, registrations } = props;
   const router = useRouter();
   const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +179,10 @@ export function EditEventForm(props: {
         pageTagline: String(fd.get("pageTagline") ?? ""),
         pageLogoUrl,
         pageAboutHtml: String(fd.get("pageAboutHtml") ?? ""),
+        registrationMode: String(fd.get("registrationMode") ?? ""),
+        teamMinSize: String(fd.get("teamMinSize") ?? ""),
+        teamMaxSize: String(fd.get("teamMaxSize") ?? ""),
+        soloPolicy: String(fd.get("soloPolicy") ?? ""),
       });
       if (!res.ok) {
         setError(res.error);
@@ -210,59 +214,16 @@ export function EditEventForm(props: {
       <form key={formKey} aria-label="Event details" onSubmit={onSubmit} onChangeCapture={() => setDirty(true)} onInputCapture={() => setDirty(true)} className="flex flex-col gap-5">
         {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
 
-        <FormCard
-          title={<>Basics<Chip size="sm" tone={event.status === EventStatus.DRAFT ? "neutral" : "success"}>{event.status === EventStatus.DRAFT ? "Draft" : "Published"}</Chip></>}
-          description="Update the public-facing title and introduction."
-        >
-          <Field label="Title" required>
-            <Input name="title" defaultValue={event.title} />
-          </Field>
-          <Field label="Tagline" helperText="A short line beneath the event title.">
-            <Input name="pageTagline" defaultValue={page?.tagline ?? ""} />
-          </Field>
-          <ImageUploadPicker
-            initialUrl={page?.logoUrl}
-            label="Event page logo"
-            placeholder="Your event page logo will appear here."
-            disabled={pending}
-            onChange={(file, previewUrl) => {
-              setPageLogoFile(file);
-              setPageLogoPreviewUrl(previewUrl);
-              setDirty(true);
-            }}
-          />
-          <RichTextEditor
-            name="pageAboutHtml"
-            label="About the event"
-            defaultValue={page?.aboutHtml ?? ""}
-            helperText="Required. Use the toolbar to format text—no HTML needed."
-            minHeight={140}
-          />
-          <div className="flex flex-col gap-2">
-            <Field label="Tags" helperText="Comma-separated (eg: workshop, meetup, ai). Used in global search.">
-              <Input
-                name="tags"
-                defaultValue={tagsPreview.join(", ")}
-                onChange={(e) => {
-                  const parts = e.currentTarget.value
-                    .split(/[,\n]/g)
-                    .map((s) => s.trim().toLowerCase())
-                    .map((s) => s.replace(/\s+/g, " "))
-                    .filter(Boolean)
-                    .slice(0, 12);
-                  setTagsPreview(Array.from(new Set(parts)));
-                }}
-              />
-            </Field>
-            {tagsPreview.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {tagsPreview.slice(0, 12).map((t) => (
-                  <Chip key={t} size="sm" tone="outline">{t}</Chip>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </FormCard>
+        <BasicsCard
+          event={event}
+          page={page}
+          pending={pending}
+          tagsPreview={tagsPreview}
+          setTagsPreview={setTagsPreview}
+          setPageLogoFile={setPageLogoFile}
+          setPageLogoPreviewUrl={setPageLogoPreviewUrl}
+          setDirty={setDirty}
+        />
 
         <FormCard title="Cover image" description="Add a visual to make your event page stand out.">
           <CoverImagePicker
@@ -305,6 +266,14 @@ export function EditEventForm(props: {
             start={start}
             timeZone={timezone}
             onDirty={() => setDirty(true)}
+            initialTeam={{
+              registrationMode: event.registrationMode,
+              teamMinSize: event.teamMinSize,
+              teamMaxSize: event.teamMaxSize,
+              soloPolicy: event.soloPolicy,
+            }}
+            teamModeLocked={(registrations?.total ?? 0) > 0}
+            largestTeam={registrations?.largestTeam ?? 0}
           />
         </FormCard>
 

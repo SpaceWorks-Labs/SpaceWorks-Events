@@ -7,6 +7,7 @@ import { Callout } from "@/components/ui/display";
 import { Dropdown, Field, Input } from "@/components/ui/field";
 import {
   ID_CARD_GRID_SIZES_MM,
+  ID_CARD_TEAM_MERGE_FIELD,
   isDefaultLayout,
   layoutFlags,
   layoutForPaper,
@@ -30,6 +31,7 @@ import { AnswersSection, ColourSection, LogosSection, PaperSection } from "./IdC
 import { DesignFileButtons } from "./IdCardDesigner/DesignFileButtons";
 import { Inspector } from "./IdCardDesigner/Inspector";
 import { StyleSection } from "./IdCardDesigner/StyleSection";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export { FitArea, NumberSlider, SaveStatusPill, Section, SwatchGroup, SwitchLine, ToggleField } from "./IdCardDesigner/controls";
 export { ColourSection, PaperSection } from "./IdCardDesigner/sections";
@@ -47,12 +49,15 @@ export function IdCardDesigner({
   branding,
   attendee,
   registrationFields,
+  teamEvent = false,
   onClose,
 }: {
   source: BadgeDesignSource;
   branding: BadgeBranding;
   attendee: IdCardAttendee | null;
   registrationFields: RegistrationField[];
+  /** TEAM event: offers the Team line and the {{team}} merge field. */
+  teamEvent?: boolean;
   onClose: () => void;
 }) {
   const { settings, update, checkpoint, undo, redo, retry, canUndo, canRedo, status, error } = useIdCardSettings(source);
@@ -62,7 +67,7 @@ export function IdCardDesigner({
   const [notice, setNotice] = useState<{ tone: "danger" | "success"; text: string } | null>(null);
   const [printing, setPrinting] = useState(false);
 
-  const previewPerson = sample === "attendee" && attendee ? attendee : sampleAttendee(registrationFields, sample === "long");
+  const previewPerson = sample === "attendee" && attendee ? attendee : sampleAttendee(registrationFields, sample === "long", teamEvent);
 
   // Undo/redo from the keyboard while the designer is open (not while typing).
   useEffect(() => {
@@ -131,6 +136,7 @@ export function IdCardDesigner({
           <h2 id="id-card-designer-title" className="text-h4 text-ink">Badge designer</h2>
           <p className="truncate text-caption text-ink-muted">{source.eventTitle} · every check-in desk prints this design</p>
         </div>
+        <HelpLink article="check-in/badges" />
         <div className="flex items-center gap-2" aria-live="polite">
           <SaveStatusPill status={status} />
           {status === "error" ? <Button size="sm" variant="secondary" onClick={retry}>Try again</Button> : null}
@@ -162,6 +168,11 @@ export function IdCardDesigner({
             <ToggleField label="Footer" checked={settings.showFooter} onCheckedChange={(showFooter) => update({ showFooter })}>
               <Input maxLength={80} value={settings.footerText} disabled={!settings.showFooter} onChange={(event) => update({ footerText: event.target.value })} />
             </ToggleField>
+            {teamEvent ? (
+              <p className="text-caption text-ink-muted">
+                Type <code className="rounded bg-subtle px-1 font-mono text-[12px] text-ink">{ID_CARD_TEAM_MERGE_FIELD}</code> in any of these to print the attendee&apos;s team name.
+              </p>
+            ) : null}
           </Section>
 
           <LogosSection settings={settings} branding={branding} update={update} toggleItem={toggleItem} />
@@ -187,7 +198,7 @@ export function IdCardDesigner({
             <SwitchLine label="Shrink long names to fit" hint="Keeps names on one line, down to 60% of the size." checked={settings.nameAutoFit} onCheckedChange={(nameAutoFit) => update({ nameAutoFit })} />
           </Section>
 
-          <AnswersSection settings={settings} fields={registrationFields} update={update} />
+          <AnswersSection settings={settings} fields={registrationFields} teamEvent={teamEvent} update={update} />
         </aside>
 
         {/* Canvas */}
@@ -254,7 +265,7 @@ export function IdCardDesigner({
         />
         <span className="hidden text-caption text-ink-muted md:inline">Print at 100% (actual size), no headers or footers.</span>
         <div className="ml-auto flex flex-wrap gap-2">
-          <Button variant="secondary" disabled={printing} onClick={() => runPrint(sampleAttendee(registrationFields))}>
+          <Button variant="secondary" disabled={printing} onClick={() => runPrint(sampleAttendee(registrationFields, false, teamEvent))}>
             Print test card
           </Button>
           {attendee ? (

@@ -5,6 +5,7 @@ export const API_SCOPES = [
   "participants:read",
   "participants:attendance:read",
   "orders:read",
+  "applications:read",
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];

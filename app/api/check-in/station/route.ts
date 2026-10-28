@@ -7,16 +7,20 @@ import { prisma } from "@/lib/db";
 import { getClientIpFromHeaders, checkRateLimitById } from "@/lib/rateLimit";
 import { CHECK_IN_STATION_COOKIE, createCheckInStationProof, hasValidCheckInStationProof, stationExpiresAt, stationOpensAt, verifyStationPin } from "@/lib/checkInStation";
 import { gateCheckInForStatus, parseCheckInPayload } from "@/lib/checkIn";
-import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { crewDoorSelect, doorExtras, getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { deskAttendanceState } from "@/lib/attendanceCheck";
 import { commitCheckInProjection, commitUndoCheckInProjection } from "@/lib/checkInMutations";
+import { listRecentCheckIns } from "@/lib/checkInRecent";
 import { badgeBrandingFor, badgeDesignFor, loadBadgeEvent } from "@/lib/badge/data";
 import { attendeePhotoUrl } from "@/lib/badge/imageUrl";
 
 const bodySchema = z.object({
   organisationSlug: z.string().trim().min(1).max(120), eventSlug: z.string().trim().min(1).max(160),
-  action: z.enum(["unlock", "bootstrap", "previewToken", "previewRsvp", "checkInRsvp", "lookup", "undo"]),
+  action: z.enum(["unlock", "bootstrap", "recent", "previewToken", "previewRsvp", "checkInRsvp", "lookup", "undo"]),
   pin: z.string().trim().regex(/^\d{8}$/).optional(), rawInput: z.string().trim().min(1).max(2048).optional(),
   rsvpId: z.string().trim().min(1).max(128).optional(), query: z.string().trim().min(2).max(200).optional(), force: z.boolean().optional(),
+  /** "recent": the keyset cursor from the previous page of Recent check-ins. */
+  cursor: z.string().trim().min(1).max(160).optional(),
 }).strict().superRefine((value, ctx) => {
   if (value.action === "unlock" && !value.pin) ctx.addIssue({ code: "custom", path: ["pin"], message: "PIN is required." });
   if (value.action === "previewToken" && !value.rawInput) ctx.addIssue({ code: "custom", path: ["rawInput"], message: "Ticket input is required." });
@@ -24,14 +28,15 @@ const bodySchema = z.object({
   if (value.action === "lookup" && !value.query) ctx.addIssue({ code: "custom", path: ["query"], message: "Search query is required." });
 });
 
+// The attendance confirmation badge travels to the station, never the guest's note (docs/ATTENDANCE.md).
 function failure(error = "Station access is unavailable.", status = 400) { return NextResponse.json({ ok: false, error }, { status }); }
 function attendeeLabel(r: { user: { name: string | null; email: string | null } | null; guestName: string | null; guestEmail: string | null }) {
   return r.user?.name?.trim() || r.guestName?.trim() || r.user?.email || r.guestEmail || "Guest";
 }
-const rsvpInclude = { user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } }, answers: { include: { field: { select: { key: true, label: true } } } } } as const;
+const rsvpInclude = { user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } }, team: { select: { name: true } }, crewMember: crewDoorSelect, attendanceCheck: { select: { response: true } }, answers: { include: { field: { select: { key: true, label: true } } } } } as const;
 type StationRsvp = Prisma.RSVPGetPayload<{ include: typeof rsvpInclude }>;
 function toData(rsvp: StationRsvp, force = false) {
-  return { rsvpId: rsvp.id, displayName: attendeeLabel(rsvp), email: rsvp.user?.email ?? rsvp.guestEmail, status: rsvp.status, alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt?.toISOString() ?? null, checkInQrToken: rsvp.checkInToken, checkInDetails: getCheckInDetails(rsvp.answers), registrationDetails: getRegistrationDetails(rsvp.answers), photoUrl: attendeePhotoUrl(rsvp.user), gate: gateCheckInForStatus(rsvp.status, force) };
+  return { rsvpId: rsvp.id, displayName: attendeeLabel(rsvp), email: rsvp.user?.email ?? rsvp.guestEmail, status: rsvp.status, alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt?.toISOString() ?? null, checkInQrToken: rsvp.checkInToken, checkInDetails: getCheckInDetails(rsvp.answers, rsvp.crewMember), registrationDetails: getRegistrationDetails(rsvp.answers), ...doorExtras(rsvp), attendance: deskAttendanceState(rsvp.attendanceCheck), photoUrl: attendeePhotoUrl(rsvp.user), gate: gateCheckInForStatus(rsvp.status, force) };
 }
 
 export async function POST(request: Request) {
@@ -61,15 +66,20 @@ export async function POST(request: Request) {
   if (!hasValidCheckInStationProof(proof, event.id, event.checkInStationSecretVersion, event.startDateTime, event.endDateTime)) return failure("Station access has expired.", 401);
   if (!(await checkRateLimitById("checkin", `station:${event.id}:${getClientIpFromHeaders(request.headers)}`))) return failure("Too many check-in requests. Please try again shortly.", 429);
   if (input.action === "bootstrap") {
-    const [confirmed, checkedIn, recentRsvps, form, badgeEvent] = await Promise.all([
+    const [confirmed, checkedIn, recent, form, badgeEvent] = await Promise.all([
       prisma.rSVP.count({ where: { eventId: event.id, status: "CONFIRMED" } }), prisma.rSVP.count({ where: { eventId: event.id, checkedInAt: { not: null } } }),
-      prisma.rSVP.findMany({ where: { eventId: event.id, checkedInAt: { not: null } }, orderBy: { checkedInAt: "desc" }, take: 200, include: { user: { select: { name: true, email: true } } } }),
+      listRecentCheckIns(event.id),
       prisma.eventRegistrationForm.findUnique({ where: { eventId: event.id }, select: { fields: { select: { key: true, label: true }, orderBy: { sortOrder: "asc" } } } }),
       loadBadgeEvent(event.id),
     ]);
     // The station prints the event's saved badge design (read-only here).
     const badge = badgeEvent ? { design: badgeDesignFor(badgeEvent), branding: badgeBrandingFor(badgeEvent) } : null;
-    return NextResponse.json({ ok: true, data: { organisationName: event.organisation.name, badge, eventId: event.id, eventTitle: event.title, registrationFields: form?.fields ?? [], stats: { confirmed, checkedIn }, recent: recentRsvps.map((r) => ({ rsvpId: r.id, displayName: attendeeLabel(r), email: r.user?.email ?? r.guestEmail, checkedInAt: r.checkedInAt!.toISOString() })) } });
+    return NextResponse.json({ ok: true, data: { organisationName: event.organisation.name, badge, eventId: event.id, eventTitle: event.title, registrationFields: form?.fields ?? [], stats: { confirmed, checkedIn }, recent: recent.rows, recentNextCursor: recent.nextCursor } });
+  }
+  if (input.action === "recent") {
+    // The next page of Recent check-ins for this station's event only.
+    const page = await listRecentCheckIns(event.id, input.cursor ?? null);
+    return NextResponse.json({ ok: true, data: page });
   }
   let rsvp: StationRsvp | null = null;
   if (input.action === "previewToken") {
@@ -80,8 +90,8 @@ export async function POST(request: Request) {
     rsvp = await prisma.rSVP.findFirst({ where: { id: input.rsvpId, eventId: event.id }, include: rsvpInclude });
   }
   if (input.action === "lookup") {
-    const rows = await prisma.rSVP.findMany({ where: { eventId: event.id, OR: [{ guestName: { contains: input.query!, mode: "insensitive" } }, { guestEmail: { contains: input.query!, mode: "insensitive" } }, { user: { name: { contains: input.query!, mode: "insensitive" } } }, { user: { email: { contains: input.query!, mode: "insensitive" } } }] }, take: 12, orderBy: { createdAt: "desc" }, include: { user: { select: { name: true, email: true } } } });
-    return NextResponse.json({ ok: true, data: { rows: rows.map((r) => ({ rsvpId: r.id, displayName: attendeeLabel({ ...r, guestName: r.guestName }), email: r.user?.email ?? r.guestEmail, status: r.status, checkedInAt: r.checkedInAt?.toISOString() ?? null })) } });
+    const rows = await prisma.rSVP.findMany({ where: { eventId: event.id, OR: [{ guestName: { contains: input.query!, mode: "insensitive" } }, { guestEmail: { contains: input.query!, mode: "insensitive" } }, { user: { name: { contains: input.query!, mode: "insensitive" } } }, { user: { email: { contains: input.query!, mode: "insensitive" } } }] }, take: 12, orderBy: { createdAt: "desc" }, include: { user: { select: { name: true, email: true } }, team: { select: { name: true } }, attendanceCheck: { select: { response: true } } } });
+    return NextResponse.json({ ok: true, data: { rows: rows.map((r) => ({ rsvpId: r.id, displayName: attendeeLabel({ ...r, guestName: r.guestName }), email: r.user?.email ?? r.guestEmail, status: r.status, checkedInAt: r.checkedInAt?.toISOString() ?? null, ...doorExtras(r), attendance: deskAttendanceState(r.attendanceCheck) })) } });
   }
   if (!rsvp) return failure("RSVP not found.");
   if (input.action === "undo") {
@@ -101,7 +111,7 @@ export async function POST(request: Request) {
     else {
       if (updated.state === "missing") return failure("RSVP not found.", 404);
       if (updated.state === "ineligible") {
-        const currentGate = gateCheckInForStatus(updated.status, Boolean(input.force));
+        const currentGate = gateCheckInForStatus(updated.status, Boolean(input.force), updated.applicant);
         return failure(currentGate.ok ? "Check-in could not be completed." : currentGate.reason, 409);
       }
       data.checkedInAt = updated.checkedInAt.toISOString(); data.alreadyCheckedIn = true;

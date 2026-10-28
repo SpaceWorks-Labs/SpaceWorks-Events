@@ -25,11 +25,21 @@ Vitest, and Playwright. Deployment supports Docker standalone output, the Render
 
 The product currently includes organisations and member roles, public/private
 events and RRULE-based series, custom RSVP forms and waitlists, event short
-links, QR tickets with live check-in updates and offline check-in, ID card /
+links, QR tickets with live check-in updates, offline check-in and custom
+check-in lists, ID card /
 badge generation (server-saved designs, colour and logos, PDF/PNG and bulk
 sheets in `lib/badge/`), feedback and layered certificates, designed broadcast and
 transactional email, optional paid tickets through each organisation's own
-Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), a personal account area (registrations, organisations,
+Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), team registration
+with paid team places (`docs/TEAMS.md`), multi-stage applications and shortlisting on any one-off
+event with per-stage reviewer panels and offers (`docs/ADMISSION.md`), hackathon submissions, judging, results,
+entry fees and prize payouts (`docs/HACKATHON.md`), a Mentor Desk (help
+queue with lease claims, mentor assignments, office hours and mentoring
+rounds, `docs/MENTOR_DESK.md`), event finance with expense
+claims, per-stage reimbursement policies, refund requests and a budget (`docs/FINANCE.md`), a Canva-style ticket
+designer with designed PNG/PDF tickets (`docs/TICKET_DESIGNER.md`), manual "Are you still coming?"
+attendance confirmation with paid-ticket release rules (`docs/ATTENDANCE.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
+organiser lists with saved views and filtered CSV exports, a personal account area (registrations, organisations,
 data export), and a separate super-admin operations, insights, and
 instance-settings area, plus a tenant-bound machine API. Treat this as a production-oriented application:
 tenant isolation, privacy, and secure operations are core behaviour rather
@@ -55,7 +65,9 @@ below and `docs/DESIGN.md`). The
 most sensitive current scenarios are organisation isolation and role checks;
 event privacy and RSVP capacity; opaque ticket, certificate, invitation, and
 password-reset links; event short links that never reveal hidden events; the
-realtime ticket check-in endpoints (`/api/ticket/:token/{status,events}`,
+Mentor Desk (`MENTOR` is an isolated grant like `JUDGE` and needs staff MFA;
+help text never reaches webhooks, chat or audit metadata;
+`docs/MENTOR_DESK.md`); the realtime ticket check-in endpoints (`/api/ticket/:token/{status,events}`,
 check-in state only, channels keyed by RSVP id); the personal data export and
 leave-organisation actions (own data and membership only); required
 authenticator MFA for organisation staff, checked each session (`/verify-mfa`,
@@ -131,6 +143,7 @@ scripts/seed-demo.mjs` seeds a demo organiser, organisation and event.
 | `scripts/` | Production checks, schema checks, storage migration, and standalone helpers |
 | `charts/spaceworks-events/` | Helm deployment chart: web, worker and beat Deployments and the migration job |
 | `deploy/cloudflare-cron/` | Cloudflare Worker that runs the outbox every minute on free hosting |
+| `content/help/` | The in-app guide at `/help` (MDX articles, section manifest, generated indexes; see its README) |
 | `docs/` | Product, security, development, and operational handbook |
 
 ## Design system
@@ -150,6 +163,11 @@ come from `components/brand/SpaceWorksLogo.tsx` (masters in
 
 ## Working conventions
 
+- When a change alters what people see or do, update the matching guide
+  article in `content/help` (British English, "Space Works") and run
+  `npm run help:index`; CI checks the generated index. A new feature gets an
+  article listed in `content/help/sections/*.ts`. Guide sections for owners/admins
+  or the super admin are a reading convenience, never authorization.
 - Inspect nearby code and existing tests before introducing a pattern. Keep
   changes small, typed, and consistent with the established UI: Tailwind CSS, Radix
   primitives and lucide icons via `components/ui/*` (see `docs/DESIGN.md`).
@@ -257,6 +275,9 @@ come from `components/brand/SpaceWorksLogo.tsx` (masters in
 - Use Prisma transactions for multi-record state changes, especially RSVP
   capacity/waitlist flows. Rely on database constraints as the final integrity
   layer, not a prior UI check.
+- Raw SQL never passes a JS `Date` or uses `now()` for a `timestamp(3)`
+  column: use `sqlUtcTimestamp` and `SQL_UTC_NOW` (`lib/sqlTimestamp.ts`),
+  so a database whose `TimeZone` is not UTC cannot shift the value.
 - For schema changes, create and review a Prisma migration. Inspect generated
   SQL for indexes, nullability, backfills, constraints, and cascades. Do not
   use `db:push` for deployable changes.
@@ -276,6 +297,12 @@ come from `components/brand/SpaceWorksLogo.tsx` (masters in
 - Instance settings override legacy environment fallbacks for SMTP, Google SSO,
   and backup posture. Backup settings are display-only; do not imply that the
   app creates, retains, or restores provider backups.
+- Organisation webhooks (`lib/webhooks/*`, `docs/WEBHOOKS.md`) are owner/admin
+  only. Emit only after a transaction commits, through `emitWebhookEvent`
+  (background enqueue, never throws); keep payloads to the strict DTOs (no
+  emails, answers, or tokens), signing secrets write-only and encrypted, and
+  every target SSRF-checked at save and delivery time with the pinned lookup.
+  `WEBHOOKS_ALLOW_PRIVATE_TARGETS` is for development and tests only.
 - Machine API clients are tenant-bound bearer identities, not Auth.js users.
   Require explicit scopes, resolve the tenant solely from the credential, use
   explicit DTOs/selects, and never log or persist a raw credential.

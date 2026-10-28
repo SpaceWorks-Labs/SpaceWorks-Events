@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { intervalCounts, nowAndNext } from "@/lib/dashboardHomeMetrics";
 import { ARRIVAL_BUCKETS, ARRIVAL_BUCKET_MS, DAY_MS, LISTED, LIVE_LEAD_MS, SAMPLE_LIMIT } from "./constants";
 import { countsFor, displayName, firstName, toEventRow, type EventForRow, type RsvpCounts } from "./rows";
+import { teamUnitNoun } from "@/lib/teamCapacityDisplay";
 import type { DashboardHome, HomeLiveEvent } from "./types";
 
 /** The Next up card for one event. `canManage` must reflect the person's role in its organisation. */
@@ -26,7 +27,11 @@ export async function loadNextUp(event: EventForRow, counts: RsvpCounts, canMana
     startDateTime: event.startDateTime,
     timezone: event.timezone,
     confirmed: countsFor(counts, event.id).confirmed,
+    // What fills capacity: attendees (never crew) or team units; crew are named beside them.
+    placesUsed: counts.units.get(event.id) ?? 0,
+    crew: counts.crew.get(event.id) ?? 0,
     capacity: event.capacity,
+    capacityUnits: event.registrationMode === "TEAM" ? { used: counts.units.get(event.id) ?? 0, noun: teamUnitNoun(event.soloPolicy, event.capacity ?? 0) } : null,
     signupsLastDay,
     checkInHref: canManage ? `/dashboard/${event.organisation.slug}/event/${event.id}/check-in` : null,
     recentNames: recent.map((rsvp) => displayName(rsvp)).filter((name) => name !== "A guest").map(firstName),

@@ -11,11 +11,11 @@
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const OWNER = "[A-Za-z0-9_-]{1,128}";
-const ORGANISATION_KEY = new RegExp(`^organisations/(${OWNER})/(event-sponsors|organisation-logos|event-page-logos|member-id-photos|member-id-watermarks)/${UUID}\\.webp$`, "i");
+const ORGANISATION_KEY = new RegExp(`^organisations/(${OWNER})/(event-sponsors|event-crew|organisation-logos|event-page-logos|member-id-photos|member-id-watermarks|ticket-design-images)/${UUID}\\.webp$`, "i");
 const USER_KEY = new RegExp(`^users/(${OWNER})/profile-images/${UUID}\\.webp$`, "i");
 
 export type ManagedImageScope =
-  | { kind: "organisation"; organisationId: string; category: "event-sponsors" | "organisation-logos" | "event-page-logos" | "member-id-photos" | "member-id-watermarks" }
+  | { kind: "organisation"; organisationId: string; category: "event-sponsors" | "event-crew" | "organisation-logos" | "event-page-logos" | "member-id-photos" | "member-id-watermarks" | "ticket-design-images" }
   | { kind: "user"; userId: string };
 
 /**

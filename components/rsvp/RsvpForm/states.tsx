@@ -24,7 +24,7 @@ export function FramedCheckoutNotice({ framedCheckout }: { framedCheckout: { che
   );
 }
 
-export function RsvpDone({ ticketToken, rsvpStatus, sellsPaid }: { ticketToken: string; rsvpStatus: RsvpStatus | null; sellsPaid: boolean }) {
+export function RsvpDone({ ticketToken, rsvpStatus, sellsPaid, registeredAs = null, joinTeamName = null }: { ticketToken: string; rsvpStatus: RsvpStatus | null; sellsPaid: boolean; registeredAs?: "create" | "join" | "solo" | null; joinTeamName?: string | null }) {
   const href = ticketToken ? `/ticket/${ticketToken}` : null;
   const ticketDownloadUrl = ticketToken ? `/api/ticket/${ticketToken}/download` : null;
   const isConfirmed = rsvpStatus === "CONFIRMED";
@@ -40,6 +40,13 @@ export function RsvpDone({ ticketToken, rsvpStatus, sellsPaid }: { ticketToken: 
               : "Request sent. Nothing has been charged; if the organiser approves it, we’ll email you a link to pay."
             : "Registration received. We’ll let you know when its status changes."}
       </p>
+      {registeredAs === "create" ? (
+        <p className="text-body-ui">
+          Your team is registered. Check your email for your team page link, where you manage the team, and the join link to share with your teammates.
+        </p>
+      ) : registeredAs === "join" && joinTeamName ? (
+        <p className="text-body-ui">You’re on {joinTeamName}. Your registration follows the team’s status.</p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {isConfirmed && ticketDownloadUrl ? (
           <Button asChild variant="primary" size="sm">

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { EventPrivacyType } from "@prisma/client";
 import { safeTimeZone } from "@/lib/timeZone";
+import { cachedDateTimeFormat } from "@/lib/format/intlCache";
 
 export const DAY_MS = 86_400_000;
 export const PAGE_SIZE = 8;
@@ -19,7 +20,7 @@ export const PRIVACY_LABELS: Record<EventPrivacyType, string> = {
 
 /** "2026-10-15" for an instant in a timezone. */
 export function localDay(date: Date, timeZone: string) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: safeTimeZone(timeZone), year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  return cachedDateTimeFormat("en-CA", { timeZone: safeTimeZone(timeZone), year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
 export function initialsOf(name: string | null | undefined) {

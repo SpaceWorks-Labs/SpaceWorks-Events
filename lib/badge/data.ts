@@ -4,7 +4,8 @@ import { Prisma, RsvpStatus } from "@prisma/client";
 import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
 import { prisma } from "@/lib/db";
 import { SPONSOR_LIMIT_MAX, type IdCardPrintSettings } from "@/lib/idCardPrint";
-import { attendeePhotoUrl } from "./imageUrl";
+import { crewKindLabel } from "@/lib/crewKind";
+import { attendeePhotoUrl, managedImageUrl } from "./imageUrl";
 import type { BadgeStatusFilter } from "./filters";
 import type { IdCardAttendee } from "./types";
 
@@ -39,6 +40,9 @@ export type BadgeDesignState = { settings: IdCardPrintSettings; saved: boolean; 
 
 export function badgeStatusWhere(filter: BadgeStatusFilter): Prisma.RSVPWhereInput {
   if (filter === "checked-in") return { checkedInAt: { not: null } };
+  // Event crew (docs/CREW.md) and everyone else, for printing crew badges separately.
+  if (filter === "crew") return { isCrew: true };
+  if (filter === "attendees") return { status: RsvpStatus.CONFIRMED, isCrew: false };
   if (filter === "not-checked-in") return { status: RsvpStatus.CONFIRMED, checkedInAt: null };
   if (filter === "all") return { status: { in: [RsvpStatus.CONFIRMED, RsvpStatus.WAITLISTED, RsvpStatus.PENDING_APPROVAL] } };
   return { status: RsvpStatus.CONFIRMED };
@@ -47,26 +51,37 @@ export function badgeStatusWhere(filter: BadgeStatusFilter): Prisma.RSVPWhereInp
 export const badgeRsvpInclude = {
   user: { select: { id: true, name: true, email: true, profileImageUrl: true, image: true } },
   answers: { include: { field: { select: { key: true, label: true } } } },
+  team: { select: { name: true } },
+  crewMember: { select: { role: true, photoUrl: true, foodPreference: true, kind: true } },
 } satisfies Prisma.RSVPInclude;
 
 type BadgeRsvp = Prisma.RSVPGetPayload<{ include: typeof badgeRsvpInclude; }>;
 
-export function badgeAttendeeFor(rsvp: BadgeRsvp): IdCardAttendee {
+/**
+ * One badge. A crew ticket (docs/CREW.md) prints "Crew" and its role in the
+ * team slot, and its crew photo when it is a crew upload of this event's
+ * organisation (storage key only, never a remote URL).
+ */
+export function badgeAttendeeFor(rsvp: BadgeRsvp, organisationId?: string): IdCardAttendee {
+  const crew = rsvp.isCrew ? rsvp.crewMember : null;
+  const crewPhoto = crew?.photoUrl && organisationId ? managedImageUrl(crew.photoUrl, { kind: "organisation", organisationId, category: "event-crew" }) : null;
   return {
     rsvpId: rsvp.id,
     displayName: rsvp.user?.name?.trim() || rsvp.guestName?.trim() || rsvp.user?.email || rsvp.guestEmail || "Guest",
     email: rsvp.user?.email ?? rsvp.guestEmail,
     checkInQrToken: rsvp.checkInToken,
-    checkInDetails: getCheckInDetails(rsvp.answers),
+    checkInDetails: getCheckInDetails(rsvp.answers, crew),
     registrationDetails: getRegistrationDetails(rsvp.answers),
-    photoUrl: attendeePhotoUrl(rsvp.user),
+    photoUrl: crewPhoto ?? attendeePhotoUrl(rsvp.user),
+    // The crew kind is printed for display only (docs/VOLUNTEERS.md).
+    teamName: rsvp.isCrew ? (crew?.role.trim() ? `${crewKindLabel(crew.kind)} · ${crew.role.trim()}` : crewKindLabel(crew?.kind)) : (rsvp.team?.name ?? null),
   };
 }
 
 /** One RSVP of this event (never another event's), for a single badge. */
 export async function loadBadgeAttendee(eventId: string, rsvpId: string) {
-  const rsvp = await prisma.rSVP.findFirst({ where: { id: rsvpId, eventId }, include: badgeRsvpInclude });
-  return rsvp ? badgeAttendeeFor(rsvp) : null;
+  const rsvp = await prisma.rSVP.findFirst({ where: { id: rsvpId, eventId }, include: { ...badgeRsvpInclude, event: { select: { organisationId: true } } } });
+  return rsvp ? badgeAttendeeFor(rsvp, rsvp.event?.organisationId) : null;
 }
 
 export function countBadgeAttendees(eventId: string, filter: BadgeStatusFilter) {
@@ -83,11 +98,11 @@ export async function* badgeAttendees(eventId: string, filter: BadgeStatusFilter
       orderBy: { id: "asc" },
       take: Math.min(batchSize, limit - yielded),
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: badgeRsvpInclude,
+      include: { ...badgeRsvpInclude, event: { select: { organisationId: true } } },
     });
     if (rows.length === 0) return;
     for (const row of rows) {
-      yield badgeAttendeeFor(row);
+      yield badgeAttendeeFor(row, row.event?.organisationId);
       yielded += 1;
     }
     cursor = rows.at(-1)!.id;

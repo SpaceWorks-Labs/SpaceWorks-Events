@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "data": {
+    "reviews": [
+      {
+        "assignmentId": "classign00000000000000001",
+        "stageName": "Review",
+        "stagePosition": 1,
+        "stageOpen": true,
+        "label": "Application 1",
+        "status": "ASSIGNED",
+        "reviewedCurrent": false
+      }
+    ]
+  }
+}

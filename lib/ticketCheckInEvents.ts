@@ -1,7 +1,9 @@
 import "server-only";
 
 import { EventEmitter } from "node:events";
+import { outsideRequestActor } from "@/lib/requestActor";
 import Redis from "ioredis";
+import { REDIS_FAIL_FAST_OPTIONS } from "@/lib/redisOptions";
 
 /**
  * Realtime "your ticket was just checked in" notifications.
@@ -54,15 +56,14 @@ function usesRedis(): boolean {
 
 function createClient(role: "publisher" | "subscriber"): Redis {
   // Mirrors lib/rateLimit.ts: fail fast per command and connect on first use.
-  const client = new Redis(process.env.REDIS_URL as string, {
-    maxRetriesPerRequest: 1,
-    connectTimeout: 1000,
-    lazyConnect: true,
+  // Created outside any request actor: the client and its listeners live on.
+  return outsideRequestActor(() => {
+    const client = new Redis(process.env.REDIS_URL as string, REDIS_FAIL_FAST_OPTIONS);
+    client.on("error", () => {
+      console.warn(`[ticketCheckInEvents] Redis ${role} error`);
+    });
+    return client;
   });
-  client.on("error", () => {
-    console.warn(`[ticketCheckInEvents] Redis ${role} error`);
-  });
-  return client;
 }
 
 function getPublisher(): Redis {
@@ -73,11 +74,11 @@ function getPublisher(): Redis {
 function getSubscriber(): Redis {
   if (subscriber) return subscriber;
   subscriber = createClient("subscriber");
-  subscriber.on("message", (channel: string, raw: string) => {
+  outsideRequestActor(() => subscriber!.on("message", (channel: string, raw: string) => {
     if (!channel.startsWith(CHANNEL_PREFIX)) return;
     const message = parseMessage(raw);
     if (message) emitter.emit(channel, message);
-  });
+  }));
   return subscriber;
 }
 
@@ -94,8 +95,9 @@ function parseMessage(raw: string): TicketCheckedInMessage | null {
 }
 
 function dispatchLocally(channel: string, message: TicketCheckedInMessage) {
-  // Never run listener code synchronously inside the check-in request path.
-  queueMicrotask(() => emitter.emit(channel, message));
+  // Never run listener code synchronously inside the check-in request path,
+  // nor as the request's actor.
+  outsideRequestActor(() => queueMicrotask(() => emitter.emit(channel, message)));
 }
 
 /**

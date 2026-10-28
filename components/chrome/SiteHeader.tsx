@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { signOut } from "next-auth/react";
+import { useAuthSession } from "@/components/auth/useAuthSession";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Menu as MenuIcon, X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -16,6 +17,7 @@ const primaryLinks = [
   { href: "/features", label: "Features", guestOnly: true },
   { href: "/#self-host", label: "Self-host", guestOnly: false },
   { href: "/about", label: "About", guestOnly: false },
+  { href: "/help", label: "Help", guestOnly: false },
 ];
 
 /**
@@ -44,7 +46,7 @@ export function BrandHomeLink({ href = "/", stacked = false, className }: { href
 /** The Space Works Events site header (docs/DESIGN.md §4.14): home, about, features, discover, legal. */
 export function SiteHeader() {
   const pathname = usePathname();
-  const { status } = useSession();
+  const { status } = useAuthSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const signedIn = status === "authenticated";
   const links = primaryLinks.filter((link) => !(link.guestOnly && signedIn));

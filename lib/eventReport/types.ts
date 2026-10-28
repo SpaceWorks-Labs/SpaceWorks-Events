@@ -35,7 +35,26 @@ export type ReportCheckInSources = { organiser: number; offline: number; station
  * Everything the PDF shows. Attendee data is reduced to counts and timestamps
  * before it gets here: no names, emails, tickets or written answers.
  */
+/**
+ * TEAM events (docs/TEAMS.md): team and solo counts only. Never team names,
+ * members or "looking for a team" profiles.
+ */
+export type ReportTeamMetrics = {
+  /** Teams with at least one registration. */
+  teams: number;
+  /** Teams that had a place (confirmed). */
+  confirmedTeams: number;
+  /** Registrations without a team. */
+  soloRegistrants: number;
+  /** Solo registrants who had a place; with `confirmedTeams`, the units filled. */
+  confirmedSoloRegistrants: number;
+  /** Average people per team, one decimal; 0 with no teams. */
+  averageTeamSize: number;
+};
+
 export type EventReportMetrics = ReportRsvpMetrics & {
+  /** Set for TEAM events only. */
+  teams?: ReportTeamMetrics | null;
   targetType: "event" | "occurrence";
   targetId: string;
   organisationId: string;
@@ -76,4 +95,6 @@ export type EventReportMetrics = ReportRsvpMetrics & {
   shortLinkVisits?: number | null;
   /** Takings: the tickets sold for this event (or, for a date, that date's own tickets). */
   money?: RevenueSummary | null;
+  /** Spending (docs/FINANCE.md): paid expense claims and prize money, approved claims not yet paid, and the budget. */
+  spending?: { currency: string; expensesPaidMinor: number; prizesPaidMinor: number; approvedUnpaidMinor: number; budgetMinor: number | null; } | null;
 };

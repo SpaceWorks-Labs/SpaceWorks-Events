@@ -23,10 +23,14 @@ describe("event publishing helpers", () => {
     expect(closingSummary({ ...base, mode: "at", closesAt: "2035-10-13T18:00" })).toMatchObject({ short: "closes Sat 13 Oct, 6:00 pm" });
     expect(closingSummary({ ...base, mode: "at", closesAt: "2035-10-14T10:00" }).problem).toMatch(/on or before the start/);
     expect(closingSummary({ ...base, mode: "at" }).problem).toMatch(/Choose/);
+    // Just after midnight reads "12:15 am" on every ICU build, never "0:15 am".
+    expect(closingSummary({ ...base, mode: "at", closesAt: "2035-10-13T00:15" }).short).toBe("closes Sat 13 Oct, 12:15 am");
   });
 
   it("sums up what guests experience", () => {
     expect(publishingSummary({ status: "DRAFT", privacyType: "PUBLIC", capacity: null, closing: "" }).headline).toBe("Draft.");
+    // A cancelled event is offline for the public, like a hidden one (lib/publicEventAccess.ts).
+    expect(publishingSummary({ status: "CANCELLED", privacyType: "PUBLIC", capacity: null, closing: "" }).detail).toBe("The event page is offline and guests can't sign up.");
     expect(publishingSummary({ status: "PUBLISHED", privacyType: "HIDDEN_LINK", capacity: 120, closing: "closes 2 hours before" })).toEqual({
       headline: "Live.",
       detail: "Link only, anyone can sign up · 120 spots · closes 2 hours before.",

@@ -58,7 +58,7 @@ export default async function DiscoverPage({
       active ? "border-primary bg-primary text-on-primary" : "border-line-strong bg-panel text-ink hover:bg-surface",
     );
   return (
-    <div className="flex flex-col">
+    <div className="flex min-w-0 flex-col">
       {/* Title and search (Figma 125:2367) */}
       <Container className="flex flex-col gap-6 pb-8 pt-12 lg:pt-16">
         <h1 className="font-accent text-[34px] font-medium leading-[1.1] text-ink sm:text-[40px]">Discover events</h1>
@@ -121,7 +121,7 @@ export default async function DiscoverPage({
       {/* Results (Figma 125:2391) */}
       <Container className="flex flex-col gap-6 pb-16 pt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-label text-ink-secondary" aria-live="polite">{resultsLabel}</h2>
+          <h2 className="min-w-0 text-label text-ink-secondary [overflow-wrap:anywhere]" aria-live="polite">{resultsLabel}</h2>
           <div className="flex flex-wrap items-center gap-3">
             {totalItems > 0 ? (
               <p className="text-caption text-ink-muted">
@@ -158,9 +158,10 @@ export default async function DiscoverPage({
             ) : null}
           </div>
         ) : (
-          <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {pageItems.map((row) => (
-              <li key={row.id}>
+              // min-w-0: a long unbroken title must wrap, not widen the grid track.
+              <li key={row.id} className="min-w-0">
                 {row.kind === "event" ? (
                   <DiscoverEventCard
                     event={{

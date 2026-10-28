@@ -1,21 +1,29 @@
 import "server-only";
 
-import { EventPrivacyType, OrderStatus, PaymentStatus, RsvpStatus, type Prisma } from "@prisma/client";
+import { EventPrivacyType, OrderStatus, PaymentStatus, RegistrationMode, RsvpStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
+import { emitTeamWebhooks, promoteOldestWaitlistedUnit, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { enqueuePaymentEmail } from "../email";
 import { HOLD_EXTENSION_CAP_MS, PAYMENT_LINK_HOLD_MS } from "../holds";
 import { providerMinimumMinor } from "../money";
 import { hasFreeSeats, lockSeriesDates, ORDER_SUBJECT_SELECT, orderSubject, seatTargetOf, type SeatTarget } from "../targets";
-import { attendeeEmail, lockOrder, onlineAccount, PaymentOperationError, subjectTitle, ZERO } from "./shared";
+import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, onlineAccount, PaymentOperationError, subjectTitle, ZERO } from "./shared";
 
 /**
  * Offer a paid request (approved, or reached on the waitlist) its seats: the
  * order holds them for a day with one pending payment and the buyer is
  * emailed a link. The checkout page opens only when they click Pay.
  */
-export async function offerInTransaction(tx: Prisma.TransactionClient, params: { orderId: string; organisationId: string; provider: "RAZORPAY" | "STRIPE"; testMode: boolean; actorUserId: string | null; now: Date; }) {
+type OfferRsvp = { id: string; orderId: string | null; eventId: string | null; eventInstanceId: string | null; ticketTypeId: string | null; };
+
+/**
+ * Offer a paid request its payment link, holding its seats. `hasRoom`
+ * replaces the seat check (hasFreeSeats) where places are counted otherwise:
+ * a solo applicant on a TEAM admission event takes one unit.
+ */
+export async function offerInTransaction(tx: Prisma.TransactionClient, params: { orderId: string; organisationId: string; provider: "RAZORPAY" | "STRIPE"; testMode: boolean; actorUserId: string | null; now: Date; hasRoom?: (rsvps: OfferRsvp[]) => Promise<boolean>; }) {
   await lockOrder(tx, params.orderId);
   const order = await tx.order.findFirst({
     where: { id: params.orderId, organisationId: params.organisationId },
@@ -25,7 +33,7 @@ export async function offerInTransaction(tx: Prisma.TransactionClient, params: {
   const subject = orderSubject(order);
   if (!subject || !subject.open(params.now)) throw new PaymentOperationError("This event is no longer open for registration.");
   if (order.totalMinor < providerMinimumMinor(params.provider, order.currency)) throw new PaymentOperationError("This order is below the smallest payment the provider accepts.");
-  if (!(await hasFreeSeats(tx, order.rsvps, params.now))) throw new PaymentOperationError("There aren't enough free places for this order yet.");
+  if (!(await (params.hasRoom ? params.hasRoom(order.rsvps) : hasFreeSeats(tx, order.rsvps, params.now)))) throw new PaymentOperationError("There aren't enough free places for this order yet.");
   const holdExpiresAt = new Date(params.now.getTime() + PAYMENT_LINK_HOLD_MS);
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.PENDING, holdExpiresAt, holdCapAt: new Date(holdExpiresAt.getTime() + HOLD_EXTENSION_CAP_MS), testMode: params.testMode } });
   await tx.rSVP.updateMany({ where: { orderId: order.id }, data: { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt } });
@@ -38,6 +46,7 @@ export async function offerInTransaction(tx: Prisma.TransactionClient, params: {
 }
 
 export async function offerRequestedOrder(params: { orderId: string; organisationId: string; actorUserId: string | null; now?: Date; }) {
+  if (await isAdmissionOrder(prisma, params.orderId)) throw new AdmissionManagedError();
   const account = await onlineAccount(params.organisationId);
   await prisma.$transaction((tx) => offerInTransaction(tx, { ...params, provider: account.provider, testMode: account.testMode, now: params.now ?? new Date() }));
 }
@@ -66,8 +75,11 @@ export async function declineRequestedOrder(params: { orderId: string; organisat
 export async function offerNextWaitlisted(target: SeatTarget, now = new Date()): Promise<boolean> {
   let owner: { organisationId: string; privacyType: EventPrivacyType; title: string; seriesId: string | null; } | null = null;
   if ("eventId" in target) {
-    const event = await prisma.event.findUnique({ where: { id: target.eventId }, select: { organisationId: true, privacyType: true, title: true } });
-    owner = event ? { ...event, seriesId: null } : null;
+    const event = await prisma.event.findUnique({ where: { id: target.eventId }, select: { organisationId: true, privacyType: true, title: true, registrationMode: true, admissionEnabled: true } });
+    // Applications have their own waitlist, offered first in, first offered (lib/admission/promotion.ts).
+    if (event?.admissionEnabled) return false;
+    if (event?.registrationMode === RegistrationMode.TEAM) return promoteNextTeamUnit(target.eventId);
+    owner = event ? { organisationId: event.organisationId, privacyType: event.privacyType, title: event.title, seriesId: null } : null;
   } else {
     const date = await prisma.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: { eventSeriesId: true, series: { select: { organisationId: true, privacyType: true, title: true } } } });
     owner = date ? { ...date.series, seriesId: date.eventSeriesId } : null;
@@ -93,6 +105,24 @@ export async function offerNextWaitlisted(target: SeatTarget, now = new Date()):
     if (promoted.count === 1 && to) await enqueueRsvpStatusNotification(tx, { to, eventTitle: owner.title, approved: true, checkInToken: next.checkInToken });
     return promoted.count === 1;
   });
+}
+
+/**
+ * TEAM events (docs/TEAMS.md) promote whole units: the oldest waitlisted
+ * team or solo registration, when a unit is free. Paid team places are paid
+ * up front, so only free registrations ever wait.
+ */
+async function promoteNextTeamUnit(eventId: string) {
+  const webhooks: RegistrationStatusWebhook[] = [];
+  const promoted = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+    const event = await tx.event.findUnique({ where: { id: eventId }, select: { id: true, title: true, capacity: true, privacyType: true } });
+    const unit = event ? await promoteOldestWaitlistedUnit(tx, event) : null;
+    if (unit) webhooks.push(...unit.webhooks);
+    return unit != null;
+  });
+  emitTeamWebhooks(webhooks);
+  return promoted;
 }
 
 /** Offer every free seat, in waitlist order, until the seats or the waitlist run out. Returns how many were offered. */
@@ -145,6 +175,8 @@ export async function sendPaymentLink(params: { orderId: string; organisationId:
     await recordAuditEvent({ action: "PAYMENT_LINK_SENT", actorUserId: params.actorUserId, organisationId: params.organisationId, targetType: "Order", targetId: order.id });
     return "resent";
   }
+  // An application's order is held only through its accepted offer (docs/ADMISSION.md).
+  if (await isAdmissionOrder(prisma, order.id)) throw new AdmissionManagedError();
   if (order.status === OrderStatus.REQUESTED) {
     await offerRequestedOrder(params);
     return "reopened";

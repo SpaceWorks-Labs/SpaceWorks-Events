@@ -10,7 +10,7 @@ import {
   isUserEmailVerified,
 } from "@/lib/permissions";
 import { isReservedEventSlug, slugifyTitle, withSlugSuffix } from "@/lib/slug";
-import { cloneEventSchema, createEventSchema } from "@/lib/validators";
+import { cloneEventSchema, createEventSchema, normalizedTeamSettings } from "@/lib/validators";
 import type { ActionResult } from "../org";
 import { flattenZodErrors } from "../utils";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
@@ -18,6 +18,7 @@ import { recordAuditEvent } from "@/lib/audit";
 import { isOrganisationUploadUrl } from "@/lib/uploadUrl";
 import { richTextToPlainText, sanitizeRichText } from "@/lib/richText";
 import { revalidateEventPaths, validationError } from "./shared";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 
 export async function createEvent(
   input: unknown,
@@ -117,6 +118,7 @@ export async function createEvent(
         privacyType: data.privacyType ?? EventPrivacyType.PUBLIC,
         registrationClosesAt: data.registrationClosesAt ?? null,
         registrationLeadMinutes: data.registrationLeadMinutes ?? null,
+        ...(normalizedTeamSettings(data) ?? {}),
         page: {
           create: {
             isPublished: data.status === EventStatus.PUBLISHED,
@@ -132,9 +134,12 @@ export async function createEvent(
       organisationId: org.id,
       targetType: "Event",
       targetId: created.id,
-      metadata: { status: created.status },
+      metadata: { status: created.status, registrationMode: created.registrationMode },
     });
 
+    if (created.status === EventStatus.PUBLISHED || created.status === EventStatus.CANCELLED) {
+      emitWebhookEvent({ type: created.status === EventStatus.PUBLISHED ? "event.published" : "event.cancelled", eventId: created.id, previousStatus: null });
+    }
     revalidateEventPaths(org.slug, slug, created.id);
     return { ok: true, data: { id: created.id, slug: created.slug } };
   } catch {
@@ -222,6 +227,15 @@ export async function cloneEvent(
         status: EventStatus.DRAFT,
         privacyType: source.privacyType,
         listedPublicly: source.listedPublicly,
+        registrationMode: source.registrationMode,
+        teamMinSize: source.teamMinSize,
+        teamMaxSize: source.teamMaxSize,
+        soloPolicy: source.soloPolicy,
+        // Hackathon email switches carry over (lib/hackathonEmails.ts).
+        emailEntrantsOnResults: source.emailEntrantsOnResults,
+        emailSubmissionReceipts: source.emailSubmissionReceipts,
+        // The setting is copied; attendance checks (and their answers) never are.
+        attendanceCheckReleaseOnDecline: source.attendanceCheckReleaseOnDecline,
       },
     });
 

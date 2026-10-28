@@ -46,6 +46,15 @@ describe("readinessItems", () => {
     expect(items.some((item) => item.key === "pin")).toBe(false);
   });
 
+  it("sends TEAM approvals to Teams only when every pending unit is a team", () => {
+    const approvals = (input: Partial<ReadinessInput>) => readinessItems({ ...base, teamMode: true, ...input }).find((item) => item.key === "approvals")?.action;
+    expect(approvals({ pendingApprovals: 2, pendingTeams: 2 })).toMatchObject({ tab: "guests", sub: "teams" });
+    // Pending solo registrants are only shown in People.
+    expect(approvals({ pendingApprovals: 2, pendingTeams: 0 })).toMatchObject({ tab: "guests", sub: "people" });
+    expect(approvals({ pendingApprovals: 3, pendingTeams: 1 })).toMatchObject({ tab: "guests", sub: "people" });
+    expect(approvals({ pendingApprovals: 2 })).toMatchObject({ tab: "guests", sub: "people" });
+  });
+
   it("shows approvals as done only when approval is required", () => {
     expect(readinessItems(base).some((item) => item.key === "approvals")).toBe(false);
     expect(readinessItems({ ...base, approvalRequired: true }).find((item) => item.key === "approvals")?.done).toBe(true);
@@ -56,6 +65,23 @@ describe("readinessItems", () => {
     expect(items.map((item) => item.key)).toEqual(["programme"]);
     expect(readinessItems({ ...base, permissions: eventCapabilities("MEMBER", []) })).toEqual([]);
     expect(readinessItems({ ...base, permissions: eventCapabilities(null, ["CHECK_IN", "EDIT_DETAILS", "MANAGE_INVITATIONS"]) })).toEqual([]);
+  });
+
+  it("shows attendance confirmation replies once guests were asked, as information only", () => {
+    expect(readinessItems(base).some((item) => item.key === "attendance")).toBe(false);
+    expect(readinessItems({ ...base, attendanceReplies: null }).some((item) => item.key === "attendance")).toBe(false);
+    expect(readinessItems({ ...base, attendanceReplies: { coming: 0, notComing: 0, noReply: 0 } }).some((item) => item.key === "attendance")).toBe(false);
+    const items = readinessItems({ ...base, attendanceReplies: { coming: 12, notComing: 3, noReply: 5 } });
+    expect(items.find((item) => item.key === "attendance")).toEqual({
+      key: "attendance", label: "Attendance: 12 coming · 3 not coming · 5 no reply", done: true, action: { kind: "tab", label: "Details", tab: "emails" },
+    });
+  });
+
+  it("never shows attendance replies to anyone who cannot email guests", () => {
+    const replies = { coming: 1, notComing: 1, noReply: 1 };
+    const all = eventCapabilities(null, ["EDIT_DETAILS", "MANAGE_REGISTRATIONS", "MANAGE_INVITATIONS", "CHECK_IN", "PUBLISH_AND_SCHEDULE"]);
+    expect(readinessItems({ ...base, attendanceReplies: replies, permissions: all }).some((item) => item.key === "attendance")).toBe(false);
+    expect(readinessItems({ ...base, attendanceReplies: replies, permissions: eventCapabilities("MEMBER", []) }).some((item) => item.key === "attendance")).toBe(false);
   });
 
   it("never offers publishing to a collaborator, even with every grant", () => {

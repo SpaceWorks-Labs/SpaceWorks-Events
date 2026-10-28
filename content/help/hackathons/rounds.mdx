@@ -1,0 +1,73 @@
+Big hackathons often judge in stages: a first round where every project gets a few reviews, then a final round where a smaller panel looks again at the best ones. Rounds let you run judging that way. Each round has its own rubric, its own judges and its own assignments, and finalists move from one round to the next.
+
+<Callout kind="permission">
+
+Adding, changing, opening and closing rounds, and choosing a round's judges: owners and admins of the organisation.
+
+</Callout>
+
+## One round to start with
+
+Every event starts with a single round called **Main**. If you never add another, judging works exactly as described in [Judges, rubric and scoring](/help/hackathons/judging): nothing about rounds gets in your way.
+
+Open the **Judging** tab and choose **Rounds** to see your rounds in order. The round judges are working on now is marked **Current**, and each round shows a status: **Draft** (not opened yet), **Open**, **Closed** or **Finalised**.
+
+## Adding a round
+
+<Steps>
+
+1. In **Judging** → **Rounds**, choose **Add round**.
+2. Give it a **Name**, for example "Finals".
+3. Under **Projects judged**, choose **Finalists advanced from the previous round** for a stage that only looks at the best projects, or **Every submitted project** to judge everyone again.
+4. Set the **Target judges per project**, and whether **All judges see all projects** or only the projects assigned to them.
+5. Turn on **Fresh eyes** if judges shouldn't see a project they already reviewed in an earlier round.
+6. Optionally set a **Planned start** and **Planned end**. They're shown to help you plan; rounds still open and close only when you say so.
+7. Choose **Add round**.
+
+</Steps>
+
+Then select the round in the list and build its rubric in the **Rubric** card, just like the first round's. A round's rubric is locked once the round opens.
+
+You can reorder rounds with the arrows while they're still drafts, and **Delete round** removes a draft round (never the first one).
+
+<Callout kind="note">
+
+The first round always judges every submitted project. A later round that takes finalists can only open once finalists have been advanced into it. See [Finalists](/help/hackathons/finalists).
+
+</Callout>
+
+## Choosing a round's judges
+
+Each round can have its own panel. Select the round and choose **Choose judges**, then tick the people who should judge it and choose **Save panel**.
+
+If you leave everyone unticked, the round has no panel and **every invited judge** judges it, the same as the first round by default. With a panel, only the people you ticked see that round's projects and their reviews count. Judges who aren't on the panel see a note saying so.
+
+## Opening and closing rounds
+
+Rounds run one at a time, in order. Select a round and use **Open round**, **Close round** or **Reopen round**. A round can only open once every earlier round is closed, and an earlier round can't reopen after a later one has opened.
+
+Closing a round freezes its scores. Results, awards and the **Results** table always follow the latest round that has opened, so the winners come from your final round.
+
+## Finalising a round
+
+Before finalists can move on, finalise the round you're advancing from: select it and choose **Finalise round**.
+
+Finalising checks that every project in the round has the target number of submitted reviews. If some are short, the app tells you how many and asks for a reason before it finalises anyway. Missing reviews never count as a zero; a project with fewer reviews simply has fewer judges behind its score.
+
+A finalised round can't reopen, and its target and score method stay as they were. Its ranking stays as it was finalised too: the reviews counted then keep counting, even if a judge is removed later. If you need to change something, **Undo finalise** works until finalists have been advanced from the round.
+
+With more than one round, finalise the final round before you publish the results.
+
+## Looking at earlier rounds
+
+**Score**, **Progress** and **Results** show a **Round** picker once there's more than one round. Pick an earlier round to see its projects, progress and ranking as they were; they're read-only. Exporting from **Results** downloads the round you're looking at.
+
+## Assigning judges at random
+
+**Assign judges automatically** on the **Progress** tab works on the current round. Under **How judges are picked**, **Balanced** always gives the same plan for the same projects and judges. **Random** shuffles who gets what while still keeping loads even, respecting the target and never giving a judge a project they're registered on or (with fresh eyes) already reviewed. The preview shows the random seed; choose **Re-roll** for a different draw. The seed is stored with the assignment, so the same draw can be reproduced later.
+
+## Good to know
+
+- Judges can only score in the current round. Earlier rounds stay visible to them read-only.
+- Fresh eyes can only be changed before the round opens.
+- See [Finalists](/help/hackathons/finalists) for moving projects between rounds and announcing them.

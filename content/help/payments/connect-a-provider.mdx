@@ -1,0 +1,88 @@
+To sell paid tickets, your organisation connects its own Razorpay or Stripe account. Buyers pay on that provider's checkout page, and the money lands in your account, not on the Space Works Events server. You paste in your keys once, add a webhook in the provider's dashboard so it can tell the app when someone has paid, and test the connection.
+
+<Callout kind="permission">
+
+The organisation owner only. Saving or removing keys also needs a recent sign-in: if you signed in more than 10 minutes ago, the app asks you to sign in again first.
+
+</Callout>
+
+## Choosing a provider
+
+- **Razorpay** takes cards, UPI, netbanking and wallets in India.
+- **Stripe** takes cards worldwide. Stripe accepts new Indian businesses by invitation only, so Razorpay is usually the choice in India.
+
+You can save keys for both, but new paid tickets always use the provider you select. Payments already taken keep their own provider, including for refunds.
+
+## Connecting Razorpay
+
+<Steps>
+
+1. In your Razorpay dashboard, go to **Account & Settings** → **API keys** and generate a key. Keep the page open.
+2. In Space Works Events, open your organisation's **Settings** and, under **Payments**, choose **Manage payments**.
+3. Under **Razorpay**, enter the **Key id** (it starts with `rzp_test_` or `rzp_live_`) and the **Key secret**.
+4. Make up a **Webhook secret** of at least 8 characters and enter it.
+5. Set **Currency for new ticket types**, for example INR, and choose **Save payment settings**. Your **Webhook address** now appears.
+6. In Razorpay, add a webhook: paste the **Webhook address**, enter the same secret you chose, and tick every event listed under the address on the payment settings page.
+7. Back in Space Works Events, select **Razorpay** as the **Provider**, choose **Save payment settings**, then choose **Test connection**.
+
+</Steps>
+
+## Connecting Stripe
+
+<Steps>
+
+1. In your Stripe dashboard, go to **Developers** → **API keys** and copy your secret key. A restricted key works too.
+2. In Space Works Events, open your organisation's **Settings** and, under **Payments**, choose **Manage payments**.
+3. Under **Stripe**, paste the **Secret key** (it starts with `sk_` or `rk_`), set **Currency for new ticket types**, and choose **Save payment settings**. Your **Webhook address** now appears.
+4. In Stripe, add a webhook endpoint with that address and every event listed under it on the payment settings page.
+5. Copy the endpoint's signing secret from Stripe (it starts with `whsec_`) into **Signing secret**.
+6. Select **Stripe** as the **Provider**, choose **Save payment settings**, then choose **Test connection**.
+
+</Steps>
+
+<Screenshot name="payment-settings" alt="The Payments settings page with the provider choice, the Razorpay and Stripe sections, the webhook address and Test connection" />
+
+You can only select a provider once all its keys are saved, including the webhook secret: without the webhook, the app wouldn't hear about payments.
+
+<Callout kind="warning">
+
+Copy the webhook events exactly as the page lists them. If an event is missing, payments, refunds or chargebacks may not reach the app, and buyers can be left waiting for their tickets.
+
+</Callout>
+
+## Test mode and going live
+
+Test keys (`rzp_test_` for Razorpay, `sk_test_` or `rk_test_` for Stripe) take test payments only, so no real money moves. While they're in use:
+
+- The payment settings show a **Test mode** chip, and **Test connection** reports "These are test keys, so payments are not real."
+- The ticket settings say payments are in test mode.
+- Test orders are marked as tests on the order page, in the guest list, on receipts and in the orders CSV.
+
+When you're happy, replace the test keys with live keys, add a webhook for your live account in the same way and enter its secret, save, and choose **Test connection** again. It should say "Connected. These are live keys."
+
+**Test connection** only checks that the provider accepts your keys. A **Connection tested** chip shows it passed; it goes back to **Not tested yet** whenever you change keys or the provider.
+
+## Your keys are write-only
+
+Keys and secrets are encrypted when you save them and never shown again, not even to you. A saved secret's label says "saved; leave blank to keep", so you can change other settings without retyping it. To replace one, type the new value and save.
+
+Each organisation has its own webhook address, so a message from your provider can only ever settle your own organisation's orders.
+
+## Disconnecting
+
+To stop using a provider, choose **Remove keys** in its section and confirm. Its saved keys are deleted, and if it was your selected provider, the **Provider** goes back to **Not connected** and only free tickets can be issued. Existing payments keep their records.
+
+<Callout kind="warning">
+
+Refunds for a payment go through the provider it was paid with, using that provider's saved keys. Don't remove a provider's keys while you may still need to refund payments taken through it.
+
+</Callout>
+
+## Receipt details
+
+Below the provider settings, the **Receipts** card sets what every buyer's PDF receipt shows as the organisation that was paid: a **Registered name** (blank uses your organisation's name), a **Registration number** and a **Registered address**. All three are optional. Choose **Save receipt details**. See [Orders and receipts](/help/payments/orders-and-receipts).
+
+## Good to know
+
+- The currency you set is used for the first ticket or extra you add to each event or series, and stays fixed for that event after that, so every ticket, order and refund agrees.
+- If **Test connection** says the provider didn't accept the keys, check you copied the whole key from the right account and mode, then save again.

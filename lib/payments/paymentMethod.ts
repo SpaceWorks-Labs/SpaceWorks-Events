@@ -32,3 +32,10 @@ export function describePaymentMethod(raw: { type: unknown; brand?: unknown; las
   const detail = clean(raw.bank) || clean(raw.wallet);
   return { type, summary: detail ? `${label} · ${detail}` : label };
 }
+
+/** Money handed over in person or by transfer (offline payments, payouts). */
+export const OFFLINE_METHOD_LABELS: Record<string, string> = { CASH: "Cash", UPI: "UPI", BANK_TRANSFER: "Bank transfer", CARD_TERMINAL: "Card terminal", OTHER: "Other" };
+
+export function offlineMethodLabel(method: string) {
+  return OFFLINE_METHOD_LABELS[method] ?? "Other";
+}

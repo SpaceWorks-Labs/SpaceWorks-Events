@@ -4,6 +4,7 @@
  */
 
 import { safeTimeZone } from "@/lib/timeZone";
+import { cachedDateTimeFormat } from "@/lib/format/intlCache";
 
 type DateInput = Date | string | number;
 
@@ -14,7 +15,7 @@ function toDate(value: DateInput): Date {
 }
 
 function parts(value: DateInput, timeZone: string, options: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat(LOCALE, { timeZone: safeTimeZone(timeZone), ...options }).formatToParts(toDate(value));
+  return cachedDateTimeFormat(LOCALE, { timeZone: safeTimeZone(timeZone), ...options }).formatToParts(toDate(value));
 }
 
 function pick(list: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) {
@@ -51,16 +52,19 @@ export function formatDate(value: DateInput, timeZone: string) {
   return `${pick(list, "day")} ${pick(list, "month")} ${pick(list, "year")}`;
 }
 
-/** "9:30 AM" */
+/** "9:30 AM", "12:05 AM" */
 export function formatTime(value: DateInput, timeZone: string) {
-  const list = parts(value, timeZone, { hour: "numeric", minute: "2-digit", hour12: true });
+  // `hourCycle: "h12"`, not `hour12: true`: with en-GB, some ICU builds (Node
+  // 20's) resolve `hour12` to the h11 cycle and print "0:05 AM" just after
+  // midnight while the browser prints "12:05 AM", a hydration mismatch.
+  const list = parts(value, timeZone, { hour: "numeric", minute: "2-digit", hourCycle: "h12" });
   return `${pick(list, "hour")}:${pick(list, "minute")} ${pick(list, "dayPeriod").toUpperCase()}`;
 }
 
 /** "IST", "GMT+5:30", "BST" — the abbreviation for the event's zone at that instant. */
 export function formatTimeZoneName(value: DateInput, timeZone: string) {
   const zone = safeTimeZone(timeZone);
-  const short = pick(new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" }).formatToParts(toDate(value)), "timeZoneName");
+  const short = pick(cachedDateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" }).formatToParts(toDate(value)), "timeZoneName");
   if (zone === "Asia/Kolkata" || zone === "Asia/Calcutta") return "IST";
   return short;
 }

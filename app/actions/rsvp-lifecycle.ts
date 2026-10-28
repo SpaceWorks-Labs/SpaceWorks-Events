@@ -10,9 +10,13 @@ import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { declineRequestedOrder, offerRequestedOrder } from "@/lib/payments/operations";
+import { declineRequestedOrder, lockOrder, offerRequestedOrder, refundWholeOrderTx, submitRefunds } from "@/lib/payments/operations";
 import { attendeeEmail, attendeeName, loadRsvpContext, paidRequest, paymentOperation, revalidateRsvpPaths } from "./rsvp-lifecycle/helpers";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { reacceptRsvpFor, type ReacceptStatus } from "./rsvp-lifecycle/reaccept";
+
+/** Team registrations change status only as a whole team (docs/TEAMS.md). */
+const TEAM_MEMBER_TRANSITION_ERROR = "This registration belongs to a team. Approve, reject or promote the whole team from the Teams view.";
 
 export async function approveRsvp(input: unknown): Promise<ActionResult> {
   const session = await auth();
@@ -38,10 +42,11 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
     eventId,
     eventInstanceId,
   );
-  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error };
+  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error, ...("code" in ctx && ctx.code ? { code: ctx.code } : {}) };
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR, code: "TEAM_MEMBER" };
   if (rsvp.status !== RsvpStatus.PENDING_APPROVAL) {
     return { ok: false, error: "Only pending requests can be approved." };
   }
@@ -72,6 +77,7 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
       return {
         ok: false,
         error: "Event is at capacity. Free a spot or promote from waitlist first.",
+        code: "CAPACITY_FULL",
       };
     }
     if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
@@ -101,6 +107,7 @@ export async function approveRsvp(input: unknown): Promise<ActionResult> {
     return {
       ok: false,
       error: "This occurrence is at capacity.",
+      code: "CAPACITY_FULL",
     };
   }
   if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
@@ -136,10 +143,11 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
     eventId,
     eventInstanceId,
   );
-  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error };
+  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error, ...("code" in ctx && ctx.code ? { code: ctx.code } : {}) };
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR, code: "TEAM_MEMBER" };
   if (
     rsvp.status !== RsvpStatus.PENDING_APPROVAL &&
     rsvp.status !== RsvpStatus.WAITLISTED
@@ -157,11 +165,17 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
   }
 
   const to = attendeeEmail(rsvp);
+  const refundIds: string[] = [];
   const rejected = await prisma.$transaction(async (tx) => {
+    // A paid place is refunded below: take the locks in the payment order (Event, then Order, then RSVP).
+    if (rsvp.orderId) await lockOrder(tx, rsvp.orderId);
     const result = await tx.rSVP.updateMany({
-      where: { id: rsvp.id, status: { in: [RsvpStatus.PENDING_APPROVAL, RsvpStatus.WAITLISTED] } },
+      // `teamId: null`: an RSVP that joined a team meanwhile moves only with its team.
+      where: { id: rsvp.id, teamId: null, status: { in: [RsvpStatus.PENDING_APPROVAL, RsvpStatus.WAITLISTED] } },
       data: { status: RsvpStatus.REJECTED },
     });
+    // Team events take payment before approval (docs/TEAMS.md): a declined paid place is refunded in full.
+    if (result.count === 1 && rsvp.orderId) refundIds.push(...(await refundWholeOrderTx(tx, { orderId: rsvp.orderId, reason: "Registration declined by the organiser", actorUserId: session.user.id })));
     if (result.count === 1 && to) {
       await enqueueRsvpStatusNotification(tx, {
         to,
@@ -174,6 +188,8 @@ export async function rejectRsvp(input: unknown): Promise<ActionResult> {
     return result;
   });
   if (rejected.count !== 1) return { ok: false, error: "This RSVP was changed by another organiser." };
+  await submitRefunds(refundIds);
+  emitWebhookEvent({ type: "registration.status_changed", rsvpId: rsvp.id, status: RsvpStatus.REJECTED, previousStatus: rsvp.status });
 
   await recordAuditEvent({ action: "RSVP_REJECTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
 
@@ -225,10 +241,11 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
     eventId,
     eventInstanceId,
   );
-  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error };
+  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error, ...("code" in ctx && ctx.code ? { code: ctx.code } : {}) };
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
 
   const { org, rsvp } = ctx;
+  if (rsvp.teamId) return { ok: false, error: TEAM_MEMBER_TRANSITION_ERROR, code: "TEAM_MEMBER" };
   if (rsvp.status !== RsvpStatus.WAITLISTED) {
     return { ok: false, error: "Only waitlisted attendees can be promoted." };
   }
@@ -251,7 +268,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
       ...(to ? { notification: { to, eventTitle: ctx.event.title, checkInToken: rsvp.checkInToken } } : {}),
     });
     if (result === "full") {
-      return { ok: false, error: "Event is still at capacity." };
+      return { ok: false, error: "Event is still at capacity.", code: "CAPACITY_FULL" };
     }
     if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
     await recordAuditEvent({ action: "RSVP_WAITLIST_PROMOTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
@@ -273,7 +290,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
     ...(to ? { notification: { to, eventTitle: series.title, checkInToken: rsvp.checkInToken } } : {}),
   });
   if (result === "full") {
-    return { ok: false, error: "This occurrence is still at capacity." };
+    return { ok: false, error: "This occurrence is still at capacity.", code: "CAPACITY_FULL" };
   }
   if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
   await recordAuditEvent({ action: "RSVP_WAITLIST_PROMOTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });

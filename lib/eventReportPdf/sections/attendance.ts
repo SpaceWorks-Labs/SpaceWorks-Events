@@ -26,8 +26,15 @@ export function drawRegistrations(L: ReportLayout, metrics: EventReportMetrics, 
     { label: `Declined ${metrics.rejected}`, bg: C.dangerBg, fg: C.dangerFg },
   ]);
 
+  // TEAM events count capacity in units: confirmed teams plus confirmed solo registrants.
+  const capacityFact = () => {
+    if (metrics.capacity == null) return "No limit";
+    if (!metrics.teams) return `${metrics.confirmed.toLocaleString("en-GB")} of ${plural(metrics.capacity, "place")} filled (${percentLabel(metrics.confirmed, metrics.capacity)})`;
+    const units = metrics.teams.confirmedTeams + metrics.teams.confirmedSoloRegistrants;
+    return `${units.toLocaleString("en-GB")} of ${plural(metrics.capacity, "place")} filled by teams and solo registrants (${percentLabel(units, metrics.capacity)})`;
+  };
   const registrationFacts: Array<[string, string]> = [
-    ["Capacity", metrics.capacity == null ? "No limit" : `${metrics.confirmed.toLocaleString("en-GB")} of ${plural(metrics.capacity, "place")} filled (${percentLabel(metrics.confirmed, metrics.capacity)})`],
+    ["Capacity", capacityFact()],
   ];
   if (metrics.registrationClosesAt) registrationFacts.push(["Registration closed", `${formatDate(metrics.registrationClosesAt, tz)}, ${formatTime(metrics.registrationClosesAt, tz)}`]);
   if (metrics.signupDates?.length) {
@@ -35,6 +42,13 @@ export function drawRegistrations(L: ReportLayout, metrics: EventReportMetrics, 
     registrationFacts.push(["First sign-up", formatDate(sorted[0]!, tz)]);
     const busiest = busiestDay(metrics.signupDates, tz);
     if (busiest) registrationFacts.push(["Busiest day", `${busiest.day}, ${plural(busiest.count, "sign-up")}`]);
+  }
+  if (metrics.teams) {
+    // Counts only: team names, members and "looking for a team" profiles never appear in the report.
+    const { teams, confirmedTeams, soloRegistrants, averageTeamSize } = metrics.teams;
+    registrationFacts.push(["Teams", teams ? `${plural(teams, "team")}, ${confirmedTeams.toLocaleString("en-GB")} with a place` : "No teams"]);
+    if (teams) registrationFacts.push(["Average team size", `${averageTeamSize.toLocaleString("en-GB")} people`]);
+    registrationFacts.push(["Solo registrants", soloRegistrants ? plural(soloRegistrants, "person", "people") : "None"]);
   }
   registrationFacts.push(["Invitations", metrics.invitationCount ? plural(metrics.invitationCount, "person", "people") + " invited by email" : "None sent"]);
   if (metrics.waitlist && metrics.waitlist.joined > 0) {

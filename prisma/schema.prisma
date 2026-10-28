@@ -24,6 +24,15 @@ enum EventPermission {
   MANAGE_INVITATIONS
   CHECK_IN
   PUBLISH_AND_SCHEDULE
+  /// Hackathon judging workspace only (docs/HACKATHON.md). A collaborator with
+  /// just this grant sees no guests, answers, emails, check-in, or editing.
+  JUDGE
+  /// Application review workspace only (docs/ADMISSION.md): the applications
+  /// assigned to them, as the stage allows (blind stages hide who applied).
+  REVIEW_APPLICATIONS
+  /// Mentor Desk console only (docs/MENTOR_DESK.md): the help queue, own
+  /// teams, office-hour slots and round visits. Never satisfies another check.
+  MENTOR
 }
 
 enum EventStatus {
@@ -43,6 +52,8 @@ enum EventPageSectionType {
   VENUE
   FAQ
   RESOURCES
+  /// The event's organising crew (docs/CREW.md). Off until an organiser turns it on.
+  CREW
 }
 
 enum ContentVisibility {
@@ -95,6 +106,13 @@ enum OutboxStatus {
   FAILED
 }
 
+enum WebhookDeliveryStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
 enum ApiClientStatus {
   ACTIVE
   DISABLED
@@ -104,6 +122,162 @@ enum BroadcastAttendanceFilter {
   ANY
   CHECKED_IN
   NOT_CHECKED_IN
+}
+
+/// How people register for a one-off event. TEAM events count capacity in
+/// registration units (a team or a solo registrant); see docs/TEAMS.md.
+enum RegistrationMode {
+  INDIVIDUAL
+  TEAM
+}
+
+/// Whether a TEAM event accepts registrations without a team, and whether
+/// solo registrants may list themselves as looking for a team.
+enum SoloPolicy {
+  TEAMS_ONLY
+  SOLO_ALLOWED
+  SOLO_WITH_MATCHING
+}
+
+/// Who pays on a TEAM event that sells tickets (docs/TEAMS.md).
+enum TeamTicketMode {
+  /// Everyone buys their own ticket: the leader when creating the team, members when joining.
+  PER_MEMBER
+  /// The leader buys one ticket for the whole team; members join free.
+  PER_TEAM
+}
+
+/// INVITE: a team leader invited a seeker. REQUEST: a seeker asked to join.
+enum TeamJoinRequestDirection {
+  INVITE
+  REQUEST
+}
+
+enum TeamJoinRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+/// Lifecycle of a hackathon project (docs/HACKATHON.md). Only SUBMITTED
+/// projects can be scored or win an award.
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  WITHDRAWN
+  DISQUALIFIED
+}
+
+/// Judges can score only while OPEN. CLOSED freezes scores. The rubric can be
+/// changed only while NOT_STARTED.
+enum JudgingStatus {
+  NOT_STARTED
+  OPEN
+  CLOSED
+}
+
+/// How judges' result scores are combined (docs/HACKATHON.md).
+/// RAW: plain mean of judges' scores. ZSCORE: each judge's scores are
+/// standardised before averaging, to correct for harsh or lenient judges.
+enum ScoreNormalization {
+  RAW
+  ZSCORE
+}
+
+/// A guest's reply to the organiser's "Are you still coming?" email (docs/ATTENDANCE.md).
+enum AttendanceResponse {
+  ATTENDING
+  NOT_ATTENDING
+}
+
+/// A judging round's lifecycle (docs/HACKATHON.md "Rounds"). At most one
+/// round of an event is OPEN (partial unique index). DRAFT rounds can still
+/// change their rubric and entries; CLOSED freezes scores.
+enum JudgingRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+/// Which projects a round judges: every SUBMITTED project, or only those
+/// advanced into it from the previous round (JudgingRoundEntry).
+enum JudgingRoundEntrySource {
+  ALL_SUBMITTED
+  ADVANCED
+}
+
+/// How an automatic assignment run picks judges: BALANCED breaks ties with a
+/// fixed hash; RANDOM with a crypto-random seed stored on the run, so the
+/// same seed and inputs always give the same plan.
+enum JudgeAssignmentStrategy {
+  BALANCED
+  RANDOM
+}
+
+/// Applications (docs/ADMISSION.md). MANUAL: organisers release decisions in
+/// batches. AUTO: each application is offered a place as it arrives, or
+/// waitlisted when the offers are full.
+enum AdmissionMode {
+  MANUAL
+  AUTO
+}
+
+enum AdmissionStageStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+/// An application's state, mirrored on its registration(s): IN_REVIEW and
+/// OFFERED are PENDING_APPROVAL (or PENDING_PAYMENT while an accepted offer is
+/// being paid), WAITLISTED is WAITLISTED, ACCEPTED is CONFIRMED, and the
+/// closed states are REJECTED.
+enum AdmissionStatus {
+  IN_REVIEW
+  OFFERED
+  WAITLISTED
+  ACCEPTED
+  REJECTED
+  DECLINED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum AdmissionDecisionOutcome {
+  ADVANCE
+  ACCEPT
+  WAITLIST
+  REJECT
+}
+
+enum AdmissionBatchStatus {
+  DRAFT
+  RELEASED
+  CANCELLED
+}
+
+enum AdmissionAssignmentStatus {
+  ASSIGNED
+  SUBMITTED
+  RECUSED
+}
+
+/// ALL: the application entered the first stage when it was made. ADVANCED:
+/// a released ADVANCE decision moved it here.
+enum AdmissionEntrySource {
+  ALL
+  ADVANCED
+}
+
+/// Which paged event-dashboard list a saved view filters (Saved views in
+/// docs/FEATURES.md). Each surface has its own allow-list in lib/savedViews.ts.
+enum SavedViewSurface {
+  GUESTS_PEOPLE
+  GUESTS_TEAMS
+  JUDGING_SUBMISSIONS
+  JUDGING_RESULTS
+  JUDGING_PROGRESS
 }
 
 enum OrderStatus {
@@ -234,6 +408,8 @@ model User {
 
   accounts          Account[]
   sessions          Session[]
+  mobileSessions    MobileSession[]
+  mobileIdempotencyKeys MobileIdempotencyKey[]
   devices           UserDevice[]
   memberships       Membership[]
   rsvps             RSVP[]
@@ -253,6 +429,48 @@ model User {
   paymentsSettled   Payment[]          @relation("PaymentSettledBy")
   paymentAmendments PaymentAmendment[] @relation("PaymentAmendmentActor")
   promoCodesCreated PromoCode[]        @relation("PromoCodeCreatedBy")
+  checkInListRecords CheckInListRecord[]
+  checkInListEvents  CheckInListEvent[]
+  webhookEndpointsCreated WebhookEndpoint[] @relation("WebhookEndpointCreatedBy")
+  judgeAssignments             JudgeAssignment[]
+  judgeScores                  JudgeScore[]
+  judgeReviews                 JudgeReview[]
+  judgingRoundPanels           JudgingRoundJudge[]
+  judgingRoundEntriesAdvanced  JudgingRoundEntry[] @relation("JudgingRoundEntryAdvancedBy")
+  judgingAssignmentRuns        JudgingAssignmentRun[] @relation("JudgingAssignmentRunBy")
+  savedViews                   SavedView[]
+  prizePayoutsRecorded         PrizePayout[] @relation("PrizePayoutRecordedBy")
+  expenseClaimsSubmitted       ExpenseClaim[] @relation("ExpenseClaimSubmittedBy")
+  expenseClaimsDecided         ExpenseClaim[] @relation("ExpenseClaimDecidedBy")
+  claimPayoutsRecorded         ClaimPayout[]  @relation("ClaimPayoutRecordedBy")
+  ticketDesignsUpdated         TicketDesign[] @relation("TicketDesignUpdatedBy")
+  refundRequestsDecided        RefundRequest[] @relation("RefundRequestDecidedBy")
+  admissionStagePanels         AdmissionStageReviewer[]
+  admissionAssignments         AdmissionReviewAssignment[]
+  admissionReviews             AdmissionReview[]
+  admissionConflicts           AdmissionReviewConflict[]
+  admissionRuns                AdmissionAssignmentRun[] @relation("AdmissionAssignmentRunBy")
+  admissionEntriesAdvanced     AdmissionStageEntry[] @relation("AdmissionStageEntryAdvancedBy")
+  admissionDecisionsDrafted    AdmissionDecision[] @relation("AdmissionDecisionBy")
+  admissionBatchesReleased     AdmissionDecisionBatch[] @relation("AdmissionBatchReleasedBy")
+  crewMemberships              EventCrewMember[]
+  mentorProfiles               MentorProfile[]
+  helpRequestsRaised           HelpRequest[] @relation("HelpRequestRaisedBy")
+  helpRequestsClaimed          HelpRequest[] @relation("HelpRequestClaimedBy")
+  helpActivities               HelpRequestActivity[]
+  helpComments                 HelpRequestComment[]
+  mentorRunsCreated            MentorAssignmentRun[]
+  mentorAssignments            MentorTeamAssignment[] @relation("MentorAssignmentMentor")
+  mentorAssignmentsCreated     MentorTeamAssignment[] @relation("MentorAssignmentCreatedBy")
+  mentorConflicts              MentorConflict[]
+  mentorConflictsRecorded      MentorConflict[] @relation("MentorConflictCreatedBy")
+  officeHourSlots              OfficeHourSlot[]
+  officeHourBookings           OfficeHourBooking[]
+  officeHourChanges            OfficeHourChange[]
+  mentoringRoundSeats          MentoringRoundMentor[]
+  mentoringVisits              MentoringVisit[]
+  mentoringCheckIns            MentoringCheckIn[]
+  mentorNominations            MentorNomination[]
 }
 
 model Account {
@@ -280,6 +498,71 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// A Space Works mobile app session (Android or iOS). Only SHA-256 digests of
+/// the bearer tokens are stored. Bumping the user's `sessionVersion` (password
+/// change or reset, signing out everywhere, authenticator changes) revokes it.
+model MobileSession {
+  id                       String    @id @default(cuid())
+  userId                   String
+  /// Hex SHA-256 of the current access token.
+  accessTokenHash          String    @unique
+  /// Hex SHA-256 of the current refresh token.
+  refreshTokenHash         String    @unique
+  /// Hex SHA-256s of the last refresh tokens this one replaced, newest first
+  /// (at most MOBILE_REFRESH_HISTORY). Presenting any of them again revokes the
+  /// session, except the newest within the retry grace window.
+  previousRefreshTokenHashes String[] @default([])
+  rotatedAt                DateTime?
+  sessionVersion           Int
+  /// SHA-256 (lib/loginSecurity.ts deviceHash) of the install id the app sends.
+  /// Refreshes must send the same id. It is client-supplied, so it catches a
+  /// token replayed by another install that doesn't know the id; it is not
+  /// proof against someone who copied both.
+  deviceHash               String
+  deviceName               String?
+  /// "android" or "ios"; informational only.
+  platform                 String?
+  /// When the credential (password or Google) was last proved on this session.
+  authenticatedAt          DateTime  @default(now())
+  /// When this session last passed an authenticator check; staff access needs
+  /// it within the last 12 hours.
+  mfaVerifiedAt            DateTime?
+  createdAt                DateTime  @default(now())
+  lastUsedAt               DateTime  @default(now())
+  accessExpiresAt          DateTime
+  refreshExpiresAt         DateTime
+  revokedAt                DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([refreshExpiresAt])
+  @@index([previousRefreshTokenHashes], type: Gin)
+}
+
+/// A mobile write already answered, by its Idempotency-Key, so a retry after a
+/// lost response replays the answer instead of acting twice. Keyed by user,
+/// route and a SHA-256 of the key; only small DTOs (ids and versions, never
+/// help text) are stored, and rows expire after a day.
+model MobileIdempotencyKey {
+  id          String   @id @default(cuid())
+  userId      String
+  route       String
+  keyHash     String
+  /// HMAC of the method, path and body; the same key on another path or with another body is refused.
+  requestHash String
+  /// 0 while the first request is still running.
+  status      Int      @default(0)
+  body        Json?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, route, keyHash])
+  @@index([expiresAt])
 }
 
 /// A browser this account signed in from with a password. A sign-in from a
@@ -331,8 +614,18 @@ model Organisation {
   chatChannels      ChatChannel[]
   processedWebhookEvents ProcessedWebhookEvent[]
   orders            Order[]
+  prizePayouts      PrizePayout[]
+  expenseClaims     ExpenseClaim[]
+  claimPayouts      ClaimPayout[]
+  refundRequests    RefundRequest[]
+  ticketDesigns     TicketDesign[]
+  /// The library template tickets use when neither their type nor their event has a design (docs/TICKET_DESIGNER.md).
+  defaultTicketDesignId String?      @unique
+  defaultTicketDesign   TicketDesign? @relation("OrganisationDefaultTicketDesign", fields: [defaultTicketDesignId], references: [id], onDelete: SetNull)
   payments          Payment[]
   paymentDisputes   PaymentDispute[]
+  webhookEndpoints  WebhookEndpoint[]
+  savedViews        SavedView[]
 }
 
 /// The organisation's own payment provider account. Money goes straight to
@@ -544,6 +837,11 @@ model Event {
   listedPublicly        Boolean          @default(false)
   registrationClosesAt  DateTime?
   registrationLeadMinutes Int?
+  /// Set when sign-ups were closed from the mobile app; the cutoff before that
+  /// close is kept so reopening restores it. The dashboard event form clears it.
+  registrationManuallyClosedAt DateTime?
+  registrationCutoffBeforeManualClose DateTime?
+  registrationLeadBeforeManualClose Int?
   /// bcrypt hash for the public venue check-in station PIN. Incrementing the
   /// version invalidates all existing station proofs.
   checkInStationPinHash String?
@@ -591,7 +889,128 @@ model Event {
   orders           Order[]
   shortLinkClickDays ShortLinkClickDay[]
   promoCodes       PromoCode[]
+  checkInLists     CheckInList[]
+  savedViews       SavedView[]
+  attendanceChecks AttendanceCheck[]
+  crewMembers      EventCrewMember[]
+  crewJoinLink     EventCrewJoinLink?
+  volunteerShifts  VolunteerShift[]
 
+  /// TEAM turns on team registration (one-off events only; series stay
+  /// individual). Cannot change while the event has registrations.
+  registrationMode      RegistrationMode @default(INDIVIDUAL)
+  /// Teams below this size are flagged Incomplete and cannot be approved.
+  /// CHECK constraints keep 1 <= teamMinSize <= teamMaxSize, teamMaxSize >= 2,
+  /// and require teamMaxSize in TEAM mode.
+  teamMinSize           Int?
+  /// Enforced under the Event row lock; cannot drop below the largest team.
+  teamMaxSize           Int?
+  soloPolicy            SoloPolicy       @default(SOLO_ALLOWED)
+  /// With tickets: who pays. Locked after the first sale.
+  teamTicketMode        TeamTicketMode   @default(PER_MEMBER)
+  teams            Team[]
+  /// Hackathon submissions and judging (docs/HACKATHON.md, one-off events).
+  submissionsEnabled                  Boolean          @default(false)
+  /// Submission window, checked against server time in the write transaction.
+  /// A CHECK constraint keeps submissionsCloseAt after submissionsOpenAt.
+  submissionsOpenAt                   DateTime?
+  submissionsCloseAt                  DateTime?
+  judgingStatus                       JudgingStatus    @default(NOT_STARTED)
+  /// true: every judge sees every submitted project; false: only assigned ones.
+  judgesSeeAll                        Boolean          @default(true)
+  /// After the window closes, list submitted projects at /{org}/{event}/projects.
+  projectGalleryPublic                Boolean          @default(false)
+  /// Set when results are published (/{org}/{event}/results); null hides them.
+  resultsPublishedAt                  DateTime?
+  /// First delivery of the results-published announcement; kept across
+  /// unpublish/republish so nobody is emailed twice.
+  resultsAnnouncedAt                  DateTime?
+  /// Target number of judges per project for automatic assignment and the
+  /// progress dashboard; null means not set. CHECK keeps it in 1..20.
+  reviewsPerProject                   Int?
+  /// How result scores are combined across judges.
+  scoreNormalization                  ScoreNormalization @default(RAW)
+  /// The round judges work on now: the latest round that has opened, else
+  /// the first. judgingStatus, judgesSeeAll, reviewsPerProject and
+  /// scoreNormalization mirror this round for this release (a trigger copies
+  /// Event changes onto it); null means the event's first round, if any.
+  currentJudgingRoundId               String?          @unique
+  currentJudgingRound                 JudgingRound?    @relation("EventCurrentJudgingRound", fields: [currentJudgingRoundId], references: [id], onDelete: SetNull)
+  judgingRounds                       JudgingRound[]   @relation("EventJudgingRounds")
+  /// Hackathon emails the organiser opts into (off by default). When false,
+  /// publishing results queues no `results-published` email (an organiser can
+  /// send it later with sendResultsAnnouncement) and a project becoming
+  /// SUBMITTED, including when its entry fee is paid, queues no
+  /// `submission-received` receipt. Registration and payment emails are never gated.
+  emailEntrantsOnResults              Boolean          @default(false)
+  emailSubmissionReceipts             Boolean          @default(false)
+  /// Attendance confirmation (docs/ATTENDANCE.md): when a confirmed guest
+  /// answers "No", release their place (free: cancelled; paid: under the
+  /// buyer refund policy, or a refund request). Sending is always manual.
+  attendanceCheckReleaseOnDecline     Boolean          @default(false)
+  /// Fee to submit a project, in minor units of the event's currency; null
+  /// is free. Paid once per entrant through the normal checkout (Order.submissionId).
+  submissionFeeMinor                  BigInt?
+  /// Refund the entry fee in full when an organiser disqualifies the project.
+  submissionFeeRefundOnDisqualify     Boolean          @default(true)
+  submissions         Submission[]
+  prizePayouts        PrizePayout[]
+  /// Event finance (docs/FINANCE.md): an optional spending budget, and whether
+  /// registered participants may claim expenses (travel grants), up to a cap each.
+  budgetMinor                         BigInt?
+  participantClaimsEnabled            Boolean          @default(false)
+  participantClaimCapMinor            BigInt?
+  /// Crew (docs/CREW.md) may claim expenses from their crew ticket page.
+  crewClaimsEnabled                   Boolean          @default(false)
+  /// Volunteer shifts and contributor hours for the crew (docs/VOLUNTEERS.md). Off by default.
+  volunteerShiftsEnabled              Boolean          @default(false)
+  /// The contributor certificate design (lib/certificateTemplate.ts); null uses the standard one.
+  contributorCertificateTemplate      Json?
+  expenseClaims       ExpenseClaim[]
+  claimPayouts        ClaimPayout[]
+  reimbursementPolicies ReimbursementPolicy[]
+  /// The event's own ticket design (an event-owned TicketDesign), or null for the organisation default.
+  ticketDesignId      String?          @unique
+  ticketDesign        TicketDesign?    @relation("EventTicketDesign", fields: [ticketDesignId], references: [id], onDelete: SetNull)
+  ownTicketDesigns    TicketDesign[]   @relation("TicketDesignEvent")
+  judgingCriteria     JudgingCriterion[]
+  judgeAssignments    JudgeAssignment[]
+  awards              EventAward[]
+  /// Applications and shortlisting (docs/ADMISSION.md), on any one-off event.
+  /// On: every registration (a team or a solo registrant) is an application
+  /// reviewed in stages; places are offered, and an offer is accepted (and
+  /// paid for, on paid tickets) before the place is confirmed. A CHECK keeps
+  /// the event APPROVAL_REQUIRED while it is on. Turned on or off only while
+  /// the event has no registrations (crew aside).
+  admissionEnabled                    Boolean          @default(false)
+  admissionMode                       AdmissionMode    @default(MANUAL)
+  /// Days an applicant has to accept an offer (CHECK 1..30).
+  admissionRsvpDays                   Int              @default(7)
+  /// Most offers out at once (offered + accepted); null uses Event.capacity.
+  admissionOfferCapacity              Int?
+  /// Email applicants when they move to the next stage (off by default).
+  emailApplicantsOnStageAdvance       Boolean          @default(false)
+  admissionStages       AdmissionStage[]
+  admissionApplications AdmissionApplication[]
+  admissionBatches      AdmissionDecisionBatch[]
+  admissionConflicts    AdmissionReviewConflict[]
+  /// Mentor Desk (docs/MENTOR_DESK.md), off by default: mentors, the help
+  /// queue, assignments, office hours and mentoring rounds. When on, a judge
+  /// who mentored a team is conflicted for it.
+  mentorDeskEnabled                   Boolean          @default(false)
+  /// Email the team when a mentor claims its help request (off by default).
+  mentorHelpClaimedEmail              Boolean          @default(false)
+  /// Accepting a MENTOR grant also adds the mentor to the event crew with a
+  /// free crew ticket (docs/CREW.md); removing the grant removes that ticket.
+  mentorsGetCrewTicket                Boolean          @default(false)
+  mentorProfiles        MentorProfile[]
+  helpCategories        HelpCategory[]
+  helpRequests          HelpRequest[]
+  mentorAssignmentRuns  MentorAssignmentRun[]
+  mentorTeamAssignments MentorTeamAssignment[]
+  mentorConflicts       MentorConflict[]
+  officeHourSlots       OfficeHourSlot[]
+  mentoringRounds       MentoringRound[]
   @@unique([organisationId, slug])
   @@index([organisationId])
   @@index([organisationId, status])
@@ -622,6 +1041,9 @@ model TicketType {
   feeMinor     BigInt @default(0)
   /// Buyers may reserve and pay at the desk instead of online.
   payAtDesk    Boolean @default(false)
+  /// A design for this ticket only (one of its event's own designs); null uses the event's.
+  ticketDesignId String?
+  ticketDesign   TicketDesign? @relation("TicketTypeDesign", fields: [ticketDesignId], references: [id], onDelete: SetNull)
   name         String
   description  String    @default("")
   /// Tax-inclusive price in integer minor units of the event's currency.
@@ -680,6 +1102,20 @@ model Order {
   refundPolicy   Json?
   /// A day-long payment link's reminder was emailed (once).
   paymentReminderSentAt DateTime?
+  /// TEAM events: the team this order pays for. A leader's order created it
+  /// (the leader's registration is in the team from the start); a member's
+  /// order in PER_MEMBER mode joins it once paid (the registration has no
+  /// team until then).
+  teamId         String?
+  /// Set on a leader's order: the name of the team it creates. It tells a
+  /// leader's order from a member's even after the team is gone.
+  teamName       String?
+  /// A PER_MEMBER member's order paying to join `teamId`: kept when the team is
+  /// deleted mid-payment, so the payment is refunded rather than placed solo.
+  teamJoin       Boolean     @default(false)
+  /// A hackathon entry fee: the project it pays for. Such an order has no
+  /// registrations; once paid, the project is submitted.
+  submissionId   String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -689,9 +1125,12 @@ model Order {
   instance     EventInstance? @relation(fields: [eventInstanceId], references: [id], onDelete: SetNull)
   buyer        User?        @relation("OrderBuyer", fields: [buyerUserId], references: [id], onDelete: SetNull)
   promoCode    PromoCode?   @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  submission   Submission?  @relation(fields: [submissionId], references: [id], onDelete: SetNull)
   lines        OrderLine[]
   payments     Payment[]
   rsvps        RSVP[]
+  refundRequests RefundRequest[]
 
   @@index([organisationId, createdAt])
   @@index([eventId, status])
@@ -699,6 +1138,8 @@ model Order {
   @@index([eventInstanceId])
   @@index([status, holdExpiresAt])
   @@index([buyerUserId, createdAt])
+  @@index([teamId])
+  @@index([submissionId])
 }
 
 /// One priced line of an order. Amounts are frozen at purchase.
@@ -943,6 +1384,8 @@ model EventInvite {
 
   @@unique([eventId, email])
   @@index([eventId])
+  /// Guests · Invites newest first.
+  @@index([eventId, createdAt, id])
 }
 
 model EventSeries {
@@ -1308,6 +1751,10 @@ model RSVP {
   /// The beat emailed this guest's reminder (about a day before the start), once.
   reminderSentAt  DateTime?
   promotedAt      DateTime?
+  /// The free ticket of an event crew member (EventCrewMember). Always
+  /// CONFIRMED, on a one-off event, with no team, order or ticket type, and
+  /// never counted against Event.capacity (CHECK RSVP_crew_shape, docs/CREW.md).
+  isCrew          Boolean    @default(false)
 
   event             Event?                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   /// Orders are only deleted with their organisation; their tickets go with them.
@@ -1319,11 +1766,33 @@ model RSVP {
   answers           RsvpAnswer[]
   feedbackResponses EventFeedbackResponse[]
   checkInEvents     CheckInEvent[]
+  checkInListRecords CheckInListRecord[]
+  checkInListEvents  CheckInListEvent[]
 
+  /// Team this registration belongs to (TEAM events only). Invariant: the
+  /// RSVP status always equals the team status. Null means a solo unit.
+  teamId          String?
+  team              Team?                   @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  ledTeam           Team?                   @relation("TeamLeader")
+  seekerProfile     TeamSeekerProfile?
+  teamJoinRequests  TeamJoinRequest[]
+  submission        Submission?
+  submissionLink    SubmissionLink?
+  expenseClaims     ExpenseClaim[]
+  attendanceCheck   AttendanceCheck?
+  helpRequests      HelpRequest[]
+  crewMember        EventCrewMember?
+  /// A solo registrant's application on an admission event (docs/ADMISSION.md).
+  admissionApplication AdmissionApplication?
+  admissionAnswerRevisions AdmissionAnswerRevision[]
+  reimbursementNotices ReimbursementNotice[]
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
   @@index([userId, createdAt])
-  @@index([eventId, status, checkedInAt, createdAt, id], map: "RSVP_eventId_status_checkedInAt_createdAt_id_idx")
+  @@index([eventId, status, checkedInAt, createdAt(sort: Desc), id(sort: Desc)], map: "RSVP_eventId_status_checkedInAt_createdAt_id_idx")
+  /// Guests · People newest first, and "Recent check-ins" (docs/PERFORMANCE.md).
+  @@index([eventId, createdAt, id])
+  @@index([eventId, checkedInAt, id])
   @@index([eventInstanceId])
   @@index([eventId, attendeeKey])
   @@index([eventInstanceId, attendeeKey])
@@ -1331,6 +1800,76 @@ model RSVP {
   @@index([orderId])
   @@index([ticketTypeId, status])
   @@index([status, holdExpiresAt])
+  @@index([teamId])
+}
+
+/// A member of an event's organising crew (docs/CREW.md). Each member owns
+/// one CONFIRMED `RSVP` with `isCrew` for their free ticket and check-in; crew
+/// are counted in headcounts but never against `Event.capacity`. A crew member
+/// is a person, not an account. Later kinds (volunteers, mentors) may add a
+/// kind and an optional account link without changing the ticket rules.
+model EventCrewMember {
+  id             String   @id @default(cuid())
+  eventId        String
+  rsvpId         String   @unique
+  name           String
+  /// Normalised (trimmed, lowercase); one crew place per email per event.
+  email          String
+  foodPreference String   @default("")
+  /// Public role, such as "Logistics lead".
+  role           String   @default("")
+  /// Short plain-text bio for the public crew card.
+  bio            String   @default("")
+  /// An application upload in the organisation's `event-crew` category.
+  photoUrl       String?
+  linkedinUrl    String?
+  /// Listed in the public Crew section. People who join through the crew link
+  /// start hidden until an organiser reviews them.
+  showOnPage     Boolean  @default(true)
+  /// True when the member signed up through the crew join link.
+  joinedViaLink  Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  /// What the person does (display, badge and filter only). Never grants
+  /// authority: that comes from collaborator grants or shift sign-ups.
+  kind           CrewKind @default(VOLUNTEER)
+  /// The member's account, linked when the crew email matches a verified
+  /// account or on invitation acceptance. Optional: crew need no sign-in.
+  userId         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event        Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsvp         RSVP                     @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  user         User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shiftSignups VolunteerShiftSignup[]
+  certificates ContributorCertificate[]
+  /// Set when the Mentor Desk added this place for a mentor (docs/MENTOR_DESK.md).
+  mentorProfile MentorProfile?
+
+  @@unique([eventId, email])
+  @@index([eventId, sortOrder])
+  @@index([userId])
+}
+
+/// What a crew member does. Display, badges and filters only.
+enum CrewKind {
+  ORGANISER
+  VOLUNTEER
+  MENTOR
+  JUDGE
+}
+
+/// The shareable crew sign-up link for one event. Like a team join link the
+/// token is stored as-is so organisers can copy it again; it reveals only the
+/// event title, and replacing or deleting the row revokes the old link.
+model EventCrewJoinLink {
+  eventId   String   @id
+  token     String   @unique
+  /// The crew kind people who join through this link get.
+  kind      CrewKind @default(VOLUNTEER)
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 /// Short-lived, server-created snapshots used to undo an organiser deletion.
@@ -1424,8 +1963,6 @@ model EventFeedbackForm {
   event     Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   fields    EventFeedbackField[]
   responses EventFeedbackResponse[]
-
-  @@index([eventId])
 }
 
 model EventFeedbackField {
@@ -1524,6 +2061,78 @@ model CheckInEvent {
   @@index([actorUserId, occurredAt])
 }
 
+/// An organiser-defined check-in list beyond venue entry ("Swag collection",
+/// "Lunch – Day 1", "Workshop B"). Standalone events only. Names are unique per
+/// event among non-archived lists, case-insensitively, through the partial
+/// index `CheckInList_eventId_active_name_key` (declared in the migration,
+/// because Prisma cannot model it). Archived lists are read-only.
+model CheckInList {
+  id                   String   @id @default(cuid())
+  eventId              String
+  name                 String
+  sortOrder            Int      @default(0)
+  archived             Boolean  @default(false)
+  /// Guests must already be checked in at entry before they can be marked here.
+  requiresEntryCheckIn Boolean  @default(false)
+  /// Only guests whose confirmed order bought this add-on, up to the quantity
+  /// bought per order (meals, swag, workshops).
+  addOnId              String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  event   Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  addOn   AddOn?              @relation(fields: [addOnId], references: [id], onDelete: NoAction)
+  records CheckInListRecord[]
+  history CheckInListEvent[]
+
+  @@index([eventId, archived, sortOrder])
+  @@index([addOnId])
+}
+
+/// One person checked into one custom list. Unique on (listId, rsvpId), so a
+/// guest is in a list at most once; undo deletes the row. Independent of
+/// entry check-in (`RSVP.checkedInAt`), which list check-ins never change.
+model CheckInListRecord {
+  id          String   @id @default(cuid())
+  listId      String
+  rsvpId      String
+  actorUserId String?
+  /// `online`, `mobile-scan` or `mobile-manual` (`CheckInListRecord_known_source`).
+  source      String
+  checkedInAt DateTime @default(now())
+
+  list  CheckInList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  rsvp  RSVP        @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  actor User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([listId, rsvpId])
+  @@index([rsvpId])
+  @@index([actorUserId])
+}
+
+/// Immutable history of list check-ins and undos, kept apart from
+/// `CheckInEvent` so entry reports and check-in source counts never include
+/// list activity. Like `CheckInEvent`, a deleted RSVP or actor leaves the row
+/// with a null reference; deleting the event (and so the list) removes it.
+model CheckInListEvent {
+  id          String   @id @default(cuid())
+  listId      String
+  rsvpId      String?
+  actorUserId String?
+  /// `CHECKED_IN` or `CHECK_IN_UNDONE` (`CheckInListEvent_known_action`).
+  action      String
+  source      String
+  occurredAt  DateTime @default(now())
+
+  list  CheckInList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  rsvp  RSVP?       @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
+  actor User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([listId, occurredAt])
+  @@index([rsvpId, occurredAt])
+  @@index([actorUserId, occurredAt])
+}
+
 /// Durable queue for transactional messages. A background worker claims and
 /// retries these rows; request handlers only enqueue them.
 model OutboxMessage {
@@ -1570,6 +2179,10 @@ model InstanceSetting {
   smtpAllowUnauthenticated Boolean @default(false)
   googleClientId        String?
   googleClientSecretEncrypted String?
+  /// Comma-separated Google OAuth client ids of the Android and iOS apps, accepted
+  /// as ID-token audiences by the mobile API. Overrides GOOGLE_MOBILE_CLIENT_IDS.
+  /// Client ids are public identifiers, not secrets.
+  googleMobileClientIds String?
   backupProvider        String?
   backupLastSuccessAt   DateTime?
   backupRetentionDays   Int?
@@ -1759,6 +2372,7 @@ model AddOn {
   event      Event?       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   series     EventSeries? @relation(fields: [eventSeriesId], references: [id], onDelete: Cascade)
   orderLines OrderLine[]
+  checkInLists CheckInList[]
 
   @@index([eventId, sortOrder])
   @@index([eventSeriesId, sortOrder])
@@ -1787,4 +2401,1794 @@ model PaymentDispute {
   @@unique([provider, externalDisputeId])
   @@index([paymentId])
   @@index([organisationId, status])
+}
+
+/// An organisation's outgoing webhook receiver (docs/WEBHOOKS.md). The signing
+/// secret is stored only as AES-GCM ciphertext under a domain-separated key and
+/// is shown to the organiser once, on create or rotate.
+model WebhookEndpoint {
+  id                  String    @id @default(cuid())
+  organisationId      String
+  url                 String
+  description         String    @default("")
+  /// Subscribed event types (lib/webhooks/eventTypes.ts). `ping` is always deliverable as a test.
+  eventTypes          String[]
+  enabled             Boolean   @default(true)
+  secretEncrypted     String
+  /// Why the endpoint is off when it was not switched off by a person ("auto_disabled").
+  disabledReason      String?
+  disabledAt          DateTime?
+  consecutiveFailures Int       @default(0)
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  createdByUserId     String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organisation Organisation      @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  createdBy    User?             @relation("WebhookEndpointCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  deliveries   WebhookDelivery[]
+
+  @@index([organisationId, enabled])
+}
+
+/// Durable delivery queue: one row per endpoint and event. A worker claims rows
+/// with FOR UPDATE SKIP LOCKED; request paths only insert them after commit.
+model WebhookDelivery {
+  id             String                @id @default(cuid())
+  endpointId     String
+  organisationId String
+  /// Stable envelope id (`evt_…`), identical on every retry for receiver idempotency.
+  eventId        String
+  eventType      String
+  /// The complete minimal envelope as sent. Never holds tokens, answers, or secrets.
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  nextAttemptAt  DateTime              @default(now())
+  lockedAt       DateTime?
+  lastAttemptAt  DateTime?
+  deliveredAt    DateTime?
+  lastStatusCode Int?
+  /// Short, redacted failure summary (never the full response body).
+  lastError      String?
+  responseTimeMs Int?
+  createdAt      DateTime              @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId, eventId])
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([createdAt])
+}
+
+/// A named filter/search state on one event-dashboard list. `params` is
+/// validated against the surface's allow-list on write and again on read
+/// (unknown keys dropped); it never grants access: the surface's own
+/// permission is checked first. Shared views are visible to everyone who can
+/// open that surface on the event.
+model SavedView {
+  id             String           @id @default(cuid())
+  organisationId String
+  eventId        String
+  /// The creator; only they can rename, re-share or (with owners/admins for shared views) delete it.
+  userId         String
+  surface        SavedViewSurface
+  /// Up to 60 characters.
+  name           String
+  params         Json
+  shared         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, surface])
+  @@index([userId])
+  @@index([organisationId])
+}
+
+/// A registration unit on a TEAM event. Capacity counts each team once,
+/// however many members it has. Every mutation locks the Event row first
+/// (lib/core/teams.ts) so team changes serialise with all capacity changes.
+model Team {
+  id                String     @id @default(cuid())
+  eventId           String
+  name              String
+  /// Lowercased, trimmed, whitespace-collapsed name; unique per event.
+  nameKey           String
+  /// Mirrors every member RSVP's status (updated together, guarded by the
+  /// expected previous status).
+  status            RsvpStatus
+  /// Opaque bearer value for the shareable join link. Regenerating retires
+  /// the old link. Reveals only team name and size.
+  joinToken         String     @unique
+  /// SHA-256 (hex) of the leader's team management token. The raw token is
+  /// shown once (in the team-created email) and never stored.
+  manageTokenHash   String     @unique
+  leaderRsvpId      String?    @unique
+  lookingForMembers Boolean    @default(false)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  leaderRsvp   RSVP?             @relation("TeamLeader", fields: [leaderRsvpId], references: [id], onDelete: SetNull)
+  members      RSVP[]            @relation("TeamMembers")
+  joinRequests TeamJoinRequest[]
+  orders       Order[]
+  helpRequests       HelpRequest[]
+  mentorAssignments  MentorTeamAssignment[]
+  mentorConflicts    MentorConflict[]
+  officeHourBookings OfficeHourBooking[]
+  mentoringVisits    MentoringVisit[]
+  mentoringCheckIns  MentoringCheckIn[]
+  mentorNominations  MentorNomination[]
+
+  submission   Submission?
+  /// The team's application on an admission event (docs/ADMISSION.md).
+  admissionApplication AdmissionApplication?
+  @@unique([eventId, nameKey])
+  @@index([eventId, status, createdAt])
+  /// Guests · Teams oldest first (keyset on createdAt, id).
+  @@index([eventId, createdAt, id])
+}
+
+/// Opt-in "Looking for a team" listing for a solo registrant of a
+/// SOLO_WITH_MATCHING event. Shown only to the same event's team leaders and
+/// visible seekers, as display name + headline + skills.
+model TeamSeekerProfile {
+  id        String   @id @default(cuid())
+  rsvpId    String   @unique
+  headline  String
+  /// Up to 8 skills, each up to 30 characters.
+  skills    String[] @default([])
+  visible   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rsvp RSVP @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+}
+
+/// Leader invitation to a seeker (INVITE) or seeker request to a team
+/// (REQUEST). A partial unique index allows at most one PENDING row per
+/// team and RSVP. No email is sent for these in this version.
+model TeamJoinRequest {
+  id        String                   @id @default(cuid())
+  teamId    String
+  rsvpId    String
+  direction TeamJoinRequestDirection
+  status    TeamJoinRequestStatus    @default(PENDING)
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  rsvp RSVP @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, status])
+  @@index([rsvpId, status])
+}
+
+/// A hackathon project (docs/HACKATHON.md). The entrant is exactly one of a
+/// team or a solo RSVP (CHECK constraint), each with at most one submission,
+/// and the submission is deleted with its team, RSVP, or event. Always read
+/// together with `eventId`; the entrant must belong to the same event.
+model Submission {
+  id                 String           @id @default(cuid())
+  eventId            String
+  teamId             String?          @unique
+  rsvpId             String?          @unique
+  /// Up to 120 characters.
+  title              String
+  /// Plain text, up to 4000 characters.
+  summary            String           @default("")
+  /// Optional https: links, up to 500 characters each.
+  repoUrl            String?
+  demoUrl            String?
+  videoUrl           String?
+  status             SubmissionStatus @default(DRAFT)
+  /// Set on (re)submission; kept when an organiser disqualifies.
+  submittedAt        DateTime?
+  /// Organiser-only note; never shown to entrants, judges, or the public.
+  disqualifiedReason String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  team        Team?              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  rsvp        RSVP?              @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  assignments JudgeAssignment[]
+  scores      JudgeScore[]
+  reviews     JudgeReview[]
+  awardWins   EventAwardWinner[]
+  roundEntries JudgingRoundEntry[]
+  entryFeeOrders Order[]
+  prizePayouts PrizePayout[]
+
+  @@index([eventId, status])
+  /// Judging → Submissions (keyset on createdAt, id).
+  @@index([eventId, createdAt, id])
+  /// SUBMITTED projects by submission time: judge workspace, gallery, ranking.
+  @@index([eventId, status, submittedAt, id])
+}
+
+/// Bearer link `/submit/{token}` for a solo registrant's submission, emailed
+/// to the RSVP's own address. Only the SHA-256 digest is stored; regenerating
+/// replaces the row and retires the old link.
+model SubmissionLink {
+  id        String   @id @default(cuid())
+  rsvpId    String   @unique
+  /// Hex SHA-256 of the raw token (64 characters).
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+
+  rsvp RSVP @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+}
+
+/// "Are you still coming?" for one CONFIRMED registration of a one-off event
+/// (docs/ATTENDANCE.md). Created only by an organiser's send, reminder or
+/// shared link; nothing is sent automatically. The raw `/attend/{token}`
+/// token is emailed or shown once; only its SHA-256 digest is stored, and a
+/// reminder or a new shared link rotates it. CHECK constraints keep the digest
+/// shape, the note length, the response/respondedAt pair and releaseOutcome.
+model AttendanceCheck {
+  id             String              @id @default(cuid())
+  rsvpId         String              @unique
+  eventId        String
+  /// Hex SHA-256 of the raw token (64 characters).
+  tokenHash      String              @unique
+  /// When the question (or the latest reminder or shared link) was issued.
+  sentAt         DateTime
+  response       AttendanceResponse?
+  respondedAt    DateTime?
+  /// Optional note from the guest, at most 500 characters.
+  note           String?
+  /// A "No" whose place was not released automatically: "multiTicket" or
+  /// "notBuyer" (a paid order; organisers were told), "refundRequested"
+  /// (refund window closed; a refund request was opened) or "failed".
+  releaseOutcome String?
+  /// Set once when owners and admins were told about a "No" on a paid place
+  /// that was kept; never cleared, so changing the answer back and forth
+  /// never repeats the notice.
+  organisersNotifiedAt  DateTime?
+  /// Set once when a "No" opened a refund request (policy closed); never
+  /// cleared, so a later "No" never opens another one.
+  refundRequestOpenedAt DateTime?
+  /// That refund request, withdrawn if the guest says Yes while it is open.
+  refundRequestId       String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  rsvp          RSVP           @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  refundRequest RefundRequest? @relation(fields: [refundRequestId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, response])
+  @@index([refundRequestId])
+}
+
+/// One rubric line. Frozen once judging leaves NOT_STARTED. CHECK
+/// constraints keep weight and maxScore within 1..10.
+model JudgingCriterion {
+  id          String   @id @default(cuid())
+  eventId     String
+  /// The round this line belongs to. Always set (CHECK constraint); a
+  /// trigger fills it with the event's current round when an insert omits it.
+  roundId     String?
+  /// Up to 80 characters.
+  name        String
+  /// Up to 500 characters.
+  description String   @default("")
+  weight      Int      @default(1)
+  maxScore    Int      @default(10)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  event  Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round  JudgingRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  scores JudgeScore[]
+
+  @@index([eventId, position])
+  @@index([roundId, position])
+}
+
+/// Used when `Event.judgesSeeAll` is false: the judge sees only assigned
+/// submissions. Conflict of interest is checked separately, at read and write.
+model JudgeAssignment {
+  id           String   @id @default(cuid())
+  eventId      String
+  /// Always set (CHECK constraint); filled with the current round when omitted.
+  roundId      String?
+  judgeUserId  String
+  submissionId String
+  /// Set when the judge recused themselves from this project (docs/HACKATHON.md
+  /// "Recusal"): they no longer see or score it, and it doesn't count towards
+  /// coverage. Cleared when they undo it. Changed only while the round is OPEN.
+  recusedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round      JudgingRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  judge      User       @relation(fields: [judgeUserId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, judgeUserId, submissionId])
+  @@index([eventId, judgeUserId])
+  @@index([submissionId])
+}
+
+/// One integer score per submission, judge, and criterion (0..maxScore,
+/// checked by the core; the CHECK constraint keeps it non-negative).
+model JudgeScore {
+  id           String   @id @default(cuid())
+  submissionId String
+  judgeUserId  String
+  criterionId  String
+  score        Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submission Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  judge      User             @relation(fields: [judgeUserId], references: [id], onDelete: Cascade)
+  criterion  JudgingCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, judgeUserId, criterionId])
+  @@index([judgeUserId])
+  @@index([criterionId])
+}
+
+/// A judge's review of one submission. Only reviews with `submittedAt`
+/// count towards the result score. The comment is visible to organisers only.
+model JudgeReview {
+  id           String    @id @default(cuid())
+  /// Always set (CHECK constraint); filled with the current round when omitted.
+  roundId      String?
+  submissionId String
+  judgeUserId  String
+  /// Up to 2000 characters, organisers only.
+  comment      String    @default("")
+  submittedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  round      JudgingRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  judge      User       @relation(fields: [judgeUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, submissionId, judgeUserId])
+  @@index([judgeUserId])
+  @@index([submissionId])
+}
+
+/// One judging round of a hackathon (docs/HACKATHON.md "Rounds"). Rounds run
+/// in `position` order (unique per event); at most one is OPEN (partial
+/// unique index). Criteria, assignments and reviews belong to a round, and
+/// scores follow their criterion. A round with `entrySource = ADVANCED`
+/// judges only its JudgingRoundEntry rows; results and awards come from the
+/// event's final round. CHECK constraints keep the name non-empty,
+/// reviewsPerProject in 1..20 and closesAt after opensAt.
+model JudgingRound {
+  id                   String                  @id @default(cuid())
+  eventId              String
+  /// Up to 80 characters.
+  name                 String
+  position             Int
+  status               JudgingRoundStatus      @default(DRAFT)
+  reviewsPerProject    Int?
+  scoreNormalization   ScoreNormalization      @default(RAW)
+  judgesSeeAll         Boolean                 @default(true)
+  /// "Fresh eyes": a judge never gets a project they reviewed in an earlier round.
+  freshEyes            Boolean                 @default(false)
+  entrySource          JudgingRoundEntrySource @default(ALL_SUBMITTED)
+  /// Planned times, shown to organisers and judges; opening and closing stay manual.
+  opensAt              DateTime?
+  closesAt             DateTime?
+  /// Set when the organiser publishes this round's finalists (separate from results).
+  finalistsPublishedAt DateTime?
+  /// Set when the organiser finalises a CLOSED round (it can no longer reopen);
+  /// finalists advance only from a finalised round. Finalising a round whose
+  /// projects are short of the review target needs `finalizeExceptionReason`
+  /// (organiser-only, up to 500 characters; CHECK keeps it with finalizedAt).
+  finalizedAt          DateTime?
+  finalizeExceptionReason String?
+  /// Set with finalizedAt: the reviews counted at that moment are frozen in
+  /// JudgingRoundCountedReview and every later read of this round counts only
+  /// those. Null for a round finalised before the snapshot existed (counted live).
+  countedFrozenAt      DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  event       Event               @relation("EventJudgingRounds", fields: [eventId], references: [id], onDelete: Cascade)
+  currentFor  Event?              @relation("EventCurrentJudgingRound")
+  criteria    JudgingCriterion[]
+  assignments JudgeAssignment[]
+  reviews     JudgeReview[]
+  entries     JudgingRoundEntry[]
+  panel       JudgingRoundJudge[]
+  assignmentRuns JudgingAssignmentRun[]
+  finalistNotices JudgingFinalistNotice[]
+  reimbursementPolicies ReimbursementPolicy[]
+  countedReviews JudgingRoundCountedReview[]
+
+  @@unique([eventId, position])
+  @@index([eventId, status])
+}
+
+/// The reviews a finalised round counted (docs/HACKATHON.md "Finalising"),
+/// written when the round is finalised and removed when it is unfinalised, so
+/// its results, CSV and advancement stay as finalised even when judge grants,
+/// panels or conflicts change later. Keyed by ids rather than foreign keys to
+/// the submission and judge, so a deletion undo finds its rows again.
+model JudgingRoundCountedReview {
+  roundId      String
+  submissionId String
+  judgeUserId  String
+
+  round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@id([roundId, submissionId, judgeUserId])
+}
+
+/// A project advanced into an ADVANCED round. Written only while the round is
+/// DRAFT (frozen once it opens); the submission must belong to the round's
+/// event (trigger). `sourceRank` is its rank in the previous round, if any.
+model JudgingRoundEntry {
+  id               String   @id @default(cuid())
+  roundId          String
+  submissionId     String
+  advancedByUserId String?
+  advancedAt       DateTime @default(now())
+  sourceRank       Int?
+
+  round      JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  submission Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  advancedBy User?        @relation("JudgingRoundEntryAdvancedBy", fields: [advancedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([roundId, submissionId])
+  @@index([submissionId])
+}
+
+/// An optional per-round judging panel. A round with no rows is judged by
+/// everyone who can judge the event; with rows, only these people (who must
+/// still hold a JUDGE grant or be an organisation owner/admin) judge it.
+model JudgingRoundJudge {
+  id        String   @id @default(cuid())
+  roundId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, userId])
+  @@index([userId])
+}
+
+/// An award category (e.g. "Overall winner"). Winners are assigned manually.
+model EventAward {
+  id          String   @id @default(cuid())
+  eventId     String
+  /// Up to 80 characters.
+  name        String
+  /// Up to 500 characters.
+  description String   @default("")
+  position    Int      @default(0)
+  /// Prize money per winner, in minor units of the event's currency; null is none.
+  prizeMinor  BigInt?
+  createdAt   DateTime @default(now())
+
+  event   Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  winners EventAwardWinner[]
+  payouts PrizePayout[]
+
+  @@index([eventId, position])
+}
+
+/// A winning submission for an award, by place (1 or more). One submission per
+/// place and at most one place per submission in each award.
+model EventAwardWinner {
+  id           String   @id @default(cuid())
+  awardId      String
+  submissionId String
+  place        Int      @default(1)
+  createdAt    DateTime @default(now())
+
+  award      EventAward @relation(fields: [awardId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([awardId, place])
+  @@unique([awardId, submissionId])
+  @@index([submissionId])
+}
+
+/// Prize money paid to an award winner, recorded by an owner or admin
+/// (docs/HACKATHON.md). Append-only (database trigger): only the references
+/// may be cleared when what they point at is deleted. A mistake is undone by a
+/// reversal row (`reversesId`), at most one per payout. Names are copied so
+/// the record survives the award or project being deleted.
+model PrizePayout {
+  id               String               @id @default(cuid())
+  organisationId   String
+  eventId          String?
+  awardId          String?
+  submissionId     String?
+  awardName        String
+  projectTitle     String
+  recipientName    String
+  amountMinor      BigInt
+  currency         String
+  method           OfflinePaymentMethod
+  reference        String?
+  note             String               @default("")
+  paidAt           DateTime
+  reversesId       String?              @unique
+  recordedByUserId String?
+  createdAt        DateTime             @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?       @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  award        EventAward?  @relation(fields: [awardId], references: [id], onDelete: SetNull)
+  submission   Submission?  @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  reverses     PrizePayout? @relation("PrizePayoutReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy   PrizePayout? @relation("PrizePayoutReversal")
+  recordedBy   User?        @relation("PrizePayoutRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([awardId])
+  @@index([submissionId])
+}
+
+/// Who an expense claim is from (docs/FINANCE.md).
+enum ExpenseClaimKind {
+  /// Organisation members and event co-organisers, for themselves or on behalf of a speaker or volunteer.
+  STAFF
+  /// A registered participant, from their ticket page (travel grants).
+  PARTICIPANT
+  /// An event crew member, from their crew ticket page (docs/CREW.md), when
+  /// Event.crewClaimsEnabled is on. No cap; owners and admins approve.
+  CREW
+}
+
+enum ExpenseClaimStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  /// Paid out: a ClaimPayout row records how.
+  PAID
+  /// Taken back by its claimant before a decision.
+  WITHDRAWN
+}
+
+enum ExpenseCategory {
+  TRAVEL
+  ACCOMMODATION
+  FOOD
+  VENUE
+  EQUIPMENT
+  PRINTING
+  MARKETING
+  SUPPLIES
+  OTHER
+}
+
+/// A request to be paid back for money spent on an event. Owners and admins
+/// approve (up to the amount asked), reject, and pay; every step is audited.
+/// Names and the event title are copied so the record outlives the event.
+model ExpenseClaim {
+  id                String             @id @default(cuid())
+  organisationId    String
+  eventId           String?
+  eventTitle        String
+  kind              ExpenseClaimKind
+  status            ExpenseClaimStatus @default(SUBMITTED)
+  submittedByUserId String?
+  /// PARTICIPANT claims: the registration that made it.
+  rsvpId            String?
+  payeeName         String
+  payeeEmail        String
+  category          ExpenseCategory
+  description       String
+  amountMinor       BigInt
+  approvedMinor     BigInt?
+  currency          String
+  /// Why it was rejected, or a note with the approval; shown to the claimant.
+  decisionNote      String             @default("")
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  /// Claims under a reimbursement policy (docs/FINANCE.md "Reimbursement
+  /// policies"); null for general participant, crew and staff claims. A
+  /// policy with claims can only be closed, never deleted.
+  policyId          String?
+  /// The policy terms frozen when the claim was filed, and the eligibility
+  /// evaluated then and again at approval (lib/claims/policies/snapshot.ts).
+  eligibilitySnapshot Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  organisation Organisation     @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  policy       ReimbursementPolicy? @relation(fields: [policyId], references: [id], onDelete: NoAction)
+  submittedBy  User?            @relation("ExpenseClaimSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  decidedBy    User?            @relation("ExpenseClaimDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  rsvp         RSVP?            @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
+  receipts     ExpenseReceipt[]
+  payouts      ClaimPayout[]
+
+  @@index([eventId, status, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([submittedByUserId])
+  @@index([rsvpId])
+  @@index([policyId, status])
+  @@index([rsvpId, policyId])
+}
+
+/// A photo of a receipt, re-encoded as WebP and kept in private storage
+/// (Asset key `organisations/{id}/claim-receipts/{uuid}.webp`), served only to
+/// the organisation's owners and admins and the claimant.
+model ExpenseReceipt {
+  id         String   @id @default(cuid())
+  claimId    String
+  storageKey String   @unique
+  byteSize   Int
+  createdAt  DateTime @default(now())
+
+  claim ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+}
+
+/// Money paid back on an approved claim. Append-only like PrizePayout: only
+/// references may be cleared, and a mistake is undone with a reversal row.
+model ClaimPayout {
+  id               String               @id @default(cuid())
+  organisationId   String
+  eventId          String?
+  claimId          String?
+  payeeName        String
+  amountMinor      BigInt
+  currency         String
+  method           OfflinePaymentMethod
+  reference        String?
+  note             String               @default("")
+  paidAt           DateTime
+  reversesId       String?              @unique
+  recordedByUserId String?
+  createdAt        DateTime             @default(now())
+
+  organisation Organisation  @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  claim        ExpenseClaim? @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  reverses     ClaimPayout?  @relation("ClaimPayoutReversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy   ClaimPayout?  @relation("ClaimPayoutReversal")
+  recordedBy   User?         @relation("ClaimPayoutRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, createdAt])
+  @@index([organisationId, createdAt])
+  @@index([claimId])
+}
+
+/// Who a reimbursement policy is for (docs/FINANCE.md "Reimbursement
+/// policies"). Each kind has one resolver in lib/claims/policies/eligibility/,
+/// and a CHECK keeps exactly its own stage id set.
+enum ReimbursementEligibility {
+  /// Every confirmed (non-crew) participant.
+  CONFIRMED_PARTICIPANT
+  /// Every confirmed crew member (docs/CREW.md).
+  CREW
+  /// Participants whose team's or own project has a JudgingRoundEntry in
+  /// `judgingRoundId` and is not withdrawn or disqualified.
+  JUDGING_ROUND_ENTRY
+  /// Participants whose team took part in `mentoringRoundId` (a submitted,
+  /// non-away Mentor Desk check-in).
+  MENTORING_ROUND
+  /// Participants whose application (their team's, or their own when solo)
+  /// reached `admissionStageId` and has been accepted (ACCEPTED only).
+  ADMISSION_STAGE
+}
+
+/// A per-stage reimbursement policy of one event: who may claim, the most
+/// each person gets back, which categories, when, whether they must have
+/// checked in, and an optional budget for the whole policy. Claims freeze
+/// these terms when filed (ExpenseClaim.eligibilitySnapshot). CHECKs keep the
+/// stage ids to their eligibility kind, positive amounts and the window
+/// order; a trigger keeps the stage in the policy's event.
+model ReimbursementPolicy {
+  id                        String                   @id @default(cuid())
+  eventId                   String
+  /// Up to 80 characters.
+  name                      String
+  eligibility               ReimbursementEligibility
+  judgingRoundId            String?
+  mentoringRoundId          String?
+  /// JUDGING_ROUND_ENTRY only: claims open once the round's finalists are published.
+  requireFinalistsPublished Boolean                  @default(false)
+  /// CREW only: limit to these crew kinds (docs/VOLUNTEERS.md); empty is every crew member.
+  crewKinds                 CrewKind[]               @default([])
+  admissionStageId          String?
+  capPerPersonMinor         BigInt
+  /// At least one.
+  categories                ExpenseCategory[]
+  claimOpensAt              DateTime?
+  claimClosesAt             DateTime?
+  attendanceRequired        Boolean                  @default(false)
+  /// The most the policy pays in all (waiting plus approved claims); null is no limit.
+  budgetMinor               BigInt?
+  /// Closed policies take no new claims; their claims are still decided.
+  active                    Boolean                  @default(true)
+  /// Email each person once when the policy becomes available to them.
+  notifyWhenAvailable       Boolean                  @default(false)
+  /// When the beat last looked for people to email under this policy; the
+  /// pass takes the longest-unchecked policies first so none starves.
+  noticesCheckedAt          DateTime?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  event          Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  judgingRound   JudgingRound?         @relation(fields: [judgingRoundId], references: [id], onDelete: NoAction)
+  mentoringRound MentoringRound?       @relation(fields: [mentoringRoundId], references: [id], onDelete: NoAction)
+  admissionStage AdmissionStage?       @relation(fields: [admissionStageId], references: [id], onDelete: NoAction)
+  claims         ExpenseClaim[]
+  notices        ReimbursementNotice[]
+
+  @@index([eventId, active])
+  @@index([judgingRoundId])
+  @@index([mentoringRoundId])
+  @@index([admissionStageId])
+}
+
+/// "A reimbursement is available to you" was queued for this registration
+/// under this policy: at most once each (the beat's dedupe).
+model ReimbursementNotice {
+  id        String   @id @default(cuid())
+  policyId  String
+  rsvpId    String
+  createdAt DateTime @default(now())
+
+  policy ReimbursementPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  rsvp   RSVP                @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, rsvpId])
+  @@index([rsvpId])
+}
+
+enum RefundRequestStatus {
+  OPEN
+  APPROVED
+  DECLINED
+  WITHDRAWN
+}
+
+/// A buyer asking for money back outside the automatic refund policy. An
+/// owner or admin approves (running the normal refund, in full or in part,
+/// optionally cancelling the tickets) or declines with a reason. At most one
+/// open request per order (partial unique index).
+model RefundRequest {
+  id              String              @id @default(cuid())
+  organisationId  String
+  orderId         String
+  status          RefundRequestStatus @default(OPEN)
+  reason          String
+  approvedMinor   BigInt?
+  cancelTickets   Boolean             @default(false)
+  decisionNote    String              @default("")
+  decidedByUserId String?
+  decidedAt       DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  decidedBy    User?        @relation("RefundRequestDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  /// A guest's "No" to attendance confirmation that opened this request (docs/ATTENDANCE.md).
+  attendanceChecks AttendanceCheck[]
+
+  @@index([orderId, status])
+  @@index([organisationId, status, createdAt])
+}
+
+/// A ticket design (docs/TICKET_DESIGNER.md): a canvas of text, images,
+/// shapes, merge fields and exactly one check-in QR code, validated by
+/// lib/ticketDesign/schema.ts on every write. Without an event it is a
+/// template in the organisation's library (owners and admins edit it); with
+/// one it belongs to that event (EDIT_DETAILS edits it) and can be the event's
+/// design or a ticket type's.
+model TicketDesign {
+  id             String   @id @default(cuid())
+  organisationId String
+  eventId        String?
+  name           String
+  document       Json
+  updatedById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation  @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  event        Event?        @relation("TicketDesignEvent", fields: [eventId], references: [id], onDelete: Cascade)
+  updatedBy    User?         @relation("TicketDesignUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  usedByEvent  Event?        @relation("EventTicketDesign")
+  usedByTypes  TicketType[]  @relation("TicketTypeDesign")
+  defaultFor   Organisation? @relation("OrganisationDefaultTicketDesign")
+
+  @@index([organisationId, eventId, updatedAt])
+  @@index([eventId])
+}
+
+/// A volunteer shift (docs/VOLUNTEERS.md): a duty window with a zone, a task
+/// and a number of places. `capacity` 0 means no limit. CHECK constraints
+/// keep the window ordered, the sign-up deadline at or before the start and
+/// the check-in grace within an hour.
+model VolunteerShift {
+  id               String   @id @default(cuid())
+  eventId          String
+  title            String
+  zone             String   @default("")
+  task             String   @default("")
+  startsAt         DateTime
+  endsAt           DateTime
+  capacity         Int      @default(0)
+  signupDeadline   DateTime
+  waitlistEnabled  Boolean  @default(true)
+  requiresApproval Boolean  @default(true)
+  graceMinutes     Int      @default(15)
+  /// Closed shifts take no sign-ups, approvals or promotions.
+  closed           Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  event   Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  signups VolunteerShiftSignup[]
+
+  @@index([eventId, startsAt])
+}
+
+enum VolunteerSignupStatus {
+  APPLIED
+  WAITLISTED
+  APPROVED
+  WITHDRAWN
+  DECLINED
+}
+
+enum VolunteerAttendanceState {
+  SCHEDULED
+  CHECKED_IN
+  CHECKED_OUT
+  NO_SHOW
+}
+
+/// One crew member's place on one shift, and their shift attendance (never
+/// the event check-in). The waitlist is FIFO by `queuedAt`.
+model VolunteerShiftSignup {
+  id                String                   @id @default(cuid())
+  eventId           String
+  shiftId           String
+  crewMemberId      String
+  status            VolunteerSignupStatus    @default(APPLIED)
+  queuedAt          DateTime                 @default(now())
+  approvedAt        DateTime?
+  /// Who approved, or null for an automatic approval or promotion.
+  approvedByUserId  String?
+  attendance        VolunteerAttendanceState @default(SCHEDULED)
+  checkedInAt       DateTime?
+  checkedOutAt      DateTime?
+  breakMinutes      Int                      @default(0)
+  /// "self" or "desk".
+  attendanceSource  String?
+  attendanceActorId String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  shift       VolunteerShift                  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  crewMember  EventCrewMember                 @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  hours       VolunteerHours?
+  corrections VolunteerAttendanceCorrection[]
+
+  @@unique([shiftId, crewMemberId])
+  @@index([eventId, crewMemberId])
+  @@index([shiftId, status, queuedAt])
+}
+
+/// A desk-entered attendance time and its reason. Append-only (trigger).
+model VolunteerAttendanceCorrection {
+  id          String   @id @default(cuid())
+  eventId     String
+  signupId    String
+  actorUserId String?
+  /// "check-in" or "check-out".
+  action      String
+  occurredAt  DateTime
+  reason      String
+  createdAt   DateTime @default(now())
+
+  signup VolunteerShiftSignup @relation(fields: [signupId], references: [id], onDelete: Cascade)
+
+  @@index([signupId])
+}
+
+enum VolunteerHoursState {
+  PENDING
+  VERIFIED
+  ADJUSTED
+}
+
+/// Counted minutes for one checked-out sign-up. Leaves PENDING, or changes,
+/// only with a matching VolunteerHoursEntry (`volunteer_hours_guard` trigger).
+model VolunteerHours {
+  id        String              @id @default(cuid())
+  eventId   String
+  signupId  String              @unique
+  minutes   Int
+  state     VolunteerHoursState @default(PENDING)
+  version   Int                 @default(0)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  signup  VolunteerShiftSignup  @relation(fields: [signupId], references: [id], onDelete: Cascade)
+  entries VolunteerHoursEntry[]
+
+  @@index([eventId])
+}
+
+enum VolunteerHoursEntryKind {
+  VERIFIED
+  ADJUSTED
+}
+
+/// Append-only verification history (trigger). The actor is never the volunteer.
+model VolunteerHoursEntry {
+  id              String                  @id @default(cuid())
+  eventId         String
+  hoursId         String
+  actorUserId     String
+  previousVersion Int
+  minutes         Int
+  kind            VolunteerHoursEntryKind
+  reason          String                  @default("")
+  createdAt       DateTime                @default(now())
+
+  hours VolunteerHours @relation(fields: [hoursId], references: [id], onDelete: Cascade)
+
+  @@unique([hoursId, previousVersion])
+}
+
+/// A thank-you certificate for a crew member (docs/VOLUNTEERS.md). Snapshots
+/// the role, verified minutes and design at issue; revoked when hours change.
+/// At most one live certificate per crew member (partial unique index).
+model ContributorCertificate {
+  id             String    @id @default(cuid())
+  eventId        String
+  crewMemberId   String
+  /// Bearer capability for the download link.
+  token          String    @unique
+  role           String
+  kind           CrewKind
+  minutes        Int
+  template       Json?
+  issuedAt       DateTime  @default(now())
+  issuedByUserId String?
+  revokedAt      DateTime?
+  revokedReason  String?
+
+  crewMember EventCrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([crewMemberId])
+}
+
+// ---------------------------------------------------------------------------
+// Mentor Desk (docs/MENTOR_DESK.md), ported from the Space Works platform
+// design. Every row is keyed by its event; the organisation is reached through
+// the event. CHECK constraints, partial unique indexes and the append-only
+// triggers live in prisma/migrations/20261113000000_mentor_desk.
+// ---------------------------------------------------------------------------
+
+enum HelpRequestStatus {
+  OPEN
+  CLAIMED
+  RESOLVED
+  CANCELLED
+  EXPIRED
+}
+
+enum HelpRequestOrigin {
+  TEAM
+  MENTOR
+  ROUND
+}
+
+enum MentorAssignmentMode {
+  MANUAL
+  ROUND_ROBIN
+  SKILL_MATCH
+  RANDOM
+}
+
+enum MentorAssignmentStatus {
+  PROPOSED
+  ACTIVE
+  ENDED
+}
+
+enum MentorConflictKind {
+  DECLARED
+  AFFILIATION
+}
+
+enum MentoringRoundStatus {
+  DRAFT
+  LIVE
+  CLOSED
+  SKIPPED
+}
+
+enum OfficeHourBookingStatus {
+  BOOKED
+  CANCELLED
+}
+
+/// A MENTOR grant holder's profile on one event, created when the grant is
+/// accepted. `affiliation` is private to organisers and the mentor;
+/// `availability` is a list of UTC windows inside the event
+/// ([{"startsAt","endsAt"}]); outside them the mentor is off shift. CHECK:
+/// 1 <= maxActiveTeams <= 100, at most 8 skills.
+model MentorProfile {
+  id             String   @id @default(cuid())
+  eventId        String
+  userId         String
+  skills         String[] @default([])
+  bio            String   @default("")
+  affiliation    String   @default("")
+  availability   Json     @default("[]")
+  maxActiveTeams Int      @default(4)
+  showOnPage     Boolean  @default(false)
+  /// The crew place created for this mentor by `mentorsGetCrewTicket`; only
+  /// such a place is removed with the grant.
+  crewMemberId   String?  @unique
+  version        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event      Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  crewMember EventCrewMember? @relation(fields: [crewMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, userId])
+}
+
+/// A help category with its queue policy. CHECK: openLimit 1..10 per team,
+/// claimMinutes 1..60, expiryMinutes 15..10080. The key never changes.
+model HelpCategory {
+  id            String   @id @default(cuid())
+  eventId       String
+  key           String
+  label         String
+  skillTags     String[] @default([])
+  priority      Int      @default(0)
+  openLimit     Int      @default(1)
+  claimMinutes  Int      @default(10)
+  expiryMinutes Int      @default(240)
+  contactNote   String   @default("")
+  position      Int      @default(0)
+  active        Boolean  @default(true)
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  event    Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  requests HelpRequest[]
+
+  @@unique([eventId, key])
+}
+
+/// One help request from a team or a solo registration (CHECK: exactly one).
+/// OPEN -> CLAIMED -> RESOLVED, or CANCELLED/EXPIRED. A claim is a lease
+/// (claimId, claimGeneration, claimExpiresAt; CHECK keeps the claim shape) and
+/// a mentor holds at most one claim per event (partial unique index). The
+/// deadline is min(expiresAt, event end), checked inside every command.
+model HelpRequest {
+  id              String            @id @default(cuid())
+  eventId         String
+  categoryId      String
+  teamId          String?
+  rsvpId          String?
+  raisedByUserId  String?
+  origin          HelpRequestOrigin
+  roundId         String?
+  /// Up to 1000 characters. Private: never in webhooks, chat or audit metadata.
+  summary         String
+  location        String            @default("")
+  status          HelpRequestStatus @default(OPEN)
+  priority        Int               @default(0)
+  claimedByUserId String?
+  claimId         String?
+  claimGeneration Int               @default(0)
+  claimExpiresAt  DateTime?
+  openGeneration  Int               @default(1)
+  /// Assigned mentors have the request to themselves until then.
+  exclusiveUntil  DateTime
+  expiresAt       DateTime
+  lastOpenedAt    DateTime          @default(now())
+  firstClaimedAt  DateTime?
+  lastClaimedAt   DateTime?
+  resolvedAt      DateTime?
+  cancelledAt     DateTime?
+  /// The team's 1..5 rating once resolved.
+  rating          Int?
+  dedupKey        String            @default("")
+  version         Int               @default(1)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  event      Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category   HelpCategory          @relation(fields: [categoryId], references: [id], onDelete: NoAction)
+  team       Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  rsvp       RSVP?                 @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  raisedBy   User?                 @relation("HelpRequestRaisedBy", fields: [raisedByUserId], references: [id], onDelete: SetNull)
+  claimedBy  User?                 @relation("HelpRequestClaimedBy", fields: [claimedByUserId], references: [id], onDelete: NoAction)
+  round      MentoringRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  activities HelpRequestActivity[]
+  comments   HelpRequestComment[]
+
+  @@index([eventId, status, priority, createdAt])
+  @@index([teamId, status])
+  @@index([rsvpId, status])
+  @@index([status, expiresAt])
+}
+
+/// Append-only history of a help request (trigger); only the actor may be cleared.
+model HelpRequestActivity {
+  id          String   @id @default(cuid())
+  requestId   String
+  eventId     String
+  actorUserId String?
+  kind        String
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+
+  request HelpRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+}
+
+/// Append-only comment on an open or claimed request (trigger), 1..2000 characters.
+model HelpRequestComment {
+  id           String   @id @default(cuid())
+  requestId    String
+  eventId      String
+  authorUserId String?
+  /// "TEAM" or "MENTOR".
+  origin       String
+  body         String
+  createdAt    DateTime @default(now())
+
+  request HelpRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User?       @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+}
+
+/// An applied assignment run (append-only): every decision and every team
+/// left uncovered. RANDOM runs keep their seed so the result can be replayed.
+model MentorAssignmentRun {
+  id               String               @id @default(cuid())
+  eventId          String
+  roundId          String?
+  mode             MentorAssignmentMode
+  seed             String?
+  inputFingerprint String
+  decisions        Json
+  uncoveredTeamIds String[]             @default([])
+  createdByUserId  String?
+  createdAt        DateTime             @default(now())
+
+  event       Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round       MentoringRound?        @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  createdBy   User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignments MentorTeamAssignment[]
+
+  @@index([eventId, createdAt])
+}
+
+/// A mentor looking after a team, event-wide (no round) or for one round.
+/// PROPOSED -> ACTIVE -> ENDED (CHECK keeps endedAt with ENDED). One live
+/// mapping per mentor, team and round scope (partial unique index).
+model MentorTeamAssignment {
+  id              String                 @id @default(cuid())
+  eventId         String
+  roundId         String?
+  mentorUserId    String
+  teamId          String
+  mode            MentorAssignmentMode
+  status          MentorAssignmentStatus @default(ACTIVE)
+  runId           String?
+  /// An organiser changed this mapping by hand after a run.
+  manualOverride  Boolean                @default(false)
+  activeFrom      DateTime               @default(now())
+  /// Set when the mapping first becomes ACTIVE. Only activated mappings count
+  /// as "mentored" (judging conflicts, fresh eyes); a rejected proposal never does.
+  activatedAt     DateTime?
+  endedAt         DateTime?
+  createdByUserId String?
+  version         Int                    @default(1)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  event     Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round     MentoringRound?      @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  mentor    User                 @relation("MentorAssignmentMentor", fields: [mentorUserId], references: [id], onDelete: Cascade)
+  team      Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  run       MentorAssignmentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  createdBy User?                @relation("MentorAssignmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+  @@index([mentorUserId, status])
+  @@index([teamId])
+}
+
+/// A declared or affiliation conflict between a mentor and a team (one live
+/// row per kind, partial unique index). Team membership always conflicts.
+model MentorConflict {
+  id           String             @id @default(cuid())
+  eventId      String
+  mentorUserId String
+  teamId       String
+  kind         MentorConflictKind
+  reason       String             @default("")
+  /// Who recorded it: a mentor clears only conflicts they declared themselves.
+  createdByUserId String?
+  active       Boolean            @default(true)
+  version      Int                @default(1)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  event  Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mentor    User  @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+  team      Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("MentorConflictCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, mentorUserId])
+  @@index([teamId])
+}
+
+/// A mentor's office-hour slot. CHECK: endsAt > startsAt, capacity 1..50,
+/// bookingDeadline <= startsAt.
+model OfficeHourSlot {
+  id              String    @id @default(cuid())
+  eventId         String
+  mentorUserId    String
+  startsAt        DateTime
+  endsAt          DateTime
+  location        String    @default("")
+  capacity        Int       @default(1)
+  bookingDeadline DateTime
+  cancelledAt     DateTime?
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  event    Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mentor   User                @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+  bookings OfficeHourBooking[]
+  changes  OfficeHourChange[]
+
+  @@index([eventId, startsAt])
+  @@index([mentorUserId, startsAt])
+}
+
+/// A team's place in an office-hour slot; one live booking per slot and team.
+model OfficeHourBooking {
+  id             String                  @id @default(cuid())
+  eventId        String
+  slotId         String
+  teamId         String
+  bookedByUserId String?
+  status         OfficeHourBookingStatus @default(BOOKED)
+  cancelReason   String?
+  createdAt      DateTime                @default(now())
+  cancelledAt    DateTime?
+
+  slot     OfficeHourSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  team     Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  bookedBy User?          @relation(fields: [bookedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+  @@index([teamId, status])
+}
+
+/// Append-only log of office-hour schedule changes, each with a reason.
+model OfficeHourChange {
+  id          String   @id @default(cuid())
+  eventId     String
+  slotId      String
+  actorUserId String?
+  reason      String
+  oldSchedule Json
+  newSchedule Json
+  createdAt   DateTime @default(now())
+
+  slot  OfficeHourSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  actor User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([slotId, createdAt])
+}
+
+/// A mentoring round (stage): team check-in visits, never judging. At most
+/// one LIVE round per event (partial unique index). The form, triggers and
+/// overrides are frozen once the round leaves DRAFT. With no
+/// MentoringRoundMentor rows every eligible mentor takes part.
+model MentoringRound {
+  id                     String               @id @default(cuid())
+  eventId                String
+  position               Int
+  label                  String
+  opensAt                DateTime
+  closesAt               DateTime
+  status                 MentoringRoundStatus @default(DRAFT)
+  formSchema             Json                 @default("[]")
+  formVersion            Int                  @default(1)
+  helpTriggerRules       Json                 @default("[]")
+  allowFreshEyesOverride Boolean              @default(false)
+  allowConflictOverride  Boolean              @default(false)
+  /// Never assign a mentor to a team they mentored in an earlier round.
+  freshEyesAcrossStages  Boolean              @default(false)
+  version                Int                  @default(1)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  event          Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mentors        MentoringRoundMentor[]
+  visits         MentoringVisit[]
+  checkIns       MentoringCheckIn[]
+  nominations    MentorNomination[]
+  assignments    MentorTeamAssignment[]
+  assignmentRuns MentorAssignmentRun[]
+  helpRequests   HelpRequest[]
+  reimbursementPolicies ReimbursementPolicy[]
+
+  @@unique([eventId, position])
+}
+
+/// The organiser-chosen mentor pool of one round.
+model MentoringRoundMentor {
+  id           String   @id @default(cuid())
+  roundId      String
+  mentorUserId String
+  createdAt    DateTime @default(now())
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, mentorUserId])
+}
+
+/// The 10-minute heartbeat lease on a team during a round visit.
+model MentoringVisit {
+  id             String   @id @default(cuid())
+  eventId        String
+  roundId        String
+  teamId         String
+  mentorUserId   String
+  leaseId        String
+  generation     Int      @default(1)
+  expiresAt      DateTime
+  heartbeatAt    DateTime
+  startedAt      DateTime
+  overrideReason String   @default("")
+  version        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team   Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, teamId])
+}
+
+/// One submitted check-in per team and round (append-only), possibly "away".
+model MentoringCheckIn {
+  id             String   @id @default(cuid())
+  eventId        String
+  roundId        String
+  teamId         String
+  mentorUserId   String
+  formSnapshot   Json
+  answers        Json
+  overrideReason String   @default("")
+  away           Boolean  @default(false)
+  startedAt      DateTime
+  submittedAt    DateTime
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team   Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, teamId])
+  @@index([eventId, mentorUserId])
+}
+
+/// A mentor's private advisory nomination after a real (non-away) visit.
+/// Organisers see it as a shortlist signal; it never enters judging scores.
+model MentorNomination {
+  id           String   @id @default(cuid())
+  eventId      String
+  roundId      String
+  teamId       String
+  mentorUserId String
+  createdAt    DateTime @default(now())
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team   Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, mentorUserId, teamId])
+  @@index([eventId])
+}
+
+/// One applied automatic assignment of a round (docs/HACKATHON.md "Rounds"):
+/// the strategy, the RANDOM seed, the target, and fingerprints of the inputs
+/// and of the plan, so a run can be explained and reproduced. CHECK
+/// constraints keep `mode` to keep/replace, a seed exactly for RANDOM runs
+/// (32 hex characters) and the counts non-negative.
+model JudgingAssignmentRun {
+  id               String                  @id @default(cuid())
+  roundId          String
+  strategy         JudgeAssignmentStrategy
+  /// "keep" or "replace".
+  mode             String
+  seed             String?
+  perProject       Int
+  judges           Int
+  added            Int
+  removed          Int
+  adopted          Int
+  inputFingerprint String
+  planFingerprint  String
+  createdByUserId  String?
+  createdAt        DateTime                @default(now())
+
+  round     JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("JudgingAssignmentRunBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([roundId, createdAt])
+}
+
+/// Who has been told about a round's finalists (docs/HACKATHON.md "Rounds"):
+/// one row per round and recipient, kept after the outbox row is delivered and
+/// cleaned up, so republishing never emails anyone twice. Only a SHA-256 of
+/// the lowercased address is stored (64 hex characters, CHECK).
+/// `outboxMessageId` names the queued email, so an unpublish that withdraws it
+/// undelivered can forget the recipient again.
+model JudgingFinalistNotice {
+  id              String   @id @default(cuid())
+  roundId         String
+  emailHash       String
+  outboxMessageId String?
+  createdAt       DateTime @default(now())
+
+  round JudgingRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, emailHash])
+}
+
+/// One review stage of an event's applications (docs/ADMISSION.md), in order.
+/// Every application enters stage 1; later stages hold only the applications
+/// advanced into them (AdmissionStageEntry). Reviewers review only while a
+/// stage is OPEN. CHECKs keep the name 1..80 characters, the position >= 1,
+/// reviewsPerApplication 1..20, at most 10 criteria and the window ordered.
+model AdmissionStage {
+  id                    String               @id @default(cuid())
+  eventId               String
+  position              Int
+  name                  String
+  status                AdmissionStageStatus @default(DRAFT)
+  /// Counted reviews an application needs here before a decision is released
+  /// without an override reason.
+  reviewsPerApplication Int                  @default(1)
+  /// Reviewers don't see who applied (names, emails, phone numbers, team names).
+  blindReview           Boolean              @default(false)
+  /// Fresh eyes: nobody reviews an application here that they reviewed in
+  /// an earlier stage (assignment, manual assign and reviewing all refuse
+  /// it). Fixed once the stage leaves DRAFT or has assignments or reviews.
+  freshEyes             Boolean              @default(false)
+  /// What reviewers score, each 1..5; none means one overall score.
+  criteria              String[]             @default([])
+  /// Up to 2000 characters shown to reviewers.
+  guidance              String               @default("")
+  opensAt               DateTime?
+  closesAt              DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  event       Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  entries     AdmissionStageEntry[]
+  currentFor  AdmissionApplication[]      @relation("AdmissionCurrentStage")
+  panel       AdmissionStageReviewer[]
+  assignments AdmissionReviewAssignment[]
+  reviews     AdmissionReview[]
+  runs        AdmissionAssignmentRun[]
+  decisions   AdmissionDecision[]
+  reimbursementPolicies ReimbursementPolicy[]
+
+  @@unique([eventId, position])
+}
+
+/// One application: a team, or a solo registration (CHECK exactly one, each
+/// unique; a trigger keeps it on its event and never on a crew ticket). Made
+/// by a trigger when the registration is created on an admission event.
+/// `version` changes with every state change, so a drafted decision can't be
+/// released over a newer state; `decisionRevision` counts released decisions,
+/// so an outdated email is dropped.
+model AdmissionApplication {
+  id                  String          @id @default(cuid())
+  eventId             String
+  rsvpId              String?         @unique
+  teamId              String?         @unique
+  status              AdmissionStatus @default(IN_REVIEW)
+  /// The latest stage it reached (the stage it is reviewed in now).
+  currentStageId      String?
+  submittedAt         DateTime        @default(now())
+  offeredAt           DateTime?
+  /// OFFERED: accept by then, or the offer expires.
+  respondBy           DateTime?
+  offerReminderSentAt DateTime?
+  /// WAITLISTED: its place in the queue (first in, first offered).
+  queuedAt            DateTime?
+  /// Why promotion last passed over it (a full ticket type, an incomplete team).
+  skipReason          String?
+  decisionRevision    Int             @default(0)
+  /// Bumped when the answers change; reviews count only on the current answers.
+  answersRevision     Int             @default(1)
+  /// Set at the first released decision; answers can't change after.
+  answersLockedAt     DateTime?
+  version             Int             @default(1)
+  /// Who applied, kept when the registration or team is gone: the solo
+  /// registrant's or team's name (up to 200 characters; scrubbed when the
+  /// account is deleted), and one-way hashes ('h:' + SHA-256 hex) of every key
+  /// of everyone ever in it: attendee keys and 'guest:<email>' (one
+  /// application per person per event).
+  subjectName         String          @default("")
+  applicantKeys       String[]        @default([])
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @default(now()) @updatedAt
+
+  event           Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// SET NULL: a deleted registration or team withdraws and detaches its application (trigger).
+  rsvp            RSVP?                       @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
+  team            Team?                       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  currentStage    AdmissionStage?             @relation("AdmissionCurrentStage", fields: [currentStageId], references: [id], onDelete: SetNull)
+  entries         AdmissionStageEntry[]
+  assignments     AdmissionReviewAssignment[]
+  reviews         AdmissionReview[]
+  decisions       AdmissionDecision[]
+  answerRevisions AdmissionAnswerRevision[]
+  conflicts       AdmissionReviewConflict[]
+  statusEvents    AdmissionStatusEvent[]
+
+  @@index([eventId, status, queuedAt, id])
+  @@index([eventId, status, respondBy])
+  @@index([currentStageId, status])
+}
+
+/// An application reached a stage. Never updated (trigger); query it for
+/// "reached stage N" (applicationReachedStage in lib/admission/stages.ts).
+model AdmissionStageEntry {
+  id               String               @id @default(cuid())
+  stageId          String
+  applicationId    String
+  source           AdmissionEntrySource @default(ALL)
+  advancedByUserId String?
+  advancedAt       DateTime             @default(now())
+  /// Its rank in the previous stage when advanced, if the organiser gave one.
+  sourceRank       Int?
+
+  stage       AdmissionStage       @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  advancedBy  User?                @relation("AdmissionStageEntryAdvancedBy", fields: [advancedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([stageId, applicationId])
+  @@index([applicationId])
+}
+
+/// A stage's own reviewer panel. A stage with no rows is reviewed by every
+/// REVIEW_APPLICATIONS collaborator of the event; with rows, by these people
+/// (who must still hold the grant, or be organisation owners/admins).
+model AdmissionStageReviewer {
+  id        String   @id @default(cuid())
+  stageId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  stage AdmissionStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([stageId, userId])
+  @@index([userId])
+}
+
+/// A reviewer assigned an application in a stage. RECUSED stays (the pair is
+/// never assigned again); SUBMITTED once their review on the current answers is in.
+model AdmissionReviewAssignment {
+  id             String                    @id @default(cuid())
+  stageId        String
+  applicationId  String
+  reviewerUserId String
+  status         AdmissionAssignmentStatus @default(ASSIGNED)
+  /// The automatic run that made it, if any.
+  runId          String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @default(now()) @updatedAt
+
+  stage       AdmissionStage          @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  application AdmissionApplication    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer    User                    @relation(fields: [reviewerUserId], references: [id], onDelete: Cascade)
+  run         AdmissionAssignmentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  reviews     AdmissionReview[]
+
+  @@unique([stageId, applicationId, reviewerUserId])
+  @@index([reviewerUserId, status])
+  @@index([applicationId])
+}
+
+/// A submitted review: never updated (trigger). One per assignment and
+/// answers revision; `scores` maps each criterion (or "overall") to 1..5.
+model AdmissionReview {
+  id              String   @id @default(cuid())
+  /// Null once the assignment or the reviewer's account is gone; the review stays.
+  assignmentId    String?
+  stageId         String
+  applicationId   String
+  reviewerUserId  String?
+  answersRevision Int
+  scores          Json
+  /// Up to 2000 characters; organisers only.
+  notes           String   @default("")
+  createdAt       DateTime @default(now())
+
+  assignment  AdmissionReviewAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  stage       AdmissionStage             @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  application AdmissionApplication       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer    User?                      @relation(fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@unique([assignmentId, answersRevision])
+  @@index([applicationId, stageId])
+}
+
+/// A declared conflict of interest: the reviewer never reviews the application.
+model AdmissionReviewConflict {
+  id             String   @id @default(cuid())
+  eventId        String
+  reviewerUserId String
+  applicationId  String
+  /// "declared" (by the reviewer when recusing) or "organiser".
+  reason         String   @default("declared")
+  createdAt      DateTime @default(now())
+
+  event       Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  reviewer    User                 @relation(fields: [reviewerUserId], references: [id], onDelete: Cascade)
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewerUserId, applicationId])
+  @@index([eventId])
+}
+
+/// One applied automatic reviewer assignment of a stage, as JudgingAssignmentRun:
+/// the strategy, the RANDOM seed (CHECK: 32 hex characters exactly for RANDOM),
+/// the target and fingerprints of the inputs and the plan.
+model AdmissionAssignmentRun {
+  id               String                  @id @default(cuid())
+  stageId          String
+  strategy         JudgeAssignmentStrategy
+  /// "keep" or "replace".
+  mode             String
+  seed             String?
+  perApplication   Int
+  reviewers        Int
+  added            Int
+  removed          Int
+  inputFingerprint String
+  planFingerprint  String
+  createdByUserId  String?
+  createdAt        DateTime                @default(now())
+
+  stage       AdmissionStage              @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  createdBy   User?                       @relation("AdmissionAssignmentRunBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignments AdmissionReviewAssignment[]
+
+  @@index([stageId, createdAt])
+}
+
+/// Drafted decisions, released or cancelled as a whole (one DRAFT batch per
+/// event, partial unique index).
+model AdmissionDecisionBatch {
+  id               String               @id @default(cuid())
+  eventId          String
+  status           AdmissionBatchStatus @default(DRAFT)
+  releasedByUserId String?
+  releasedAt       DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime             @default(now())
+
+  event      Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  releasedBy User?               @relation("AdmissionBatchReleasedBy", fields: [releasedByUserId], references: [id], onDelete: SetNull)
+  decisions  AdmissionDecision[]
+
+  @@index([eventId, createdAt])
+}
+
+/// One drafted decision. Never updated once its batch is released (trigger).
+/// `expectedVersion` is the application's version when drafted; release
+/// refuses a decision whose application changed since. Without enough counted
+/// reviews, release needs `overrideReason`.
+model AdmissionDecision {
+  id              String                   @id @default(cuid())
+  batchId         String
+  applicationId   String
+  /// The stage the decision was made in.
+  stageId         String
+  outcome         AdmissionDecisionOutcome
+  expectedVersion Int
+  /// Up to 200 characters, organisers only.
+  note            String                   @default("")
+  /// Up to 500 characters; needed when the application is short of reviews.
+  overrideReason  String?
+  sourceRank      Int?
+  createdByUserId String?
+  createdAt       DateTime                 @default(now())
+
+  batch       AdmissionDecisionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  application AdmissionApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  stage       AdmissionStage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  createdBy   User?                  @relation("AdmissionDecisionBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([batchId, applicationId])
+  @@index([applicationId])
+}
+
+/// The answers an applicant replaced, kept whenever they edit them before
+/// the application locks. Never updated (trigger).
+model AdmissionAnswerRevision {
+  id              String   @id @default(cuid())
+  applicationId   String
+  /// Null once the registration is gone; the revision stays.
+  rsvpId          String?
+  /// The revision these answers belonged to.
+  answersRevision Int
+  /// Whose answers these are, kept when the registration goes: a hashed
+  /// person key ('h:' + SHA-256 hex of the attendee key; CHECK), for the
+  /// account export and account deletion.
+  personKey       String?
+  /// [{ fieldId, label, value }] as they were.
+  answers         Json
+  createdAt       DateTime @default(now())
+
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  rsvp        RSVP?                @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, createdAt])
+}
+
+/// Every status or stage change of an application, written by a trigger
+/// (also for changes made by other triggers, such as a settled payment) and
+/// turned into application.status_changed webhooks after commit
+/// (lib/admission/statusEvents.ts), which sets `emittedAt`.
+model AdmissionStatusEvent {
+  id             String           @id @default(cuid())
+  applicationId  String
+  eventId        String
+  status         AdmissionStatus
+  previousStatus AdmissionStatus?
+  stageId        String?
+  createdAt      DateTime         @default(now())
+  emittedAt      DateTime?
+
+  application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  /// Plus a partial index on createdAt WHERE emittedAt IS NULL (migration SQL): what is still to send.
+  @@index([applicationId, createdAt])
 }

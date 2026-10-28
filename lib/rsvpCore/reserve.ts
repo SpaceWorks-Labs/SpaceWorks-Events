@@ -1,12 +1,17 @@
-import { EventPrivacyType, EventStatus, Prisma, RsvpStatus } from "@prisma/client";
+import { EventPrivacyType, EventStatus, Prisma, RegistrationMode, RsvpStatus, SoloPolicy } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { enqueueRsvpConfirmation } from "@/lib/outbox";
+import { enqueueRsvpConfirmation, enqueueTeamCreated } from "@/lib/outbox";
+import type { TeamRegistrationIntent } from "@/lib/validators";
 import { noticeOrganisersOfRequest } from "@/lib/notices";
 import { notifyChatAbout } from "@/lib/chat/notify";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { lockSeriesDates } from "@/lib/payments/targets";
+import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import { RsvpTargetClosedError } from "./shared";
+import { admissionRegistrationRefusal } from "@/lib/admission/registration";
+import { placeTeamRegistration, TeamRegistrationError, type TeamEventSettings } from "./team";
 
 export function decideRsvpStatus(params: {
   capacity: number | null;
@@ -40,20 +45,31 @@ export async function reserveRsvp(params: {
   notification: { to: string; eventTitle: string };
   afterCreate?: (tx: Prisma.TransactionClient, rsvpId: string) => Promise<void>;
   enforceOpen?: boolean;
+  /** How to register on a TEAM event; omitted means solo. INDIVIDUAL events refuse team intents. */
+  team?: TeamRegistrationIntent;
+  /** Organiser manual add: a solo registration is allowed even on a TEAMS_ONLY event. */
+  allowSoloWithoutTeam?: boolean;
 }) {
-  return prisma.$transaction(async (tx) => {
+  const reservation = await prisma.$transaction(async (tx) => {
     let capacity = params.capacity;
     let privacyType = params.privacyType;
+    let teamEvent: TeamEventSettings | null = null;
     if ("eventId" in params.target) {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${params.target.eventId} FOR UPDATE`;
       const current = await tx.event.findUnique({
         where: { id: params.target.eventId },
-        select: { capacity: true, privacyType: true, status: true, endDateTime: true, registrationClosesAt: true, registrationLeadMinutes: true, startDateTime: true, page: { select: { isPublished: true } } },
+        select: { capacity: true, privacyType: true, status: true, endDateTime: true, registrationClosesAt: true, registrationLeadMinutes: true, startDateTime: true, registrationMode: true, teamMaxSize: true, soloPolicy: true, page: { select: { isPublished: true } } },
       });
       if (!current) throw new RsvpTargetClosedError();
       if (params.enforceOpen !== false && (current.status !== EventStatus.PUBLISHED || current.page?.isPublished !== true || current.endDateTime <= new Date() || isRegistrationClosed(current))) throw new RsvpTargetClosedError();
       capacity = current.capacity;
       privacyType = current.privacyType;
+      if (current.registrationMode === RegistrationMode.TEAM) teamEvent = current;
+      // A crew member already holds a free crew ticket (docs/CREW.md); a second registration would take a place.
+      if (await hasCrewEmail(tx, params.target.eventId, [params.notification.to])) throw new TeamRegistrationError(CREW_EMAIL_REFUSED);
+      // Applications (docs/ADMISSION.md): one per person per event.
+      const applied = await admissionRegistrationRefusal(tx, params.target.eventId, params.data.attendeeKey, [params.notification.to]);
+      if (applied) throw new TeamRegistrationError(applied);
     } else {
       // The series row, then the date: the same order every series path locks in.
       const date = await tx.eventInstance.findUnique({ where: { id: params.target.eventInstanceId }, select: { eventSeriesId: true } });
@@ -66,28 +82,44 @@ export async function reserveRsvp(params: {
       privacyType = current.series.privacyType;
     }
 
-    // Paid tickets still being paid for hold their seats too.
-    const confirmedCount = await tx.rSVP.count({
-      where: {
-        ...params.target,
-        ...seatTakingWhere(new Date()),
-      },
-    });
-    const status = decideRsvpStatus({
-      capacity,
-      confirmedCount,
-      privacyType,
-    });
+    const intent = params.team;
+    let status: RsvpStatus;
+    let team: { id: string; name: string; } | null = null;
+    let newTeamManageToken: string | null = null;
+    if (!teamEvent) {
+      if (intent && intent.mode !== "solo") throw new TeamRegistrationError("This event does not use team registration.");
+      // Paid tickets still being paid for hold their seats too.
+      const confirmedCount = await tx.rSVP.count({
+        where: {
+          ...params.target,
+          ...seatTakingWhere(new Date()),
+        },
+      });
+      status = decideRsvpStatus({ capacity, confirmedCount, privacyType });
+    } else {
+      // TEAM event (docs/TEAMS.md): capacity counts units, under the Event lock above.
+      ({ status, team, newTeamManageToken } = await placeTeamRegistration(tx, {
+        eventId: (params.target as { eventId: string; }).eventId, capacity, privacyType, settings: teamEvent, intent, allowSoloWithoutTeam: params.allowSoloWithoutTeam,
+      }));
+    }
     const rsvp = await tx.rSVP.create({
-      data: { ...params.data, status },
+      data: { ...params.data, status, teamId: team?.id ?? null },
       select: { id: true, checkInToken: true },
     });
+    if (team && newTeamManageToken) {
+      await tx.team.update({ where: { id: team.id }, data: { leaderRsvpId: rsvp.id } });
+      await enqueueTeamCreated(tx, { to: params.notification.to, teamId: team.id, manageToken: newTeamManageToken, reason: "created" });
+    }
     await enqueueRsvpConfirmation(tx, {
       to: params.notification.to,
       eventTitle: params.notification.eventTitle,
       status,
       checkInToken: rsvp.checkInToken,
+      ...(team ? { teamName: team.name } : {}),
     });
+    if (teamEvent && intent?.mode === "solo" && intent.seeker && teamEvent.soloPolicy === SoloPolicy.SOLO_WITH_MATCHING) {
+      await tx.teamSeekerProfile.create({ data: { rsvpId: rsvp.id, headline: intent.seeker.headline, skills: intent.seeker.skills, visible: true } });
+    }
     if (status === RsvpStatus.PENDING_APPROVAL) await noticeOrganisersOfRequest(tx, params.target);
     else {
       const who = (typeof params.data.guestName === "string" && params.data.guestName.trim()) || "Someone";
@@ -95,6 +127,8 @@ export async function reserveRsvp(params: {
     }
     await params.afterCreate?.(tx, rsvp.id);
     const count = await tx.rSVP.count({ where: params.target });
-    return { ...rsvp, status, count };
+    return { ...rsvp, status, count, teamId: team?.id ?? null };
   });
+  emitWebhookEvent({ type: "registration.created", rsvpId: reservation.id });
+  return reservation;
 }

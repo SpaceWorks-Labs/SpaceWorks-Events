@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "data": {
+    "currency": "INR",
+    "claims": [
+      {
+        "id": "clclaim0000000000000002",
+        "status": "APPROVED",
+        "category": "Food",
+        "amount": "₹3,400.00",
+        "approved": "₹3,000.00",
+        "note": "Receipts cover ₹3,000.",
+        "policy": null,
+        "description": "Volunteer lunch",
+        "createdAt": "2030-05-30T09:00:00.000Z",
+        "receiptIds": [
+          "clrcpt00000000000000001"
+        ],
+        "claimant": "Grace Hopper",
+        "kind": "STAFF"
+      }
+    ],
+    "refundRequests": [
+      {
+        "id": "clrefund000000000000001",
+        "orderId": "clorder00000000000000002",
+        "reference": "SW-9P4M2",
+        "buyerName": "Alan Turing",
+        "reason": "I can no longer travel.",
+        "status": "OPEN",
+        "createdAt": "2030-05-31T08:00:00.000Z"
+      }
+    ]
+  }
+}

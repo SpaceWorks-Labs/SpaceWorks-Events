@@ -3,10 +3,17 @@ import { loadTicketView } from "@/lib/views/app__ticket__token__page";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { MoodTile } from "@/components/brand/MoodTile";
-import { ArrowLeft, ArrowUpRight, CalendarPlus, Check } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, BadgeCheck, CalendarPlus, Check } from "lucide-react";
 import { TicketQrPanel } from "@/components/ticket/TicketQrPanel";
 import { CancelRsvpButton } from "@/components/ticket/CancelRsvpButton";
+import { TicketSeekerPanel, TicketTeamCard } from "@/components/team/TicketTeamSection";
+import { TicketJoinTeamForm } from "@/components/team/JoinTeamWithRegistration";
+import { TicketSubmissionCard } from "@/components/submission/TicketSubmissionCard";
+import { TicketMentorDeskCard } from "@/components/mentor-desk/participant/TicketMentorDeskCard";
 import { TicketDownloadButton } from "@/components/ticket/TicketDownloadButton";
+import { TicketClaims } from "@/components/ticket/TicketClaims";
+import { TicketApplicationCard } from "@/components/ticket/TicketApplicationCard";
+import { MyShifts } from "@/components/ticket/MyShifts";
 import { TicketStatusStorageSync } from "@/components/ticket/TicketStatusStorageSync";
 import { HideAfterLiveCheckIn, LiveCheckedInChip, LiveTicketCard, LiveTicketProvider } from "@/components/ticket/LiveTicket";
 import { googleCalendarEventUrl } from "@/lib/calendarInvite";
@@ -26,7 +33,18 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function TicketPage({ params, searchParams }: Props) {
-  const { rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const { isCrew, myShifts, designedTicket, claims, application, teamSection, submissionMode, mentorDesk, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const teamBlock = teamSection?.kind === "member" ? (
+    <TicketTeamCard ticketToken={rsvp.checkInToken} team={teamSection.team} manageHref={teamSection.manageHref} canLeave={teamSection.canLeave} eventPageHref={eventPageHref} />
+  ) : teamSection?.kind === "solo" ? (
+    <>
+      {teamSection.seeker ? <TicketSeekerPanel ticketToken={rsvp.checkInToken} profile={teamSection.seeker.profile} invites={teamSection.seeker.invites} requests={teamSection.seeker.requests} seekers={teamSection.seeker.seekers} teams={teamSection.seeker.teams} /> : null}
+      {teamSection.canJoin ? <TicketJoinTeamForm ticketToken={rsvp.checkInToken} /> : null}
+    </>
+  ) : teamSection?.kind === "sign-in" ? (
+    <Callout tone="info">Sign in to the account you registered with to join or find a team.</Callout>
+  ) : null;
+
   const ticketMain = (
     <>
       <header className="bg-accent px-6 py-5 text-on-accent">
@@ -93,13 +111,14 @@ export default async function TicketPage({ params, searchParams }: Props) {
           </Link>
           <div className="flex flex-wrap justify-end gap-1.5">
             {isCheckedIn ? <Chip tone="success" icon={<Check />}>Checked in</Chip> : <LiveCheckedInChip />}
+            {isCrew ? <Chip tone="ink" icon={<BadgeCheck />}>Crew</Chip> : null}
             <Chip tone={status.tone} icon={confirmed ? <Check /> : undefined}>{status.label}</Chip>
           </div>
         </div>
         {confirmed ? (
           <div className="flex items-center gap-4">
             <MoodTile mood="cheering" size={64} />
-            <p className="text-display-m break-words text-ink">You&apos;re in, {name}!</p>
+            <p className="text-display-m break-words text-ink">{isCrew ? <>You&apos;re on the crew, {name}!</> : <>You&apos;re in, {name}!</>}</p>
           </div>
         ) : hold ? (
           <div className="flex items-center gap-4">
@@ -115,6 +134,14 @@ export default async function TicketPage({ params, searchParams }: Props) {
               {rsvp.status === "WAITLISTED" ? `You're on the waitlist, ${name}.` : `Request sent, ${name}.`}
             </p>
           </div>
+        ) : null}
+
+        {/* Like the stub, the designed ticket (it carries the QR) is gone once checked in. */}
+        {designedTicket && !isCheckedIn ? (
+          <HideAfterLiveCheckIn>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a private, uncached render of this ticket */}
+            <img src={`/api/ticket/${rsvp.checkInToken}/design?inline=1`} alt={`Your ticket for ${title}`} className="h-auto w-full rounded-xl border border-line" />
+          </HideAfterLiveCheckIn>
         ) : null}
 
         {confirmed ? (
@@ -157,7 +184,7 @@ export default async function TicketPage({ params, searchParams }: Props) {
                 Add to calendar
               </a>
             </Button>
-            <TicketDownloadButton downloadUrl={`/api/ticket/${rsvp.checkInToken}/download`} />
+            {isCheckedIn ? null : <TicketDownloadButton downloadUrl={`/api/ticket/${rsvp.checkInToken}/design`} pdfUrl={`/api/ticket/${rsvp.checkInToken}/design?format=pdf`} />}
           </div>
         ) : null}
 
@@ -177,8 +204,21 @@ export default async function TicketPage({ params, searchParams }: Props) {
           </section>
         ) : null}
 
-        {/* Paid tickets are cancelled and refunded by the organiser. */}
-        {!isCheckedIn && rsvp.status !== "REJECTED" && !payment?.paid ? (
+        {application ? <TicketApplicationCard token={rsvp.checkInToken} view={application} /> : null}
+
+        {teamBlock}
+
+        {submissionMode ? <TicketSubmissionCard ticketToken={rsvp.checkInToken} mode={submissionMode} /> : null}
+
+        {mentorDesk ? <TicketMentorDeskCard desk={mentorDesk} /> : null}
+
+        {myShifts ? <MyShifts ticketToken={rsvp.checkInToken} view={myShifts} /> : null}
+
+        {claims ? <TicketClaims ticketToken={rsvp.checkInToken} view={claims} /> : null}
+
+        {/* Paid tickets are cancelled and refunded by the organiser; team members leave their team instead. */}
+        {/* An application is withdrawn from its card above until its place is confirmed (docs/ADMISSION.md). */}
+        {!isCheckedIn && rsvp.status !== "REJECTED" && !payment?.paid && !inTeam && !isCrew && (!application || application.status === "ACCEPTED") ? (
           <HideAfterLiveCheckIn>
             <CancelRsvpButton checkInToken={rsvp.checkInToken} eventPageHref={eventPageHref} />
           </HideAfterLiveCheckIn>

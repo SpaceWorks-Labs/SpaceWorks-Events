@@ -8,7 +8,11 @@ import { formatBroadcastEventDate } from "@/lib/broadcastTemplate";
 import { broadcastBrandSelect, broadcastEventUrl, broadcastFeedbackUrl, broadcastScheduleUrl } from "@/lib/eventBroadcast";
 import { MEMBER_ID_EMAIL_KIND } from "@/lib/memberIds/email";
 import { PAYMENT_EMAIL_KIND } from "@/lib/payments/email";
+import { isTeamMessageKind, teamMessageOrganisation } from "./team";
+import { isJudgingMessageKind, judgingMessageOrganisation } from "./judging";
+import { isMentorMessageKind, mentorMessageOrganisation } from "./mentor";
 import { EVENT_REMINDER_KIND } from "./payloads";
+import { ATTENDANCE_CHECK_KIND, attendanceMessageOrganisation } from "./attendance";
 
 export async function getCurrentRsvp(checkInToken: string) {
   return prisma.rSVP.findUnique({
@@ -17,7 +21,7 @@ export async function getCurrentRsvp(checkInToken: string) {
       status: true,
       guestName: true,
       user: { select: { name: true } },
-      event: { select: { startDateTime: true, endDateTime: true, timezone: true, location: true } },
+      event: { select: { startDateTime: true, endDateTime: true, timezone: true, location: true, admissionEnabled: true } },
       eventInstance: { select: { startDateTime: true, endDateTime: true, series: { select: { timezone: true } } } },
     },
   });
@@ -101,6 +105,10 @@ export async function messageOrganisation(kind: string, payload: Prisma.JsonValu
   if (kind === "event-broadcast-test" && text("eventId")) return (await prisma.event.findUnique({ where: { id: text("eventId")! }, select: { organisationId: true } }))?.organisationId ?? null;
   if (kind === PAYMENT_EMAIL_KIND && text("paymentId")) return (await prisma.payment.findUnique({ where: { id: text("paymentId")! }, select: { organisationId: true } }))?.organisationId ?? null;
   if (kind === PAYMENT_EMAIL_KIND && text("orderId")) return (await prisma.order.findUnique({ where: { id: text("orderId")! }, select: { organisationId: true } }))?.organisationId ?? null;
+  if (isTeamMessageKind(kind)) return teamMessageOrganisation(kind, p);
+  if (isJudgingMessageKind(kind)) return judgingMessageOrganisation(kind, p);
+  if (kind === ATTENDANCE_CHECK_KIND) return attendanceMessageOrganisation(p);
+  if (isMentorMessageKind(kind)) return mentorMessageOrganisation(kind, p);
   if (kind === MEMBER_ID_EMAIL_KIND && text("memberId")) return (await prisma.idMember.findUnique({ where: { id: text("memberId")! }, select: { programme: { select: { organisationId: true } } } }))?.programme.organisationId ?? null;
   return null;
 }

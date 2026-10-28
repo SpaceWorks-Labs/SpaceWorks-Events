@@ -9,6 +9,7 @@ import { OrderError, reserveOrder } from "@/lib/payments/orders";
 import { validateAndNormalizeAnswers } from "./answers";
 import { paymentContextFor, sellsTickets } from "./orders";
 import { reserveRsvp } from "./reserve";
+import { TeamRegistrationError, teamRegistrationFailure } from "./team";
 import { normalizeGuestEmail } from "./shared";
 
 /**
@@ -71,6 +72,8 @@ export async function submitManualGuestRsvpCore(
         attendeeKey: `guest:${email}`,
       },
       enforceOpen: false,
+      // Organisers may add a solo registrant even to a TEAMS_ONLY event.
+      allowSoloWithoutTeam: true,
       afterCreate: async (tx, rsvpId) => {
         if (validated.rows.length === 0) return;
         await tx.rsvpAnswer.createMany({
@@ -94,6 +97,7 @@ export async function submitManualGuestRsvpCore(
       },
     };
   } catch (error: unknown) {
+    if (error instanceof TeamRegistrationError) return teamRegistrationFailure(error);
     if (
       typeof error === "object" &&
       error !== null &&

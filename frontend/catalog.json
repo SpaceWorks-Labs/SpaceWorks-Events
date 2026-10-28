@@ -16,6 +16,11 @@
       "id": "app__account__layout:loadAccountShell"
     },
     {
+      "module": "lib/views/app__account__mentoring__eventId__page",
+      "name": "loadAccountMentoringView",
+      "id": "app__account__mentoring__eventId__page:loadAccountMentoringView"
+    },
+    {
       "module": "lib/views/app__account__organisations__page",
       "name": "loadAccountOrganisationsView",
       "id": "app__account__organisations__page:loadAccountOrganisationsView"
@@ -36,9 +41,29 @@
       "id": "app__account__security__page:loadAccountSecurityView"
     },
     {
+      "module": "lib/views/app__account__submissions__eventId__page",
+      "name": "loadAccountSubmissionView",
+      "id": "app__account__submissions__eventId__page:loadAccountSubmissionView"
+    },
+    {
+      "module": "lib/views/app__account__teams__teamId__page",
+      "name": "loadAccountTeamView",
+      "id": "app__account__teams__teamId__page:loadAccountTeamView"
+    },
+    {
+      "module": "lib/views/app__attend__token__page",
+      "name": "loadAttendView",
+      "id": "app__attend__token__page:loadAttendView"
+    },
+    {
       "module": "lib/views/app__auth__login__page",
       "name": "loadLoginView",
       "id": "app__auth__login__page:loadLoginView"
+    },
+    {
+      "module": "lib/views/app__crew__token__page",
+      "name": "loadCrewJoinView",
+      "id": "app__crew__token__page:loadCrewJoinView"
     },
     {
       "module": "lib/views/app__dashboard__layout",
@@ -126,6 +151,26 @@
       "id": "app__dashboard__orgSlug__settings__payments__page:loadPaymentSettingsView"
     },
     {
+      "module": "lib/views/app__dashboard__orgSlug__settings__webhooks__endpointId__page",
+      "name": "loadWebhookEndpointView",
+      "id": "app__dashboard__orgSlug__settings__webhooks__endpointId__page:loadWebhookEndpointView"
+    },
+    {
+      "module": "lib/views/app__dashboard__orgSlug__settings__webhooks__page",
+      "name": "loadWebhooksSettingsView",
+      "id": "app__dashboard__orgSlug__settings__webhooks__page:loadWebhooksSettingsView"
+    },
+    {
+      "module": "lib/views/app__dashboard__orgSlug__ticket-designs__designId__page",
+      "name": "loadTicketDesignerView",
+      "id": "app__dashboard__orgSlug__ticket-designs__designId__page:loadTicketDesignerView"
+    },
+    {
+      "module": "lib/views/app__dashboard__orgSlug__ticket-designs__page",
+      "name": "loadTicketDesignLibraryView",
+      "id": "app__dashboard__orgSlug__ticket-designs__page:loadTicketDesignLibraryView"
+    },
+    {
       "module": "lib/views/app__dashboard__page",
       "name": "loadDashboardView",
       "id": "app__dashboard__page:loadDashboardView"
@@ -139,6 +184,11 @@
       "module": "lib/views/app__features__page",
       "name": "loadView",
       "id": "app__features__page:loadView"
+    },
+    {
+      "module": "lib/views/app__help__layout",
+      "name": "loadHelpAccess",
+      "id": "app__help__layout:loadHelpAccess"
     },
     {
       "module": "lib/views/app__join__event-collaborator__token__page",
@@ -191,6 +241,26 @@
       "id": "app__orgSlug__eventSlug__page:loadEventView"
     },
     {
+      "module": "lib/views/app__orgSlug__eventSlug__projects__page",
+      "name": "loadProjectsMetadata",
+      "id": "app__orgSlug__eventSlug__projects__page:loadProjectsMetadata"
+    },
+    {
+      "module": "lib/views/app__orgSlug__eventSlug__projects__page",
+      "name": "loadProjectsView",
+      "id": "app__orgSlug__eventSlug__projects__page:loadProjectsView"
+    },
+    {
+      "module": "lib/views/app__orgSlug__eventSlug__results__page",
+      "name": "loadResultsMetadata",
+      "id": "app__orgSlug__eventSlug__results__page:loadResultsMetadata"
+    },
+    {
+      "module": "lib/views/app__orgSlug__eventSlug__results__page",
+      "name": "loadResultsView",
+      "id": "app__orgSlug__eventSlug__results__page:loadResultsView"
+    },
+    {
       "module": "lib/views/app__orgSlug__eventSlug__schedule__page",
       "name": "loadEventScheduleView",
       "id": "app__orgSlug__eventSlug__schedule__page:loadEventScheduleView"
@@ -204,6 +274,11 @@
       "module": "lib/views/app__orgSlug__eventSlug__speakers__speakerSlug__page",
       "name": "loadSpeakerView",
       "id": "app__orgSlug__eventSlug__speakers__speakerSlug__page:loadSpeakerView"
+    },
+    {
+      "module": "lib/views/app__orgSlug__eventSlug__team__joinToken__page",
+      "name": "loadTeamJoinView",
+      "id": "app__orgSlug__eventSlug__team__joinToken__page:loadTeamJoinView"
     },
     {
       "module": "lib/views/app__orgSlug__i__instanceId__opengraph-image",
@@ -259,6 +334,11 @@
       "module": "lib/views/app__page",
       "name": "loadView",
       "id": "app__page:loadView"
+    },
+    {
+      "module": "lib/views/app__submit__token__page",
+      "name": "loadSubmitView",
+      "id": "app__submit__token__page:loadSubmitView"
     },
     {
       "module": "lib/views/app__super-admin__activity__page",
@@ -346,6 +426,11 @@
       "id": "app__super-admin__users__userId__page:loadSuperAdminUserDetailView"
     },
     {
+      "module": "lib/views/app__team__token__page",
+      "name": "loadTeamManageView",
+      "id": "app__team__token__page:loadTeamManageView"
+    },
+    {
       "module": "lib/views/app__ticket__token__page",
       "name": "loadRouteMetadata",
       "id": "app__ticket__token__page:loadRouteMetadata"
@@ -366,14 +451,39 @@
       "id": "app__verify__token__page:loadVerifyView"
     },
     {
+      "module": "lib/views/components__event-dashboard__admission__ReviewWorkspace",
+      "name": "loadReviewWorkspace",
+      "id": "components__event-dashboard__admission__ReviewWorkspace:loadReviewWorkspace"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__judging__JudgeWorkspace",
+      "name": "loadJudgeWorkspace",
+      "id": "components__event-dashboard__judging__JudgeWorkspace:loadJudgeWorkspace"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__mentors__MentorConsole",
+      "name": "loadMentorConsoleView",
+      "id": "components__event-dashboard__mentors__MentorConsole:loadMentorConsoleView"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__AnalyticsPanel",
       "name": "loadAnalyticsPanel",
       "id": "components__event-dashboard__panels__AnalyticsPanel:loadAnalyticsPanel"
     },
     {
+      "module": "lib/views/components__event-dashboard__panels__ApplicationsPanel",
+      "name": "loadApplicationsPanel",
+      "id": "components__event-dashboard__panels__ApplicationsPanel:loadApplicationsPanel"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__CheckInPanel",
       "name": "loadCheckInPanel",
       "id": "components__event-dashboard__panels__CheckInPanel:loadCheckInPanel"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__panels__CheckInPanel",
+      "name": "loadCheckInListsSetup",
+      "id": "components__event-dashboard__panels__CheckInPanel:loadCheckInListsSetup"
     },
     {
       "module": "lib/views/components__event-dashboard__panels__EmailsPanel",
@@ -391,9 +501,24 @@
       "id": "components__event-dashboard__panels__FeedbackPanel:loadFeedbackPanel"
     },
     {
+      "module": "lib/views/components__event-dashboard__panels__FinancePanel",
+      "name": "loadFinancePanel",
+      "id": "components__event-dashboard__panels__FinancePanel:loadFinancePanel"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__GuestsPanel",
       "name": "loadGuestsPanel",
       "id": "components__event-dashboard__panels__GuestsPanel:loadGuestsPanel"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__panels__JudgingPanel",
+      "name": "loadJudgingPanel",
+      "id": "components__event-dashboard__panels__JudgingPanel:loadJudgingPanel"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__panels__MentorsPanel",
+      "name": "loadMentorsPanel",
+      "id": "components__event-dashboard__panels__MentorsPanel:loadMentorsPanel"
     },
     {
       "module": "lib/views/components__event-dashboard__panels__OverviewPanel",
@@ -401,9 +526,74 @@
       "id": "components__event-dashboard__panels__OverviewPanel:loadOverviewPanel"
     },
     {
+      "module": "lib/views/components__event-dashboard__panels__PrizePayoutsPanel",
+      "name": "loadPrizePayoutsPanel",
+      "id": "components__event-dashboard__panels__PrizePayoutsPanel:loadPrizePayoutsPanel"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__SettingsPanel",
       "name": "loadSettingsPanel",
       "id": "components__event-dashboard__panels__SettingsPanel:loadSettingsPanel"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardDashboardHome",
+      "id": "dashboardGuards:guardDashboardHome"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgDashboard",
+      "id": "dashboardGuards:guardOrgDashboard"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgMember",
+      "id": "dashboardGuards:guardOrgMember"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgAdmin",
+      "id": "dashboardGuards:guardOrgAdmin"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardOrgOwner",
+      "id": "dashboardGuards:guardOrgOwner"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardEventDashboard",
+      "id": "dashboardGuards:guardEventDashboard"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardEventCheckIn",
+      "id": "dashboardGuards:guardEventCheckIn"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardEventSchedule",
+      "id": "dashboardGuards:guardEventSchedule"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardSeriesDashboard",
+      "id": "dashboardGuards:guardSeriesDashboard"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardWebhookEndpoint",
+      "id": "dashboardGuards:guardWebhookEndpoint"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardIdProgramme",
+      "id": "dashboardGuards:guardIdProgramme"
+    },
+    {
+      "module": "lib/views/dashboardGuards",
+      "name": "guardTicketDesign",
+      "id": "dashboardGuards:guardTicketDesign"
     },
     {
       "module": "lib/views/frontend-gates",
@@ -426,6 +616,116 @@
       "module": "app/actions/account",
       "name": "updateAccountPassword",
       "id": "account:updateAccountPassword"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "respondToApplicationOffer",
+      "id": "admission-applicant:respondToApplicationOffer"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "saveApplicationAnswers",
+      "id": "admission-applicant:saveApplicationAnswers"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "loadApplicationReview",
+      "id": "admission-applicant:loadApplicationReview"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "submitApplicationReview",
+      "id": "admission-applicant:submitApplicationReview"
+    },
+    {
+      "module": "app/actions/admission-applicant",
+      "name": "recuseFromApplication",
+      "id": "admission-applicant:recuseFromApplication"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "setApplicationsEnabled",
+      "id": "admission:setApplicationsEnabled"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "saveApplicationSettings",
+      "id": "admission:saveApplicationSettings"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "createApplicationStage",
+      "id": "admission:createApplicationStage"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "updateApplicationStage",
+      "id": "admission:updateApplicationStage"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "deleteApplicationStage",
+      "id": "admission:deleteApplicationStage"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "setApplicationStagePanel",
+      "id": "admission:setApplicationStagePanel"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "previewReviewerAssignment",
+      "id": "admission:previewReviewerAssignment"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "applyReviewerAssignment",
+      "id": "admission:applyReviewerAssignment"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "assignApplicationReviewer",
+      "id": "admission:assignApplicationReviewer"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "unassignApplicationReviewer",
+      "id": "admission:unassignApplicationReviewer"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "draftApplicationDecisions",
+      "id": "admission:draftApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "removeApplicationDecisions",
+      "id": "admission:removeApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "cancelApplicationDecisions",
+      "id": "admission:cancelApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "releaseApplicationDecisions",
+      "id": "admission:releaseApplicationDecisions"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "extendApplicationOffer",
+      "id": "admission:extendApplicationOffer"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "respondForApplication",
+      "id": "admission:respondForApplication"
+    },
+    {
+      "module": "app/actions/admission",
+      "name": "loadApplicationDetail",
+      "id": "admission:loadApplicationDetail"
     },
     {
       "module": "app/actions/api-clients",
@@ -451,6 +751,36 @@
       "module": "app/actions/api-clients",
       "name": "setApiClientStatus",
       "id": "api-clients:setApiClientStatus"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "previewAttendanceCheckSend",
+      "id": "attendance-check:previewAttendanceCheckSend"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "sendAttendanceChecks",
+      "id": "attendance-check:sendAttendanceChecks"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "remindAttendanceChecks",
+      "id": "attendance-check:remindAttendanceChecks"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "setAttendanceReleaseOnDecline",
+      "id": "attendance-check:setAttendanceReleaseOnDecline"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "issueAttendanceLink",
+      "id": "attendance-check:issueAttendanceLink"
+    },
+    {
+      "module": "app/actions/attendance-check",
+      "name": "submitAttendanceReply",
+      "id": "attendance-check:submitAttendanceReply"
     },
     {
       "module": "app/actions/auth",
@@ -553,6 +883,41 @@
       "id": "chat-channels:testChatChannel"
     },
     {
+      "module": "app/actions/checkin-lists",
+      "name": "createCheckInList",
+      "id": "checkin-lists:createCheckInList"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "updateCheckInList",
+      "id": "checkin-lists:updateCheckInList"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "reorderCheckInLists",
+      "id": "checkin-lists:reorderCheckInLists"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "checkInToList",
+      "id": "checkin-lists:checkInToList"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "undoListCheckIn",
+      "id": "checkin-lists:undoListCheckIn"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "lookupListAttendees",
+      "id": "checkin-lists:lookupListAttendees"
+    },
+    {
+      "module": "app/actions/checkin-lists",
+      "name": "loadListRosterPage",
+      "id": "checkin-lists:loadListRosterPage"
+    },
+    {
       "module": "app/actions/checkin-station",
       "name": "createOrRotateCheckInStation",
       "id": "checkin-station:createOrRotateCheckInStation"
@@ -608,6 +973,61 @@
       "id": "checkin:checkInByRsvpId"
     },
     {
+      "module": "app/actions/checkin",
+      "name": "loadRecentCheckIns",
+      "id": "checkin:loadRecentCheckIns"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "addCrewMember",
+      "id": "crew:addCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "updateCrewMember",
+      "id": "crew:updateCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "setCrewMemberShown",
+      "id": "crew:setCrewMemberShown"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "deleteCrewMember",
+      "id": "crew:deleteCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "reorderCrewMember",
+      "id": "crew:reorderCrewMember"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "manageCrewJoinLink",
+      "id": "crew:manageCrewJoinLink"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "uploadCrewPhoto",
+      "id": "crew:uploadCrewPhoto"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "uploadCrewPhotoWithLink",
+      "id": "crew:uploadCrewPhotoWithLink"
+    },
+    {
+      "module": "app/actions/crew",
+      "name": "joinCrew",
+      "id": "crew:joinCrew"
+    },
+    {
+      "module": "app/actions/entry-fee",
+      "name": "saveEntryFee",
+      "id": "entry-fee:saveEntryFee"
+    },
+    {
       "module": "app/actions/event-collaborators",
       "name": "createEventCollaboratorInvite",
       "id": "event-collaborators:createEventCollaboratorInvite"
@@ -636,6 +1056,11 @@
       "module": "app/actions/event-website",
       "name": "uploadEventSponsorLogo",
       "id": "event-website:uploadEventSponsorLogo"
+    },
+    {
+      "module": "app/actions/event-website",
+      "name": "showCrewSection",
+      "id": "event-website:showCrewSection"
     },
     {
       "module": "app/actions/event-website",
@@ -763,6 +1188,71 @@
       "id": "feedback-form:deleteFeedbackField"
     },
     {
+      "module": "app/actions/feedback-form",
+      "name": "loadFeedbackResponsesPage",
+      "id": "feedback-form:loadFeedbackResponsesPage"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "submitStaffClaimAction",
+      "id": "finance:submitStaffClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "withdrawStaffClaimAction",
+      "id": "finance:withdrawStaffClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "approveClaimAction",
+      "id": "finance:approveClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "rejectClaimAction",
+      "id": "finance:rejectClaimAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "recordClaimPayoutAction",
+      "id": "finance:recordClaimPayoutAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "reverseClaimPayoutAction",
+      "id": "finance:reverseClaimPayoutAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "decideRefundRequestAction",
+      "id": "finance:decideRefundRequestAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "saveReimbursementPolicyAction",
+      "id": "finance:saveReimbursementPolicyAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "setReimbursementPolicyActiveAction",
+      "id": "finance:setReimbursementPolicyActiveAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "deleteReimbursementPolicyAction",
+      "id": "finance:deleteReimbursementPolicyAction"
+    },
+    {
+      "module": "app/actions/finance",
+      "name": "saveFinanceSettingsAction",
+      "id": "finance:saveFinanceSettingsAction"
+    },
+    {
+      "module": "app/actions/guest-list",
+      "name": "loadAttendeesPage",
+      "id": "guest-list:loadAttendeesPage"
+    },
+    {
       "module": "app/actions/instance-settings",
       "name": "setNewUserRegistrationEnabled",
       "id": "instance-settings:setNewUserRegistrationEnabled"
@@ -846,6 +1336,261 @@
       "module": "app/actions/invites",
       "name": "removeSeriesInvite",
       "id": "invites:removeSeriesInvite"
+    },
+    {
+      "module": "app/actions/invites",
+      "name": "loadInvitesPage",
+      "id": "invites:loadInvitesPage"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "saveJudgingSettings",
+      "id": "judging-admin:saveJudgingSettings"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "changeJudgingStatus",
+      "id": "judging-admin:changeJudgingStatus"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "changeScoreNormalization",
+      "id": "judging-admin:changeScoreNormalization"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "addJudgingCriterion",
+      "id": "judging-admin:addJudgingCriterion"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "editJudgingCriterion",
+      "id": "judging-admin:editJudgingCriterion"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "removeJudgingCriterion",
+      "id": "judging-admin:removeJudgingCriterion"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "reorderJudgingCriteria",
+      "id": "judging-admin:reorderJudgingCriteria"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "addEventAward",
+      "id": "judging-admin:addEventAward"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "editEventAward",
+      "id": "judging-admin:editEventAward"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "removeEventAward",
+      "id": "judging-admin:removeEventAward"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "reorderEventAwards",
+      "id": "judging-admin:reorderEventAwards"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "setEventAwardWinner",
+      "id": "judging-admin:setEventAwardWinner"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "removeEventAwardWinner",
+      "id": "judging-admin:removeEventAwardWinner"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "disqualifyProject",
+      "id": "judging-admin:disqualifyProject"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "reinstateProject",
+      "id": "judging-admin:reinstateProject"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "assignProjectJudge",
+      "id": "judging-admin:assignProjectJudge"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "unassignProjectJudge",
+      "id": "judging-admin:unassignProjectJudge"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "loadProjectReviews",
+      "id": "judging-admin:loadProjectReviews"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "loadSubmissionsPage",
+      "id": "judging-admin:loadSubmissionsPage"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "loadUnsubmittedEntrantsPage",
+      "id": "judging-admin:loadUnsubmittedEntrantsPage"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "loadResultsPage",
+      "id": "judging-admin:loadResultsPage"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "searchAwardCandidates",
+      "id": "judging-admin:searchAwardCandidates"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "publishJudgingResults",
+      "id": "judging-admin:publishJudgingResults"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "sendResultsAnnouncement",
+      "id": "judging-admin:sendResultsAnnouncement"
+    },
+    {
+      "module": "app/actions/judging-admin",
+      "name": "unpublishJudgingResults",
+      "id": "judging-admin:unpublishJudgingResults"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "previewJudgeAutoAssignment",
+      "id": "judging-ops:previewJudgeAutoAssignment"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "applyJudgeAutoAssignment",
+      "id": "judging-ops:applyJudgeAutoAssignment"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "saveReviewsPerProject",
+      "id": "judging-ops:saveReviewsPerProject"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "loadJudgingProgressPage",
+      "id": "judging-ops:loadJudgingProgressPage"
+    },
+    {
+      "module": "app/actions/judging-ops",
+      "name": "loadJudgingProgressRound",
+      "id": "judging-ops:loadJudgingProgressRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "addJudgingRound",
+      "id": "judging-rounds:addJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "editJudgingRound",
+      "id": "judging-rounds:editJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "removeJudgingRound",
+      "id": "judging-rounds:removeJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "reorderJudgingRoundsAction",
+      "id": "judging-rounds:reorderJudgingRoundsAction"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "saveJudgingRoundPanel",
+      "id": "judging-rounds:saveJudgingRoundPanel"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "changeJudgingRoundStatus",
+      "id": "judging-rounds:changeJudgingRoundStatus"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "finalizeRound",
+      "id": "judging-rounds:finalizeRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "unfinalizeRound",
+      "id": "judging-rounds:unfinalizeRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "previewRoundFinalists",
+      "id": "judging-rounds:previewRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "applyRoundFinalists",
+      "id": "judging-rounds:applyRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "publishRoundFinalists",
+      "id": "judging-rounds:publishRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "unpublishRoundFinalists",
+      "id": "judging-rounds:unpublishRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "loadRoundFinalistsList",
+      "id": "judging-rounds:loadRoundFinalistsList"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadJudgeSubmissionsPage",
+      "id": "judging:loadJudgeSubmissionsPage"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadJudgeSubmission",
+      "id": "judging:loadJudgeSubmission"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadNextJudgeSubmission",
+      "id": "judging:loadNextJudgeSubmission"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "saveJudgeScoresAction",
+      "id": "judging:saveJudgeScoresAction"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "saveJudgeReviewAction",
+      "id": "judging:saveJudgeReviewAction"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "setJudgeRecusalAction",
+      "id": "judging:setJudgeRecusalAction"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadJudgeWorkspaceRound",
+      "id": "judging:loadJudgeWorkspaceRound"
     },
     {
       "module": "app/actions/media",
@@ -963,9 +1708,174 @@
       "id": "membership:deleteOrganisation"
     },
     {
+      "module": "app/actions/mentor-console",
+      "name": "mentorHelpCommand",
+      "id": "mentor-console:mentorHelpCommand"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "mentorRaiseHelp",
+      "id": "mentor-console:mentorRaiseHelp"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "mentorCommentOnHelp",
+      "id": "mentor-console:mentorCommentOnHelp"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "saveOwnMentorProfile",
+      "id": "mentor-console:saveOwnMentorProfile"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "declareMentorConflict",
+      "id": "mentor-console:declareMentorConflict"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "createOwnOfficeHourSlot",
+      "id": "mentor-console:createOwnOfficeHourSlot"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "rescheduleOwnOfficeHourSlot",
+      "id": "mentor-console:rescheduleOwnOfficeHourSlot"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "cancelOwnOfficeHourSlot",
+      "id": "mentor-console:cancelOwnOfficeHourSlot"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "mentorVisitCommand",
+      "id": "mentor-console:mentorVisitCommand"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "nominateTeamAction",
+      "id": "mentor-console:nominateTeamAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "updateMentorDeskSettings",
+      "id": "mentor-desk:updateMentorDeskSettings"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "saveMentorProfileAsOrganiser",
+      "id": "mentor-desk:saveMentorProfileAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "saveHelpCategoryAction",
+      "id": "mentor-desk:saveHelpCategoryAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "setMentorConflictAsOrganiser",
+      "id": "mentor-desk:setMentorConflictAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "organiserHelpCommand",
+      "id": "mentor-desk:organiserHelpCommand"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "previewMentorAssignments",
+      "id": "mentor-desk:previewMentorAssignments"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "applyMentorAssignments",
+      "id": "mentor-desk:applyMentorAssignments"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "transitionMentorAssignment",
+      "id": "mentor-desk:transitionMentorAssignment"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "assignMentorManuallyAction",
+      "id": "mentor-desk:assignMentorManuallyAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "createOfficeHourSlotAsOrganiser",
+      "id": "mentor-desk:createOfficeHourSlotAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "rescheduleOfficeHourSlotAsOrganiser",
+      "id": "mentor-desk:rescheduleOfficeHourSlotAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "cancelOfficeHourSlotAsOrganiser",
+      "id": "mentor-desk:cancelOfficeHourSlotAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "cancelOfficeHourBookingAsOrganiser",
+      "id": "mentor-desk:cancelOfficeHourBookingAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "saveMentoringRoundAction",
+      "id": "mentor-desk:saveMentoringRoundAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "setRoundMentorPoolAction",
+      "id": "mentor-desk:setRoundMentorPoolAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "transitionMentoringRoundAction",
+      "id": "mentor-desk:transitionMentoringRoundAction"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "raiseHelpRequest",
+      "id": "mentor-help:raiseHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "cancelHelpRequest",
+      "id": "mentor-help:cancelHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "commentOnHelpRequest",
+      "id": "mentor-help:commentOnHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "rateHelpRequest",
+      "id": "mentor-help:rateHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "bookOfficeHourAction",
+      "id": "mentor-help:bookOfficeHourAction"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "cancelOfficeHourBookingAction",
+      "id": "mentor-help:cancelOfficeHourBookingAction"
+    },
+    {
       "module": "app/actions/mfa-step-up",
       "name": "verifyStepUpMfa",
       "id": "mfa-step-up:verifyStepUpMfa"
+    },
+    {
+      "module": "app/actions/my-shifts",
+      "name": "myShiftAction",
+      "id": "my-shifts:myShiftAction"
     },
     {
       "module": "app/actions/orders",
@@ -1023,6 +1933,21 @@
       "id": "organisation-email:stopOwnEmailServer"
     },
     {
+      "module": "app/actions/participant-claims",
+      "name": "submitParticipantClaimAction",
+      "id": "participant-claims:submitParticipantClaimAction"
+    },
+    {
+      "module": "app/actions/participant-claims",
+      "name": "withdrawParticipantClaimAction",
+      "id": "participant-claims:withdrawParticipantClaimAction"
+    },
+    {
+      "module": "app/actions/participant-claims",
+      "name": "requestRefundAction",
+      "id": "participant-claims:requestRefundAction"
+    },
+    {
       "module": "app/actions/password-reset",
       "name": "requestPasswordReset",
       "id": "password-reset:requestPasswordReset"
@@ -1076,6 +2001,21 @@
       "module": "app/actions/payment-settings",
       "name": "saveReceiptDetails",
       "id": "payment-settings:saveReceiptDetails"
+    },
+    {
+      "module": "app/actions/prizes",
+      "name": "setAwardPrizeAction",
+      "id": "prizes:setAwardPrizeAction"
+    },
+    {
+      "module": "app/actions/prizes",
+      "name": "recordPrizePayoutAction",
+      "id": "prizes:recordPrizePayoutAction"
+    },
+    {
+      "module": "app/actions/prizes",
+      "name": "reversePrizePayoutAction",
+      "id": "prizes:reversePrizePayoutAction"
     },
     {
       "module": "app/actions/promo",
@@ -1153,6 +2093,26 @@
       "id": "rsvp:submitRsvp"
     },
     {
+      "module": "app/actions/saved-views",
+      "name": "saveView",
+      "id": "saved-views:saveView"
+    },
+    {
+      "module": "app/actions/saved-views",
+      "name": "renameView",
+      "id": "saved-views:renameView"
+    },
+    {
+      "module": "app/actions/saved-views",
+      "name": "shareView",
+      "id": "saved-views:shareView"
+    },
+    {
+      "module": "app/actions/saved-views",
+      "name": "deleteView",
+      "id": "saved-views:deleteView"
+    },
+    {
       "module": "app/actions/schedule",
       "name": "saveScheduleItem",
       "id": "schedule:saveScheduleItem"
@@ -1218,6 +2178,206 @@
       "id": "shortLink:regenerateEventShortLink"
     },
     {
+      "module": "app/actions/submissions",
+      "name": "saveSubmissionDraftAction",
+      "id": "submissions:saveSubmissionDraftAction"
+    },
+    {
+      "module": "app/actions/submissions",
+      "name": "submitSubmissionAction",
+      "id": "submissions:submitSubmissionAction"
+    },
+    {
+      "module": "app/actions/submissions",
+      "name": "withdrawSubmissionAction",
+      "id": "submissions:withdrawSubmissionAction"
+    },
+    {
+      "module": "app/actions/submissions",
+      "name": "requestSubmissionLinkAction",
+      "id": "submissions:requestSubmissionLinkAction"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "approveTeam",
+      "id": "team-admin:approveTeam"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "rejectTeam",
+      "id": "team-admin:rejectTeam"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "promoteTeam",
+      "id": "team-admin:promoteTeam"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "renameTeamAsOrganiser",
+      "id": "team-admin:renameTeamAsOrganiser"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "moveTeamMember",
+      "id": "team-admin:moveTeamMember"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "deleteTeam",
+      "id": "team-admin:deleteTeam"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "loadTeamsPage",
+      "id": "team-admin:loadTeamsPage"
+    },
+    {
+      "module": "app/actions/team-admin",
+      "name": "searchMoveTargets",
+      "id": "team-admin:searchMoveTargets"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "renameTeamAction",
+      "id": "teams:renameTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "regenerateTeamJoinLinkAction",
+      "id": "teams:regenerateTeamJoinLinkAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "regenerateTeamManageLinkAction",
+      "id": "teams:regenerateTeamManageLinkAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "addTeamMemberAction",
+      "id": "teams:addTeamMemberAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "removeTeamMemberAction",
+      "id": "teams:removeTeamMemberAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "transferTeamLeadershipAction",
+      "id": "teams:transferTeamLeadershipAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "setTeamLookingForMembersAction",
+      "id": "teams:setTeamLookingForMembersAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "disbandTeamAction",
+      "id": "teams:disbandTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "inviteSeekerAction",
+      "id": "teams:inviteSeekerAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "respondToTeamRequestAction",
+      "id": "teams:respondToTeamRequestAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "cancelTeamInviteAction",
+      "id": "teams:cancelTeamInviteAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "leaveTeamAction",
+      "id": "teams:leaveTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "saveSeekerProfileAction",
+      "id": "teams:saveSeekerProfileAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "requestToJoinTeamAction",
+      "id": "teams:requestToJoinTeamAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "respondToTeamInviteAction",
+      "id": "teams:respondToTeamInviteAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "cancelTeamRequestAction",
+      "id": "teams:cancelTeamRequestAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "joinTeamWithTicketAction",
+      "id": "teams:joinTeamWithTicketAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTeamSeekersPageAction",
+      "id": "teams:loadTeamSeekersPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTeamJoinRequestsPageAction",
+      "id": "teams:loadTeamJoinRequestsPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketSeekersPageAction",
+      "id": "teams:loadTicketSeekersPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketTeamsPageAction",
+      "id": "teams:loadTicketTeamsPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketInvitesPageAction",
+      "id": "teams:loadTicketInvitesPageAction"
+    },
+    {
+      "module": "app/actions/teams",
+      "name": "loadTicketRequestsPageAction",
+      "id": "teams:loadTicketRequestsPageAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "createTicketDesignAction",
+      "id": "ticket-designs:createTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "saveTicketDesignAction",
+      "id": "ticket-designs:saveTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "deleteTicketDesignAction",
+      "id": "ticket-designs:deleteTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "assignTicketDesignAction",
+      "id": "ticket-designs:assignTicketDesignAction"
+    },
+    {
+      "module": "app/actions/ticket-designs",
+      "name": "uploadTicketDesignImageAction",
+      "id": "ticket-designs:uploadTicketDesignImageAction"
+    },
+    {
       "module": "app/actions/ticket-types",
       "name": "saveTicketType",
       "id": "ticket-types:saveTicketType"
@@ -1256,6 +2416,91 @@
       "module": "app/actions/ticket-types",
       "name": "saveTransferPolicy",
       "id": "ticket-types:saveTransferPolicy"
+    },
+    {
+      "module": "app/actions/ticket-types",
+      "name": "saveTeamTicketMode",
+      "id": "ticket-types:saveTeamTicketMode"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "setVolunteerShifts",
+      "id": "volunteer-shifts:setVolunteerShifts"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "saveVolunteerShift",
+      "id": "volunteer-shifts:saveVolunteerShift"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "closeVolunteerShift",
+      "id": "volunteer-shifts:closeVolunteerShift"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "deleteVolunteerShift",
+      "id": "volunteer-shifts:deleteVolunteerShift"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "decideVolunteerSignup",
+      "id": "volunteer-shifts:decideVolunteerSignup"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "recordVolunteerAttendance",
+      "id": "volunteer-shifts:recordVolunteerAttendance"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "reviewVolunteerHours",
+      "id": "volunteer-shifts:reviewVolunteerHours"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "manageContributorCertificate",
+      "id": "volunteer-shifts:manageContributorCertificate"
+    },
+    {
+      "module": "app/actions/volunteer-shifts",
+      "name": "saveContributorCertificateDesign",
+      "id": "volunteer-shifts:saveContributorCertificateDesign"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "createWebhookEndpoint",
+      "id": "webhooks:createWebhookEndpoint"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "updateWebhookEndpoint",
+      "id": "webhooks:updateWebhookEndpoint"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "deleteWebhookEndpoint",
+      "id": "webhooks:deleteWebhookEndpoint"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "rotateWebhookSecret",
+      "id": "webhooks:rotateWebhookSecret"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "setWebhookEndpointEnabled",
+      "id": "webhooks:setWebhookEndpointEnabled"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "sendWebhookTest",
+      "id": "webhooks:sendWebhookTest"
+    },
+    {
+      "module": "app/actions/webhooks",
+      "name": "redeliverWebhook",
+      "id": "webhooks:redeliverWebhook"
     }
   ]
 }

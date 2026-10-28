@@ -1,5 +1,6 @@
 import { EventPrivacyType, EventStatus } from "@prisma/client";
 import { z } from "zod";
+import { teamSettingsFields, validateTeamSettings } from "@/lib/validators/teams";
 import { isReservedEventSlug, isReservedOrganisationSlug } from "@/lib/slug";
 import { isUploadedImageUrl } from "@/lib/uploadUrl";
 import {
@@ -10,7 +11,10 @@ import {
   slugRegex,
   timeZoneSchema,
   validateEventScheduleAndLocation,
+  withZonedDateTimes,
 } from "@/lib/validators/shared";
+
+const EVENT_WALL_CLOCK_FIELDS = ["startDateTime", "endDateTime", "registrationClosesAt"] as const;
 
 export const createOrganisationSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -35,7 +39,7 @@ export const updateOrganisationSchema = z.object({
     .or(z.literal("")),
 });
 
-export const createEventSchema = z
+export const createEventSchema = withZonedDateTimes(EVENT_WALL_CLOCK_FIELDS, z
   .object({
     organisationSlug: z.string().trim().min(1),
     title: z.string().trim().min(1, "Title is required").max(200),
@@ -81,8 +85,10 @@ export const createEventSchema = z
       .optional()
       .default(EventPrivacyType.PUBLIC),
     ...registrationCutoffSchema,
+    ...teamSettingsFields,
   })
   .superRefine((data, ctx) => {
+    validateTeamSettings(data, ctx);
     validateEventScheduleAndLocation(data, ctx);
     if (data.registrationClosesAt && data.registrationLeadMinutes != null)
       ctx.addIssue({
@@ -109,9 +115,9 @@ export const createEventSchema = z
         path: ["registrationLeadMinutes"],
         message: "Registration cutoff cannot be before now.",
       });
-  });
+  }));
 
-export const updateEventSchema = z
+export const updateEventSchema = withZonedDateTimes(EVENT_WALL_CLOCK_FIELDS, z
   .object({
     organisationSlug: z.string().trim().min(1),
     eventId: z.string().trim().min(1),
@@ -162,8 +168,10 @@ export const updateEventSchema = z
     pageLogoUrl: eventPageLogoUrlSchema,
     pageAboutHtml: z.string().max(50_000).optional(),
     ...registrationCutoffSchema,
+    ...teamSettingsFields,
   })
   .superRefine((data, ctx) => {
+    validateTeamSettings(data, ctx);
     // A started event stays editable; updateEvent only rejects moving the start into the past.
     validateEventScheduleAndLocation(data, ctx, { requireFutureStart: false });
     if (data.registrationClosesAt && data.registrationLeadMinutes != null)
@@ -181,7 +189,7 @@ export const updateEventSchema = z
         path: ["registrationClosesAt"],
         message: "Registration must close on or before the event starts.",
       });
-  });
+  }));
 
 export const deleteEventSchema = z.object({
   organisationSlug: z.string().trim().min(1),

@@ -13,6 +13,7 @@ import { EventReportDownloadButton } from "@/components/reports/EventReportDownl
 import { Card, PageHeader } from "@/components/ui/display";
 import { formatDayTime } from "@/lib/format/datetime";
 import type { Metadata } from "next";
+import { cachedDateTimeFormat } from "@/lib/format/intlCache";
 
 export const metadata: Metadata = { title: "Manage event series", robots: { index: false, follow: false } };
 
@@ -20,13 +21,13 @@ type Props = { params: Promise<{ orgSlug: string; seriesId: string; }>; };
 
 
 function eventDateInput(date: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const parts = cachedDateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const value = (type: string) => parts.find((part) => part.type === type)?.value;
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 export default async function SeriesManagePage({ params }: Props) {
-  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendees, attendeesTruncated, rollup, dates, tickets, revenue } = await loadSeriesManageView({ params });
+  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, tickets, revenue } = await loadSeriesManageView({ params });
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title={series.title} description="Manage this recurring event and its upcoming occurrences." />
@@ -57,7 +58,7 @@ export default async function SeriesManagePage({ params }: Props) {
         />
       </section> : null}
 
-      {canManageSchedule ? <ScheduleManager organisationSlug={organisation.slug} eventSeriesId={series.id} items={series.scheduleItems.map((item) => ({ ...item, startDateTime: item.startDateTime.toISOString(), endDateTime: item.endDateTime.toISOString() }))} defaultDate={series.instances[0] ? eventDateInput(series.instances[0].startDateTime, series.timezone) : ""} /> : null}
+      {canManageSchedule ? <ScheduleManager organisationSlug={organisation.slug} eventSeriesId={series.id} items={series.scheduleItems.map((item) => ({ ...item, startDateTime: item.startDateTime.toISOString(), endDateTime: item.endDateTime.toISOString() }))} defaultDate={series.instances[0] ? eventDateInput(series.instances[0].startDateTime, series.timezone) : ""} timeZone={series.timezone} /> : null}
 
       <section aria-labelledby="series-instances-title" className="flex flex-col gap-3">
         <h2 id="series-instances-title" className="text-h4 text-ink">Upcoming dates</h2>
@@ -131,7 +132,7 @@ export default async function SeriesManagePage({ params }: Props) {
         </section>
       ) : null}
 
-      {firstInstanceId && canManageRegistrations ? (
+      {firstInstanceId && attendeesPage ? (
         <section aria-label="Attendees (next date)" className="min-w-0">
           <GuestsPeople
             organisationSlug={organisation.slug}
@@ -139,8 +140,7 @@ export default async function SeriesManagePage({ params }: Props) {
             title="Attendees (next date)"
             timeZone={series.timezone}
             now={now.toISOString()}
-            attendees={attendees}
-            truncated={attendeesTruncated}
+            initialPage={attendeesPage}
             registrationFields={[]}
           />
         </section>

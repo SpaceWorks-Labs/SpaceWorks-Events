@@ -1,14 +1,23 @@
 import "server-only";
 
+import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import crypto from "node:crypto";
-import { RsvpStatus } from "@prisma/client";
+import { ExpenseClaimStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueOperatorNotice, enqueueRsvpConfirmation } from "@/lib/outbox";
-import { PaymentOperationError } from "./operations";
+import { AdmissionManagedError, PaymentOperationError } from "./operations";
 import { lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
 
 const HOUR = 3_600_000;
+
+/** The holder's expense claims go with their registration; a ticket with claims in play stays with them (`code` for API clients). */
+export class OpenClaimsError extends PaymentOperationError {
+  readonly code = "OPEN_CLAIMS";
+  constructor() {
+    super("This ticket has expense claims waiting, approved or paid, so it can't be transferred. Withdraw a waiting claim first, or ask the organisers.");
+  }
+}
 
 /** A new ticket link: the old one stops working once a ticket changes hands. */
 function newTicketToken() {
@@ -44,6 +53,8 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     },
   });
   if (!order || order.status !== "CONFIRMED") throw new PaymentOperationError("Only confirmed tickets can be transferred.");
+  // Applications (docs/ADMISSION.md): a place was offered to this person after review, so it can't pass to someone else.
+  if (order.eventId && (await prisma.event.count({ where: { id: order.eventId, admissionEnabled: true } }))) throw new AdmissionManagedError("This place was offered to you after your application was reviewed, so it can't be transferred.");
   const settings = order.event ?? order.series;
   const subject = orderSubject(order);
 
@@ -51,6 +62,9 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     await lockOrderTargets(tx, order, now);
     const ticket = await tx.rSVP.findFirst({ where: { id: params.rsvpId, orderId: order.id }, select: { attendeeKey: true, guestEmail: true, user: { select: { email: true } } } });
     if (!ticket) throw new PaymentOperationError("Ticket not found.");
+    // Claims are read and withdrawn by registration, so the new holder would see the previous holder's (docs/FINANCE.md).
+    const claims = await tx.expenseClaim.count({ where: { rsvp: { orderId: order.id, attendeeKey: ticket.attendeeKey }, status: { in: [ExpenseClaimStatus.SUBMITTED, ExpenseClaimStatus.APPROVED, ExpenseClaimStatus.PAID] } } });
+    if (claims > 0) throw new OpenClaimsError();
     // The same person's tickets in this order (every date of a pass) move together.
     const seats = await tx.rSVP.findMany({
       where: { orderId: order.id, attendeeKey: ticket.attendeeKey, status: RsvpStatus.CONFIRMED, checkedInAt: null },
@@ -65,6 +79,8 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     }
     const previous = ticket.user?.email?.trim() || ticket.guestEmail;
     if (previous?.toLowerCase() === email) throw new PaymentOperationError("That's already who holds this ticket.");
+    // A crew member already holds a free crew ticket for the event (docs/CREW.md).
+    if (order.eventId && (await hasCrewEmail(tx, order.eventId, [email]))) throw new PaymentOperationError(CREW_EMAIL_REFUSED);
     let firstToken: string | null = null;
     for (const seat of movable) {
       const token = newTicketToken();

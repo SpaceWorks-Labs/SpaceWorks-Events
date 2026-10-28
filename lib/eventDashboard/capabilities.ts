@@ -1,4 +1,5 @@
 import { EventPermission, type MembershipRole } from "@prisma/client";
+import { judgingPermissionsFor } from "@/lib/judgingPermissions";
 
 /*
  * The single source of truth for what the event and series dashboards show.
@@ -20,8 +21,18 @@ export type EventCapabilities = {
   canViewAnalytics: boolean;
   /** Event and series invite lists (`MANAGE_INVITATIONS`). */
   canManageInvitations: boolean;
+  /**
+   * Guests → Crew (docs/CREW.md): crew list, crew tickets and the crew sign-up
+   * link (`MANAGE_REGISTRATIONS`, as app/actions/crew.ts re-checks). Being on
+   * the crew grants no dashboard access.
+   */
+  canManageCrew: boolean;
   /** Check-in desk, scanner, offline roster, undo check-in and badge printing (`CHECK_IN`). */
   canCheckIn: boolean;
+  /** Check guests into or out of custom check-in lists (`CHECK_IN`, the same rule as entry check-in). */
+  canCheckInToLists: boolean;
+  /** Create, rename, reorder, archive and restore custom check-in lists (`EDIT_DETAILS`). */
+  canManageCheckInLists: boolean;
   /** Venue station PIN: on, reveal, rotate, off. */
   canManageCheckInStation: boolean;
   /** Event page content: page settings, highlights, speakers, sponsors, resources, FAQs (`EDIT_DETAILS`). */
@@ -54,7 +65,54 @@ export type EventCapabilities = {
   canDeleteEvent: boolean;
   /** Co-organiser invites, grants and removal. */
   canManageCollaborators: boolean;
+  /** Judging workspace: org owner/admin or a JUDGE collaborator (docs/HACKATHON.md). */
+  canJudge: boolean;
+  /** Judging settings, rubric, assignments, awards, and results: org owner/admin only. */
+  canManageJudging: boolean;
+  /**
+   * A collaborator whose only grant is JUDGE. The page must show nothing but
+   * the judging workspace: no overview data, guests, page editor, emails,
+   * check-in, feedback, analytics, or settings.
+   */
+  isJudgeOnly: boolean;
+  /** Applications tab: stages, reviewers, decisions and offers (`MANAGE_REGISTRATIONS`, as app/actions/admission.ts re-checks; docs/ADMISSION.md). */
+  canManageApplications: boolean;
+  /** The application review workspace: org owner/admin or a REVIEW_APPLICATIONS collaborator. */
+  canReviewApplications: boolean;
+  /**
+   * A non-member collaborator whose grants are REVIEW_APPLICATIONS (and
+   * possibly JUDGE or MENTOR) only: the page shows their workspaces and nothing else.
+   */
+  isReviewerOnly: boolean;
+} & MentorPermissions;
+
+/** Mentor Desk flags (docs/MENTOR_DESK.md). */
+export type MentorPermissions = {
+  /** Holds the MENTOR grant on this event: the mentor console (the grant itself, never implied by a role). */
+  canMentor: boolean;
+  /** Mentor Desk settings, mentors, categories, assignments, office hours, rounds and the CSV: org owner/admin only. */
+  canManageMentorDesk: boolean;
+  /**
+   * A collaborator who is not an organisation member and whose grants are
+   * MENTOR (and possibly JUDGE) only. The page shows the mentor console (and
+   * the judging workspace for JUDGE) and nothing else.
+   */
+  isMentorOnly: boolean;
 };
+
+/**
+ * MENTOR is isolated like JUDGE: it opens the mentor console and nothing
+ * else, and no other permission check ever treats it as one of its grants.
+ */
+export function mentorPermissionsFor(isAdmin: boolean, isMember: boolean, grant: readonly EventPermission[]): MentorPermissions {
+  const hasMentor = grant.includes(EventPermission.MENTOR);
+  return {
+    canMentor: hasMentor,
+    canManageMentorDesk: isAdmin,
+    isMentorOnly: !isAdmin && !isMember && hasMentor
+      && grant.every((permission) => permission === EventPermission.MENTOR || permission === EventPermission.JUDGE),
+  };
+}
 
 export type SeriesCapabilities = {
   isAdmin: boolean;
@@ -92,7 +150,10 @@ export function eventCapabilities(
     canExportAttendees: registrations,
     canViewAnalytics: registrations,
     canManageInvitations: has(EventPermission.MANAGE_INVITATIONS),
+    canManageCrew: registrations,
     canCheckIn: has(EventPermission.CHECK_IN),
+    canCheckInToLists: has(EventPermission.CHECK_IN),
+    canManageCheckInLists: has(EventPermission.EDIT_DETAILS),
     canManageCheckInStation: isAdmin,
     canEditPageContent: has(EventPermission.EDIT_DETAILS),
     canEditEventDetails: isAdmin,
@@ -110,6 +171,11 @@ export function eventCapabilities(
     canEmbedEvent: isAdmin,
     canDeleteEvent: isAdmin,
     canManageCollaborators: isAdmin,
+    ...judgingPermissionsFor(isAdmin, role != null, grant ?? []),
+    canManageApplications: registrations,
+    canReviewApplications: has(EventPermission.REVIEW_APPLICATIONS),
+    isReviewerOnly: !isAdmin && role == null && Boolean(grant?.includes(EventPermission.REVIEW_APPLICATIONS)) && Boolean(grant?.every((permission) => permission === EventPermission.REVIEW_APPLICATIONS || permission === EventPermission.JUDGE || permission === EventPermission.MENTOR)),
+    ...mentorPermissionsFor(isAdmin, role != null, grant ?? []),
   };
 }
 

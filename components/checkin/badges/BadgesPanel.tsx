@@ -18,7 +18,7 @@ import { SaveStatusPill } from "../id-card/IdCardDesigner";
 import { printCard } from "../id-card/printCards";
 import { sampleAttendee, type BadgeDesignSeed, type BadgeDesignSource, type RegistrationField, useIdCardSettings } from "../id-card/shared";
 
-export type BadgeListAttendee = { rsvpId: string; displayName: string; email: string | null; status: string; checkedIn: boolean };
+export type BadgeListAttendee = { rsvpId: string; displayName: string; email: string | null; status: string; checkedIn: boolean; isCrew?: boolean };
 
 const STATUS_PILLS: Record<string, { label: string; tone: ChipTone }> = {
   CONFIRMED: { label: "Confirmed", tone: "success" },
@@ -55,6 +55,8 @@ function matchesFilter(attendee: BadgeListAttendee, filter: BadgeStatusFilter) {
   if (filter === "checked-in") return attendee.checkedIn;
   if (filter === "not-checked-in") return attendee.status === "CONFIRMED" && !attendee.checkedIn;
   if (filter === "all") return true;
+  if (filter === "crew") return attendee.isCrew === true;
+  if (filter === "attendees") return attendee.status === "CONFIRMED" && !attendee.isCrew;
   return attendee.status === "CONFIRMED";
 }
 

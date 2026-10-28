@@ -1,34 +1,40 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout, EmptyState } from "@/components/ui/display";
-import { Dropdown, SearchInput } from "@/components/ui/field";
-import { cn } from "@/lib/cn";
 import type { AttendeeRow } from "@/components/attendees/types";
 import { ManualRsvpDialog } from "@/components/attendees/ManualRsvpDialog";
 import { EditRsvpDialog } from "@/components/attendees/EditRsvpDialog";
-import { ExportEmailsButton } from "@/components/attendees/ExportEmailsButton";
 import type { RegistrationFieldRow } from "@/components/registration/EventRegistrationFormEditor";
 import { ConfirmationDialog } from "@/components/feedback/ConfirmationDialog";
 import { useToast } from "@/components/feedback/ToastProvider";
-import { deleteRsvp, restoreRsvp } from "@/app/actions/rsvp-admin";
+import { RemoveGuestDialog } from "./GuestsPeople/RemoveGuestDialog";
 import { PaymentDialog } from "@/components/attendees/PaymentDialog";
 import { approveRsvp, promoteFromWaitlist, reacceptRsvp, rejectRsvp } from "@/app/actions/rsvp-lifecycle";
 import { undoCheckIn } from "@/app/actions/checkin";
 import { GuestRow, type GuestRowActions } from "@/components/event-dashboard/guests/GuestRow";
+import { useEventTabs } from "@/components/event-dashboard/EventDashboardTabs";
+import { MoveToTeamDialog } from "@/components/event-dashboard/guests/MoveToTeamDialog";
+import { AttendanceLinkDialog } from "@/components/event-dashboard/guests/AttendanceLinkDialog";
 import {
-  GUEST_FILTERS,
-  countGuestFilters,
-  filterGuests,
   guestDisplayName,
-  pageRange,
   type GuestKindFilter,
   type GuestStatusFilter,
+  type GuestTeamFilter,
 } from "@/components/event-dashboard/guests/guestList";
-import { FILTER_DOTS, PAGE_SIZE, type ActionResult, type GuestListTarget } from "./GuestsPeople/constants";
+import { useDebouncedValue, useServerPages, type ServerPageResult } from "@/components/event-dashboard/guests/useServerPages";
+import { loadAttendeesPage } from "@/app/actions/guest-list";
+import { attendeeViewSearchParams, type AttendeeAttendanceFilter } from "@/lib/attendeeListQuery";
+import { showingLabel } from "@/lib/keysetCursor";
+import type { AttendeesPage } from "@/lib/eventDashboard/attendees";
+import { viewParam, type SavedViewDto, type ViewParams } from "@/lib/savedViews";
+import { useInitialViewParams, useSyncViewToUrl } from "@/components/event-dashboard/views/useViewUrl";
+import { SEARCH_DELAY_MS, type ActionResult, type GuestListTarget, type Meta, type View } from "./GuestsPeople/constants";
+import { GuestFilters, GuestsHeaderActions } from "./GuestsPeople/Toolbar";
+import { initialGuestList, reacceptMessage, toGuestPage } from "./GuestsPeople/paging";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export type { GuestListTarget } from "./GuestsPeople/constants";
 
@@ -38,11 +44,13 @@ export function GuestsPeople({
   title = "Guests",
   timeZone,
   now,
-  attendees,
-  truncated,
+  initialPage,
   registrationFields,
+  teamMode = false,
   ticketTypes = [],
   canUndoCheckIn = true,
+  canShareAttendanceLink = false,
+  savedViews,
 }: {
   organisationSlug: string;
   target: GuestListTarget;
@@ -50,35 +58,83 @@ export function GuestsPeople({
   timeZone: string;
   /** Server render time (ISO) so relative labels match between server and client. */
   now: string;
-  attendees: AttendeeRow[];
-  truncated: boolean;
+  /** The first page of the unfiltered list, with its counts. */
+  initialPage: AttendeesPage;
   registrationFields: RegistrationFieldRow[];
+  /** TEAM event: show each guest's team, the In a team / Solo filter, route status changes to Teams, and offer Move to team. */
+  teamMode?: boolean;
   /** Events that sell tickets: what a manually added guest can be given. */
   ticketTypes?: Array<{ id: string; name: string; priceMinor: number; currency: string; }>;
   /** Undo check-in is a CHECK_IN operation, separate from managing registrations. */
   canUndoCheckIn?: boolean;
+  /** Owners and admins of a one-off event that has not started: "Share attendance link" (re-checked on the server). */
+  canShareAttendanceLink?: boolean;
+  /** Saved views for this list (event dashboard only); omitted on a series date. */
+  savedViews?: SavedViewDto[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [manualRsvpOpen, setManualRsvpOpen] = useState(false);
-  const [status, setStatus] = useState<GuestStatusFilter>("all");
-  const [kind, setKind] = useState<GuestKindFilter>("all");
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(0);
+  // Filters live in the address bar (saved views): a link reopens the same view.
+  const fromUrl = useInitialViewParams("GUESTS_PEOPLE");
+  const [status, setStatus] = useState<GuestStatusFilter>(viewParam(fromUrl, "status") as GuestStatusFilter);
+  const [kind, setKind] = useState<GuestKindFilter>(viewParam(fromUrl, "kind") as GuestKindFilter);
+  const [team, setTeam] = useState<GuestTeamFilter>(viewParam(fromUrl, "team") as GuestTeamFilter);
+  const [attendance, setAttendance] = useState<AttendeeAttendanceFilter>(viewParam(fromUrl, "attendance") as AttendeeAttendanceFilter);
+  const { openTab } = useEventTabs();
+  const [query, setQuery] = useState(viewParam(fromUrl, "q"));
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editGuest, setEditGuest] = useState<AttendeeRow | null>(null);
   const [paymentGuest, setPaymentGuest] = useState<AttendeeRow | null>(null);
   const [removeGuest, setRemoveGuest] = useState<AttendeeRow | null>(null);
   const [undoGuest, setUndoGuest] = useState<AttendeeRow | null>(null);
+  const [moveGuest, setMoveGuest] = useState<AttendeeRow | null>(null);
+  const [linkGuest, setLinkGuest] = useState<AttendeeRow | null>(null);
 
   const eventId = target.kind === "event" ? target.eventId : undefined;
   const scope = target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId };
 
-  const counts = useMemo(() => countGuestFilters(attendees), [attendees]);
-  const visible = useMemo(() => filterGuests(attendees, { status, kind, query }), [attendees, status, kind, query]);
-  const range = pageRange(visible.length, page, PAGE_SIZE);
-  const pageRows = visible.slice(range.page * PAGE_SIZE, range.page * PAGE_SIZE + PAGE_SIZE);
+  const searchedQuery = useDebouncedValue(query.trim(), SEARCH_DELAY_MS);
+  const viewParams = useMemo(() => {
+    const params: ViewParams = {};
+    if (status !== "all") params.status = status;
+    if (kind !== "all") params.kind = kind;
+    if (teamMode && team !== "all") params.team = team;
+    if (target.kind === "event" && attendance !== "all") params.attendance = attendance;
+    if (searchedQuery) params.q = searchedQuery;
+    return params;
+  }, [status, kind, team, teamMode, attendance, target.kind, searchedQuery]);
+  useSyncViewToUrl("GUESTS_PEOPLE", viewParams);
+  const applyView = useCallback((params: ViewParams) => {
+    setStatus(viewParam(params, "status") as GuestStatusFilter);
+    setKind(viewParam(params, "kind") as GuestKindFilter);
+    setTeam(viewParam(params, "team") as GuestTeamFilter);
+    setAttendance(viewParam(params, "attendance") as AttendeeAttendanceFilter);
+    setQuery(viewParam(params, "q"));
+  }, []);
+  // Series dates are never asked to confirm attendance, so the filter applies to one-off events only.
+  const attendanceFilter: AttendeeAttendanceFilter = target.kind === "event" ? attendance : "all";
+  const view: View = useMemo(() => ({ status, kind, team: teamMode ? team : "all", attendance: attendanceFilter, query: searchedQuery }), [status, kind, team, teamMode, attendanceFilter, searchedQuery]);
+  const viewKey = JSON.stringify(view);
+  const isDefaultView = view.status === "all" && view.kind === "all" && view.team === "all" && view.attendance === "all" && !view.query;
+  const initial = useMemo(() => initialGuestList(initialPage), [initialPage]);
+  const scopeIds = useMemo(() => (target.kind === "event" ? { eventId: target.eventId } : { eventInstanceId: target.instanceId }), [target]);
+  const fetchPage = useCallback(
+    async (current: View, cursor: string | null): Promise<ServerPageResult<AttendeeRow, Meta>> => toGuestPage(await loadAttendeesPage({ organisationSlug, ...scopeIds, ...current, cursor })),
+    [organisationSlug, scopeIds],
+  );
+  const list = useServerPages<AttendeeRow, View, Meta>({ initial, view, viewKey, isDefaultView, delayMs: 0, fetchPage, keyOf: (row) => row.id });
+  // The chips count the whole event; the list, its label and the exports follow the search and dropdowns.
+  const { counts, total, matching, attendanceCounts } = list.meta;
+  // Shown once someone has been asked (the server sends counts only then), or while a linked view selects it.
+  const showAttendanceFilter = target.kind === "event" && (attendanceCounts != null || attendance !== "all");
+  const shownTotal = matching;
+  // Both exports carry the list's current filters and search, so they hold
+  // every matching registration, not only the rows loaded here.
+  const viewQuery = attendeeViewSearchParams(view);
+  const emailExportHref = eventId ? `/api/exports/events/${eventId}/attendee-emails${viewQuery ? `?${viewQuery}` : ""}` : null;
+  const csvExportHref = eventId ? `/api/exports/events/${eventId}/attendees${viewQuery ? `?${viewQuery}` : ""}` : null;
 
   function run<R extends ActionResult>(guest: AttendeeRow, action: () => Promise<R>, success: string | ((res: R) => string)) {
     setBusyId(guest.id);
@@ -98,11 +154,7 @@ export function GuestsPeople({
     approve: (guest) => run(guest, () => approveRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), "Approved"),
     decline: (guest) => run(guest, () => rejectRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), "Declined"),
     promote: (guest) => run(guest, () => promoteFromWaitlist({ organisationSlug, rsvpId: guest.id, ...scope }), "Spot given"),
-    reaccept: (guest) => run(guest, () => reacceptRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), (res) => {
-      const status = "data" in res ? res.data?.status : undefined;
-      if (status === "PAYMENT_REQUESTED") return "Re-accepted. They've been sent a payment link; their ticket confirms once they pay.";
-      return status === "WAITLISTED" ? "Re-accepted. The event is full, so they're on the waitlist." : "Re-accepted";
-    }),
+    reaccept: (guest) => run(guest, () => reacceptRsvp({ organisationSlug, rsvpId: guest.id, ...scope }), (res) => reacceptMessage("data" in res ? res.data?.status : undefined)),
     copyTicket: async (guest) => {
       try {
         await navigator.clipboard.writeText(guest.ticketUrl);
@@ -111,121 +163,83 @@ export function GuestsPeople({
         showToast("Could not copy", "error");
       }
     },
+    shareAttendanceLink: eventId && canShareAttendanceLink ? (guest) => setLinkGuest(guest) : undefined,
     edit: (guest) => setEditGuest(guest),
     undoCheckIn: eventId && canUndoCheckIn ? (guest) => setUndoGuest(guest) : undefined,
     remove: (guest) => setRemoveGuest(guest),
     // Orders on an event, or on a series date or pass, are refunded the same way.
     payment: (guest) => setPaymentGuest(guest),
+    openTeams: teamMode && target.kind === "event" ? () => openTab("guests", "teams") : undefined,
+    // The dialog searches the event's teams on the server; the move itself is re-checked there.
+    moveToTeam: teamMode && target.kind === "event" ? (guest) => setMoveGuest(guest) : undefined,
   };
-
-  function resetPage<T>(setter: (value: T) => void) {
-    return (value: T) => {
-      setter(value);
-      setPage(0);
-    };
-  }
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {truncated ? (
-        <Callout tone="warning">
-          {target.kind === "event"
-            ? "Only the 250 most recent registrations are loaded in this browser view, and its email export is limited to those records. Download the full attendee CSV for the complete list."
-            : "Only the 250 most recent registrations are loaded in this browser view."}
-        </Callout>
-      ) : null}
-
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-h4 text-ink">{title}</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-h4 text-ink">{title}</h2>
+          <HelpLink article="guests/guest-list" />
+        </div>
         {target.kind === "event" ? (
-          <div className="flex flex-wrap gap-2">
-            <ExportEmailsButton size="md" eventTitle={target.eventTitle} attendees={visible} title="Export emails for the guests shown" />
-            <Button asChild variant="secondary" startIcon={<Download />}>
-              <a href={`/api/exports/events/${target.eventId}/attendees`}>Download CSV</a>
-            </Button>
-            <Button variant="primary" startIcon={<Plus />} onClick={() => setManualRsvpOpen(true)}>
-              Add guest
-            </Button>
-          </div>
+          <GuestsHeaderActions
+            organisationSlug={organisationSlug}
+            eventId={target.eventId}
+            savedViews={savedViews}
+            viewParams={viewParams}
+            applyView={applyView}
+            teamMode={teamMode}
+            emailExportHref={emailExportHref}
+            csvExportHref={csvExportHref}
+            shownTotal={shownTotal}
+            setManualRsvpOpen={setManualRsvpOpen}
+          />
         ) : null}
       </div>
 
-      {attendees.length === 0 ? (
+      {total === 0 && list.rows.length === 0 ? (
         <EmptyState mood="sleepy" title="No guests yet.">
           Registrations appear here as people sign up.{eventId ? " You can also add a guest yourself." : null}
         </EmptyState>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1.5">
-              {GUEST_FILTERS.map(({ value, label }) => {
-                const on = status === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => resetPage(setStatus)(value)}
-                    className={cn(
-                      "inline-flex min-h-[38px] items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors",
-                      on ? "border-primary bg-primary text-on-primary" : "border-line-strong bg-panel text-ink hover:bg-subtle",
-                    )}
-                  >
-                    <span aria-hidden className={cn("size-2 rounded-full", value === "all" && on ? "bg-on-primary" : FILTER_DOTS[value])} />
-                    {label}
-                    <span className="font-medium tabular-nums">{counts[value]}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex w-full min-w-0 flex-wrap gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
-              <div className="min-w-0 flex-1 sm:w-[160px] sm:flex-none">
-                <label htmlFor="guest-kind" className="sr-only">Registration type</label>
-                <Dropdown id="guest-kind" value={kind} onChange={(event) => resetPage(setKind)(event.target.value as GuestKindFilter)} className="py-2 sm:text-sm">
-                  <option value="all">Everyone</option>
-                  <option value="guests">Guests only</option>
-                  <option value="users">Signed-in users</option>
-                </Dropdown>
-              </div>
-              <div className="w-full min-w-0 sm:w-[260px]">
-                <label htmlFor="guest-search" className="sr-only">Search guests by name or email</label>
-                <SearchInput
-                  id="guest-search"
-                  placeholder="Search name or email"
-                  value={query}
-                  onChange={(event) => resetPage(setQuery)(event.target.value)}
-                  onClear={() => resetPage(setQuery)("")}
-                  autoComplete="off"
-                  className="py-2 sm:text-sm"
-                />
-              </div>
-            </div>
-          </div>
+          <GuestFilters
+            status={status}
+            setStatus={setStatus}
+            counts={counts}
+            kind={kind}
+            setKind={setKind}
+            teamMode={teamMode}
+            team={team}
+            setTeam={setTeam}
+            query={query}
+            setQuery={setQuery}
+            attendance={showAttendanceFilter ? attendance : null}
+            setAttendance={setAttendance}
+            attendanceCounts={attendanceCounts}
+          />
 
-          {visible.length === 0 ? (
-            <EmptyState>{query.trim() ? "No guests match that search." : "No guests in this view."}</EmptyState>
+          {list.error ? <Callout tone="danger" role="alert">{list.error}</Callout> : null}
+
+          {list.loading === "replace" ? (
+            <p role="status" className="text-body-ui text-ink-muted">Loading guests…</p>
+          ) : list.rows.length === 0 ? (
+            <EmptyState>{view.query ? "No guests match that search." : "No guests in this view."}</EmptyState>
           ) : (
-            <ul aria-label="Guests" className="flex flex-col gap-2">
-              {pageRows.map((guest) => (
+            <ul id={list.listId} aria-label="Guests" aria-busy={list.loading != null} className="flex flex-col gap-2">
+              {list.rows.map((guest) => (
                 <GuestRow key={guest.id} guest={guest} timeZone={timeZone} now={now} busy={pending && busyId === guest.id} disabled={pending} actions={actions} />
               ))}
             </ul>
           )}
 
-          {visible.length > 0 ? (
+          {list.rows.length > 0 && list.loading !== "replace" ? (
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-secondary">
-              <span aria-live="polite">
-                Showing {range.first}–{range.last} of {visible.length}
-              </span>
-              {range.lastPage > 0 ? (
-                <div className="flex gap-1.5">
-                  <Button size="sm" variant="secondary" disabled={range.page === 0} onClick={() => setPage(range.page - 1)}>
-                    Previous
-                  </Button>
-                  <Button size="sm" variant="secondary" disabled={range.page >= range.lastPage} onClick={() => setPage(range.page + 1)}>
-                    Next
-                  </Button>
-                </div>
+              <span aria-live="polite">{showingLabel(list.rows.length, Math.max(shownTotal, list.rows.length), shownTotal === 1 ? "guest" : "guests")}</span>
+              {list.nextCursor ? (
+                <Button size="sm" variant="secondary" loading={list.loading === "more"} loadingLabel="Loading…" onClick={() => void list.loadMore()}>
+                  Load more guests
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -247,6 +261,26 @@ export function GuestsPeople({
       ) : null}
 
       {manualRsvpOpen && eventId ? <ManualRsvpDialog organisationSlug={organisationSlug} eventId={eventId} fields={registrationFields} ticketTypes={ticketTypes} onClose={() => setManualRsvpOpen(false)} onAdded={() => router.refresh()} /> : null}
+
+      {moveGuest && eventId ? (
+        <MoveToTeamDialog
+          organisationSlug={organisationSlug}
+          eventId={eventId}
+          person={{ rsvpId: moveGuest.id, name: guestDisplayName(moveGuest), teamId: moveGuest.team?.id ?? null }}
+          onClose={() => setMoveGuest(null)}
+          onMoved={() => router.refresh()}
+        />
+      ) : null}
+
+      {linkGuest && eventId ? (
+        <AttendanceLinkDialog
+          organisationSlug={organisationSlug}
+          eventId={eventId}
+          guest={{ rsvpId: linkGuest.id, name: guestDisplayName(linkGuest), state: linkGuest.attendance?.state ?? null }}
+          // A created link turns the badge into "No reply" (or keeps their answer).
+          onClose={(created) => { setLinkGuest(null); if (created) router.refresh(); }}
+        />
+      ) : null}
 
       {editGuest ? (
         <EditRsvpDialog
@@ -275,45 +309,15 @@ export function GuestsPeople({
         }}
       />
 
-      <ConfirmationDialog
-        open={Boolean(removeGuest)}
-        title="Remove Attendee"
-        message={`Are you sure you want to remove ${removeGuest?.user?.name ?? removeGuest?.guestName ?? removeGuest?.guestEmail ?? "this attendee"}'s RSVP registration?`}
-        confirmLabel="Remove"
-        loading={pending}
-        onCancel={() => setRemoveGuest(null)}
-        onConfirm={() => {
-          if (!removeGuest) return;
-          const guest = removeGuest;
-          setRemoveGuest(null);
-          startTransition(async () => {
-            const res = await deleteRsvp({ organisationSlug, rsvpId: guest.id, ...scope });
-            if (!res.ok) {
-              showToast(res.error, "error");
-              return;
-            }
-            showToast(
-              "Attendee removed",
-              "success",
-              {
-                label: "Undo",
-                onClick: () => {
-                  startTransition(async () => {
-                    const restored = await restoreRsvp({ organisationSlug, undoId: res.data!.undoId });
-                    if (restored.ok) {
-                      showToast("Attendee restored", "success");
-                      router.refresh();
-                    } else {
-                      showToast(restored.error, "error");
-                    }
-                  });
-                },
-              },
-              10000,
-            );
-            router.refresh();
-          });
-        }}
+      <RemoveGuestDialog
+        organisationSlug={organisationSlug}
+        scope={scope}
+        removeGuest={removeGuest}
+        setRemoveGuest={setRemoveGuest}
+        pending={pending}
+        startTransition={startTransition}
+        showToast={showToast}
+        router={router}
       />
     </div>
   );

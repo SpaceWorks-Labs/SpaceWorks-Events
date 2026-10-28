@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { EventPermission, MembershipRole, RsvpStatus } from "@prisma/client";
+import type { AttendanceResponse, EventPermission, MembershipRole, RsvpStatus, SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { minorToDecimalString } from "@/lib/payments/money";
 
@@ -16,6 +16,19 @@ type AnswerValue = { valueText: string | null; valueBool: boolean | null; valueN
 
 /* ---------- Raw input shapes (exactly what the loader selects) ---------- */
 
+/** A hackathon project (docs/HACKATHON.md). The organisers' disqualification reason is never read. */
+type ExportSubmission = {
+  title: string;
+  summary: string;
+  repoUrl: string | null;
+  demoUrl: string | null;
+  videoUrl: string | null;
+  status: SubmissionStatus;
+  submittedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type AccountExportSource = {
   user: {
     name: string | null;
@@ -27,12 +40,20 @@ export type AccountExportSource = {
   signInProviders: Array<{ provider: string }>;
   memberships: Array<{ role: MembershipRole; createdAt: Date; organisation: { name: string; slug: string } }>;
   registrations: Array<{
+    /** Used only to tell whether the user leads their team; never exported. */
+    id?: string;
     status: RsvpStatus;
     createdAt: Date;
     checkedInAt: Date | null;
     event: { title: string; startDateTime: Date; endDateTime: Date; timezone: string; organisation: { name: string } } | null;
     eventInstance: { startDateTime: Date; endDateTime: Date; series: { title: string; timezone: string; organisation: { name: string } } } | null;
     answers: Array<AnswerValue & { field: { label: string } }>;
+    /** TEAM events: the user's team (name and who leads it), and the team's project. */
+    team?: { name: string; leaderRsvpId: string | null; submission?: ExportSubmission | null } | null;
+    /** A solo registration's own project. */
+    submission?: ExportSubmission | null;
+    /** The user's own attendance confirmation reply (docs/ATTENDANCE.md); its token hash is never read. */
+    attendanceCheck?: { sentAt: Date; response: AttendanceResponse | null; respondedAt: Date | null; note: string | null } | null;
   }>;
   feedback: Array<{
     submittedAt: Date;
@@ -114,7 +135,31 @@ export function buildAccountDataExport(source: AccountExportSource, generatedAt:
         status: rsvp.status,
         registeredAt: rsvp.createdAt.toISOString(),
         checkedInAt: iso(rsvp.checkedInAt),
+        team: rsvp.team?.name ?? null,
+        teamRole: rsvp.team ? (rsvp.id != null && rsvp.team.leaderRsvpId === rsvp.id ? "leader" : "member") : null,
         answers: rsvp.answers.map((answer) => ({ question: answer.field.label, answer: answerValue(answer) })),
+        attendanceConfirmation: rsvp.attendanceCheck
+          ? { askedAt: rsvp.attendanceCheck.sentAt.toISOString(), response: rsvp.attendanceCheck.response, respondedAt: iso(rsvp.attendanceCheck.respondedAt), note: rsvp.attendanceCheck.note || null }
+          : null,
+      }];
+    }),
+    submissions: cap(source.registrations).flatMap((rsvp) => {
+      const submission = rsvp.team ? rsvp.team.submission : rsvp.submission;
+      const event = rsvp.event;
+      if (!submission || !event) return [];
+      return [{
+        event: event.title,
+        organisation: event.organisation.name,
+        team: rsvp.team?.name ?? null,
+        title: submission.title,
+        summary: submission.summary,
+        repoUrl: submission.repoUrl,
+        demoUrl: submission.demoUrl,
+        videoUrl: submission.videoUrl,
+        status: submission.status,
+        submittedAt: iso(submission.submittedAt),
+        createdAt: submission.createdAt.toISOString(),
+        updatedAt: submission.updatedAt.toISOString(),
       }];
     }),
     feedback: cap(source.feedback).map((response) => ({
@@ -169,6 +214,19 @@ export type AccountDataExport = ReturnType<typeof buildAccountDataExport>;
 
 const answerSelect = { valueText: true, valueBool: true, valueNumber: true, valueDate: true } as const;
 
+// Explicit project fields only; `disqualifiedReason` is organiser-only and never read.
+const submissionSelect = {
+  title: true,
+  summary: true,
+  repoUrl: true,
+  demoUrl: true,
+  videoUrl: true,
+  status: true,
+  submittedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 /**
  * Load only the signed-in user's own rows. Every query is keyed on `userId`
  * (directly or through the user's own RSVP) and fetches one row beyond the cap
@@ -193,12 +251,18 @@ export async function loadAccountExportSource(userId: string): Promise<AccountEx
       orderBy: { createdAt: "desc" },
       take,
       select: {
+        id: true,
         status: true,
         createdAt: true,
         checkedInAt: true,
+        // Team name, leader, and the team's project only; join and management tokens are never read.
+        team: { select: { name: true, leaderRsvpId: true, submission: { select: submissionSelect } } },
+        submission: { select: submissionSelect },
         event: { select: { title: true, startDateTime: true, endDateTime: true, timezone: true, organisation: { select: { name: true } } } },
         eventInstance: { select: { startDateTime: true, endDateTime: true, series: { select: { title: true, timezone: true, organisation: { select: { name: true } } } } } },
         answers: { select: { ...answerSelect, field: { select: { label: true } } }, orderBy: { field: { sortOrder: "asc" } }, take: 200 },
+        // The reply, its time and note; the check's token hash is never read.
+        attendanceCheck: { select: { sentAt: true, response: true, respondedAt: true, note: true } },
       },
     }),
     prisma.eventFeedbackResponse.findMany({

@@ -76,7 +76,7 @@ describe("seat holds and sales windows", () => {
   const now = new Date("2030-01-01T10:00:00.000Z");
 
   it("counts confirmed registrations and only unexpired holds", () => {
-    expect(seatTakingWhere(now)).toEqual({ OR: [{ status: "CONFIRMED" }, { status: "PENDING_PAYMENT", holdExpiresAt: { gt: now } }] });
+    expect(seatTakingWhere(now)).toEqual({ isCrew: false, OR: [{ status: "CONFIRMED" }, { status: "PENDING_PAYMENT", holdExpiresAt: { gt: now } }] });
     expect(isActiveHold({ status: "PENDING_PAYMENT", holdExpiresAt: new Date(now.getTime() + 1000) }, now)).toBe(true);
     expect(isActiveHold({ status: "PENDING_PAYMENT", holdExpiresAt: now }, now)).toBe(false);
   });

@@ -41,11 +41,20 @@ export type CheckInGate =
   | { ok: true }
   | { ok: false; reason: string; needsForce: boolean; blocked?: boolean };
 
+/** An application not yet accepted (docs/ADMISSION.md) has no place: no override admits it. */
+export const APPLICANT_NO_PLACE = "This applicant's application hasn't been accepted, so they have no place and can't be checked in, even with an override.";
+
+/**
+ * `applicant`: the registration is (or is in a team that is) an admission
+ * application that isn't ACCEPTED, as `commitCheckInProjection` reports it.
+ */
 export function gateCheckInForStatus(
   status: RsvpStatus,
   force: boolean,
+  applicant = false,
 ): CheckInGate {
   if (status === "CONFIRMED") return { ok: true };
+  if (applicant) return { ok: false, reason: APPLICANT_NO_PLACE, needsForce: false, blocked: true };
   if (status === "REJECTED") {
     return {
       ok: false,

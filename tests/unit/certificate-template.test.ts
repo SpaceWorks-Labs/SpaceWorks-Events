@@ -9,7 +9,7 @@ const backgroundKey = "organisations/org_1/certificate-backgrounds/12345678-1234
 const assetKey = "organisations/org_1/certificate-assets/87654321-1234-4123-8123-123456789abc.webp";
 const legacy = { ...defaultNameArea, backgroundKey };
 const template: CertificateTemplate = { version: 2, backgroundKey, elements: [defaultNameElement()] };
-const values = { name: "Alex", event: "Launch night", eventDate: "14 Oct 2026", organisation: "Community", issueDate: "15 Oct 2026" };
+const values = { name: "Alex", event: "Launch night", eventDate: "14 Oct 2026", organisation: "Community", issueDate: "15 Oct 2026", role: "", hours: "" };
 const withName = (patch: Record<string, unknown>) => ({ ...template, elements: [{ ...template.elements[0], ...patch }] });
 
 /** Bounding box of dark pixels as fractions of the image. */

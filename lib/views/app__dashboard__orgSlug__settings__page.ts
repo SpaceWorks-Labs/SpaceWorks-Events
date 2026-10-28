@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { canDeleteOrg, requireOrgRole } from "@/lib/permissions";
 import { configuredProvider, isProviderTestMode } from "@/lib/payments/settings";
+import { countWebhookEndpoints } from "@/lib/webhooks/management";
 type Props = { params: Promise<{ orgSlug: string; }>; };
 
 export async function loadOrgSettingsView({ params }: Props) {
@@ -47,6 +48,8 @@ export async function loadOrgSettingsView({ params }: Props) {
   const email = { useOwnServer: emailRow?.useOwnServer ?? false };
 
   const chatChannels = await prisma.chatChannel.count({ where: { organisationId: organisation.id } });
+  // The page itself is OWNER/ADMIN only, and so are webhooks (canManageWebhooks).
+  const webhooks = await countWebhookEndpoints(organisation.id);
 
-  return { org, organisation, membership, isOwner, canDelete, totalApiClients, activeApiClients, payments, email, chatChannels };
+  return { org, organisation, membership, isOwner, canDelete, totalApiClients, activeApiClients, payments, email, chatChannels, webhooks };
 }

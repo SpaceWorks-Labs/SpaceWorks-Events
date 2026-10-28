@@ -19,6 +19,7 @@ export function useLookupFlow({
   showToast,
   startTransition,
   stationRequest,
+  removeRecent,
   setLookupRows,
   setLastResult,
   setScanPreview,
@@ -34,6 +35,8 @@ export function useLookupFlow({
   showToast: ReturnType<typeof useToast>["showToast"];
   startTransition: TransitionStartFunction;
   stationRequest: StationRequest;
+  /** Drops an undone check-in from Recent check-ins, including older loaded pages. */
+  removeRecent: (rsvpId: string) => void;
   setLookupRows: Dispatch<SetStateAction<LookupRow[]>>;
   setLastResult: Dispatch<SetStateAction<LastResult>>;
   setScanPreview: Dispatch<SetStateAction<CheckInPreviewData | null>>;
@@ -60,9 +63,9 @@ export function useLookupFlow({
           q.length < 2
             ? []
             : roster.rows
-                .filter((row) => row.displayName.toLowerCase().includes(q) || row.email?.toLowerCase().includes(q))
+                .filter((row) => row.displayName.toLowerCase().includes(q) || row.email?.toLowerCase().includes(q) || row.teamName?.toLowerCase().includes(q))
                 .slice(0, 12)
-                .map(({ rsvpId, displayName, email, status, checkedInAt }) => ({ rsvpId, displayName, email, status, checkedInAt })),
+                .map(({ rsvpId, displayName, email, status, checkedInAt, teamName, attendance }) => ({ rsvpId, displayName, email, status, checkedInAt, teamName, attendance })),
         );
       })();
       return;
@@ -107,6 +110,8 @@ export function useLookupFlow({
           checkInQrToken: attendee.ticketToken,
           checkInDetails: attendee.checkInDetails ?? [],
           registrationDetails: attendee.registrationDetails ?? [],
+          teamName: attendee.teamName ?? null,
+          attendance: attendee.attendance ?? null,
           gate,
         });
         setScanIsOffline(true);
@@ -149,6 +154,7 @@ export function useLookupFlow({
         showToast(res.error, "error");
         return;
       }
+      removeRecent(rsvpId);
       showToast("Check-in removed", "success");
       // Search results and the result card would otherwise still say "Checked in" and offer Undo again.
       setLookupRows((rows) => rows.map((row) => (row.rsvpId === rsvpId ? { ...row, checkedInAt: null } : row)));

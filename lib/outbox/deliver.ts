@@ -4,10 +4,8 @@ import "server-only";
 
 import { OutboxStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { sendApprovalNotification, sendCollaboratorInvitation, sendEventBroadcast, sendEventInvitation, sendReminder, sendRSVPConfirmation } from "@/lib/email";
-import { broadcastHtmlToText, renderBroadcastHtml, renderBroadcastTemplate, sampleBroadcastVariables } from "@/lib/broadcastTemplate";
-import { broadcastBrandFor, broadcastEventUrl, broadcastTicketUrl, rsvpMatchesBroadcastAudience } from "@/lib/eventBroadcast";
-import { isBroadcastDesign } from "@/lib/email/broadcastDesigns";
+import { sendApprovalNotification, sendCollaboratorInvitation, sendEventInvitation, sendReminder, sendRSVPConfirmation } from "@/lib/email";
+import { broadcastTicketUrl } from "@/lib/eventBroadcast";
 import { sendPasswordResetEmail } from "@/lib/email/passwordReset";
 import { sendSignInCodeEmail } from "@/lib/email/signInCode";
 import { sendEmailVerificationEmail } from "@/lib/email/emailVerification";
@@ -17,13 +15,35 @@ import { reportOpsAlert } from "@/lib/opsAlerts";
 import { asMemberIdEmailPayload, deliverMemberIdCardEmail, MEMBER_ID_EMAIL_KIND } from "@/lib/memberIds/email";
 import { asPaymentEmailPayload, deliverPaymentEmail, PAYMENT_EMAIL_KIND } from "@/lib/payments/email";
 import { sendAs } from "@/lib/email/transporter";
+import { designedTicketAttachment } from "@/lib/ticketDesign/resolve";
 import { asChatMessagePayload, deliverChatMessage } from "@/lib/chat/deliver";
 import { CHAT_MESSAGE_KIND } from "@/lib/chat/notify";
-import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload, asEmailVerificationPayload, asEventBroadcastPayload, asEventBroadcastTestPayload, asEventInvitePayload, asEventReminderPayload, asOperatorNoticePayload, asPasswordResetPayload, asRsvpConfirmationPayload, asRsvpStatusPayload, asSignInCodePayload, containsCapability, isExpired, messageId, retryDelayMs } from "./payloads";
-import { attendeeName, broadcastEventSelect, broadcastVariablesFor, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
+import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload, asEmailVerificationPayload, asEventInvitePayload, asEventReminderPayload, asOperatorNoticePayload, asPasswordResetPayload, asRsvpConfirmationPayload, asRsvpStatusPayload, asSignInCodePayload, containsCapability, isExpired, messageId, retryDelayMs } from "./payloads";
+import { deliverTeamMessage, isTeamMessageKind } from "./team";
+import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
+import { ATTENDANCE_CHECK_KIND, deliverAttendanceCheck } from "./attendance";
+import { deliverMentorMessage, isMentorMessageKind } from "./mentor";
+import { deliverCrewMessage, isCrewMessageKind } from "./crew";
+import { ADMISSION_NOTICE_KIND, deliverAdmissionNotice } from "./admission";
+import { deliverReimbursementAvailable, REIMBURSEMENT_AVAILABLE_KIND } from "./reimbursement";
+import { deliverVolunteerNotice, VOLUNTEER_NOTICE_KIND } from "./volunteer";
+import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
+import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
+import { dueOutboxMessages } from "./due";
 
 /** Deliver a small batch. Run this from a protected scheduler, never a request path. */
 export async function deliverOutboxBatch(limit = 20) {
+  const { sent, failed } = await deliverOutboxBatchWithCount(limit);
+  return { sent, failed };
+}
+
+/**
+ * As deliverOutboxBatch, plus how many due messages the batch picked up.
+ * Messages dropped on purpose (a recipient who no longer matches, a link that
+ * no longer works) count as neither sent nor failed, so only `due` tells the
+ * drain loop whether the queue is empty.
+ */
+export async function deliverOutboxBatchWithCount(limit = 20) {
   // A worker may be interrupted after claiming a message. Return a stale claim
   // to the retry queue before processing new work so messages cannot be lost.
   await prisma.outboxMessage.updateMany({
@@ -34,11 +54,7 @@ export async function deliverOutboxBatch(limit = 20) {
     data: { status: OutboxStatus.PENDING, lockedAt: null },
   });
 
-  const messages = await prisma.outboxMessage.findMany({
-    where: { status: OutboxStatus.PENDING, availableAt: { lte: new Date() } },
-    orderBy: { createdAt: "asc" },
-    take: Math.min(Math.max(limit, 1), 100),
-  });
+  const messages = await dueOutboxMessages(Math.min(Math.max(limit, 1), 100));
 
   let sent = 0;
   let failed = 0;
@@ -63,7 +79,8 @@ export async function deliverOutboxBatch(limit = 20) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-        await sendRSVPConfirmation({ ...payload, recipientName: attendeeName(rsvp), calendarEvent: calendarEvent(rsvp), messageId: stableMessageId });
+        const ticketPdf = payload.status === RsvpStatus.CONFIRMED ? await designedTicketAttachment(payload.checkInToken) : undefined;
+        await sendRSVPConfirmation({ ...payload, recipientName: attendeeName(rsvp), calendarEvent: calendarEvent(rsvp), messageId: stableMessageId, ticketPdf, application: Boolean(rsvp.event?.admissionEnabled) });
       } else if (message.kind === "rsvp-status") {
         const payload = asRsvpStatusPayload(message.payload);
         if (!payload) throw new PermanentOutboxError();
@@ -80,7 +97,9 @@ export async function deliverOutboxBatch(limit = 20) {
             checkInToken: payload.checkInToken,
             recipientName: attendeeName(rsvp),
             calendarEvent: calendarEvent(rsvp),
+            teamName: payload.teamName,
             messageId: stableMessageId,
+            ticketPdf: await designedTicketAttachment(payload.checkInToken!),
           });
         } else {
           await sendApprovalNotification({ ...payload, messageId: stableMessageId });
@@ -90,7 +109,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendSignInCodeEmail({ ...payload, messageId: stableMessageId });
@@ -99,7 +117,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendPasswordResetEmail({ ...payload, messageId: stableMessageId });
@@ -108,7 +125,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendEmailVerificationEmail({ ...payload, messageId: stableMessageId });
@@ -117,7 +133,6 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendEventInvitation({ ...payload, messageId: stableMessageId });
@@ -126,87 +141,19 @@ export async function deliverOutboxBatch(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (isExpired(payload.expiresAt)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
-          failed += 1;
           continue;
         }
         await sendCollaboratorInvitation({ ...payload, messageId: stableMessageId });
       } else if (message.kind === "event-broadcast") {
-        const payload = asEventBroadcastPayload(message.payload);
-        if (!payload) throw new PermanentOutboxError();
-        const [broadcast, rsvp] = await Promise.all([
-          prisma.eventBroadcast.findUnique({
-            where: { id: payload.broadcastId },
-            select: { subject: true, body: true, design: true, statuses: true, attendance: true, eventId: true, event: { select: broadcastEventSelect } },
-          }),
-          prisma.rSVP.findUnique({
-            where: { id: payload.rsvpId },
-            select: { eventId: true, status: true, checkedInAt: true, checkInToken: true, guestName: true, user: { select: { name: true } } },
-          }),
-        ]);
-        // The broadcast or registration was removed, or the registration no
-        // longer belongs to the audience it was selected for. Drop silently
-        // rather than sending wording that no longer applies.
-        if (!broadcast || !rsvp || rsvp.eventId !== broadcast.eventId || !rsvpMatchesBroadcastAudience(rsvp, broadcast)) {
+        if ((await deliverEventBroadcast(message.payload, stableMessageId)) === "dropped") {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-        const variables = broadcastVariablesFor(broadcast.event, {
-          name: rsvp.user?.name?.trim() || rsvp.guestName?.trim() || null,
-          ticketUrl: rsvp.status === RsvpStatus.CONFIRMED ? broadcastTicketUrl(rsvp.checkInToken) : null,
-        });
-        const bodyHtml = renderBroadcastHtml(broadcast.body, variables);
-        await sendEventBroadcast({
-          to: payload.to,
-          subject: renderBroadcastTemplate(broadcast.subject, variables),
-          bodyHtml,
-          bodyText: broadcastHtmlToText(bodyHtml),
-          eventTitle: broadcast.event.title,
-          organisationName: broadcast.event.organisation.name,
-          design: isBroadcastDesign(broadcast.design) ? broadcast.design : undefined,
-          brand: broadcastBrandFor(broadcast.event),
-          messageId: stableMessageId,
-        });
       } else if (message.kind === "event-broadcast-test") {
-        const payload = asEventBroadcastTestPayload(message.payload);
-        if (!payload) throw new PermanentOutboxError();
-        const event = await prisma.event.findUnique({ where: { id: payload.eventId }, select: broadcastEventSelect });
-        if (!event) {
+        if ((await deliverEventBroadcastTest(message.payload, stableMessageId)) === "dropped") {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-        const variables = sampleBroadcastVariables({
-          title: event.title,
-          startDateTime: event.startDateTime,
-          timezone: event.timezone,
-          location: event.location,
-          isOnline: event.isOnline,
-          eventUrl: broadcastEventUrl(event.organisation.slug, event.slug),
-          organisationName: event.organisation.name,
-        }, payload.recipientName ?? null);
-        // If the organiser receiving the test is confirmed for this event themselves,
-        // the ticket button opens their own ticket, so the whole flow can be checked.
-        // (Tests only ever go to the signed-in organiser's own verified address.)
-        const ownRsvp = await prisma.rSVP.findFirst({
-          where: {
-            eventId: payload.eventId,
-            status: RsvpStatus.CONFIRMED,
-            OR: [{ user: { email: { equals: payload.to, mode: "insensitive" } } }, { guestEmail: { equals: payload.to, mode: "insensitive" } }],
-          },
-          select: { checkInToken: true },
-        });
-        if (ownRsvp) variables.ticketLink = broadcastTicketUrl(ownRsvp.checkInToken);
-        const bodyHtml = renderBroadcastHtml(payload.body, variables);
-        await sendEventBroadcast({
-          to: payload.to,
-          subject: `[Test] ${renderBroadcastTemplate(payload.subject, variables)}`,
-          bodyHtml,
-          bodyText: broadcastHtmlToText(bodyHtml),
-          eventTitle: event.title,
-          organisationName: event.organisation.name,
-          design: isBroadcastDesign(payload.design) ? payload.design : undefined,
-          brand: broadcastBrandFor(event),
-          messageId: stableMessageId,
-        });
       } else if (message.kind === EVENT_REMINDER_KIND) {
         const payload = asEventReminderPayload(message.payload);
         if (!payload) throw new PermanentOutboxError();
@@ -264,6 +211,34 @@ export async function deliverOutboxBatch(limit = 20) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
+      } else if (message.kind === ATTENDANCE_CHECK_KIND) {
+        const outcome = await deliverAttendanceCheck(message.payload, stableMessageId);
+        if (!outcome) throw new PermanentOutboxError();
+        if (outcome !== "sent") {
+          // A stale question is dropped; one that missed the event's start expired (counted as failed).
+          await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
+          if (outcome === "expired") failed += 1;
+          continue;
+        }
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind) || message.kind === VOLUNTEER_NOTICE_KIND || message.kind === ADMISSION_NOTICE_KIND || message.kind === REIMBURSEMENT_AVAILABLE_KIND) {
+        const outcome = message.kind === ADMISSION_NOTICE_KIND
+          ? await deliverAdmissionNotice(message.payload, stableMessageId)
+          : message.kind === REIMBURSEMENT_AVAILABLE_KIND
+          ? await deliverReimbursementAvailable(message.payload, stableMessageId)
+          : isTeamMessageKind(message.kind)
+          ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
+          : isCrewMessageKind(message.kind)
+            ? await deliverCrewMessage(message.payload, stableMessageId)
+            : isMentorMessageKind(message.kind)
+              ? await deliverMentorMessage(message.kind, message.payload, stableMessageId)
+            : message.kind === VOLUNTEER_NOTICE_KIND
+              ? await deliverVolunteerNotice(message.payload, stableMessageId)
+              : await deliverJudgingMessage(message.kind, message.payload, stableMessageId);
+        if (!outcome) throw new PermanentOutboxError();
+        if (outcome === "dropped") {
+          await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
+          continue;
+        }
       } else {
         throw new PermanentOutboxError();
       }
@@ -304,5 +279,5 @@ export async function deliverOutboxBatch(limit = 20) {
     }
   }
   sendAs(null);
-  return { sent, failed };
+  return { sent, failed, due: messages.length };
 }

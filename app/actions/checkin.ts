@@ -10,12 +10,10 @@ import {
 import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { commitCheckInProjection, commitUndoCheckInProjection } from "@/lib/checkInMutations";
-import {
-  getCheckInDetails,
-  getRegistrationDetails,
-  type CheckInDetail,
-  type RegistrationDetail,
-} from "@/lib/checkInDetails";
+import type { CheckInDetail, RegistrationDetail } from "@/lib/checkInDetails";
+import { doorExtras } from "@/lib/checkInDetails";
+import { deskAttendanceState, type AttendanceState } from "@/lib/attendanceCheck";
+import { DESK_EXTRAS_INCLUDE, deskResult } from "./checkin/result";
 import { attendeeLabel, requireOrgMemberForEvent, resolveRsvpForToken, revalidateAfterCheckIn } from "./checkin/access";
 import {
   checkInByRsvpId as checkInByRsvpIdAction,
@@ -25,6 +23,8 @@ import {
   downloadOfflineCheckInRoster as downloadOfflineCheckInRosterAction,
   syncOfflineCheckIns as syncOfflineCheckInsAction,
 } from "./checkin/offline";
+import { loadRecentCheckIns as loadRecentCheckInsAction } from "./checkin/recent";
+import type { RecentCheckInsPage } from "@/lib/checkInRecent";
 
 export type CheckInResultData = {
   rsvpId: string;
@@ -37,6 +37,12 @@ export type CheckInResultData = {
   checkInQrToken: string;
   checkInDetails: CheckInDetail[];
   registrationDetails: RegistrationDetail[];
+  /** TEAM events: the attendee's team name, shown at the desk and on badges. Not part of any API DTO. */
+  teamName?: string | null;
+  /** Attendance confirmation reply badge (docs/ATTENDANCE.md); null when never asked. Never the note. */
+  attendance?: AttendanceState | null;
+  /** An event crew ticket (docs/CREW.md): a Crew badge at the desk. */
+  isCrew?: boolean;
 };
 
 export type CheckInPreviewData = CheckInResultData & {
@@ -64,18 +70,7 @@ export async function previewCheckInByToken(
 
   return {
     ok: true,
-    data: {
-      rsvpId: rsvp.id,
-      displayName: attendeeLabel(rsvp),
-      email: rsvp.user?.email ?? rsvp.guestEmail,
-      status: rsvp.status,
-      alreadyCheckedIn: Boolean(rsvp.checkedInAt),
-      checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
-      checkInQrToken: rsvp.checkInToken,
-      checkInDetails: getCheckInDetails(rsvp.answers),
-      registrationDetails: getRegistrationDetails(rsvp.answers),
-      gate,
-    },
+    data: { ...deskResult(rsvp, { alreadyCheckedIn: Boolean(rsvp.checkedInAt), checkedInAt: rsvp.checkedInAt }), gate },
   };
 }
 
@@ -114,17 +109,7 @@ export async function checkInByToken(
   if (rsvp.checkedInAt) {
     return {
       ok: true,
-      data: {
-        rsvpId: rsvp.id,
-        displayName: attendeeLabel(rsvp),
-        email: rsvp.user?.email ?? rsvp.guestEmail,
-        status: rsvp.status,
-        alreadyCheckedIn: true,
-        checkedInAt: rsvp.checkedInAt.toISOString(),
-        checkInQrToken: rsvp.checkInToken,
-        checkInDetails: getCheckInDetails(rsvp.answers),
-        registrationDetails: getRegistrationDetails(rsvp.answers),
-      },
+      data: { ...deskResult(rsvp, { alreadyCheckedIn: true, checkedInAt: rsvp.checkedInAt }) },
     };
   }
 
@@ -139,22 +124,12 @@ export async function checkInByToken(
   if (committed.state !== "checked-in") {
     if (committed.state === "missing") return { ok: false, error: "RSVP not found." };
     if (committed.state === "ineligible") {
-      const currentGate = gateCheckInForStatus(committed.status, Boolean(force));
+      const currentGate = gateCheckInForStatus(committed.status, Boolean(force), committed.applicant);
       return { ok: false, error: currentGate.ok ? "Check-in could not be completed." : currentGate.reason };
     }
     return {
       ok: true,
-      data: {
-        rsvpId: rsvp.id,
-        displayName: attendeeLabel(rsvp),
-        email: rsvp.user?.email ?? rsvp.guestEmail,
-        status: rsvp.status,
-        alreadyCheckedIn: true,
-        checkedInAt: committed.checkedInAt.toISOString(),
-        checkInQrToken: rsvp.checkInToken,
-        checkInDetails: getCheckInDetails(rsvp.answers),
-        registrationDetails: getRegistrationDetails(rsvp.answers),
-      },
+      data: { ...deskResult(rsvp, { alreadyCheckedIn: true, checkedInAt: committed.checkedInAt }) },
     };
   }
 
@@ -166,17 +141,7 @@ export async function checkInByToken(
 
   return {
     ok: true,
-    data: {
-      rsvpId: rsvp.id,
-      displayName: attendeeLabel(rsvp),
-      email: rsvp.user?.email ?? rsvp.guestEmail,
-      status: rsvp.status,
-      alreadyCheckedIn: false,
-      checkedInAt: now.toISOString(),
-      checkInQrToken: rsvp.checkInToken,
-      checkInDetails: getCheckInDetails(rsvp.answers),
-      registrationDetails: getRegistrationDetails(rsvp.answers),
-    },
+    data: { ...deskResult(rsvp, { alreadyCheckedIn: false, checkedInAt: now }) },
   };
 }
 
@@ -233,6 +198,12 @@ export type LookupRow = {
   email: string | null;
   status: string;
   checkedInAt: string | null;
+  /** TEAM events: the attendee's team name. */
+  teamName?: string | null;
+  /** Attendance confirmation reply badge; null when never asked. */
+  attendance?: AttendanceState | null;
+  /** An event crew ticket (docs/CREW.md). */
+  isCrew?: boolean;
 };
 
 export type OfflineCheckInRosterRow = LookupRow & {
@@ -282,10 +253,13 @@ export async function lookupAttendeesForCheckIn(
         { guestName: { contains: q, mode: "insensitive" } },
         { user: { email: { contains: q, mode: "insensitive" } } },
         { user: { name: { contains: q, mode: "insensitive" } } },
+        // TEAM events: typing a team name lists its members. The team is
+        // matched inside this event only.
+        { team: { eventId: ctx.event.id, name: { contains: q, mode: "insensitive" } } },
       ],
     },
     take: 12,
-    include: { user: { select: { name: true, email: true } } },
+    include: { user: { select: { name: true, email: true } }, team: { select: { name: true } }, ...DESK_EXTRAS_INCLUDE },
     orderBy: { createdAt: "desc" },
   });
 
@@ -295,6 +269,8 @@ export async function lookupAttendeesForCheckIn(
     email: r.user?.email ?? r.guestEmail,
     status: r.status,
     checkedInAt: r.checkedInAt?.toISOString() ?? null,
+    ...doorExtras(r),
+    attendance: deskAttendanceState(r.attendanceCheck),
   }));
 
   return { ok: true, data: { rows } };
@@ -314,4 +290,8 @@ export async function checkInByRsvpId(
   input: unknown,
 ): Promise<ActionResult<CheckInResultData>> {
   return checkInByRsvpIdAction(input);
+}
+
+export async function loadRecentCheckIns(input: unknown): Promise<ActionResult<RecentCheckInsPage>> {
+  return loadRecentCheckInsAction(input);
 }

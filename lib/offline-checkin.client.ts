@@ -1,3 +1,5 @@
+import type { AttendanceState } from "@/lib/attendanceCheck";
+
 export type OfflineAttendee = {
   rsvpId: string;
   ticketToken: string;
@@ -8,6 +10,12 @@ export type OfflineAttendee = {
   // Older rosters stored on a shared device do not have these fields yet.
   checkInDetails?: Array<{ label: string; value: string }>;
   registrationDetails?: Array<{ key: string; label: string; value: string }>;
+  /** TEAM events: the attendee's team name. */
+  teamName?: string | null;
+  /** Attendance confirmation reply badge; null when never asked (docs/ATTENDANCE.md). */
+  attendance?: AttendanceState | null;
+  /** An event crew ticket (docs/CREW.md); absent on older rosters. */
+  isCrew?: boolean;
 };
 
 export type OfflineRoster = {

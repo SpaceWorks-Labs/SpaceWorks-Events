@@ -1,9 +1,19 @@
+import type { TeamRegistrationConfig } from "@/components/rsvp/TeamRegistrationFields";
 import type { RegistrationFieldDefinition } from "@/components/rsvp/registrationTypes";
 import type { RsvpStatus } from "@prisma/client";
 import type { PublicTicketType } from "@/lib/payments/tickets";
 import type { TicketingInfo } from "@/components/rsvp/PromoCodeField";
 
 export type Props = {
+  /** Team event settings (docs/TEAMS.md); null for individual registration. */
+  team?: TeamRegistrationConfig | null;
+  /**
+   * Hackathon pages (docs/HACKATHON.md): each href is set only when that page
+   * is live (results published; gallery public after the window closed).
+   */
+  judging?: { resultsHref: string | null; projectsHref: string | null } | null;
+  /** Mentors listed on the event page (docs/MENTOR_DESK.md): name, bio and skills only. */
+  mentors?: Array<{ id: string; name: string; bio: string; skills: string[] }>;
   orgSlug: string;
   organisation: { name: string; logoUrl: string | null };
   preview: boolean;
@@ -44,12 +54,18 @@ export type Props = {
   venue: { location: string; mapLinkUrl: string | null } | null;
   faqs: Array<{ id: string; question: string; answerHtml: string }>;
   resources: Array<{ id: string; title: string; description: string; href: string }>;
+  /** Crew shown on the page (docs/CREW.md): only public profile fields, never email or food. */
+  crew?: Array<{ id: string; name: string; role: string; bio: string; photoUrl: string | null; linkedinUrl: string | null }>;
   registrationFields: RegistrationFieldDefinition[];
   confirmedCount: number | null;
+  /** Crew tickets, counted as "going" but never against capacity; null when counts are hidden. */
+  crewCount?: number | null;
   registrationOpen: boolean;
   /** At capacity: new registrations join the waitlist. Derived server-side. */
   registrationFull: boolean;
   approvalRequired: boolean;
+  /** Registering means applying (docs/ADMISSION.md). */
+  applications?: boolean;
   /** The signed-in viewer's own registration, so the card shows it on any device. */
   viewerRsvp?: { token: string; status: RsvpStatus } | null;
   /** Ticket types on sale; empty for a free event without types. */

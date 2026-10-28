@@ -41,6 +41,9 @@ export async function postRsvp(body: unknown) {
   };
 }
 
+/** Prefix of the browser-stored RSVP markers (ticket links on event pages). */
+export const RSVP_STORAGE_PREFIX = "swe:rsvp:";
+
 export function storageKey(params: {
   orgSlug: string;
   eventSlug?: string;
@@ -49,7 +52,7 @@ export function storageKey(params: {
   const suffix = params.eventInstanceId
     ? `i:${params.eventInstanceId}`
     : `e:${params.eventSlug ?? ""}`;
-  return `swe:rsvp:${params.orgSlug}:${suffix}`;
+  return `${RSVP_STORAGE_PREFIX}${params.orgSlug}:${suffix}`;
 }
 
 export function safeJsonParse<T>(v: string | null): T | null {

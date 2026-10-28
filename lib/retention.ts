@@ -1,7 +1,8 @@
 import "server-only";
 
-import { OutboxStatus } from "@prisma/client";
+import { OutboxStatus, WebhookDeliveryStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { purgeUnusedCrewPhotos } from "@/lib/core/crew/photos";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEBHOOK_EVENT_RETENTION_DAYS = 90;
@@ -13,7 +14,8 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     365,
   );
   const sentBefore = new Date(now.getTime() - outboxRetentionDays * DAY_MS);
-  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents] = await prisma.$transaction([
+  const webhookBefore = new Date(now.getTime() - 30 * DAY_MS);
+  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents, webhookDeliveries, mobileSessions, idempotencyKeys, applicationEvents] = await prisma.$transaction([
     prisma.verificationToken.deleteMany({ where: { expires: { lt: now } } }),
     prisma.session.deleteMany({ where: { expires: { lt: now } } }),
     prisma.organisationInvite.deleteMany({ where: { usedAt: null, expiresAt: { lt: now } } }),
@@ -29,7 +31,22 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     prisma.processedWebhookEvent.deleteMany({
       where: { processedAt: { lt: new Date(now.getTime() - WEBHOOK_EVENT_RETENTION_DAYS * DAY_MS) } },
     }),
+    // Organisation webhook delivery log: 30 days. Retries finish within about
+    // a day, so only rows still under a worker lease are kept.
+    prisma.webhookDelivery.deleteMany({
+      where: { createdAt: { lt: webhookBefore }, status: { not: WebhookDeliveryStatus.PROCESSING } },
+    }),
+    // Mobile app sessions past their refresh lifetime, or revoked a week ago.
+    prisma.mobileSession.deleteMany({
+      where: { OR: [{ refreshExpiresAt: { lt: now } }, { revokedAt: { lt: new Date(now.getTime() - 7 * DAY_MS) } }] },
+    }),
+    // Mobile idempotency keys past their day.
+    prisma.mobileIdempotencyKey.deleteMany({ where: { expiresAt: { lt: now } } }),
+    // Application status changes already sent as webhooks (docs/ADMISSION.md): 30 days.
+    prisma.admissionStatusEvent.deleteMany({ where: { emittedAt: { not: null, lt: webhookBefore } } }),
   ]);
+  // Crew photos nobody saved within a day (docs/CREW.md); objects too, so outside the transaction.
+  const unusedCrewPhotos = await purgeUnusedCrewPhotos(now);
   return {
     verificationTokens: tokens.count,
     expiredSessions: sessions.count,
@@ -39,5 +56,10 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     sentOutboxMessages: sentMessages.count,
     failedOutboxMessages: failedMessages.count,
     processedWebhookEvents: webhookEvents.count,
+    webhookDeliveries: webhookDeliveries.count,
+    mobileSessions: mobileSessions.count,
+    idempotencyKeys: idempotencyKeys.count,
+    applicationStatusEvents: applicationEvents.count,
+    unusedCrewPhotos,
   };
 }

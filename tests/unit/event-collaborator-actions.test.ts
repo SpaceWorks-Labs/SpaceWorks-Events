@@ -16,12 +16,18 @@ vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/permissions", () => ({ getMembership: mocks.membership, isOrgAdmin: (role: string) => role === "OWNER" || role === "ADMIN" }));
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
 vi.mock("@/lib/actionRateLimit", () => ({ isActionRateLimited: mocks.rateLimited }));
-vi.mock("@/lib/db", () => ({ prisma: {
-  organisation: { findUnique: mocks.orgFind },
-  eventCollaborator: { deleteMany: mocks.deleteMany, updateMany: mocks.updateMany },
-  eventCollaboratorInvite: { deleteMany: mocks.inviteDeleteMany },
-} }));
+vi.mock("@/lib/db", () => {
+  const prisma = {
+    organisation: { findUnique: mocks.orgFind },
+    // The grant before the change (docs/MENTOR_DESK.md: a removed MENTOR grant ends its assignments).
+    eventCollaborator: { deleteMany: mocks.deleteMany, updateMany: mocks.updateMany, findFirst: async () => null },
+    eventCollaboratorInvite: { deleteMany: mocks.inviteDeleteMany },
+    $transaction: async (run: (tx: unknown) => unknown) => run(prisma),
+  };
+  return { prisma };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/core/mentorDesk/crewLink", () => ({ syncMentorCrewAfterGrant: vi.fn() }));
 
 import { cancelEventCollaboratorInvite, revokeEventCollaborator, updateEventCollaboratorPermissions } from "@/app/actions/event-collaborators";
 
@@ -58,6 +64,31 @@ describe("event collaborator tenant binding", () => {
       where: { id: "grant_b", eventSeriesId: "series_b", series: { organisationId: "org_a" } },
       data: { permissions: [EventPermission.EDIT_DETAILS] },
     });
+  });
+
+  it("grants JUDGE on a one-off event but never on a series, and refuses duplicates", async () => {
+    await expect(updateEventCollaboratorPermissions({
+      organisationSlug: "org-a",
+      eventId: "event_a",
+      collaboratorId: "grant_a",
+      permissions: [EventPermission.JUDGE],
+    })).resolves.toEqual({ ok: true });
+    expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { permissions: [EventPermission.JUDGE] } }));
+
+    mocks.updateMany.mockClear();
+    await expect(updateEventCollaboratorPermissions({
+      organisationSlug: "org-a",
+      eventSeriesId: "series_a",
+      collaboratorId: "grant_a",
+      permissions: [EventPermission.JUDGE],
+    })).resolves.toEqual({ ok: false, error: "Invalid collaborator permissions." });
+    await expect(updateEventCollaboratorPermissions({
+      organisationSlug: "org-a",
+      eventId: "event_a",
+      collaboratorId: "grant_a",
+      permissions: [EventPermission.CHECK_IN, EventPermission.CHECK_IN],
+    })).resolves.toEqual({ ok: false, error: "Invalid collaborator permissions." });
+    expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 
   it("cancels only unused invites of an event in the authorised organisation", async () => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidTimeZone } from "@/lib/timeZone";
+import { isValidTimeZone, zonedInputToIso } from "@/lib/timeZone";
 import { isUploadedImageUrl } from "@/lib/uploadUrl";
 
 export const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -21,6 +21,46 @@ export const timeZoneSchema = z
   .min(1, "Timezone is required")
   .max(64)
   .refine(isValidTimeZone, "Select a valid IANA timezone");
+/**
+ * `YYYY-MM-DDTHH:mm[:ss[.sss]]` with no `Z` or UTC offset: a wall-clock time.
+ * Event times are kept to the minute, so seconds are dropped rather than
+ * letting the value fall through to the server's own clock.
+ */
+const ZONELESS_DATETIME = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/;
+
+/**
+ * A wall-clock date-time string (a `datetime-local` value with no `Z` or
+ * offset) read in `timeZone`, never in the server's clock. Instants that carry
+ * a `Z` or offset, and Date objects, pass through unchanged; a local time
+ * that does not exist in the timezone (a DST gap) becomes an invalid value.
+ */
+export function zonedDateTimeInput(value: unknown, timeZone: string): unknown {
+  if (typeof value !== "string") return value;
+  const match = value.trim().match(ZONELESS_DATETIME);
+  if (!match) return value;
+  return zonedInputToIso(match[1], timeZone) ?? "invalid-local-time";
+}
+
+/**
+ * Reads the payload's wall-clock `keys` in its own `timezone` before
+ * validating, so a UTC container stores an Asia/Kolkata 19:00 start as
+ * 13:30Z, and a DST-gap time fails validation.
+ */
+export function withZonedDateTimes<T extends z.ZodType>(keys: readonly string[], schema: T) {
+  return z.preprocess((input) => {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+    const record = input as Record<string, unknown>;
+    const timeZone = typeof record.timezone === "string" ? record.timezone.trim() : "";
+    if (!timeZone || !isValidTimeZone(timeZone)) return input;
+    let output = record;
+    for (const key of keys) {
+      const value = zonedDateTimeInput(record[key], timeZone);
+      if (value !== record[key]) output = { ...output, [key]: value };
+    }
+    return output;
+  }, schema);
+}
+
 export const coverImageUrlSchema = z
   .union([
     z.string().refine(isUploadedImageUrl, "Invalid uploaded image URL"),

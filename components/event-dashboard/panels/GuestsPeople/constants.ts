@@ -1,6 +1,13 @@
-import type { GuestStatusFilter } from "@/components/event-dashboard/guests/guestList";
+import type { GuestKindFilter, GuestStatusFilter, GuestTeamFilter } from "@/components/event-dashboard/guests/guestList";
+import type { AttendeeAttendanceCounts, AttendeeFilterCounts } from "@/lib/eventDashboard/attendees";
+import type { AttendeeAttendanceFilter } from "@/lib/attendeeListQuery";
 
-export const PAGE_SIZE = 25;
+export const SEARCH_DELAY_MS = 300;
+
+export const NO_COUNTS: AttendeeFilterCounts = { all: 0, going: 0, waitlist: 0, approve: 0, declined: 0, checkedIn: 0, notCheckedIn: 0 };
+
+export type View = { status: GuestStatusFilter; kind: GuestKindFilter; team: GuestTeamFilter; attendance: AttendeeAttendanceFilter; query: string };
+export type Meta = { counts: AttendeeFilterCounts; total: number; matching: number; attendanceCounts: AttendeeAttendanceCounts | null };
 
 export const FILTER_DOTS: Record<GuestStatusFilter, string> = {
   all: "bg-ink",
@@ -9,6 +16,7 @@ export const FILTER_DOTS: Record<GuestStatusFilter, string> = {
   approve: "bg-highlight",
   declined: "bg-danger-fg",
   checkedIn: "bg-primary",
+  notCheckedIn: "bg-ink-muted",
 };
 
 export type ActionResult = { ok: true } | { ok: false; error: string };

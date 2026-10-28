@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { CheckInResultData } from "@/app/actions/checkin";
+import { BadgeCheck } from "lucide-react";
 import { Chip, type ChipTone } from "@/components/ui/display";
 
 function DetailRows({ rows }: { rows: Array<{ key: string; label: string; value: string }> }) {
@@ -34,6 +35,11 @@ const statusChips: Record<string, { label: string; tone: ChipTone }> = {
   CANCELLED: { label: "Cancelled", tone: "neutral" },
 };
 
+/** A crew ticket (docs/CREW.md). `isCrew` is optional on desk results, so older payloads and rosters show nothing. */
+export function CrewChip({ data }: { data: { isCrew?: boolean } }) {
+  return data.isCrew === true ? <Chip size="sm" tone="accent" icon={<BadgeCheck />}>Crew</Chip> : null;
+}
+
 export function StatusChip({ status }: { status: string }) {
   const chip = statusChips[status] ?? { label: status, tone: "neutral" as ChipTone };
   return <Chip size="sm" tone={chip.tone}>{chip.label}</Chip>;
@@ -45,25 +51,3 @@ export function CheckInTimestamp({ value }: { value: string }) {
   return <>{isClient ? new Date(value).toLocaleString() : `${value.slice(0, 16).replace("T", " ")} UTC`}</>;
 }
 
-export function playSuccessFeedback() {
-  if (typeof window === "undefined") return;
-  try {
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.frequency.value = 880;
-    g.gain.value = 0.08;
-    o.start();
-    setTimeout(() => {
-      o.stop();
-      ctx.close();
-    }, 120);
-  } catch {
-    /* ignore */
-  }
-  if (typeof navigator !== "undefined" && navigator.vibrate) {
-    navigator.vibrate(40);
-  }
-}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, ChevronDown, MapPin, Video } from "lucide-react";
+import { ArrowRight, ArrowUpRight, ChevronDown, LayoutGrid, MapPin, Trophy, Video } from "lucide-react";
 import { accentStyle } from "@/lib/theme/accent";
 import { formatDateBlock, formatDayLong, formatTime, formatTimeRange, formatTimeZoneName } from "@/lib/format/datetime";
 import { Avatar, Callout, Chip, DateBlock } from "@/components/ui/display";
@@ -7,8 +7,11 @@ import { RegistrationCard } from "./RegistrationCard";
 import { SectionNav } from "./SectionNav";
 import type { Props } from "./EventWebsiteShell/types";
 import { duration, mapSearchQuery, Rich, SECTION_LABELS, TIER_LABELS } from "./EventWebsiteShell/helpers";
+import { MentorsSection } from "./EventWebsiteShell/MentorsSection";
+import { CrewSection } from "./EventWebsiteShell/CrewSection";
 
 export function EventWebsiteShell(p: Props) {
+  const crew = p.crew ?? [];
   const shown = new Set(p.page.sections.filter((x) => x.isVisible).map((x) => x.type));
   const sectionContent: Array<[string, boolean]> = [
     ["ABOUT", true],
@@ -19,9 +22,10 @@ export function EventWebsiteShell(p: Props) {
     ["VENUE", Boolean(p.venue && !p.event.isOnline)],
     ["FAQ", p.faqs.length > 0],
     ["RESOURCES", p.resources.length > 0],
+    ["CREW", crew.length > 0],
   ];
   const rendered = new Set(sectionContent.filter(([type, hasContent]) => shown.has(type) && hasContent).map(([type]) => type));
-  const navItems = ["ABOUT", "SCHEDULE", "SPEAKERS", "SPONSORS", "VENUE", "FAQ", "RESOURCES"]
+  const navItems = ["ABOUT", "SCHEDULE", "SPEAKERS", "SPONSORS", "VENUE", "FAQ", "RESOURCES", "CREW"]
     .filter((type) => rendered.has(type))
     .map((type) => ({ id: type.toLowerCase(), label: SECTION_LABELS[type]! }));
 
@@ -33,6 +37,7 @@ export function EventWebsiteShell(p: Props) {
   const countLabel = [
     p.sessions.length > 0 ? `${p.sessions.length} ${p.sessions.length === 1 ? "session" : "sessions"}` : null,
     p.speakers.length > 0 ? `${p.speakers.length} ${p.speakers.length === 1 ? "speaker" : "speakers"}` : null,
+    rendered.has("CREW") ? `${crew.length} crew` : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -90,9 +95,11 @@ export function EventWebsiteShell(p: Props) {
               organisation={{ name: p.organisation.name, slug: p.orgSlug, logoUrl: p.organisation.logoUrl }}
               registrationFields={p.registrationFields}
               confirmedCount={p.confirmedCount}
+              crewCount={p.crewCount ?? null}
               capacity={p.event.capacity}
-              state={{ cancelled: p.event.status === "CANCELLED", open: p.registrationOpen, full: p.registrationFull, approvalRequired: p.approvalRequired }}
+              state={{ cancelled: p.event.status === "CANCELLED", open: p.registrationOpen, full: p.registrationFull, approvalRequired: p.approvalRequired, applications: p.applications ?? false }}
               accentColor={p.page.accentColor}
+              team={p.team}
               viewerRsvp={p.viewerRsvp ?? null}
               tickets={p.tickets ?? []}
               heldCount={p.heldCount ?? 0}
@@ -105,6 +112,31 @@ export function EventWebsiteShell(p: Props) {
         {/* Sections */}
         <div className="flex min-w-0 flex-col gap-10 md:col-start-1 md:row-start-2 md:gap-12">
           <SectionNav items={navItems} />
+
+          {p.judging && (p.judging.resultsHref || p.judging.projectsHref) ? (
+            <nav aria-label="Hackathon" className="grid gap-3 sm:grid-cols-2">
+              {p.judging.resultsHref ? (
+                <Link href={p.judging.resultsHref} className="flex items-center gap-3 rounded-lg bg-accent-soft p-4 transition-[filter] hover:brightness-[0.98]">
+                  <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-md bg-canvas text-accent-text"><Trophy className="size-5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-bold text-accent-text">Results are in</span>
+                    <span className="block text-sm text-ink-secondary">See the awards and winning projects</span>
+                  </span>
+                  <ArrowRight aria-hidden className="size-4 shrink-0 text-accent-text" />
+                </Link>
+              ) : null}
+              {p.judging.projectsHref ? (
+                <Link href={p.judging.projectsHref} className="flex items-center gap-3 rounded-lg border border-line bg-canvas p-4 transition-colors hover:bg-subtle">
+                  <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-ink-secondary"><LayoutGrid className="size-5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-bold text-ink">Projects</span>
+                    <span className="block text-sm text-ink-muted">Browse everything that was submitted</span>
+                  </span>
+                  <ArrowRight aria-hidden className="size-4 shrink-0 text-ink-muted" />
+                </Link>
+              ) : null}
+            </nav>
+          ) : null}
 
           {rendered.has("ABOUT") ? (
             <section id="about" aria-label="About" className="flex scroll-mt-6 flex-col gap-5">
@@ -177,6 +209,8 @@ export function EventWebsiteShell(p: Props) {
               </ul>
             </section>
           ) : null}
+
+          {p.mentors?.length ? <MentorsSection mentors={p.mentors} /> : null}
 
           {rendered.has("SPONSORS") ? (
             <section id="sponsors" aria-labelledby="sponsors-title" className="scroll-mt-6">
@@ -276,6 +310,7 @@ export function EventWebsiteShell(p: Props) {
             </section>
           ) : null}
 
+          {rendered.has("CREW") ? <CrewSection crew={crew} eventTitle={p.event.title} /> : null}
         </div>
       </div>
     </div>

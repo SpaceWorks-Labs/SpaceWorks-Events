@@ -4,30 +4,16 @@ import NextAuth, { CredentialsSignin } from "next-auth";
 import { authAdapter } from "@/lib/authAdapter";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { verifyPasswordSignIn } from "@/lib/credentialsAuth";
 import { hasVerifiedGoogleEmail } from "@/lib/googleAuth";
-import { consumeRecoveryCode, decryptMfaSecret, consumeMfaCode } from "@/lib/mfa";
-import { isNewUserRegistrationEnabled } from "@/lib/instanceSettings";
+import { evaluateGoogleSignIn } from "@/lib/googleSignIn";
 import { getClientIpFromHeaders } from "@/lib/rateLimit";
-import {
-  accountLocked, accountUnderAttack, consumeSignInCode, deviceHash, isAddressBlocked, knownDevice,
-  newDeviceCheckEnabled, noteFailedSignIn, rememberSignIn, sendSignInCode,
-} from "@/lib/loginSecurity";
 import { getGoogleSsoSettings } from "@/lib/instanceSettings";
-import { logOpsError } from "@/lib/opsAlerts";
-
-const credentialsSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
-  password: z.string().min(1).max(128),
-  totp: z.string().trim().max(32).optional(),
-  /** The browser's random device id (see lib/loginSecurity). */
-  device: z.string().trim().max(64).optional(),
-  /** The code emailed for an unusual sign-in. */
-  emailCode: z.string().trim().max(12).optional(),
-});
+import { logAuthError } from "@/lib/authLogger";
+import { actorSession } from "@/lib/actorSession";
+import { currentRequestActor } from "@/lib/requestActor";
+import type { Session } from "next-auth";
 
 /**
  * This code is returned only after the supplied password is valid. It lets the
@@ -52,7 +38,7 @@ class TooManyAttemptsError extends CredentialsSignin {
   code = "too_many_attempts";
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
+const nextAuth = NextAuth(async () => {
   const google = await getGoogleSsoSettings();
   return {
   adapter: authAdapter,
@@ -67,13 +53,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   },
   trustHost: true,
   logger: {
-    // Auth.js error causes can contain provider responses and credentials, so
-    // the log line stays fixed; only the redacted alert carries the detail.
-    error(error) {
-      const { type } = error as Error & { type?: unknown };
-      const label = typeof type === "string" ? type : error.name;
-      logOpsError("[auth] Authentication failed", { level: "error", source: "auth", title: `Sign-in failed (${label})`, error });
-    },
+    // Expected sign-in outcomes are skipped; see lib/authLogger.ts.
+    error: logAuthError,
   },
   pages: {
     signIn: "/login",
@@ -99,104 +80,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
         password: { label: "Password", type: "password" },
       },
       async authorize(raw, request) {
-        const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
-        const { email, password } = parsed.data;
-        const ip = request?.headers ? getClientIpFromHeaders(request.headers) : "unknown";
-        if (await isAddressBlocked(ip)) throw new TooManyAttemptsError();
-        if (await isActionRateLimited("auth", email)) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            passwordHash: true,
-            sessionVersion: true,
-            emailVerified: true,
-            mfaSecretEncrypted: true,
-          },
+        const outcome = await verifyPasswordSignIn(raw, {
+          ip: request?.headers ? getClientIpFromHeaders(request.headers) : "unknown",
+          userAgent: request?.headers?.get("user-agent") ?? "",
         });
-        // Equal bcrypt work for missing and OAuth-only accounts prevents the
-        // obvious timing oracle. This is a fixed non-secret dummy hash.
-        const ok = await bcrypt.compare(password, user?.passwordHash ?? "$2b$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW");
-        if (!user?.passwordHash || !ok) {
-          await noteFailedSignIn(ip, email);
-          return null;
-        }
-        if (!user.emailVerified) throw new EmailVerificationRequiredError();
-        if (!user.email) return null;
-
-        let mfaVerified = false;
-        if (user.mfaSecretEncrypted) {
-          const code = parsed.data.totp ?? "";
-          if (!code) throw new MfaRequiredError();
-          const validTotp = await consumeMfaCode(decryptMfaSecret(user.mfaSecretEncrypted), user.email, code);
-          if (!validTotp && !(await consumeRecoveryCode(user.id, code))) {
-            await noteFailedSignIn(ip, email);
-            return null;
-          }
-          mfaVerified = true;
-        }
-
-        // An authenticator code is proof enough. Otherwise a device this account
-        // hasn't used (after its first), or recent failures, need an emailed code.
-        const hash = deviceHash(parsed.data.device);
-        const { known, firstDevice } = await knownDevice(user.id, hash);
-        if (newDeviceCheckEnabled() && !mfaVerified && ((!known && !firstDevice) || (await accountUnderAttack(email)))) {
-          if (await accountLocked(email)) throw new TooManyAttemptsError();
-          const emailCode = parsed.data.emailCode ?? "";
-          if (!emailCode) {
-            if (!(await sendSignInCode({ id: user.id, email: user.email }))) throw new TooManyAttemptsError();
-            throw new EmailCodeRequiredError();
-          }
-          if (!(await consumeSignInCode(user.id, emailCode))) {
-            await noteFailedSignIn(ip, email);
-            return null;
-          }
-        }
-        await rememberSignIn({ userId: user.id, email: user.email, hash, ip, userAgent: request?.headers?.get("user-agent") ?? "", firstDevice });
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          sessionVersion: user.sessionVersion,
-          mfaVerified,
-        };
+        if (outcome.ok) return outcome.user;
+        if (outcome.reason === "mfa_required") throw new MfaRequiredError();
+        if (outcome.reason === "email_verification_required") throw new EmailVerificationRequiredError();
+        if (outcome.reason === "email_code_required") throw new EmailCodeRequiredError();
+        if (outcome.reason === "too_many_attempts") throw new TooManyAttemptsError();
+        return null;
       },
     }),
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
       if (account?.provider !== "google") return true;
-      if (!hasVerifiedGoogleEmail(profile)) return false;
-      const email = user.email?.trim().toLowerCase();
-      if (!email) return false;
-      user.email = email;
-      const existing = await prisma.user.findUnique({
-        where: { email }, select: { passwordHash: true, emailVerified: true },
-      });
-      // A pre-registered, unverified password must never survive linking to
-      // the real inbox owner's Google identity.
-      if (existing?.passwordHash && !existing.emailVerified) return false;
-
-      const existingAccount = await prisma.account.findUnique({
-        where: { provider_providerAccountId: { provider: account.provider, providerAccountId: account.providerAccountId } },
-        select: { id: true },
-      });
-      if (existingAccount || existing) return true;
-
-      // A verified Google identity may create an account only while the
-      // instance-wide account-creation policy permits it. Returning true lets
-      // Auth.js create the adapter user after this callback.
-      if (!(await isNewUserRegistrationEnabled())) {
-        return "/login?error=account_creation_disabled";
-      }
-      return true;
+      const decision = await evaluateGoogleSignIn({ email: user.email, emailVerified: hasVerifiedGoogleEmail(profile), providerAccountId: account.providerAccountId });
+      if (decision === "deny") return false;
+      user.email = user.email!.trim().toLowerCase();
+      // Returning true lets Auth.js create or link the adapter user after this callback.
+      return decision === "account_creation_disabled" ? "/login?error=account_creation_disabled" : true;
     },
     async jwt({ token, user }) {
       const userId = user?.id ?? token.sub;
@@ -246,3 +150,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   },
   };
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+/**
+ * The signed-in session. Inside a mobile API request (lib/requestActor.ts)
+ * there is no cookie: the app session that authenticated the bearer token is
+ * presented as the session instead, so Server Action bodies run unchanged for
+ * the app with every payment, refund, webhook and notification rule intact.
+ * Its `mfaVerified` and `authenticatedAt` come from the app session.
+ */
+export async function auth(): Promise<Session | null> {
+  const actor = currentRequestActor();
+  if (!actor) return nextAuth.auth();
+  // A mobile request without a bearer is signed out, never the cookie session.
+  return actor.kind === "mobile" ? actorSession(actor) : null;
+}

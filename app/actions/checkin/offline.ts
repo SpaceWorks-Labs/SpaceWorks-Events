@@ -1,9 +1,11 @@
+import { Prisma, type AttendanceResponse, type RsvpStatus } from "@prisma/client";
 import { gateCheckInForStatus } from "@/lib/checkIn";
 import { prisma } from "@/lib/db";
 import { offlineCheckInRosterSchema, syncOfflineCheckInsSchema } from "@/lib/validators";
 import type { ActionResult } from "../org";
 import { commitCheckInProjection } from "@/lib/checkInMutations";
 import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
+import { deskAttendanceState } from "@/lib/attendanceCheck";
 import { attendeeLabel, requireOrgMemberForEvent, revalidatePath } from "./access";
 import type { OfflineCheckInRosterRow } from "../checkin";
 
@@ -19,29 +21,59 @@ export async function downloadOfflineCheckInRoster(
   const ctx = await requireOrgMemberForEvent(organisationSlug, eventId);
   if (!ctx.ok) return { ok: false, error: ctx.error };
 
-  const rsvps = await prisma.rSVP.findMany({
-    where: { eventId: ctx.event.id, status: { in: ["CONFIRMED", "WAITLISTED", "PENDING_APPROVAL"] } },
-    include: {
-      user: { select: { name: true, email: true } },
-      answers: { include: { field: { select: { key: true, label: true } } } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // The whole roster in two set-based reads (registrations with their user
+  // and team joined in SQL, then every answer of those registrations), not a
+  // relation lookup per registration id.
+  const rosterStatuses: RsvpStatus[] = ["CONFIRMED", "WAITLISTED", "PENDING_APPROVAL"];
+  const [rsvps, answers] = await Promise.all([
+    prisma.$queryRaw<
+      Array<{ id: string; checkInToken: string; guestName: string | null; guestEmail: string | null; status: RsvpStatus; checkedInAt: Date | null; userId: string | null; userName: string | null; userEmail: string | null; teamName: string | null; isCrew: boolean; crewFood: string | null; attendanceResponse: AttendanceResponse | null; attendanceAsked: boolean; }>
+    >`
+      SELECT r."id", r."checkInToken", r."guestName", r."guestEmail", r."status", r."checkedInAt", r."userId",
+        u."name" AS "userName", u."email" AS "userEmail", t."name" AS "teamName", r."isCrew", c."foodPreference" AS "crewFood",
+        ac."response" AS "attendanceResponse", (ac."id" IS NOT NULL) AS "attendanceAsked"
+      FROM "RSVP" r
+      LEFT JOIN "User" u ON u."id" = r."userId"
+      LEFT JOIN "Team" t ON t."id" = r."teamId"
+      LEFT JOIN "EventCrewMember" c ON c."rsvpId" = r."id"
+      LEFT JOIN "AttendanceCheck" ac ON ac."rsvpId" = r."id"
+      WHERE r."eventId" = ${ctx.event.id} AND r."status"::text IN (${Prisma.join(rosterStatuses)})
+      ORDER BY r."createdAt" DESC`,
+    prisma.rsvpAnswer.findMany({
+      where: { rsvp: { eventId: ctx.event.id, status: { in: rosterStatuses } } },
+      include: { field: { select: { key: true, label: true } } },
+      orderBy: { id: "asc" },
+    }),
+  ]);
+  const answersByRsvp = new Map<string, typeof answers>();
+  for (const answer of answers) {
+    const list = answersByRsvp.get(answer.rsvpId);
+    if (list) list.push(answer);
+    else answersByRsvp.set(answer.rsvpId, [answer]);
+  }
 
   return {
     ok: true,
     data: {
       generatedAt: new Date().toISOString(),
-      rows: rsvps.map((r) => ({
-        rsvpId: r.id,
-        ticketToken: r.checkInToken,
-        displayName: attendeeLabel(r),
-        email: r.user?.email ?? r.guestEmail,
-        status: r.status,
-        checkedInAt: r.checkedInAt?.toISOString() ?? null,
-        checkInDetails: getCheckInDetails(r.answers),
-        registrationDetails: getRegistrationDetails(r.answers),
-      })),
+      rows: rsvps.map((r) => {
+        const user = r.userId ? { name: r.userName, email: r.userEmail } : null;
+        const rsvpAnswers = answersByRsvp.get(r.id) ?? [];
+        return {
+          rsvpId: r.id,
+          ticketToken: r.checkInToken,
+          displayName: attendeeLabel({ user, guestName: r.guestName, guestEmail: r.guestEmail }),
+          email: user?.email ?? r.guestEmail,
+          status: r.status,
+          checkedInAt: r.checkedInAt?.toISOString() ?? null,
+          checkInDetails: getCheckInDetails(rsvpAnswers, r.crewFood != null ? { foodPreference: r.crewFood } : null),
+          registrationDetails: getRegistrationDetails(rsvpAnswers),
+          teamName: r.teamName,
+          // The attendance reply only (docs/ATTENDANCE.md); never the note.
+          attendance: deskAttendanceState(r.attendanceAsked ? { response: r.attendanceResponse } : null),
+          isCrew: r.isCrew,
+        };
+      }),
     },
   };
 }
@@ -107,7 +139,7 @@ export async function syncOfflineCheckIns(
     } else if (committed.state === "already-checked-in") {
       alreadyCheckedInIds.push(rsvp.id);
     } else {
-      const currentGate = committed.state === "ineligible" ? gateCheckInForStatus(committed.status, checkIn.force) : null;
+      const currentGate = committed.state === "ineligible" ? gateCheckInForStatus(committed.status, checkIn.force, committed.applicant) : null;
       failed.push({
         rsvpId: rsvp.id,
         error: committed.state === "missing" ? "RSVP not found for this event." : currentGate?.ok ? "Check-in could not be completed." : currentGate!.reason,

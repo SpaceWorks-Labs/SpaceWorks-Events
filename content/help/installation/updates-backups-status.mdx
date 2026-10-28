@@ -1,0 +1,79 @@
+Once Space Works Events is running on your VPS, the same installer keeps it up to date and backed up, and the super admin area shows whether the backups are healthy. This page covers installations made with the one-line installer; the full runbook is `docs/DEPLOYMENT_VPS.md` in the repository.
+
+<Callout kind="permission">
+
+Whoever runs the server, with root or `sudo`. The backup status on **Operations** is for the super admin.
+
+</Callout>
+
+## Updating to a new release
+
+<Steps>
+
+1. Sign in to the server and run the installer command again.
+2. Choose **1) Update to the latest release**.
+3. Check the current and new version it shows, and confirm.
+
+</Steps>
+
+The updater stops straight away if you're already on the latest release. Otherwise it:
+
+1. backs up the database and configuration;
+2. downloads the new images while the site keeps running, then applies the database migrations;
+3. recreates the services, waits for them to be healthy and runs its checks;
+4. keeps the three newest releases so it can go back.
+
+It keeps every setting and secret; an update never generates new ones. **If any step after the backup fails, it puts back the previous release automatically.**
+
+<Callout kind="warning">
+
+Database migrations that already ran aren't reversed by the rollback. If an older release can't run on the newer database, restore the backup the updater took just before.
+
+</Callout>
+
+### Automatic deploys
+
+If you answered yes to automatic deploys, or added them later with **7) Automatic deploys**, a GitHub Actions runner on the server installs each new published release by itself. It runs the same steps as a manual update: a backup, the new images, migrations, health checks, and the previous release restored if the new one is unhealthy. Nothing connects in from GitHub; the runner checks outwards. It runs under its own account with no Docker access, and only installs published releases from the main branch.
+
+## Backups
+
+<Steps>
+
+1. Run the installer and choose **4) Backups**.
+2. Turn on nightly backups, encryption and, if you like, off-site copies.
+3. If you turn on encryption, save the private key it shows **once** in your password manager. It isn't stored on the server.
+
+</Steps>
+
+| Setting | What it does |
+| --- | --- |
+| **Nightly backups** | A full backup (database, configuration and uploaded files) at about 02:30 UTC. |
+| **Encryption** | Each backup is encrypted with age to a key only you hold. |
+| **Off-site copies** | After each backup, an encrypted copy goes to an S3-compatible bucket at another provider, kept for its own number of days (90 by default). Only encrypted backups are sent. |
+| **Retention** | How many days backups stay on the server (14 by default). The newest few are always kept. |
+
+To back up straight away, choose **2) Back up now**. The site keeps running while it works.
+
+<Callout kind="tip">
+
+A backup on the same server isn't a backup of the server. Turn on off-site copies, or copy the backups away yourself, and practise restoring now and then on a separate machine.
+
+</Callout>
+
+Restoring is done from the server with the restore tool. It shows what will be replaced, asks you to type `RESTORE`, and backs up the current database before it starts. Restoring onto a new server has its own order of steps, because the configuration must go back before the database. Follow `docs/DEPLOYMENT_VPS.md` for both.
+
+## Checking status
+
+There are two places to look:
+
+- **On the server:** choose **3) Check status and health**. It shows the release, free disk space, the newest backup and every service, then runs the installation's checks. It changes nothing.
+- **In the app:** open **Operations** in the super admin area. On VPS installations, **Server backups** shows whether backups are healthy, whether the nightly schedule is on, whether they're encrypted and copied off-site, and when the newest full backup was made. The app only reads a small status file the backup job writes; it never touches the backups themselves.
+
+If a backup fails, or scheduled backups are more than 36 hours old, the super admin is emailed once about it (once a day while it stays stale). **Operations** also shows whether the email worker and the beat are running. See [Email delivery](/help/instance/email-delivery).
+
+## Good to know
+
+- Only one install, update, backup or restore runs at a time.
+- Encrypted backups can't be restored without the key you saved. Losing it means losing those backups.
+- The **Backup configuration** fields in [Instance settings](/help/instance/settings) are for describing a provider's backups on other kinds of deployment. On a VPS, rely on **Server backups** instead.
+- Certificates for the internal services renew themselves weekly when due, and Caddy renews the public HTTPS certificate.

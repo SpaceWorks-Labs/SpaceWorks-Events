@@ -30,6 +30,7 @@ import {
   saveSession as saveSessionAction,
   setEventSessionDelay as setEventSessionDelayAction,
 } from "./event-website/schedule";
+import { showCrewSection as showCrewSectionAction } from "./event-website/crewSection";
 
 export async function uploadEventSpeakerPhoto(formData: FormData): Promise<ActionResult<{ url: string; }>> {
   return uploadEventSpeakerPhotoAction(formData);
@@ -38,6 +39,11 @@ export async function uploadEventSpeakerPhoto(formData: FormData): Promise<Actio
 /** Sponsor logos follow the same validation, private storage, and WebP re-encoding path as speaker photos. */
 export async function uploadEventSponsorLogo(formData: FormData): Promise<ActionResult<{ url: string; }>> {
   return uploadEventSponsorLogoAction(formData);
+}
+
+/** Switch on the public Crew section from Guests → Crew (docs/CREW.md); needs EDIT_DETAILS. */
+export async function showCrewSection(input: unknown): Promise<ActionResult> {
+  return showCrewSectionAction(input);
 }
 
 export async function saveEventPage(input: unknown): Promise<ActionResult> {
@@ -57,7 +63,11 @@ export async function saveEventPage(input: unknown): Promise<ActionResult> {
             sortOrder: z.number().int().min(0).max(20),
           }),
         )
-        .length(9),
+        // Every section type once. A form opened before CREW existed still
+        // sends the other nine, which leaves the saved CREW row untouched.
+        .min(Object.values(EventPageSectionType).length - 1)
+        .max(Object.values(EventPageSectionType).length)
+        .refine((sections) => new Set(sections.map((section) => section.type)).size === sections.length),
     })
     .strict();
   const parsed = schema.safeParse(input);

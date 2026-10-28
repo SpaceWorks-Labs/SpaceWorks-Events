@@ -1,4 +1,4 @@
-import { loadCheckInPanel } from "@/lib/views/components__event-dashboard__panels__CheckInPanel";
+import { loadCheckInListsSetup, loadCheckInPanel } from "@/lib/views/components__event-dashboard__panels__CheckInPanel";
 import Link from "next/link";
 import { Download, IdCard, ScanLine } from "lucide-react";
 import type { EventDashboardContext } from "@/lib/eventDashboard/context";
@@ -7,7 +7,9 @@ import { Chip } from "@/components/ui/display";
 import { cn } from "@/lib/cn";
 import { type DoorsTone } from "@/components/event-dashboard/check-in/doors";
 import { DoorStationControls } from "@/components/event-dashboard/check-in/DoorStationControls";
+import { CheckInListsCard } from "@/components/event-dashboard/check-in/CheckInListsCard";
 import { NoPermission } from "./shared";
+import { HelpLink } from "@/components/help/HelpLink";
 
 const DOORS_CHIP: Record<DoorsTone, string> = {
   upcoming: "bg-warning-bg text-warning-fg",
@@ -26,8 +28,18 @@ const cardClass = "flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-
 
 export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
   const { permissions } = ctx;
-  if (!permissions.canCheckIn) return <NoPermission>You do not have permission to operate check-in.</NoPermission>;
-  const { event, organisation, desk, checkInHref, doors, seats, lit } = await loadCheckInPanel({ ctx });
+  if (!permissions.canCheckIn) {
+    if (!permissions.canManageCheckInLists) return <NoPermission>You do not have permission to operate check-in.</NoPermission>;
+    // EDIT_DETAILS co-organisers set up the lists; scanning stays with CHECK_IN.
+    const { lists, addOns } = await loadCheckInListsSetup({ ctx });
+    return (
+      <div className="flex flex-col gap-5">
+        <CheckInListsCard organisationSlug={ctx.organisation.slug} eventId={ctx.event.id} lists={lists} checkInHref={null} canManage addOns={addOns} />
+        <NoPermission>Checking guests in needs the check-in permission.</NoPermission>
+      </div>
+    );
+  }
+  const { event, organisation, desk, lists, addOns, checkInHref, doors, seats, lit } = await loadCheckInPanel({ ctx });
   return (
     <div className="flex flex-col gap-5">
       <section aria-labelledby="checkin-desk-title" className="yy-dark-band flex flex-col gap-7 rounded-xl bg-[var(--yy-inverse-surface)] p-6 text-ink sm:p-7 lg:flex-row lg:items-center">
@@ -73,7 +85,10 @@ export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         <section aria-labelledby="checkin-station-title" className={cardClass}>
           <div className="flex items-center justify-between gap-3">
-            <h2 id="checkin-station-title" className="text-h4 text-ink">Door station</h2>
+            <div className="flex items-center gap-1">
+              <h2 id="checkin-station-title" className="text-h4 text-ink">Door station</h2>
+              <HelpLink article="check-in/door-station" />
+            </div>
             <Chip size="sm" tone={desk.stationEnabled ? "success" : "neutral"}>{desk.stationEnabled ? "On" : "Off"}</Chip>
           </div>
           <p className="text-sm text-ink-secondary">
@@ -99,6 +114,8 @@ export async function CheckInPanel({ ctx }: { ctx: EventDashboardContext; }) {
             ))}
           </ul>
         </section>
+
+        <CheckInListsCard organisationSlug={organisation.slug} eventId={event.id} lists={lists} checkInHref={checkInHref} canManage={permissions.canManageCheckInLists} addOns={addOns} className="md:col-span-2 xl:col-span-3" />
 
         <section aria-labelledby="checkin-attendance-title" className={cn(cardClass, "md:col-span-2 xl:col-span-1")}>
           <h2 id="checkin-attendance-title" className="text-h4 text-ink">Attendance</h2>

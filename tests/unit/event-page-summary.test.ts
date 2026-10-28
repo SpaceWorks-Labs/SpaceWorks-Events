@@ -62,7 +62,14 @@ describe("normalizeSections", () => {
   it("shows every section for a page saved without section rows (the public page uses this too)", () => {
     const result = normalizeSections([]);
     expect(result.map((section) => section.type)).toEqual([...SECTION_TYPES]);
-    expect(result.every((section) => section.isVisible)).toBe(true);
+    // The Crew section (docs/CREW.md) starts off until an organiser turns it on.
+    expect(result.filter((section) => !section.isVisible).map((section) => section.type)).toEqual(["CREW"]);
+  });
+
+  it("appends a missing Crew section last and hidden, keeping saved ones as saved", () => {
+    const saved = SECTION_TYPES.filter((type) => type !== "CREW").map((type, sortOrder) => ({ type, isVisible: true, sortOrder }));
+    expect(normalizeSections(saved).at(-1)).toEqual({ type: "CREW", isVisible: false, sortOrder: SECTION_TYPES.length - 1 });
+    expect(normalizeSections([{ type: "CREW", isVisible: true, sortOrder: 0 }])[0]).toEqual({ type: "CREW", isVisible: true, sortOrder: 0 });
   });
 });
 
@@ -106,6 +113,9 @@ describe("labels and excerpts", () => {
     expect(registerLabelFor("HIDDEN_LINK")).toBe("Register — it's free");
     expect(registerLabelFor("APPROVAL_REQUIRED")).toBe("Request to join");
     expect(registerLabelFor("INVITE_ONLY")).toBe("Register with your invite");
+    expect(registerLabelFor("PUBLIC", { soloPolicy: "TEAMS_ONLY" })).toBe("Register your team");
+    expect(registerLabelFor("PUBLIC", { soloPolicy: "SOLO_ALLOWED" })).toBe("Register a team or yourself");
+    expect(registerLabelFor("APPROVAL_REQUIRED", { soloPolicy: "TEAMS_ONLY" })).toBe("Request a place for your team");
   });
 
   it("names field types", () => {

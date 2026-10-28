@@ -26,11 +26,21 @@ jobs:
           DATABASE_URL: postgresql://build:build@localhost:5432/swevents
           DIRECT_URL: postgresql://build:build@localhost:5432/swevents
       - run: npm run lint
+      # The guide's generated index must match content/help (npm run help:index).
+      - run: node scripts/generate-help-index.mjs --check
+      # The frontend catalog must match the view readers and actions (npm run frontend:catalog).
+      - run: node scripts/generate-frontend-catalog.mjs --check
       # Route types (RouteContext, typed routes) are generated, not committed.
       - run: npx next typegen
       - run: npx tsc --noEmit
       - run: npm run test:unit
       - run: npm run build
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/swevents
+          AUTH_SECRET: ci-placeholder-not-used-at-build
+      # The split frontend refuses database code at build time, so a stray
+      # import from a server core is caught here, not at release.
+      - run: npm run build:frontend
         env:
           DATABASE_URL: postgresql://build:build@localhost:5432/swevents
           AUTH_SECRET: ci-placeholder-not-used-at-build
@@ -86,3 +96,11 @@ jobs:
       # Generates independent disposable credentials and removes only its own
       # PostgreSQL/Redis containers. No deployed database or hosting keys needed.
       - run: npm run test:e2e:${{ matrix.deployment }}
+      # Retry traces of failed specs (disposable data and credentials only).
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-${{ matrix.deployment }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore

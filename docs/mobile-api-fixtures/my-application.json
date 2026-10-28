@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "data": {
+    "application": {
+      "status": "OFFERED",
+      "statusLabel": "Offered a place",
+      "stage": null,
+      "respondBy": "2030-05-03T17:00:00.000Z",
+      "teamName": null,
+      "isLeader": true,
+      "actions": [
+        "accept",
+        "decline",
+        "withdraw"
+      ],
+      "paid": true,
+      "paying": false,
+      "answers": null
+    }
+  }
+}

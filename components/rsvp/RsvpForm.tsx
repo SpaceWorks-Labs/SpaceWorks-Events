@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useSession } from "next-auth/react";
+import { useAuthSession } from "@/components/auth/useAuthSession";
 import { useRouter } from "next/navigation";
 import type { RsvpStatus } from "@prisma/client";
 import type { RegistrationFieldDefinition } from "@/components/rsvp/registrationTypes";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/display";
-import { Field, Input } from "@/components/ui/field";
 import { RegistrationQuestions, focusQuestion, useRegistrationAnswers } from "@/components/rsvp/QuestionField";
 import { identityErrors } from "@/components/rsvp/registrationAnswers";
+import { TeamRegistrationFields, useTeamRegistration, type TeamRegistrationConfig } from "@/components/rsvp/TeamRegistrationFields";
 import { AddOnPicker, TicketPicker, ticketAvailable } from "@/components/rsvp/TicketPicker";
 import { AccessCodeField, PromoCodeField, previewOrderTotal, type AppliedPromo, type TicketingInfo } from "@/components/rsvp/PromoCodeField";
 import { formatMoney } from "@/lib/payments/money";
@@ -18,12 +18,16 @@ import { Radio, RadioGroup } from "@/components/ui/choice";
 import { AttendeeFields } from "./RsvpForm/AttendeeFields";
 import { postRsvp, safeJsonParse, storageKey } from "./RsvpForm/helpers";
 import { FramedCheckoutNotice, RsvpDone } from "./RsvpForm/states";
+import { GuestIdentityFields, SignedInNameField } from "./RsvpForm/IdentityFields";
+import { teamTicketing } from "./RsvpForm/teamTickets";
 
 export function RsvpForm(props: {
   orgSlug: string;
   eventSlug?: string;
   eventInstanceId?: string;
   registrationFields?: RegistrationFieldDefinition[];
+  /** Team event settings (docs/TEAMS.md); omit for individual registration. */
+  team?: TeamRegistrationConfig | null;
   /** Ticket types to buy; registration without tickets when empty. */
   tickets?: PublicTicketType[];
   /** Extras to buy alongside tickets. */
@@ -34,15 +38,19 @@ export function RsvpForm(props: {
   /** A paid order is only a request first: it needs approval, or waits for a place. */
   paidRequest?: "approval" | "waitlist" | null;
   /** Lets a containing event page update immediately after this tab saves an RSVP. */
-  onRsvpSaved?: (rsvp: { ticketToken: string; status: RsvpStatus | null }) => void;
+  onRsvpSaved?: (rsvp: { ticketToken: string; status: RsvpStatus | null; teamMode: "create" | "join" | "solo" | null }) => void;
 }) {
-  const { orgSlug, eventSlug, eventInstanceId, registrationFields, onRsvpSaved, tickets: listed = [], paidSalesOpen = false, ticketing = null, paidRequest = null } = props;
+  const { orgSlug, eventSlug, eventInstanceId, registrationFields, team, onRsvpSaved, tickets: listed = [], paidSalesOpen = false, ticketing = null, paidRequest = null } = props;
   const addOns = useMemo(() => props.addOns ?? ticketing?.addOns ?? [], [props.addOns, ticketing]);
   // Tickets an access code revealed join the public ones.
   const [unlocked, setUnlocked] = useState<PublicTicketType[]>([]);
   const [accessCode, setAccessCode] = useState<string | null>(null);
-  const tickets = useMemo(() => [...listed, ...unlocked.filter((ticket) => !listed.some((other) => other.id === ticket.id))], [listed, unlocked]);
-  const sellsTicketTypes = tickets.length > 0 || Boolean(ticketing?.accessCodes);
+  const teamState = useTeamRegistration(team);
+  const offered = useMemo(() => [...listed, ...unlocked.filter((ticket) => !listed.some((other) => other.id === ticket.id))], [listed, unlocked]);
+  // Team events seat one person per order; a PER_TEAM member joins free.
+  const teamTickets = teamTicketing(team, teamState.mode, offered);
+  const tickets = teamTickets.tickets;
+  const sellsTicketTypes = teamTickets.showTickets && (tickets.length > 0 || Boolean(ticketing?.accessCodes));
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [addOnQuantities, setAddOnQuantities] = useState<Record<string, number>>({});
   const [payAtDesk, setPayAtDesk] = useState(false);
@@ -65,7 +73,7 @@ export function RsvpForm(props: {
   const atDesk = deskOffered && payAtDesk;
   const currency = tickets[0]?.currency ?? addOns[0]?.currency ?? "INR";
   const sellsPaid = tickets.some((ticket) => ticket.priceMinor > 0 || ticket.flexible || ticket.feeMinor > 0) || addOns.some((addOn) => addOn.priceMinor > 0);
-  const { data: session, status } = useSession();
+  const { data: session, status } = useAuthSession();
   const router = useRouter();
   const lsKey = storageKey({ orgSlug, eventSlug, eventInstanceId });
   const [guestEmail, setGuestEmail] = useState("");
@@ -74,6 +82,7 @@ export function RsvpForm(props: {
   const [done, setDone] = useState(false);
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null);
   const [ticketToken, setTicketToken] = useState("");
+  const [registeredAs, setRegisteredAs] = useState<"create" | "join" | "solo" | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -92,10 +101,11 @@ export function RsvpForm(props: {
   const formRef = useRef<HTMLDivElement & HTMLFormElement>(null);
   const requireName = !session?.user?.name?.trim();
   const isGuest = !session?.user;
-  const problemCount = Object.keys(questionsState.errors).length + Object.values(identity).filter(Boolean).length;
+  const problemCount = Object.keys(questionsState.errors).length + Object.values(identity).filter(Boolean).length + teamState.problemCount();
 
   /** Client-side checks first, so each question shows its own message; the server still decides. */
   function checkBeforeSubmit() {
+    const firstTeamProblem = teamState.validate();
     const who = identityErrors({ name, email: guestEmail, requireName: isGuest || requireName, requireEmail: isGuest });
     const questionErrors = questionsState.validate();
     setIdentity(who);
@@ -103,14 +113,16 @@ export function RsvpForm(props: {
     const ticketProblem = missingTicket ? "Choose at least one ticket." : priceProblem ?? undefined;
     setTicketError(ticketProblem);
     const firstQuestion = fields.find((field) => questionErrors[field.key])?.key;
-    const first = ticketProblem ? "__ticket" : who.name ? "__name" : who.email ? "__email" : firstQuestion;
+    const first = ticketProblem ? "__ticket" : firstTeamProblem ?? (who.name ? "__name" : who.email ? "__email" : firstQuestion);
     if (first) focusQuestion(formRef.current, first);
     return !first;
   }
 
   function submit() {
     setError(null);
+    if (teamState.awaitingLink) return;
     if (!checkBeforeSubmit()) return;
+    const teamIntent = teamState.payload();
     startTransition(async () => {
       const res = await postRsvp({
         orgSlug,
@@ -129,13 +141,17 @@ export function RsvpForm(props: {
         } : {}),
         name,
         answers: questionsState.payload(),
+        ...(teamIntent ? { team: teamIntent } : {}),
       });
       if (!res.ok) setError(res.error);
-      else saveSuccessfulRsvp({ ticketToken: res.ticketToken, status: res.status }, res);
+      else {
+        setRegisteredAs(teamIntent?.mode ?? null);
+        saveSuccessfulRsvp({ ticketToken: res.ticketToken, status: res.status }, res, teamIntent?.mode ?? null);
+      }
     });
   }
 
-  function saveSuccessfulRsvp(rsvp: { ticketToken: string; status: RsvpStatus | null }, order: { orderToken?: string | null; checkoutUrl?: string | null } = {}) {
+  function saveSuccessfulRsvp(rsvp: { ticketToken: string; status: RsvpStatus | null }, order: { orderToken?: string | null; checkoutUrl?: string | null } = {}, teamMode: "create" | "join" | "solo" | null = null) {
     setTicketToken(rsvp.ticketToken);
     setRsvpStatus(rsvp.status);
     if (rsvp.ticketToken) {
@@ -165,7 +181,7 @@ export function RsvpForm(props: {
       router.push(`/order/${order.orderToken}`);
       return;
     }
-    onRsvpSaved?.(rsvp);
+    onRsvpSaved?.({ ...rsvp, teamMode });
     setDone(true);
     // Re-read the going count and spots left, which now include this registration.
     router.refresh();
@@ -180,10 +196,16 @@ export function RsvpForm(props: {
   }
 
   if (done) {
-    return <RsvpDone ticketToken={ticketToken} rsvpStatus={rsvpStatus} sellsPaid={sellsPaid} />;
+    return <RsvpDone ticketToken={ticketToken} rsvpStatus={rsvpStatus} sellsPaid={sellsPaid} registeredAs={registeredAs} joinTeamName={team?.joinTeam?.name ?? null} />;
   }
 
   const questions = <RegistrationQuestions controller={questionsState} />;
+  const teamFields = (
+    <>
+      <TeamRegistrationFields controller={teamState} />
+      {teamTickets.note && (tickets.length > 0 || ticketing?.accessCodes) ? <p className="text-caption text-ink-muted">{teamTickets.note}</p> : null}
+    </>
+  );
   const ticketSection = sellsTicketTypes ? (
     <div data-question-key="__ticket" className="flex flex-col gap-3">
       {tickets.length > 0 ? (
@@ -224,7 +246,7 @@ export function RsvpForm(props: {
       ) : null}
     </div>
   ) : null;
-  const submitLabel = totalMinor <= 0
+  const submitLabel = !sellsTicketTypes || totalMinor <= 0
     ? "Register"
     : atDesk
       ? `Reserve, pay ${formatMoney(totalMinor, currency)} at the desk`
@@ -239,31 +261,28 @@ export function RsvpForm(props: {
     </Callout>
   ) : null;
 
+  // "Join with a link" without a link: only the explanation, nothing to
+  // submit. The team choice stays in the same element either way, so moving
+  // between the options with the arrow keys never remounts the radio group
+  // (which would drop keyboard focus out of it).
+  const awaitingLink = teamState.awaitingLink;
+
   if (session?.user) {
     return (
       <div ref={formRef} className="flex flex-col gap-3.5">
         {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
         {problems}
+        {teamFields}
         {ticketSection}
-        <div data-question-key="__name">
-          <Field label="Name" optional={!requireName} required={requireName} error={identity.name} helperText={!requireName ? `Leave blank to use ${session.user.name}.` : undefined}>
-            <Input
-              name="name"
-              autoComplete="name"
-              value={name}
-              placeholder={session.user.name ?? ""}
-              onChange={(event) => {
-                setName(event.target.value);
-                if (identity.name && event.target.value.trim()) setIdentity((current) => ({ ...current, name: undefined }));
-              }}
-              maxLength={200}
-            />
-          </Field>
-        </div>
-        {questions}
-        <Button variant="accent" size="lg" fullWidth loading={pending} loadingLabel="Registering…" onClick={submit}>
-          {submitLabel}
-        </Button>
+        {awaitingLink ? null : (
+          <>
+            <SignedInNameField name={name} setName={setName} identity={identity} setIdentity={setIdentity} requireName={requireName} accountName={session.user.name} />
+            {questions}
+            <Button variant="accent" size="lg" fullWidth loading={pending} loadingLabel="Registering…" onClick={submit}>
+              {submitLabel}
+            </Button>
+          </>
+        )}
       </div>
     );
   }
@@ -280,43 +299,18 @@ export function RsvpForm(props: {
     >
       {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
       {problems}
+      {teamFields}
       {ticketSection}
-      <p className="text-body-ui text-ink-muted">Your details</p>
-      <div data-question-key="__name">
-        <Field label="Name" required error={identity.name}>
-          <Input
-            name="name"
-            autoComplete="name"
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value);
-              if (identity.name && event.target.value.trim()) setIdentity((current) => ({ ...current, name: undefined }));
-            }}
-            maxLength={200}
-          />
-        </Field>
-      </div>
-      <div data-question-key="__email">
-        <Field label="Email" required error={identity.email} helperText="We’ll send your ticket here.">
-          <Input
-            name="guestEmail"
-            type="email"
-            autoComplete="email"
-            value={guestEmail}
-            onChange={(event) => {
-              setGuestEmail(event.target.value);
-              if (identity.email) {
-                const recheck = identityErrors({ name, email: event.target.value, requireName: false, requireEmail: true }).email;
-                setIdentity((current) => ({ ...current, email: recheck }));
-              }
-            }}
-          />
-        </Field>
-      </div>
-      {questions}
-      <Button variant="accent" size="lg" fullWidth type="submit" loading={pending} loadingLabel="Registering…">
-        {submitLabel}
-      </Button>
+      {awaitingLink ? null : (
+        <>
+          <p className="text-body-ui text-ink-muted">Your details</p>
+          <GuestIdentityFields name={name} setName={setName} guestEmail={guestEmail} setGuestEmail={setGuestEmail} identity={identity} setIdentity={setIdentity} />
+          {questions}
+          <Button variant="accent" size="lg" fullWidth type="submit" loading={pending} loadingLabel="Registering…">
+            {submitLabel}
+          </Button>
+        </>
+      )}
     </form>
   );
 }

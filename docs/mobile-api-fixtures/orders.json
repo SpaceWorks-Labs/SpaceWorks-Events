@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "data": {
+    "orders": [
+      {
+        "id": "clorder00000000000000001",
+        "reference": "SW-7K2Q9",
+        "status": "CONFIRMED",
+        "total": "₹998.00",
+        "totalMinor": "99800",
+        "currency": "INR",
+        "createdAt": "2030-05-20T10:00:00.000Z",
+        "holdExpiresAt": null,
+        "ticketCount": 2,
+        "event": {
+          "title": "Spring Hack Night",
+          "organisation": "Civic Tech Meetup",
+          "startDateTime": "2030-06-01T13:00:00.000Z"
+        }
+      }
+    ],
+    "nextCursor": null
+  }
+}

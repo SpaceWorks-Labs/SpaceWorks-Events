@@ -1,0 +1,163 @@
+{
+  "ok": true,
+  "data": {
+    "event": {
+      "id": "clevent000000000000000001",
+      "slug": "spring-hack-night",
+      "title": "Spring Hack Night",
+      "coverImageUrl": null,
+      "startDateTime": "2030-05-10T17:00:00.000Z",
+      "endDateTime": "2030-05-10T21:00:00.000Z",
+      "timezone": "Europe/London",
+      "location": "Community Hall, 1 High Street",
+      "mapLinkUrl": "https://maps.example/hall",
+      "isOnline": false,
+      "accentColor": "#2F6FEB",
+      "status": "PUBLISHED",
+      "registrationMode": "INDIVIDUAL",
+      "organisation": {
+        "slug": "civic-tech",
+        "name": "Civic Tech Meetup",
+        "logoUrl": null
+      },
+      "description": "Build something useful for your neighbourhood.",
+      "tags": [
+        "civic",
+        "hackathon"
+      ],
+      "capacity": 80,
+      "showRegistrationCount": true,
+      "confirmedCount": 42,
+      "privacyType": "PUBLIC",
+      "registrationOpen": true,
+      "registrationFull": false,
+      "registrationClosedReason": null,
+      "onlineUrl": null
+    },
+    "registration": {
+      "requiresApproval": false,
+      "takesApplications": false,
+      "fields": [
+        {
+          "id": "clfield000000000000000001",
+          "key": "attending_dinner",
+          "label": "Staying for dinner?",
+          "type": "CHECKBOX",
+          "required": false,
+          "helpText": null,
+          "placeholder": null,
+          "options": [],
+          "settings": {},
+          "showIf": null
+        },
+        {
+          "id": "clfield000000000000000002",
+          "key": "dietary",
+          "label": "Dietary needs",
+          "type": "MULTI_SELECT",
+          "required": false,
+          "helpText": "Tell us so we can plan food.",
+          "placeholder": null,
+          "options": [
+            "Vegetarian",
+            "Vegan",
+            "Gluten-free"
+          ],
+          "settings": {
+            "allowOther": true,
+            "maxSelections": 3
+          },
+          "showIf": {
+            "fieldKey": "attending_dinner",
+            "values": [
+              "Yes"
+            ]
+          }
+        }
+      ],
+      "myRsvp": {
+        "rsvpId": "clrsvp000000000000000001",
+        "status": "CONFIRMED",
+        "ticketToken": "tkEXAMPLEownerTicketToken01"
+      }
+    },
+    "schedule": [
+      {
+        "trackName": "Main Hall",
+        "sessions": [
+          {
+            "id": "clsession0000000000000001",
+            "title": "Welcome",
+            "startDateTime": "2030-05-10T17:00:00.000Z",
+            "endDateTime": "2030-05-10T17:15:00.000Z",
+            "delayMinutes": 0,
+            "room": null,
+            "speakers": [
+              "Ada Organiser"
+            ]
+          },
+          {
+            "id": "clsession0000000000000002",
+            "title": "Lightning talks",
+            "startDateTime": "2030-05-10T17:25:00.000Z",
+            "endDateTime": "2030-05-10T18:10:00.000Z",
+            "delayMinutes": 10,
+            "room": null,
+            "speakers": []
+          }
+        ]
+      }
+    ],
+    "speakers": [
+      {
+        "name": "Ada Organiser",
+        "title": "Community lead",
+        "photoUrl": null
+      }
+    ],
+    "feedbackOpen": false,
+    "ticketing": {
+      "currency": "INR",
+      "tickets": [
+        {
+          "id": "cltt0000000000000000001",
+          "name": "General",
+          "description": "Entry and lunch",
+          "priceMinor": 49900,
+          "currency": "INR",
+          "minPerOrder": 1,
+          "maxPerOrder": 6,
+          "sales": "ON_SALE",
+          "salesStartAt": null,
+          "salesEndAt": "2030-05-31T18:30:00.000Z",
+          "remaining": 42,
+          "pass": false,
+          "passDates": null,
+          "flexible": false,
+          "suggestedMinor": null,
+          "maxPriceMinor": null,
+          "seatsPerTicket": 1,
+          "feeMinor": 0,
+          "visibility": "PUBLIC",
+          "payAtDesk": true
+        }
+      ],
+      "addOns": [
+        {
+          "id": "cladd000000000000000001",
+          "name": "T-shirt",
+          "description": "",
+          "priceMinor": 30000,
+          "currency": "INR",
+          "maxPerOrder": 2,
+          "remaining": null
+        }
+      ],
+      "promoCodes": true,
+      "accessCodes": false,
+      "sellsPaid": true,
+      "paidSalesOpen": true,
+      "refundPolicy": "Full refund until 48 hours before the start."
+    }
+  }
+}

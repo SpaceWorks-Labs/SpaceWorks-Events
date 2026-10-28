@@ -5,9 +5,11 @@ import { pageSecurity } from "@/lib/pageSecurity";
 import { CLIENT_IP_HEADER, GATEWAY_HEADER, isFrontendPeer } from "@/lib/frontend/peer";
 import { checkRateLimit } from "@/lib/rateLimit";
 
-function tooMany(apiV1 = false) {
+function tooMany(apiV1 = false, mobile = false) {
   return NextResponse.json(
-    apiV1
+    mobile
+      ? { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests. Try again later." } }
+      : apiV1
       ? { error: { code: "RATE_LIMITED", message: "Too many requests. Try again later." } }
       : { error: "Too many requests. Try again later." },
     { status: 429, headers: { "Retry-After": "60", "Cache-Control": "no-store" } },
@@ -47,12 +49,25 @@ export async function proxy(request: NextRequest) {
   // failed distributed limiter means the application is not fully ready.
   // Payment provider webhooks have their own bucket instead of the global one.
   const isPaymentWebhook = pathname.startsWith("/api/webhooks/");
+  // A split-hosted page render reads its views here, a dozen or more per page.
+  // A single-server render spends no API budget, so these authenticated peer
+  // reads (the gateway key was checked above) skip the per-user global bucket.
+  // Peer actions keep their own limit (lib/frontend/handler.ts).
+  const isPeerView = request.headers.has(GATEWAY_HEADER) && pathname.startsWith("/api/frontend/view/");
   if (isPaymentWebhook) {
     if (!(await checkRateLimit(request, "paymentWebhook"))) return tooMany();
-  } else if (pathname.startsWith("/api") && pathname !== "/api/health") {
+  } else if (pathname.startsWith("/api") && pathname !== "/api/health" && !isPeerView) {
     if (!(await checkRateLimit(request, "global"))) {
-      return tooMany(pathname.startsWith("/api/v1"));
+      return tooMany(pathname.startsWith("/api/v1"), pathname.startsWith("/api/mobile/"));
     }
+  }
+
+  // Mobile app sign-in shares the strict per-IP sign-in bucket with the web
+  // (the credential verifier adds per-account limits). Mobile API requests are
+  // bearer-authenticated route handlers: no cookies, CSRF or Server Action
+  // origin checks apply, and nothing here redirects them.
+  if ((pathname === "/api/mobile/v1/auth/login" || pathname === "/api/mobile/v1/auth/google") && request.method === "POST") {
+    if (!(await checkRateLimit(request, "auth"))) return tooMany(false, true);
   }
 
   // Auth.js polls session, CSRF, and provider endpoints with GET requests.

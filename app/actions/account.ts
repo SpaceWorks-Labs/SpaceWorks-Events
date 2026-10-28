@@ -16,6 +16,7 @@ import { noticeEach } from "@/lib/notices";
 import { flattenZodErrors } from "./utils";
 import type { ActionResult } from "./org";
 import { isUploadedImageUrl, isUserUploadUrl } from "@/lib/uploadUrl";
+import { revokeUserMobileSessions } from "@/lib/mobileAuth";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -138,6 +139,7 @@ export async function updateAccountPassword(
     if (updated.count !== 1) return false;
     await tx.verificationToken.deleteMany({ where: { identifier: { in: [`reset:${user.email}`, `mfa:${session.user.id}`] } } });
     await tx.session.deleteMany({ where: { userId: session.user.id } });
+    await revokeUserMobileSessions(tx, session.user.id);
     await tx.auditEvent.create({
       data: {
         action: user.passwordHash

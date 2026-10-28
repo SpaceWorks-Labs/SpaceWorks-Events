@@ -19,7 +19,7 @@ vi.mock("@/lib/instanceSettings", () => ({ isPaidEventsEnabled: mocks.paidEnable
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/db", () => ({ prisma: {
   organisation: { findUnique: mocks.orgFind },
-  event: { findFirst: mocks.eventFind },
+  event: { findFirst: mocks.eventFind, count: async () => 0 },
   ticketType: { findFirst: mocks.typeFind },
   organisationPaymentSettings: { findUnique: mocks.settingsFind },
   $transaction: mocks.transaction,

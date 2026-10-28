@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "data": {
+    "judgingStatus": "OPEN",
+    "round": {
+      "id": "clround00000000000000001",
+      "name": "Main",
+      "position": 0,
+      "judgingStatus": "OPEN",
+      "isCurrent": true
+    },
+    "criteria": [
+      {
+        "id": "clcrit0000000000000000001",
+        "name": "Impact",
+        "description": "Who does it help, and how much?",
+        "weight": 3,
+        "maxScore": 10
+      },
+      {
+        "id": "clcrit0000000000000000002",
+        "name": "Execution",
+        "description": "Does it work?",
+        "weight": 2,
+        "maxScore": 5
+      }
+    ]
+  }
+}

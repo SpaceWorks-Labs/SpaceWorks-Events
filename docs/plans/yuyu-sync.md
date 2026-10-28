@@ -102,6 +102,24 @@ Done from the follow-ups:
 - **Secrets check:** `scripts/check-instance-secrets.mjs` also checks each organisation's mail server password, chat channel credentials, payment keys and station PINs.
 - **Weekly Yuyu check:** it skips commits named on "cherry picked from Yuyu <hash>" lines in `dev` and those listed in `.github/yuyu-reviewed.txt`, and lists each commit once.
 
+## Third sync, branch 1 (`fix/yuyu-sync-3`, 27 Oct 2026)
+
+The upstream fixes from the third sync (plan: `docs/plans/yuyu-sync-3.md`). Every commit names its Yuyu hash; nothing from this branch goes in `.github/yuyu-reviewed.txt`.
+
+- **Outbox** (`22adb522`, outbox part of `bc3171b8`): a pass drains until nothing is due or 40 s have passed, going by how many due messages a batch picked up, and backs off only when a batch failed without a send. Transactional email (including payment notices, member IDs and team email) is claimed before `event-broadcast`, `event-invite` and `results-published`. Yuyu's "kinds added after 1.0" requeue is not ported.
+- **Pre-production fixes** (`ba1fc528`). Adapted to `dev`:
+  - `private, no-store` for signed-in areas, `/login`, `/join`, `/reset-password`, `/verify-email`, `/verify-mfa`, `/order/{token}`, `/verify/{token}` and any request with the `swe.session-token.v1` cookie, in `lib/pageSecurity.ts` (both proxies). `no-referrer` headers for the order, member ID verification, invitation, reset and email-verification links.
+  - `lib/redisOptions.ts`; DST-safe wall-clock parsing for event create/update and series create, plus series schedule items, which `dev`'s schedule form posts as `datetime-local` values. Other date inputs (ticket sale windows, promo and pass validity, judging windows, event sessions) already require ISO instants from their forms.
+  - Prisma error log, venue station **Sign in again**, and the schema drift fix (migration `20261107020000_drop_orphan_event_session_type`, CI `prisma migrate diff --exit-code`). `dev` already refreshed the series "N going" count.
+  - Not ported: the mobile OpenAPI and catch-all, `ajv` and the `vitest` bump.
+- **Unchanged event times** (`56a47332`, web part): a time unchanged to the minute keeps its stored value, so no time-change email. The iOS app-link part goes with the mobile API branch.
+- **New event dialog** (`bb3791e8`, dialog part of `bc3171b8`): defaults, `min`, Next and Create on the selected timezone, a controlled picker, focus handling; `/discover` overflow. Own e2e spec `create-event-timezone.spec.ts` instead of Yuyu's redesign journeys.
+- **Release-gate fixes** (rest of `bc3171b8`): `lib/format/intlCache.ts` (date and number formatters, including `formatMoney`, revenue and the PDF report); `lib/sqlTimestamp.ts` after an audit of every raw SQL query (judge scoring, webhook claim, the series-date payment lock, processed payment webhooks, every keyset cursor; `lib/payments` row locks, prizes, member IDs and `reserveRsvp` pass no timestamps); `lib/authLogger.ts` treating `dev`'s MfaRequired, EmailVerificationRequired, EmailCodeRequired and TooManyAttempts outcomes as expected; the publish row lock; webhook root-cause errors; table, copy, station gutter, Helm `updateStrategy` and `db:restore --via-local-tunnel`. Already in `dev`: public page section defaults, the absolute robots sitemap, the station "not open yet" message. The submit-receipt wording waits for the hackathon email toggles branch.
+- **Speaker photos** (`c8c707b4`): 5 MB browser check, `finally`, toast. Event page images use a new `eventPageUpload` bucket (60 an hour); the shared `upload` bucket stays at 12.
+- **Tab error boundaries** (`88ed91bb`), **event-wide People chips** (`cc872878`; attendance counts wait for the attendance branch).
+- **Real dashboard 404s** (`a11326e4`): guards are view readers (`lib/views/dashboardGuards.ts`) behind a React `cache` wrapper, so split hosting runs them on the backend. Covers `dev`'s settings chat, email and payments, ticket designs, member IDs and check-in badges. Unit test pins every `loading.tsx`; e2e `dashboard-not-found.spec.ts`.
+- **Large events** (`5a3830bb`): migration `20261108000000_large_event_indexes`; aggregated judging reads in `lib/core/judging/judgeWork.ts`; set-based offline roster; gallery search; `csvByteStream` for every export, including orders and Finance. The golden equivalence test is kept as an integration test. Yuyu's `tests/perf` load harness is not ported.
+
 ## Follow-ups
 
 - **Mobile API** (`/api/mobile/v1`): its own project, rebuilt on `dev`'s paid-event flows. It is listed as deferred in `.github/yuyu-reviewed.txt`.
