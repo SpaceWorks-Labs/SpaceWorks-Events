@@ -38,7 +38,9 @@ export async function loadSettingsPanel({ ctx, judgingInUse = false }: { ctx: Ev
   const ticketDesign = tickets ? { ...(await loadEventTicketDesigns(event.id, organisation.id)), starters: STARTER_DESIGNS.map((starter) => ({ key: starter.key, label: starter.label })) } : null;
   // Applications (docs/ADMISSION.md): owners and admins turn them on here; then they have their own tab.
   const applicationsCard = permissions.isAdmin && !event.admissionEnabled ? await admissionEnableState(event.id) : null;
-  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign, applicationsCard };
+  // Mentor Desk switch (docs/MENTOR_DESK.md): owners and admins, on one-off events.
+  const mentorDesk = permissions.canManageMentorDesk ? { enabled: event.mentorDeskEnabled, helpClaimedEmail: event.mentorHelpClaimedEmail, crewTicket: event.mentorsGetCrewTicket } : null;
+  return { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign, applicationsCard, mentorDesk };
 }
 
 import { loadEventDashboard } from "@/lib/eventDashboard/context";

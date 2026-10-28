@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "data": {
+    "rsvpId": "clrsvp000000000000000013",
+    "displayName": "Wait Listed",
+    "email": "wait@example.test",
+    "status": "WAITLISTED",
+    "alreadyCheckedIn": false,
+    "checkedInAt": null,
+    "checkInDetails": [
+      {
+        "label": "T-shirt size",
+        "value": "M"
+      }
+    ],
+    "registrationDetails": [
+      {
+        "label": "T-shirt size",
+        "value": "M"
+      },
+      {
+        "label": "Company",
+        "value": "Example Ltd"
+      }
+    ],
+    "teamName": "Byte Club",
+    "payment": {
+      "due": "₹499.00",
+      "orderId": "clorder00000000000000001",
+      "payAtDesk": true
+    },
+    "gate": {
+      "ok": false,
+      "reason": "Guest is on the waitlist — use “Override” to check in at the door.",
+      "needsForce": true
+    }
+  }
+}

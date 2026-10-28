@@ -8,7 +8,7 @@ import { eventCapabilities, seriesCapabilities, type EventCapabilities, type Ser
  * `grant` names the single EventPermission that unlocks a flag for someone
  * who is not an organisation owner/admin; `null` means owners/admins only.
  */
-const EVENT_MATRIX: Record<Exclude<keyof EventCapabilities, "isJudgeOnly" | "isReviewerOnly">, EventPermission | null> = {
+const EVENT_MATRIX: Record<Exclude<keyof EventCapabilities, "isJudgeOnly" | "isMentorOnly" | "canMentor" | "isReviewerOnly">, EventPermission | null> = {
   isAdmin: null,
   canManageRegistrations: EventPermission.MANAGE_REGISTRATIONS,
   canExportAttendees: EventPermission.MANAGE_REGISTRATIONS,
@@ -39,6 +39,7 @@ const EVENT_MATRIX: Record<Exclude<keyof EventCapabilities, "isJudgeOnly" | "isR
   canManageJudging: null,
   canManageApplications: EventPermission.MANAGE_REGISTRATIONS,
   canReviewApplications: EventPermission.REVIEW_APPLICATIONS,
+  canManageMentorDesk: null,
 };
 
 const SERIES_MATRIX: Record<keyof SeriesCapabilities, EventPermission | null> = {
@@ -70,15 +71,19 @@ const cases = ROLES.flatMap((role) => GRANTS.map(([name, grant]) => [role ?? "no
 
 describe("eventCapabilities", () => {
   it("covers every flag in the matrix", () => {
-    expect(Object.keys(eventCapabilities(null, [])).sort()).toEqual([...Object.keys(EVENT_MATRIX), "isJudgeOnly", "isReviewerOnly"].sort());
+    expect(Object.keys(eventCapabilities(null, [])).sort()).toEqual([...Object.keys(EVENT_MATRIX), "isJudgeOnly", "isMentorOnly", "canMentor", "isReviewerOnly"].sort());
   });
 
   it.each(cases)("%s with %s", (_role, _grant, role, grant) => {
     // Judge-only: a non-member whose only grant is JUDGE (docs/HACKATHON.md).
     const isJudgeOnly = role === null && grant.length === 1 && grant[0] === EventPermission.JUDGE;
-    // Reviewer-only: a non-member whose only grant is REVIEW_APPLICATIONS (docs/ADMISSION.md).
-    const isReviewerOnly = role === null && grant.length === 1 && grant[0] === EventPermission.REVIEW_APPLICATIONS;
-    expect(eventCapabilities(role, grant)).toEqual({ ...expected(EVENT_MATRIX, role, grant), isJudgeOnly, isReviewerOnly });
+    // Mentor-only (docs/MENTOR_DESK.md): a non-member whose grants are MENTOR, possibly with JUDGE.
+    const isMentorOnly = role === null && grant.includes(EventPermission.MENTOR) && grant.every((p) => p === EventPermission.MENTOR || p === EventPermission.JUDGE);
+    // canMentor is the grant itself, never implied by an organisation role.
+    const canMentor = grant.includes(EventPermission.MENTOR);
+    // Reviewer-only (docs/ADMISSION.md): a non-member whose grants are REVIEW_APPLICATIONS, possibly with JUDGE or MENTOR.
+    const isReviewerOnly = role === null && grant.includes(EventPermission.REVIEW_APPLICATIONS) && grant.every((p) => p === EventPermission.REVIEW_APPLICATIONS || p === EventPermission.JUDGE || p === EventPermission.MENTOR);
+    expect(eventCapabilities(role, grant)).toEqual({ ...expected(EVENT_MATRIX, role, grant), isJudgeOnly, isMentorOnly, canMentor, isReviewerOnly });
   });
 
   it("never lets a co-organiser with every grant delete, clone, embed, publish or manage collaborators", () => {

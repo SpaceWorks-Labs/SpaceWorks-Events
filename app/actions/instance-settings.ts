@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { prisma } from "@/lib/db";
-import { INSTANCE_SETTINGS_ID, isValidSenderAddress } from "@/lib/instanceSettings";
+import { INSTANCE_SETTINGS_ID, isGoogleClientIdList, isValidSenderAddress, parseGoogleClientIdList } from "@/lib/instanceSettings";
 import { assertEmailAccepted, EmailRecipientRejectedError, EmailTransportUnavailableError, getPlatformTransport } from "@/lib/email/transporter";
 import { describeOperationalError } from "@/lib/redactSensitiveText";
 import { requireSuperAdminMfa } from "@/lib/permissions";
@@ -32,6 +32,7 @@ const serviceSettingsSchema = z.object({
   smtpPort: optionalNumber(1, 65535), smtpSecure: z.boolean(),
   smtpUser: optionalText(320), smtpPassword: z.string().max(1024).optional(), smtpAllowUnauthenticated: z.boolean(),
   googleClientId: optionalText(320), googleClientSecret: z.string().max(1024).optional(),
+  googleMobileClientIds: optionalText(2000).refine((value) => !value || isGoogleClientIdList(value), "Enter Google OAuth client IDs separated by commas."),
   backupProvider: optionalText(80),
   backupLastSuccessAt: z.preprocess((value) => (value === "" || value === null ? undefined : value), z.string().datetime().optional()),
   backupRetentionDays: optionalNumber(1, 3650),
@@ -134,6 +135,7 @@ export async function saveInstanceServiceSettings(input: unknown): Promise<Actio
     emailFrom: value.emailFrom ?? null,
     ...smtpData,
     googleClientId: value.googleClientId ?? null,
+    googleMobileClientIds: value.googleMobileClientIds ? parseGoogleClientIdList(value.googleMobileClientIds).join(",") : null,
     backupProvider: value.backupProvider ?? null,
     backupLastSuccessAt: value.backupLastSuccessAt ? new Date(value.backupLastSuccessAt) : null,
     backupRetentionDays: value.backupRetentionDays ?? null,
@@ -147,7 +149,7 @@ export async function saveInstanceServiceSettings(input: unknown): Promise<Actio
     action: "INSTANCE_SERVICE_SETTINGS_UPDATED", actorUserId: session.user.id, targetType: "InstanceSetting", targetId: INSTANCE_SETTINGS_ID,
     metadata: {
       smtpConfigured, smtpPasswordChanged: Boolean(smtpPassword) && keepsPassword,
-      googleSsoConfigured: Boolean(value.googleClientId), googleSecretChanged: Boolean(googleClientSecret),
+      googleSsoConfigured: Boolean(value.googleClientId), googleSecretChanged: Boolean(googleClientSecret), googleMobileClients: Boolean(value.googleMobileClientIds),
       backupConfigured: Boolean(value.backupProvider),
     },
   });

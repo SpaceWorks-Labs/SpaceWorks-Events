@@ -1192,6 +1192,57 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "attending/joining-the-crew": {
+    "headings": [
+      {
+        "id": "joining-with-a-crew-sign-up-link",
+        "title": "Joining with a crew sign-up link",
+        "level": 2
+      },
+      {
+        "id": "your-crew-ticket",
+        "title": "Your crew ticket",
+        "level": 2
+      },
+      {
+        "id": "claiming-expenses",
+        "title": "Claiming expenses",
+        "level": 2
+      },
+      {
+        "id": "what-s-different-for-crew",
+        "title": "What's different for crew",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "If you're helping to run an event as a volunteer, host, helper or mentor, the organisers may add you to its crew. You get a free crew ticket for check-in, and you might be thanked by name on the event page. You don't need an account."
+      },
+      {
+        "heading": "Joining with a crew sign-up link",
+        "anchor": "joining-with-a-crew-sign-up-link",
+        "text": "Organisers can share a crew sign-up link with their team. It opens a Join the crew page with the event's name, organiser and date. Open the link the organisers sent you. Under Your crew profile, enter your Name and Email. If you like, add a Food preference, a Role (such as \"Registration desk\"), a Short bio, a Photo and a LinkedIn URL. Choose Join the crew. If you're new to the event's crew, your crew ticket arrives by email. The organisers review crew profiles before anyone appears on the event page, so you won't be shown straight away. If you've already registered for the event with the same email address, nothing changes and your registration stays as it is. Ask the organisers to add you to the crew; they can turn a free registration into a crew ticket. A ticket you paid for can't become a crew ticket: the organisers would cancel or refund your order first. The page says \"Crew sign-ups are closed\" once the event has ended or been cancelled. If the link doesn't open at all, the organisers may have replaced or turned it off: ask them for the current one. Only the organisers see your email address and food preference. If you're shown on the event page, it lists your name, role, bio, photo and LinkedIn link."
+      },
+      {
+        "heading": "Your crew ticket",
+        "anchor": "your-crew-ticket",
+        "text": "Whether you joined with the link or the organisers added you, you get an email saying \"You're on the crew for\" the event, with your ticket link and, if the organisers designed one, your ticket as a PDF. Your ticket page shows a Crew chip and the QR code for check-in. See Your ticket for saving it and adding it to your calendar. On the day, check in at the door like everyone else. The desk shows that you're crew and your food preference."
+      },
+      {
+        "heading": "Claiming expenses",
+        "anchor": "claiming-expenses",
+        "text": "If the organisers let crew claim expenses, your ticket page shows Claim expenses. Use it to ask to be paid back for things you bought for the event, with photos of your receipts. See Claiming expenses."
+      },
+      {
+        "heading": "What's different for crew",
+        "anchor": "what-s-different-for-crew",
+        "text": "Your crew ticket is free and doesn't take one of the event's guest places. You can't cancel a crew ticket yourself. If you can't make it, tell the organisers, who can remove you from the crew. You aren't part of a team and can't enter a hackathon project. You won't be asked \"Are you still coming?\". To change your role, bio or photo, ask the organisers. They edit crew profiles."
+      }
+    ]
+  },
   "attending/member-id": {
     "headings": [
       {
@@ -1533,6 +1584,57 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "heading": "Good to know",
         "anchor": "good-to-know",
         "text": "You can register once per event or date. For a recurring series, such as a weekly meetup, register for each date you want, or buy a pass where one is sold. Your answers go to the organisers of this event only. Changed your mind? See Your ticket."
+      }
+    ]
+  },
+  "attending/still-coming": {
+    "headings": [
+      {
+        "id": "answer-the-question",
+        "title": "Answer the question",
+        "level": 2
+      },
+      {
+        "id": "saying-no",
+        "title": "Saying No",
+        "level": 2
+      },
+      {
+        "id": "changing-your-answer",
+        "title": "Changing your answer",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Shortly before an event, the organisers may email you to ask whether you're still coming. It helps them plan food, seats and staff, and lets them offer your place to someone else if you can't make it. Answering takes a moment and you don't need an account. The email is only sent to people with a confirmed place, and only when the organisers choose to ask. Its subject is \"Are you still coming to\" followed by the event name; a reminder starts with \"Reminder:\". Organisers can also send you the same link by text or chat."
+      },
+      {
+        "heading": "Answer the question",
+        "anchor": "answer-the-question",
+        "text": "Open the email and choose Yes, I'll be there or No, I can't make it. Your answer page opens with that choice picked. It shows the event's date, time and place, and your name and email. If you like, add a Note for the organisers, such as \"Arriving late\". Notes can be up to 500 characters. Choose Send my answer. You'll see \"Thanks, see you there!\" or \"Thanks for letting us know\", with your answer and when you sent it. The organisers see your answer and note straight away. The link is private to you: anyone with it can answer for you. If the organisers send a reminder or a new link, the earlier one stops working, so use the newest."
+      },
+      {
+        "heading": "Saying No",
+        "anchor": "saying-no",
+        "text": "What happens when you say No depends on how the organisers set up the event, and on your ticket: Your answer is just recorded. You keep your place and your ticket. The organisers may follow up with you. Your place is released. The page warns you first with \"Answering No releases your place\", and the button changes to Release my place. When you send it, your registration is cancelled and your place can go to someone else. You'll see \"Your place has been released\". A paid ticket you bought on its own order is cancelled under the event's refund policy, the same as cancelling from your order page. The page tells you how much comes back. A ticket you reserved to pay at the desk is simply cancelled. See Asking for a refund. A paid ticket after the refund window has closed keeps its place. Your No is sent to the organisers with a refund request (including your note), and they decide. If you change your answer to Yes while they haven't decided yet, the request is withdrawn. A paid ticket on an order with several tickets, or one someone else paid for, is never cancelled from this page. Your answer goes to the organisers, who will sort out the order with whoever paid. The page only says your place will be released when that is really what will happen. A released place can't be taken back from the answer page. If your plans change, register again from the event page while places are left. If you've already been checked in at the event, you keep your place whatever you answer. On a team event, a released place cancels only your own registration, as if you'd left the team. See Registering as a team."
+      },
+      {
+        "heading": "Changing your answer",
+        "anchor": "changing-your-answer",
+        "text": "You can change your answer until the event starts. Open the link again, choose Change my answer, pick the other option and send it. If you answered No and your place was released, you can't change it: register again instead. Once the event has started, the page says \"Answers are closed\" and shows the answer you gave."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "If the event has been cancelled, or your registration is no longer confirmed, the page explains that there's nothing to answer. Answering Yes doesn't replace your ticket. Bring your QR code as usual. See Your ticket. You can also cancel from your ticket at any time before you're checked in. If you have an account, your answers are included when you download your data. Crew are never asked. See Joining an event's crew."
       }
     ]
   },
@@ -2719,7 +2821,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Clone an event",
         "anchor": "clone-an-event",
-        "text": "Cloning makes a new draft event with the same core information, so you don't start from scratch. Open the event you want to copy and choose the Settings tab. In Run it again, choose Clone event. The app opens the new event's dashboard. Its title ends in (copy). Go to Event page → Details, update the title, dates and anything else that's different, and save. The copy is always a Draft, so nothing goes public until you publish it. You need a verified email address to clone. What's copied Title (with (copy) added) and cover image Start, end and time zone Location, map link and whether it's online Capacity, who can find it and whether you approve sign-ups Team registration settings What isn't copied Guests, invites, orders, check-ins, feedback and expense claims The event page content: the formatted introduction, tagline, logo, accent colour, sections, highlights, speakers, sponsors, resources, FAQs and the programme Tickets, prices, extras, promo codes, the refund policy and the ticket design Registration form questions, emails, the feedback form and certificate Hackathon submissions and judging settings Co-organisers, tags, the short link, the sign-up closing rule and the budget The copy keeps the original dates, which are often in the past, so set new dates first. You'll also need to fill in About the event again before you can save the Details form."
+        "text": "Cloning makes a new draft event with the same core information, so you don't start from scratch. Open the event you want to copy and choose the Settings tab. In Run it again, choose Clone event. The app opens the new event's dashboard. Its title ends in (copy). Go to Event page → Details, update the title, dates and anything else that's different, and save. The copy is always a Draft, so nothing goes public until you publish it. You need a verified email address to clone. What's copied Title (with (copy) added) and cover image Start, end and time zone Location, map link and whether it's online Capacity, who can find it and whether you approve sign-ups Team registration settings The Hackathon emails switches (results emails and submission receipts), and Free the place when a guest says No for attendance confirmation What isn't copied Guests, invites, orders, check-ins, feedback and expense claims The event page content: the formatted introduction, tagline, logo, accent colour, sections, highlights, speakers, sponsors, resources, FAQs and the programme Tickets, prices, extras, promo codes, the refund policy and the ticket design Registration form questions, emails, the feedback form and certificate Hackathon submissions and judging settings Co-organisers, tags, the short link, the sign-up closing rule and the budget The copy keeps the original dates, which are often in the past, so set new dates first. You'll also need to fill in About the event again before you can save the Details form."
       },
       {
         "heading": "Cancel an event",
@@ -3771,6 +3873,82 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "guests/attendance-confirmation": {
+    "headings": [
+      {
+        "id": "who-gets-asked",
+        "title": "Who gets asked",
+        "level": 2
+      },
+      {
+        "id": "ask-your-guests",
+        "title": "Ask your guests",
+        "level": 2
+      },
+      {
+        "id": "guests-who-get-a-place-later",
+        "title": "Guests who get a place later",
+        "level": 3
+      },
+      {
+        "id": "reminding-people-who-haven-t-replied",
+        "title": "Reminding people who haven't replied",
+        "level": 3
+      },
+      {
+        "id": "sending-a-guest-s-link-yourself",
+        "title": "Sending a guest's link yourself",
+        "level": 3
+      },
+      {
+        "id": "freeing-places-when-a-guest-says-no",
+        "title": "Freeing places when a guest says No",
+        "level": 2
+      },
+      {
+        "id": "following-the-replies",
+        "title": "Following the replies",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "A day or two before a busy event, it helps to know who is really coming. Attendance confirmation emails every confirmed guest a short \"Are you still coming?\" with Yes and No buttons, and collects the answers for you. If you like, a No can free the guest's place for someone else. Nothing is ever sent automatically. There's no schedule or timer: guests are only asked when you choose to ask them. Owners and admins of the organisation. No co-organiser permission covers emailing guests, so co-organisers don't see the Attendance confirmation card or the Share attendance link option."
+      },
+      {
+        "heading": "Who gets asked",
+        "anchor": "who-gets-asked",
+        "text": "Every guest whose registration is Going on a one-off event, at the address they registered with. On team events, each team member is asked individually. Guests on the waitlist, waiting for approval, waiting to pay, or declined are never asked. Crew are never asked: they're running the event. A guest who was asked and then joins the crew loses the question, and its link stops working. Each guest is only asked once. Anyone already asked is skipped, even if two organisers press send at the same time. Recurring series dates and passes can't be asked yet."
+      },
+      {
+        "heading": "Ask your guests",
+        "anchor": "ask-your-guests",
+        "text": "Open the event and choose the Emails tab. The Attendance confirmation card is at the top. Decide whether a No should free the guest's place (see below), and set Free the place when a guest says No before you send. Choose Ask guests to confirm attendance. Check how many confirmed guests will be asked and the event date. Choose the send button, for example Send to 40 guests. Each guest gets one email, and each email counts towards your email sending limit. The email shows the event's date, time and place, with two buttons: Yes, I'll be there and No, I can't make it. Choosing one opens the guest's private answer page with that answer picked; they then send it and can add a note of up to 500 characters. See Answering \"Are you still coming?\" for what guests see. Most organisers send it one or two days before the event. You can send until the event starts. Guests who get a place later After the first send, the button reads Ask newly confirmed guests. Use it for people who got a place since, for example from the waitlist. It only asks guests who haven't been asked before. Reminding people who haven't replied Choose Remind people who haven't replied and confirm. Guests without an answer get the question again, with a new link; the link in their earlier email stops working. Each guest can be reminded at most once every 12 hours, and the card tells you when the next reminder is possible. You can send or remind up to 10 times an hour. Sending a guest's link yourself If you'd rather reach someone by text or WhatsApp, or their email isn't getting through, you can copy their personal link and send it yourself. Open the Guests tab and choose People. Find the guest, open the row's menu and choose Share attendance link. Choose Create link, then Copy link, and paste it into your message. No email is sent. The link opens the same answer page as the email. Send it only to that guest, because anyone with the link can answer for them. If the guest hasn't been asked yet, they now count as asked and show No reply. Ask guests to confirm attendance won't email them as well. If they were already asked, the button reads Create new link. The new link replaces the one in their email, which stops working. An answer they already gave stays, and they can change it with the new link. For safety, Space Works Events can't show a link again later. Each time you choose Share attendance link, you get a new one, and the previous one stops working. The option shows for guests who are Going, until the event starts."
+      },
+      {
+        "heading": "Freeing places when a guest says No",
+        "anchor": "freeing-places-when-a-guest-says-no",
+        "text": "Free the place when a guest says No is off unless you turn it on. Off: a No is only recorded. The guest keeps their registration until you or they cancel it. On: a No gives the place up, in the same way the guest could themselves. What \"giving the place up\" means depends on the ticket: Ticket What a No does Free The registration is cancelled, as if the guest cancelled from their ticket. If you don't approve each sign-up, the next person on the waitlist moves up. On team events the usual team rules apply, such as passing leadership on. Paid (or reserved to pay at the desk), on an order of its own, and the person answering bought it The order is cancelled under the event's refund policy, exactly as the buyer could cancel it from their order page, and they get back what the policy allows. A desk reservation is simply cancelled, with nothing to refund. Paid, but the refund policy no longer allows a cancellation The place is kept and a refund request is opened for you, once. Approve or decline it under Finance. If the guest then says Yes while it's still open, it's withdrawn and you're told they're coming after all. See Refund requests. Paid or reserved at the desk, on an order with several tickets (or a team ticket that pays for the whole team), or bought by someone else Nothing is cancelled. You get an email (and a chat message, if your chat is connected), and the guest list shows Said No · paid. Cancel or refund it yourself if you need to: see Refunds and cancellations. Guests are warned before they send a No that releases their place, and they can't take it back from the answer page: they'd have to register again while places are left. A guest who has already checked in always keeps their place, but their answer is still recorded. The email follows the switch, and the guest's own ticket, at the moment it's delivered: it only mentions giving up the place when that would really happen, and for a paid ticket it names the refund the policy gives. You're told about a guest's paid No once, however often they change their answer. A guest's note goes into the refund request when one is opened, so you'll see it in Finance; the email and chat message about a kept place never include it. It never promises the place to someone on the waitlist, because events where you approve each sign-up don't move anyone up automatically. Choose the setting before you send. The confirmation step reminds you which way it's set: \"A No frees their place\" or \"A No is recorded only\"."
+      },
+      {
+        "heading": "Following the replies",
+        "anchor": "following-the-replies",
+        "text": "Answers from a link you shared yourself show up in exactly the same places as answers from the email. The card shows how many guests were asked, when and by whom the last email went, and counts for Coming, Not coming, No reply and Newly confirmed, not asked. If places were released, it says how many. Guests → People shows each guest's answer as a chip (Said No · paid when a paid place was kept) and any note under their row. A drop-down filters the list by answer, with counts, and saved views keep it. See The guest list. The check-in desk shows the answer chip for guests who were asked, never their note. See The check-in desk. The Overview tab adds a line such as \"Attendance: 12 coming · 3 not coming · 5 no reply\" once anyone has been asked. The guest CSV has Attendance confirmation and Attendance note columns. See Exporting guest data. Guests can change their answer until the event starts. After that, the replies are final."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "You can't ask, remind or share links once the event has started, or if it's cancelled. A queued email is dropped rather than sent if the guest has already answered, is no longer going, or the event was cancelled. Cloning an event copies the Free the place when a guest says No setting, never the questions or answers. See Cloning, cancelling and deleting. Answers are deleted with the registration. Guests' own answers are included when they download their data. For any other message to guests, see Emailing your guests."
+      }
+    ]
+  },
   "guests/automatic-emails": {
     "headings": [
       {
@@ -3823,7 +4001,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": null,
         "anchor": null,
-        "text": "Space Works Events sends some emails for you, without anyone pressing send. This page lists them, who gets them and when, so you know what your guests have already been told. You can't change their wording or turn them off. For anything else, write to guests yourself from the Emails tab; see Emailing your guests."
+        "text": "Space Works Events sends some emails for you, without anyone pressing send. This page lists them, who gets them and when, so you know what your guests have already been told. You can't change their wording, and apart from the hackathon emails below you can't turn them off. For anything else, write to guests yourself from the Emails tab; see Emailing your guests."
       },
       {
         "heading": "Who they come from",
@@ -3858,7 +4036,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Hackathon emails",
         "anchor": "hackathon-emails",
-        "text": "When Subject Who gets it A project is submitted Submission received · event The person who submitted it. A solo entrant asks for a submission link Your submission link · event That entrant's registered address. You publish the results for the first time Results are out · event Every registration that's going, once per address."
+        "text": "When Subject Who gets it A project is submitted Submission received · event The person who submitted it, only if Email a receipt when a project is submitted is on. A solo entrant asks for a submission link Your submission link · event That entrant's registered address. Always sent. You publish the results Results are out · event Every registration that's going, once per address, only if Email entrants when results are published is on. You publish a judging round's finalists You're through to round · event Each finalist's confirmed team members (or the solo entrant), once per round, only if Email entrants when results are published is on. The switches are in Judging → Setup under Hackathon emails, and both are off unless you turn them on. Payment emails, such as entry-fee receipts and refunds, always go out whatever they say. See Submissions and the gallery and Awards and results."
       },
       {
         "heading": "Emails to organisers",
@@ -3980,6 +4158,97 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "heading": "Good to know",
         "anchor": "good-to-know",
         "text": "Only guests who are going get a working ticket link. Everyone else's {{ticketLink}} and View your ticket button opens the event page. If a guest's status changes before their email is delivered so they no longer match the audience, they're skipped. If you send several emails in a short time, you're asked to wait before sending another. Some emails go out without you doing anything, such as tickets, approval decisions and a reminder the day before. See Automatic emails. If guests say an email never arrived, see Common problems."
+      }
+    ]
+  },
+  "guests/event-crew": {
+    "headings": [
+      {
+        "id": "adding-crew-members",
+        "title": "Adding crew members",
+        "level": 2
+      },
+      {
+        "id": "managing-the-list",
+        "title": "Managing the list",
+        "level": 3
+      },
+      {
+        "id": "mentors",
+        "title": "Mentors",
+        "level": 3
+      },
+      {
+        "id": "the-crew-sign-up-link",
+        "title": "The crew sign-up link",
+        "level": 2
+      },
+      {
+        "id": "food-for-crew",
+        "title": "Food for crew",
+        "level": 2
+      },
+      {
+        "id": "showing-the-crew-on-the-event-page",
+        "title": "Showing the crew on the event page",
+        "level": 2
+      },
+      {
+        "id": "how-crew-tickets-work",
+        "title": "How crew tickets work",
+        "level": 2
+      },
+      {
+        "id": "crew-expenses",
+        "title": "Crew expenses",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "The crew is the team running your event: volunteers, hosts, stage and logistics helpers, and mentors if you use the Mentor Desk. Keep them in Guests → Crew so each one gets a free ticket for check-in, you know what to order for their food, and, if you like, the event page can thank them by name. Crew members don't need an account, and they don't use up guest places. Being on the crew gives nobody access to your dashboard. Owners and admins, and co-organisers with the Registrations permission. Turning on the public Crew section also needs permission to edit the event page: owners and admins, or co-organisers with Edit details. Crew are available on one-off events. The dates of a recurring series don't have a crew."
+      },
+      {
+        "heading": "Adding crew members",
+        "anchor": "adding-crew-members",
+        "text": "Open the event and choose Guests → Crew. Choose Add crew member. Enter their Name and Email. Add a Role (for example \"Volunteer\" or \"Registration desk\"), a Food preference, a Short bio, a Photo and a LinkedIn URL if you want. Leave Show on event page on to list them in the Crew section, or turn it off to keep them private. Choose Add and send ticket. They get an email saying \"You're on the crew for\" your event, with their crew ticket (and your designed ticket as a PDF, if the event has one). If you change a crew member's email address later, the ticket is sent to the new address too. If the person had already registered for the event on their own with a free ticket, their registration becomes their crew ticket. It keeps its ticket link, QR code and any check-in, and the guest place it held is freed for the waitlist. Some registrations can't be turned into a crew ticket: Someone who bought a ticket: cancel or refund their order first. Crew tickets are always free and never part of an order. Someone in a team: they have to leave their team first. Someone with a hackathon project: withdraw or remove the project first. Managing the list Each row shows the member's role, email, food preference and whether they've checked in. On each row you can: switch Show on event page on or off move the member up or down, which sets their order on the event page edit their details remove them from the crew, which cancels their crew ticket, including any check-in. They're only emailed if the crew ticket was their own registration. Mentors If you run the Mentor Desk and turn on Give mentors a crew ticket, mentors you give Mentor Desk access to from then on join the crew with the role \"Mentor\", hidden from the event page, and get a free crew ticket. Removing a mentor removes that ticket. A mentor who's already registered keeps their own ticket."
+      },
+      {
+        "heading": "The crew sign-up link",
+        "anchor": "the-crew-sign-up-link",
+        "text": "Instead of adding everyone yourself, share a link so crew can add themselves. In the Crew sign-up link card, choose Create link. Choose Copy link and share it with your team. People who sign up fill in the same details and get their crew ticket by email. They start hidden from the event page with a Joined via link chip, so you can check their details before switching on Show on event page. Replace link makes a new link; the old one stops working straight away. Turn off removes the link. Crew who already signed up keep their tickets. The link stops taking sign-ups once the event has ended or is cancelled. Anyone with the link can join the crew and get a ticket, so share it only with your team. Replace it if it reaches the wrong people. To keep people's details private, the link never says whether an email address is already on the crew or registered for the event. In that case nothing changes, and the confirmation asks them to contact you. Add them yourself with Add crew member."
+      },
+      {
+        "heading": "Food for crew",
+        "anchor": "food-for-crew",
+        "text": "The Food for crew card groups everyone's food preferences with a count for each, ready for catering. It covers crew only; guests' answers to your registration form aren't included. Only organisers see food preferences."
+      },
+      {
+        "heading": "Showing the crew on the event page",
+        "anchor": "showing-the-crew-on-the-event-page",
+        "text": "The event page has an optional Crew section. It's off on every event until you turn it on, so nobody is shown publicly by accident. When it's on, it lists crew members with Show on event page on, as cards with their name, role, bio, photo and LinkedIn link. Email addresses, food preferences and tickets are never shown. Turn it on in Event page → Sections. If some crew are set to show but the section is off, Guests → Crew also offers Turn on Crew section. See Building your event page."
+      },
+      {
+        "heading": "How crew tickets work",
+        "anchor": "how-crew-tickets-work",
+        "text": "Crew count as going, but never against your place limit or your paid places. An event with 50 places and 8 crew still takes 50 guests. The Overview tab shows crew next to the number going. Crew check in at the desk like anyone else. The desk shows a Crew chip and their food preference. See The check-in desk. ID badges have Event crew and Confirmed attendees (no crew) filters, and a crew badge prints Crew and the role. See ID cards and badges. Designed tickets print Crew for the ticket name and leave the price empty. In Guests → People, crew show as Going with a Crew chip. Edit and remove them in Crew, not there. The guest CSV marks them as crew. Crew can't cancel their own crew ticket, buy a ticket, join a team, or enter a hackathon project. Crew are never asked to confirm attendance."
+      },
+      {
+        "heading": "Crew expenses",
+        "anchor": "crew-expenses",
+        "text": "If crew pay for things on your behalf, an owner or admin can turn on Let crew claim expenses from their crew ticket page in the Finance tab. Crew then see Claim expenses on their ticket page. There's no limit per person; owners and admins approve, reject and pay each claim, and the claims list marks them (crew). See Expense claims."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "An event can have up to 500 crew members, and each email address can only be on the crew once. Cloning an event doesn't copy the crew or the sign-up link. See Cloning, cancelling and deleting. Cancelling the event tells the crew, like everyone with a place. What crew members see is in Joining an event's crew."
       }
     ]
   },
@@ -4126,7 +4395,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Guest statuses",
         "anchor": "guest-statuses",
-        "text": "Status Meaning Going Has a place and a ticket. Waitlist Signed up when the event was full and is waiting for a place. To approve Asked to join an event where you approve each sign-up. Declined You turned down their request or removed them from the waitlist. Unpaid Has places held while they pay for a ticket. Narrow the list with the filter chips (All, Going, Waitlist, To approve, Declined, Checked in, Not checked in), choose Everyone, Guests only (registered without an account) or Signed-in users, and search by name or email. Team events add In a team and Solo. See Filters and saved views."
+        "text": "Status Meaning Going Has a place and a ticket. Waitlist Signed up when the event was full and is waiting for a place. To approve Asked to join an event where you approve each sign-up. Declined You turned down their request or removed them from the waitlist. Unpaid Has places held while they pay for a ticket. Narrow the list with the filter chips (All, Going, Waitlist, To approve, Declined, Checked in, Not checked in), choose Everyone, Guests only (registered without an account) or Signed-in users, and search by name or email. Team events add In a team and Solo. Once you've asked guests whether they're still coming, an attendance drop-down filters by their answer, and each row shows the answer and any note. See Filters and saved views and Attendance confirmation. Your event's crew show as Going with a Crew chip and are managed in Crew; see Event crew."
       },
       {
         "heading": "Approving, declining and giving places",
@@ -4444,6 +4713,47 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "hackathons/getting-help": {
+    "headings": [
+      {
+        "id": "asking-for-help",
+        "title": "Asking for help",
+        "level": 2
+      },
+      {
+        "id": "booking-office-hours",
+        "title": "Booking office hours",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "When an event runs a Mentor Desk, you can ask its mentors for help during the event and, as a team, book time with them."
+      },
+      {
+        "heading": "Asking for help",
+        "anchor": "asking-for-help",
+        "text": "Open your team page (the private link your team leader got by email), or sign in and choose Get help on your ticket. Under Get help from a mentor, choose what you need help with, describe the problem and say where you are. Choose Ask for help. Your request shows Waiting until a mentor picks it up, then Mentor on the way. You can add a message, or Cancel request if you sorted it out. Once it's resolved, rate how it went from 1 to 5. Only your team, the mentors and the organisers see what you wrote. A ticket link alone can't ask for help: sign in with the account you registered with, or use your team page. A team can have only a few waiting requests in each category, and a request closes on its own if nobody picks it up in time or when the event ends."
+      },
+      {
+        "heading": "Booking office hours",
+        "anchor": "booking-office-hours",
+        "text": "Teams can book time with a mentor under Mentors and office hours. Pick an open slot and choose Book. Everyone in your team and the mentor get an email with a calendar invite. You can't book two slots at the same time, and you can cancel a booking until the slot starts. After that, ask the organisers."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "The mentors listed on the event page chose to be listed. Asking for help is free: it never adds anything to your ticket."
+      }
+    ]
+  },
   "hackathons/judging": {
     "headings": [
       {
@@ -4525,6 +4835,148 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "hackathons/mentor-console": {
+    "headings": [
+      {
+        "id": "your-profile-and-shifts",
+        "title": "Your profile and shifts",
+        "level": 2
+      },
+      {
+        "id": "helping-teams",
+        "title": "Helping teams",
+        "level": 2
+      },
+      {
+        "id": "your-teams-and-conflicts",
+        "title": "Your teams and conflicts",
+        "level": 2
+      },
+      {
+        "id": "office-hours",
+        "title": "Office hours",
+        "level": 2
+      },
+      {
+        "id": "round-visits",
+        "title": "Round visits",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "As a mentor you see the event's mentor console and nothing else: the help queue, the teams you look after, your office hours, round visits and your profile. Mentors: people invited to the event with the Mentor permission, after setting up an authenticator app."
+      },
+      {
+        "heading": "Your profile and shifts",
+        "anchor": "your-profile-and-shifts",
+        "text": "Open Profile to set your skills, bio and availability. You can only claim help and visit teams while you're inside one of your availability windows. Your affiliation is private to you and the organisers."
+      },
+      {
+        "heading": "Helping teams",
+        "anchor": "helping-teams",
+        "text": "Open My queue. Requests you can take have a Claim button; greyed-out ones need another mentor (a skill you don't have, or a team's own mentor gets a few minutes first). Choose Claim, then head over to the team. Use More time if you need longer, message the team, and choose Resolved when you're done, or Release to hand it back. You hold one request at a time. If you leave a claim, it lapses and returns to the queue. You can also Raise a request for a team you're with."
+      },
+      {
+        "heading": "Your teams and conflicts",
+        "anchor": "your-teams-and-conflicts",
+        "text": "My teams lists the teams the organisers assigned to you. If you have a conflict of interest with a team (a friend, a colleague), declare it there: you won't get its requests, assignments or visits. Only the organisers can clear a conflict they recorded."
+      },
+      {
+        "heading": "Office hours",
+        "anchor": "office-hours",
+        "text": "Under My office hours, add slots inside your availability. Teams book them from their team page and you both get a calendar invite. Cancelling a slot needs a reason and tells the booked teams."
+      },
+      {
+        "heading": "Round visits",
+        "anchor": "round-visits",
+        "text": "When the organisers open a mentoring round you're part of, Round visits lists the teams. Choose Start visit on a team. Nobody else can visit it while you're there. Fill in the check-in form, or tick The team was away. Optionally Nominate this team, then choose Submit check-in. Each team gets one check-in per round, and you don't visit the same team twice across rounds unless the organisers allow it and you give a reason. Nominations are a private signal for the organisers and never change judging scores."
+      }
+    ]
+  },
+  "hackathons/mentor-desk": {
+    "headings": [
+      {
+        "id": "turning-it-on",
+        "title": "Turning it on",
+        "level": 2
+      },
+      {
+        "id": "inviting-mentors",
+        "title": "Inviting mentors",
+        "level": 2
+      },
+      {
+        "id": "help-categories",
+        "title": "Help categories",
+        "level": 2
+      },
+      {
+        "id": "the-live-queue",
+        "title": "The live queue",
+        "level": 2
+      },
+      {
+        "id": "assigning-mentors-to-teams",
+        "title": "Assigning mentors to teams",
+        "level": 2
+      },
+      {
+        "id": "office-hours-and-rounds",
+        "title": "Office hours and rounds",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "The Mentor Desk helps teams get help from mentors during your event. Teams ask for help and a mentor on shift picks the request up; you can also assign mentors to teams, let teams book office hours, and run mentoring rounds where mentors check in on every team. Turning the Mentor Desk on and running it: owners and admins of the organisation. Mentors are invited as co-organisers with the Mentor permission and only ever see their own mentor console."
+      },
+      {
+        "heading": "Turning it on",
+        "anchor": "turning-it-on",
+        "text": "Open the event and choose the Settings tab. In Mentor Desk, turn on Turn on the Mentor Desk and choose Save. Optionally turn on Email the team when a mentor picks up their request (once per request) and Give mentors a crew ticket. A Mentors tab appears on the event. Turning the desk off later hides it again and stops all mentor access; nothing is deleted. While the Mentor Desk is on, a judge who mentored a team, or has a conflict with it, never judges that team's project, in any round."
+      },
+      {
+        "heading": "Inviting mentors",
+        "anchor": "inviting-mentors",
+        "text": "In Settings → Co-organisers, invite each mentor by email and give them only the Mentor permission. When they accept, they appear under Mentors → Mentors. Open Edit profile to set their skills, a short bio, a private affiliation, the most teams they look after at once and their availability. Mentors must set up an authenticator app, like all organisers. Outside their availability windows they are off shift: they can still edit their profile, but they can't claim help or visit teams. With no windows at all they are off duty. Turn on Show on the event page to list a mentor in the event page's Mentors section, with their name, bio and skills. Their affiliation and email are never shown. With Give mentors a crew ticket on, mentors who accept their invite join the crew with a free crew ticket (role \"Mentor\", not listed publicly). Removing a mentor removes that ticket. Someone already registered for the event keeps their own ticket."
+      },
+      {
+        "heading": "Help categories",
+        "anchor": "help-categories",
+        "text": "Under Mentors → Categories, add what teams can ask for, such as \"Cloud\" or \"Design\". For each category you choose: Priority: higher-priority requests come first in the queue. Skill tags: only mentors with one of these skills may claim the request (a team's assigned mentor always may). Open per team: how many waiting requests a team may have in the category (1 to 10). Claim minutes: how long a mentor holds a request before it returns to the queue (1 to 60; mentors can ask for more time). Expiry minutes: when an unanswered request closes (15 minutes to 7 days, never after the event ends)."
+      },
+      {
+        "heading": "The live queue",
+        "anchor": "the-live-queue",
+        "text": "Mentors → Queue shows every waiting and claimed request and refreshes every 15 seconds. You can Assign a request to a mentor on shift, Release or Resolve a claim, and Reopen a resolved request with a reason. A claim a mentor leaves goes back to the queue within a minute."
+      },
+      {
+        "heading": "Assigning mentors to teams",
+        "anchor": "assigning-mentors-to-teams",
+        "text": "Under Mentors → Assignments, choose the scope (the whole event or one mentoring round) and a mode: Skill match, Round robin or Random. Preview changes nothing. Random shows a seed: the same seed always gives the same result, and Re-roll draws again. Apply records the run and lists any teams left without a mentor. You can also Assign by hand. Assignments never give a mentor their own team, a team they have a conflict with, or more teams than their limit. Record conflicts under Mentors → Mentors → Conflicts of interest."
+      },
+      {
+        "heading": "Office hours and rounds",
+        "anchor": "office-hours-and-rounds",
+        "text": "Under Office hours, open slots for any mentor inside their availability. Teams book them from their team page and everyone gets a calendar invite. Under Rounds, add mentoring rounds: a window, a short check-in form, optional rules that raise help from the answers, and the round's own Mentor pool (none chosen means every mentor). Open one round at a time. Mentors can nominate teams after a real visit; nominations appear as a private shortlist on the round and never change judging scores."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "CSV exports help requests (without their text or contact details) and assignments. Help request text is private to the team, the mentors and the organisers. Removing a mentor ends their assignments, hands their claims back to the queue and cancels their future office hours, emailing the booked teams."
+      }
+    ]
+  },
   "hackathons/overview": {
     "headings": [
       {
@@ -4582,12 +5034,12 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "The Judging tab",
         "anchor": "the-judging-tab",
-        "text": "The Judging tab is split into sections: Section What it's for Setup The submission window, which projects judges see, the public gallery, opening and closing judging, and the rubric. Submissions Every project, with filters, search, judge assignments and disqualification. Judges Your invited judges, and the owners and admins who can also judge. Progress Judges' progress, projects that need more reviews, and automatic assignment. Score Where you score projects yourself, if you're judging too. Results The ranked projects, the CSV export and publishing the results page. Awards Your awards and the projects that win them. Prizes Prize money for each award, and the payouts you've made."
+        "text": "The Judging tab is split into sections: Section What it's for Setup The submission window, which projects judges see, the public gallery, hackathon emails, opening and closing judging, and the rubric. Submissions Every project, with filters, search, judge assignments and disqualification. Judges Your invited judges, and the owners and admins who can also judge. Progress Judges' progress, projects that need more reviews, and automatic assignment. Score Where you score projects yourself, if you're judging too. Results The ranked projects, the CSV export and publishing the results page. Awards Your awards and the projects that win them. Prizes Prize money for each award, and the payouts you've made."
       },
       {
         "heading": "From start to finish",
         "anchor": "from-start-to-finish",
-        "text": "A typical competition runs like this: Prepare. Turn on submissions, set the window, build the rubric, and invite judges. See Judges, rubric and scoring. Collect projects. Confirmed teams and solo entrants submit during the window from their ticket or team page, paying the entry fee if you set one. See Submissions and the gallery. Share out the work. If judges should only see some projects, assign them by hand or automatically. See Assigning judges and tracking progress. Open judging. Judges score each project against the rubric and submit a review. Close judging. The scores are frozen and the ranking is final. Pick winners and publish. Add awards, choose winners from the ranked list, and publish the results page. Every confirmed registrant gets an email saying the results are out. See Awards and results. Pay the prizes. Record each prize payout as you make it. See Prize payouts."
+        "text": "A typical competition runs like this: Prepare. Turn on submissions, set the window, build the rubric, and invite judges. See Judges, rubric and scoring. Collect projects. Confirmed teams and solo entrants submit during the window from their ticket or team page, paying the entry fee if you set one. See Submissions and the gallery. Share out the work. If judges should only see some projects, assign them by hand or automatically. See Assigning judges and tracking progress. Open judging. Judges score each project against the rubric and submit a review. Close judging. The scores are frozen and the ranking is final. Pick winners and publish. Add awards, choose winners from the ranked list, and publish the results page. If you turned on Email entrants when results are published, every confirmed registrant gets an email saying the results are out. See Awards and results. Pay the prizes. Record each prize payout as you make it. See Prize payouts."
       },
       {
         "heading": "Judging status",
@@ -4761,6 +5213,11 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "level": 2
       },
       {
+        "id": "emailing-entrants-about-the-results",
+        "title": "Emailing entrants about the results",
+        "level": 2
+      },
+      {
         "id": "changing-published-results",
         "title": "Changing published results",
         "level": 2
@@ -4795,7 +5252,12 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Publishing the results page",
         "anchor": "publishing-the-results-page",
-        "text": "You can publish once judging is closed. Until then, the Results page card tells you what to do next. Check the winners on the Awards section. On Results, in the Results page card, choose Publish results…. Confirm with Publish results. The event's results page goes live, showing each award with its winning projects' titles, team or entrant names, and links. Scores, ranks and judges' comments are never shown. Publishing also emails every confirmed registrant once to say the results are out (on a team event, each member gets their own). Emails go out through your mail provider over a few minutes, so check its sending limits before a big announcement. Choose View results page to see it as guests do. The results page follows the event page's visibility, so a private or invite-only event keeps its results private too. If more than 10 winners are listed, visitors can search them. Publishing also adds award badges to the public project gallery, with a filter for award winners."
+        "text": "You can publish once judging is closed. Until then, the Results page card tells you what to do next. Check the winners on the Awards section. On Results, in the Results page card, choose Publish results…. Confirm with Publish results. The event's results page goes live, showing each award with its winning projects' titles, team or entrant names, and links. Scores, ranks and judges' comments are never shown. Whether anyone is emailed depends on a switch; see Emailing entrants about the results. Choose View results page to see it as guests do. The results page follows the event page's visibility, so a private or invite-only event keeps its results private too. If more than 10 winners are listed, visitors can search them. Publishing also adds award badges to the public project gallery, with a filter for award winners."
+      },
+      {
+        "heading": "Emailing entrants about the results",
+        "anchor": "emailing-entrants-about-the-results",
+        "text": "Results emails are off unless you turn them on. In Judging → Setup, under Hackathon emails, turn on Email entrants when results are published and choose Save settings. Publishing then emails every confirmed registrant once to say the results are out (on a team event, each member gets their own). With the switch off, the results page goes live without emailing anyone, and the Results page card says so. If you published without emailing and change your mind, turn the switch on and save. A Send results email now… button then appears in the Results page card. It shows how many entrants will be emailed before you confirm, and it can only be sent once. Emails go out through your mail provider over a few minutes, so check its sending limits before a big announcement. The same switch decides whether finalists are emailed when you publish a round's finalists; see Finalists."
       },
       {
         "heading": "Changing published results",
@@ -4908,6 +5370,11 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "level": 2
       },
       {
+        "id": "submission-receipts",
+        "title": "Submission receipts",
+        "level": 2
+      },
+      {
         "id": "reviewing-submissions",
         "title": "Reviewing submissions",
         "level": 2
@@ -4942,7 +5409,12 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "The submission window",
         "anchor": "the-submission-window",
-        "text": "Set the window in Judging → Setup, in the Project submissions card: Opens and Closes are in the event's time zone. The app checks the time every time an entrant saves, so nobody can sneak a change in after the deadline. Choose Save settings after changing them. Only confirmed entrants can submit. On a team event, that's a confirmed team. On an individual event, or for a solo registrant at a team event, it's a confirmed registration. Entrants reach the form from their ticket or team page while the event is live. A project has a title (up to 120 characters), a plain-text summary (up to 4,000 characters), and optional links to the code, a demo and a video. Entrants can save a draft, submit, edit while the window is open, and withdraw. Whoever submits gets an email confirming the project was received. If you charge an entry fee, the project is only submitted once the fee is paid; see Project entry fees. The entrants' side is covered in Submitting a hackathon project. If a team is disbanded or a solo registration is cancelled, its project goes with it. If you delete a team or registration by mistake and undo it, the project and its scores come back too."
+        "text": "Set the window in Judging → Setup, in the Project submissions card: Opens and Closes are in the event's time zone. The app checks the time every time an entrant saves, so nobody can sneak a change in after the deadline. Choose Save settings after changing them. Only confirmed entrants can submit. On a team event, that's a confirmed team. On an individual event, or for a solo registrant at a team event, it's a confirmed registration. Entrants reach the form from their ticket or team page while the event is live. A project has a title (up to 120 characters), a plain-text summary (up to 4,000 characters), and optional links to the code, a demo and a video. Entrants can save a draft, submit, edit while the window is open, and withdraw. If you charge an entry fee, the project is only submitted once the fee is paid; see Project entry fees. The entrants' side is covered in Submitting a hackathon project."
+      },
+      {
+        "heading": "Submission receipts",
+        "anchor": "submission-receipts",
+        "text": "By default, nobody is emailed when a project is submitted: entrants see \"Project submitted\" on screen. To send a receipt, turn on Email a receipt when a project is submitted under Hackathon emails in Judging → Setup and choose Save settings. Whoever submits then gets an email confirming the project was received, including a project that's submitted once its entry fee is paid. The entry-fee payment receipt itself always goes out. If a team is disbanded or a solo registration is cancelled, its project goes with it. If you delete a team or registration by mistake and undo it, the project and its scores come back too."
       },
       {
         "heading": "Reviewing submissions",

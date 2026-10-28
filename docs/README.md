@@ -15,7 +15,9 @@ New here? Start with [Features](FEATURES.md) for what it does, then [Local devel
 | [Design system](DESIGN.md) | V1 visual design brief: tokens, the dot-sign brand (§2.3), typography, components, motion, page patterns, dark mode, and voice |
 | [Contributing](../CONTRIBUTING.md) | How to report bugs, suggest ideas, and prepare a pull request |
 | [Features](FEATURES.md) | Current user-facing and administrative capabilities |
+| [Mobile API v1](MOBILE_API.md) | User-authenticated API for the Space Works apps (Android and iOS), with an [OpenAPI 3.1 spec](mobile-api.openapi.yaml) and [fixtures](mobile-api-fixtures/) |
 | [Team registration](TEAMS.md) | Design contract for team events: settings, capacity units, team status, join links, the team page, looking for a team, and organiser team actions |
+| [Attendance confirmation](ATTENDANCE.md) | "Are you still coming?": who is asked, sending and reminders, the guest's form, what a No releases on free and paid tickets, and what organisers see |
 | [Event crew](CREW.md) | Design contract for an event's organising team: free crew tickets outside capacity and payments, the crew sign-up link, the public Crew section, crew claims, and what the other flows refuse ([test conditions](CREW_TEST_CONDITIONS.md)) |
 | [Applications and shortlisting](ADMISSION.md) | Design contract for applications on any one-off event: stages with their own reviewer panels, seeded reviewer assignment, decision batches with review coverage, offers that are accepted (and paid) before a place is confirmed, the waitlist, and the guards behind them |
 | [Hackathon submissions, judging, and results](HACKATHON.md) | Design contract for hackathon events: project submissions and links, judges and conflicts of interest, the rubric and result score, awards, and published results |

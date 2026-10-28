@@ -27,7 +27,7 @@ describe("embedding response headers", () => {
 
 describe("capability page caching", () => {
   it("marks ticket, team, and submission pages no-store and leaves other pages alone", async () => {
-    for (const path of ["/ticket/abc123", "/team/" + "t".repeat(43), "/acme/launch/team/" + "j".repeat(43), "/submit/" + "s".repeat(43), "/account/submissions/evt_123"]) {
+    for (const path of ["/ticket/abc123", "/team/" + "t".repeat(43), "/acme/launch/team/" + "j".repeat(43), "/submit/" + "s".repeat(43), "/attend/" + "a".repeat(43), "/account/submissions/evt_123"]) {
       const response = await proxy(new NextRequest(`https://events.example.test${path}`));
       expect(response.headers.get("cache-control"), path).toContain("no-store");
       expect(response.headers.get("cache-control"), path).toContain("private");

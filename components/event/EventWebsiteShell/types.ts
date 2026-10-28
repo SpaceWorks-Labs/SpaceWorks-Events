@@ -12,6 +12,8 @@ export type Props = {
    * is live (results published; gallery public after the window closed).
    */
   judging?: { resultsHref: string | null; projectsHref: string | null } | null;
+  /** Mentors listed on the event page (docs/MENTOR_DESK.md): name, bio and skills only. */
+  mentors?: Array<{ id: string; name: string; bio: string; skills: string[] }>;
   orgSlug: string;
   organisation: { name: string; logoUrl: string | null };
   preview: boolean;

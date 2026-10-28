@@ -54,6 +54,7 @@ export function RefundRequestsList({ scope, requests, timezone, currency }: { sc
                 <p className="text-caption text-ink-muted">{formatDayTime(request.createdAt, timezone)}{request.approved ? ` · refunded ${request.approved}${request.cancelTickets ? ", tickets cancelled" : ""}` : ""}</p>
                 <p className="mt-1 whitespace-pre-line text-body-ui text-ink-secondary">{request.reason}</p>
                 {request.note ? <p className="mt-1 text-caption text-ink-muted">Note: {request.note}</p> : null}
+                {request.attendanceAnswer ? <p className="mt-1 text-caption text-ink-muted">Attendance answer now: {request.attendanceAnswer === "ATTENDING" ? "Coming" : "Not coming"}</p> : null}
               </div>
               <Chip tone={REQUEST_STATUS[request.status]?.tone ?? "neutral"} size="sm">{REQUEST_STATUS[request.status]?.label ?? request.status}</Chip>
             </div>

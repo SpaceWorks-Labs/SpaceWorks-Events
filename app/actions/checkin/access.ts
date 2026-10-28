@@ -94,6 +94,8 @@ export async function resolveRsvpForToken(
       user: { select: { name: true, email: true } },
       answers: { include: { field: { select: { key: true, label: true } } } },
       team: { select: { name: true } }, crewMember: crewDoorSelect,
+      // The attendance reply only (docs/ATTENDANCE.md); never the note or the link digest.
+      attendanceCheck: { select: { response: true } },
       event: { select: { id: true, organisationId: true, slug: true } },
       eventInstance: {
         include: { series: { select: { organisationId: true } } },

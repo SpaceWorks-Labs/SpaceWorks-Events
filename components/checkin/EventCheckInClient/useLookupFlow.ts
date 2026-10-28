@@ -65,7 +65,7 @@ export function useLookupFlow({
             : roster.rows
                 .filter((row) => row.displayName.toLowerCase().includes(q) || row.email?.toLowerCase().includes(q) || row.teamName?.toLowerCase().includes(q))
                 .slice(0, 12)
-                .map(({ rsvpId, displayName, email, status, checkedInAt, teamName }) => ({ rsvpId, displayName, email, status, checkedInAt, teamName })),
+                .map(({ rsvpId, displayName, email, status, checkedInAt, teamName, attendance }) => ({ rsvpId, displayName, email, status, checkedInAt, teamName, attendance })),
         );
       })();
       return;
@@ -111,6 +111,7 @@ export function useLookupFlow({
           checkInDetails: attendee.checkInDetails ?? [],
           registrationDetails: attendee.registrationDetails ?? [],
           teamName: attendee.teamName ?? null,
+          attendance: attendee.attendance ?? null,
           gate,
         });
         setScanIsOffline(true);

@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "data": {
+    "currency": "INR",
+    "cap": "₹2,000.00",
+    "categories": [
+      {
+        "value": "TRAVEL",
+        "label": "Travel"
+      }
+    ],
+    "claims": [
+      {
+        "id": "clclaim0000000000000001",
+        "status": "SUBMITTED",
+        "category": "Travel",
+        "amount": "₹1,200.00",
+        "approved": null,
+        "note": null
+      }
+    ]
+  }
+}

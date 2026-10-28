@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "data": {
+    "id": "clorder00000000000000001",
+    "reference": "SW-7K2Q9",
+    "status": "CONFIRMED",
+    "testMode": false,
+    "holdActive": false,
+    "holdExpiresAt": null,
+    "canPay": false,
+    "receiptAvailable": true,
+    "total": "₹998.00",
+    "subtotal": "₹998.00",
+    "discount": null,
+    "refunded": null,
+    "refundPolicy": "Full refund until 48 hours before the start.",
+    "cancellation": {
+      "refund": "₹998.00",
+      "team": null
+    },
+    "canRequestRefund": true,
+    "refundRequest": null,
+    "free": false,
+    "pass": false,
+    "event": {
+      "title": "Spring Hack Night",
+      "organisation": "Civic Tech Meetup",
+      "startDateTime": "2030-06-01T13:00:00.000Z",
+      "timezone": "Asia/Kolkata"
+    },
+    "lines": [
+      {
+        "id": "clline00000000000000001",
+        "label": "General × 2",
+        "amount": "₹998.00"
+      }
+    ],
+    "tickets": [
+      {
+        "rsvpId": "clrsvp00000000000000001",
+        "label": "General 1",
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "account": true,
+        "needsDetails": false,
+        "status": "CONFIRMED",
+        "checkedIn": false,
+        "ticketToken": "tk_example_ticket_token_1",
+        "transferUntil": "2030-06-01T07:00:00.000Z"
+      },
+      {
+        "rsvpId": "clrsvp00000000000000002",
+        "label": "General 2",
+        "name": "",
+        "email": "",
+        "account": false,
+        "needsDetails": true,
+        "status": "CONFIRMED",
+        "checkedIn": false,
+        "ticketToken": "tk_example_ticket_token_2",
+        "transferUntil": "2030-06-01T07:00:00.000Z"
+      }
+    ]
+  }
+}

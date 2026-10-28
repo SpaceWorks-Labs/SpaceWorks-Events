@@ -7,6 +7,7 @@ import { RegistrationCard } from "./RegistrationCard";
 import { SectionNav } from "./SectionNav";
 import type { Props } from "./EventWebsiteShell/types";
 import { duration, mapSearchQuery, Rich, SECTION_LABELS, TIER_LABELS } from "./EventWebsiteShell/helpers";
+import { MentorsSection } from "./EventWebsiteShell/MentorsSection";
 import { CrewSection } from "./EventWebsiteShell/CrewSection";
 
 export function EventWebsiteShell(p: Props) {
@@ -208,6 +209,8 @@ export function EventWebsiteShell(p: Props) {
               </ul>
             </section>
           ) : null}
+
+          {p.mentors?.length ? <MentorsSection mentors={p.mentors} /> : null}
 
           {rendered.has("SPONSORS") ? (
             <section id="sponsors" aria-labelledby="sponsors-title" className="scroll-mt-6">

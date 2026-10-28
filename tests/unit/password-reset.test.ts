@@ -25,6 +25,7 @@ const tx = {
   },
   user: { update: vi.fn() },
   session: { deleteMany: vi.fn() },
+  mobileSession: { updateMany: vi.fn(async () => ({ count: 0 })) },
   auditEvent: { create: vi.fn() },
 };
 

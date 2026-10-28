@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "data": {
+    "rsvpId": "clrsvp00000000000000001",
+    "status": "PENDING_PAYMENT",
+    "ticketToken": null,
+    "orderId": "clorder00000000000000001",
+    "checkoutUrl": "https://checkout.razorpay.com/v1/payments/abc",
+    "holdExpiresAt": "2030-05-20T10:15:00.000Z"
+  }
+}

@@ -33,9 +33,12 @@ transactional email, optional paid tickets through each organisation's own
 Razorpay or Stripe account (`lib/payments/`, `docs/PAYMENTS.md`), team registration
 with paid team places (`docs/TEAMS.md`), multi-stage applications and shortlisting on any one-off
 event with per-stage reviewer panels and offers (`docs/ADMISSION.md`), hackathon submissions, judging, results,
-entry fees and prize payouts (`docs/HACKATHON.md`), event finance with expense
+entry fees and prize payouts (`docs/HACKATHON.md`), a Mentor Desk (help
+queue with lease claims, mentor assignments, office hours and mentoring
+rounds, `docs/MENTOR_DESK.md`), event finance with expense
 claims, refund requests and a budget (`docs/FINANCE.md`), a Canva-style ticket
-designer with designed PNG/PDF tickets (`docs/TICKET_DESIGNER.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
+designer with designed PNG/PDF tickets (`docs/TICKET_DESIGNER.md`), manual "Are you still coming?"
+attendance confirmation with paid-ticket release rules (`docs/ATTENDANCE.md`), organisation webhooks (`docs/WEBHOOKS.md`), server-paged
 organiser lists with saved views and filtered CSV exports, a personal account area (registrations, organisations,
 data export), and a separate super-admin operations, insights, and
 instance-settings area, plus a tenant-bound machine API. Treat this as a production-oriented application:
@@ -62,7 +65,9 @@ below and `docs/DESIGN.md`). The
 most sensitive current scenarios are organisation isolation and role checks;
 event privacy and RSVP capacity; opaque ticket, certificate, invitation, and
 password-reset links; event short links that never reveal hidden events; the
-realtime ticket check-in endpoints (`/api/ticket/:token/{status,events}`,
+Mentor Desk (`MENTOR` is an isolated grant like `JUDGE` and needs staff MFA;
+help text never reaches webhooks, chat or audit metadata;
+`docs/MENTOR_DESK.md`); the realtime ticket check-in endpoints (`/api/ticket/:token/{status,events}`,
 check-in state only, channels keyed by RSVP id); the personal data export and
 leave-organisation actions (own data and membership only); required
 authenticator MFA for organisation staff, checked each session (`/verify-mfa`,

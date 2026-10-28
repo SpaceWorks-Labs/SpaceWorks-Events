@@ -1,0 +1,63 @@
+{
+  "ok": true,
+  "data": {
+    "event": {
+      "id": "clevent000000000000000001",
+      "slug": "spring-hack-night",
+      "title": "Spring Hack Night",
+      "coverImageUrl": null,
+      "startDateTime": "2030-05-10T17:00:00.000Z",
+      "endDateTime": "2030-05-10T21:00:00.000Z",
+      "timezone": "Europe/London",
+      "location": "Community Hall",
+      "mapLinkUrl": null,
+      "isOnline": false,
+      "accentColor": null,
+      "status": "PUBLISHED",
+      "registrationMode": "TEAM",
+      "organisation": {
+        "slug": "civic-tech",
+        "name": "Civic Tech Meetup",
+        "logoUrl": null
+      },
+      "privacyType": "PUBLIC",
+      "registrationOpen": true,
+      "registrationClosesAt": "2030-05-10T16:00:00.000Z",
+      "registrationClosedReason": null,
+      "registrationManuallyClosed": false,
+      "feedbackOpen": false,
+      "eventUrl": "https://events.example/civic-tech/spring-hack-night",
+      "shortUrl": "https://events.example/Ab3dEf9"
+    },
+    "counts": {
+      "confirmed": 42,
+      "waitlisted": 5,
+      "pending": 0,
+      "pendingPayment": 0,
+      "crew": 0,
+      "checkedIn": 0,
+      "capacity": 80,
+      "capacityUsed": 42,
+      "attendance": {
+        "coming": 30,
+        "notComing": 4,
+        "noReply": 6,
+        "notAsked": 2
+      }
+    },
+    "myPermissions": {
+      "checkIn": true,
+      "manageRegistrations": true,
+      "sendEmails": true,
+      "schedule": true,
+      "manageFeedback": true,
+      "manageRegistrationWindow": true,
+      "judge": true,
+      "checkInToLists": true,
+      "manageOrders": true,
+      "manageCrew": true,
+      "fileClaims": true,
+      "manageFinance": true
+    }
+  }
+}

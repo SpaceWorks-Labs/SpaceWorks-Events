@@ -15,6 +15,12 @@ export type EventClientDto = Omit<Event,
   | "ticketDesignId"
   // Applications have their own view (lib/admission/).
   | "admissionEnabled" | "admissionMode" | "admissionRsvpDays" | "admissionOfferCapacity" | "emailApplicantsOnStageAdvance"
+  // Attendance confirmation has its own status DTO (lib/eventDashboard/attendanceCheckCard.ts).
+  | "attendanceCheckReleaseOnDecline"
+  // The mobile sign-up close snapshot only matters to lib/core/registrationWindow.ts.
+  | "registrationManuallyClosedAt" | "registrationCutoffBeforeManualClose" | "registrationLeadBeforeManualClose"
+  // Mentor Desk settings have their own view (lib/core/mentorDesk/).
+  | "mentorDeskEnabled" | "mentorHelpClaimedEmail" | "mentorsGetCrewTicket"
 >;
 
 /** Copies only the DTO fields, so a full Event record never reaches the browser. */

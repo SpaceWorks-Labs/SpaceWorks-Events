@@ -18,6 +18,8 @@ const eventFieldList = [
   "submissionsEnabled", "judgingStatus", "resultsPublishedAt", "submissionFeeMinor", "submissionFeeRefundOnDisqualify",
   // Applications (docs/ADMISSION.md): whether registering means applying.
   "admissionEnabled",
+  // Mentor Desk switches the dashboard tab and settings read (docs/MENTOR_DESK.md).
+  "mentorDeskEnabled", "mentorHelpClaimedEmail", "mentorsGetCrewTicket",
   "page", "highlights", "speakers", "sponsors", "resources", "faqs", "sessions", "scheduleTracks", "organisation", "feedbackForm", "registrationForm", "badgeDesign", "_count",
 ] as const;
 const eventFields = new Set<string>(eventFieldList);

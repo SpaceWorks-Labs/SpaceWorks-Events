@@ -37,6 +37,7 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | `PUBLISH_AND_SCHEDULE` | The programme: schedule tracks, sessions and live delays (standalone events), and series schedule items. Despite the name, setting an event Live stays with owners and admins |
 | `REVIEW_APPLICATIONS` | The application review workspace only ([Applications](ADMISSION.md)): the applications assigned to the reviewer in open stages, as the stage allows (blind stages hide who applied), scoring them and stepping back for a conflict. Standalone events only. It satisfies no other check; a non-member whose grants are only `REVIEW_APPLICATIONS` (and possibly `JUDGE`) sees only their workspaces (`isReviewerOnly`). Stages, panels, assignment, decisions and offers need `MANAGE_REGISTRATIONS` (`canManageApplications`); turning applications on or off and their settings are owner/admin only. On events taking applications, the guest list's approve, decline, promote and re-accept refuse application registrations |
 | `JUDGE` | The hackathon judging workspace only ([Hackathon judging](HACKATHON.md)): reading and scoring the submissions the judge may see, with private reviews. Standalone events only. It satisfies no other check, and a non-member whose only grant is `JUDGE` is *judge-only*: the dashboard shows the judging workspace and nothing else (`isJudgeOnly`) |
+| `MENTOR` | The Mentor Desk console only ([Mentor Desk](MENTOR_DESK.md)): the help queue while on shift, own teams, own office hours, round visits and own profile. Standalone events only; staff MFA applies. It satisfies no other check (`canMentor`); a non-member whose grants are `MENTOR` (and possibly `JUDGE`) is *mentor-only*: the dashboard shows the mentor console (and the judging workspace for `JUDGE`) and nothing else (`isMentorOnly`). Managing the desk (`canManageMentorDesk`) stays with owners and admins |
 
 ## Event dashboard
 
@@ -63,6 +64,8 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Overview: "See how it went" (ended) | Analytics visibility | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: list, filters, ticket links | `loadAttendeesFirstPage` / `loadAttendeesPage` only for `canManageRegistrations` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: approve, decline, give spot, add, edit, remove, undo remove | `app/actions/rsvp-lifecycle`, `app/actions/rsvp-admin.ts`: `canManageRegistrationsFor` | Yes | — | — | Yes | — | — | — | — | Yes |
+| Guests · People: attendance confirmation badge, note, filter and counts; CSV attendance columns ([ATTENDANCE.md](ATTENDANCE.md)) | same list query and attendee CSV route: admin or `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |
+| Guests · People: Share attendance link | `lib/core/attendanceCheck/link.ts`: admin (`canManageEvents`, as broadcasts) | Yes | — | — | — | — | — | — | — | — |
 | Guests · Crew ([Event crew](CREW.md)): list and food summary, add, edit, show/hide, reorder, remove, photo upload, sign-up link create/replace/turn off (`canManageCrew`) | `app/actions/crew.ts` via `resolveOrganiserEvent` (`lib/core/teams.ts`): `canManageRegistrationsFor` | Yes | — | — | Yes | — | — | — | — | Yes |
 | Guests · People: undo check-in | `app/actions/checkin.ts`: `CHECK_IN` | Yes | — | — | — | — | — | — | — | Yes |
 | Guests · People: Export CSV / Export emails (current filters) | `GET /api/exports/events/:id/attendees`, `…/attendee-emails`: admin or `MANAGE_REGISTRATIONS` | Yes | — | — | Yes | — | — | — | — | Yes |
@@ -72,6 +75,7 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Event page · Page & programme: content editor | `app/actions/event-website.ts`: `EDIT_DETAILS` | Yes | — | Yes | — | — | — | — | — | Yes |
 | Event page · Page & programme: "Open schedule" | schedule page and actions: `PUBLISH_AND_SCHEDULE` | Yes | — | — | — | — | — | Yes | — | Yes |
 | Event page · Registration form | `app/actions/registration-form.ts`: `requireOrgRole(ADMIN)` | Yes | — | — | — | — | — | — | — | — |
+| Emails: Attendance confirmation card (preview, ask, ask newly confirmed, remind, release switch); Overview attendance line | `lib/core/attendanceCheck/*`: admin (`canManageEvents`, exactly as broadcasts) | Yes | — | — | — | — | — | — | — | — |
 | Emails: compose, test, send, history | `app/actions/broadcasts.ts`: admin | Yes | — | — | — | — | — | — | — | — |
 | Check-in: desk, counts, ID cards | `app/actions/checkin.ts`: `CHECK_IN` | Yes | — | — | — | — | Yes | — | — | Yes |
 | Check-in: check-in lists card, list switcher, scan/search into a list, undo, list guest view | `app/actions/checkin-lists.ts` over `lib/core/checkinLists.ts` (`checkInToListForUser`, `undoListCheckInForUser`, `lookupListAttendeesForUser`): `CHECK_IN` (`canCheckInToLists`) | Yes | — | — | — | — | Yes | — | — | Yes |
@@ -97,6 +101,9 @@ would be allowed. `tests/unit/event-capabilities.test.ts` pins this table.
 | Check-in page (`…/check-in`) | page and check-in actions: `CHECK_IN` | Yes | 404 | 404 | 404 | 404 | Yes | 404 | 404 | Yes |
 | Judging tab: shown | page render; `canJudge` or `canManageJudging`, and the event uses judging (`eventUsesJudging`) | Yes | — | — | — | — | — | — | Yes | Yes |
 | Judging: workspace (submissions to judge, scores, private review, Score next project) | `lib/judgingAccess.ts` `resolveJudgeContext`, `lib/core/judging.ts` (`nextSubmissionForJudge` uses the list's visibility query): admin or `JUDGE`; conflict-of-interest entries hidden | Yes | — | — | — | — | — | — | Yes | Yes |
+| Mentors tab: shown | page render; the desk is on and `canManageMentorDesk` or `canMentor` | Yes | — | — | — | — | — | — | — | — |
+| Mentor Desk: settings, mentors, queue commands, assignments, office hours, categories, rounds, shortlist, CSV ([MENTOR_DESK.md](MENTOR_DESK.md)) | `resolveDeskOrganiser`: admin (`canManageMentorDesk`) | Yes | — | — | — | — | — | — | — | — |
+| Mentor console: queue, claims, own teams, slots, visits, profile | `resolveMentorContext` + `liveMentor` in each command: the `MENTOR` grant (not in the columns above), staff MFA, on shift for queue and visits | `MENTOR` only | — | — | — | — | — | — | — | — |
 | Judging: settings, window, rubric, assignments, judging status, Hackathon emails switches | `resolveJudgingOrganiser`: admin (`canManageJudging`) | Yes | — | — | — | — | — | — | — | — |
 | Judging: disqualify, reinstate, awards, Adjust for harsh/generous judges, publish and unpublish results | `resolveJudgingOrganiser`: admin | Yes | — | — | — | — | — | — | — | — |
 | Judging: Send results email now (`sendResultsAnnouncement`) | `resolveJudgingOrganiser`: admin (same as publishing results); broadcast rate-limit bucket | Yes | — | — | — | — | — | — | — | — |
@@ -125,7 +132,10 @@ caller's organisation, or one they cannot open at all, answers
 ³ A non-member whose only grant is `JUDGE` sees the event header and the
 judging workspace and nothing else: no tabs, header numbers, page link, or
 check-in. A member or a co-organiser with other grants who also holds `JUDGE`
-gets the Judging tab next to what their other grants allow.
+gets the Judging tab next to what their other grants allow. Likewise a
+non-member whose grants are `MENTOR` (and possibly `JUDGE`) sees the event
+header, the mentor console and, with `JUDGE`, the judging workspace, and
+nothing else.
 
 A saved view only selects filters inside a list. It is never an access
 grant: the list's own check runs first, a shared view is listed only to
@@ -173,6 +183,24 @@ from another organisation is "not found" (a 404 page, or the action error
 "Webhook endpoint not found."). See [Organisation webhooks](WEBHOOKS.md). Collaborators who are not members see only the list of events they
 co-organise on `/dashboard/:orgSlug`.
 
+## Mobile API
+
+`lib/mobile/permissions.ts` derives the mobile `EventPermissions` from
+`eventCapabilities()`, the same source as the dashboard, so the app shows what
+the website shows: `checkIn` and `checkInToLists` (`CHECK_IN`),
+`manageRegistrations` and `manageOrders` (`MANAGE_REGISTRATIONS`), `schedule`
+(`PUBLISH_AND_SCHEDULE`), `judge` (the `JUDGE` grant once submissions are on),
+`sendEmails`, `manageFeedback`, `manageRegistrationWindow` and `manageFinance`
+(organisation OWNER/ADMIN), and `fileClaims` (anyone on the dashboard). Unlike
+Yuyu, `manageRegistrations` follows the grant, as the web guest list does.
+Every organiser route first applies the staff authenticator rule to the app
+session (`STAFF_MFA_REQUIRED`, `STAFF_MFA_ENROLMENT_REQUIRED`); the mutation
+then runs the matching Server Action's body as the request actor, which
+re-checks everything. Events outside the caller's dashboard access, including
+other organisations', are `NOT_FOUND`; a JUDGE-only grant reaches only the
+judging routes. Claim and refund-request decisions are held to the event in
+the path.
+
 ## Known gaps
 
 - `EDIT_DETAILS` does not cover the Details form. `updateEvent` writes
@@ -181,7 +209,6 @@ co-organise on `/dashboard/:orgSlug`.
   co-organiser edits page content but not the title or dates. Splitting the
   form would let the grant cover the descriptive fields.
 - The registration form questions are owner/admin only; no grant covers them.
-- Custom check-in lists are web-only for now: offline check-in, the venue
-  station and series occurrences do not reach them. The cores in
-  `lib/core/checkinLists.ts` already take a `source` (`mobile-scan`,
-  `mobile-manual`) for a future mobile check-in client.
+- Custom check-in lists: offline check-in, the venue station and series
+  occurrences do not reach them. The mobile API does (`mobile-scan`,
+  `mobile-manual` sources).

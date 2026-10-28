@@ -65,13 +65,13 @@ export async function transitionTeamStatus(
       if (event.status !== EventStatus.PUBLISHED || event.endDateTime <= new Date()) return fail("This event is no longer open for approvals.");
       const size = await tx.rSVP.count({ where: { teamId: team.id } });
       if (event.teamMinSize != null && size < event.teamMinSize) {
-        return fail(`This team is incomplete (${size} of at least ${event.teamMinSize} members), so it can't be approved yet.`);
+        return fail(`This team is incomplete (${size} of at least ${event.teamMinSize} members), so it can't be approved yet.`, "TEAM_INCOMPLETE");
       }
     } else if (team.status !== RsvpStatus.WAITLISTED) {
       return fail("Only waitlisted teams can be promoted.");
     }
     if (event.capacity != null && (await countConfirmedUnits(tx, event.id)) >= event.capacity) {
-      return fail(action === "approve" ? "Event is at capacity. Free a spot or promote from waitlist first." : "Event is still at capacity.");
+      return fail(action === "approve" ? "Event is at capacity. Free a spot or promote from waitlist first." : "Event is still at capacity.", "CAPACITY_FULL");
     }
     const confirmed = await setTeamStatusTx(tx, { teamId: team.id, eventId: event.id, eventTitle: event.title, from: [team.status], to: RsvpStatus.CONFIRMED });
     if (!confirmed) return changed;

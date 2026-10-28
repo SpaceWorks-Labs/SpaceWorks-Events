@@ -80,11 +80,39 @@ export type EventCapabilities = {
   /** The application review workspace: org owner/admin or a REVIEW_APPLICATIONS collaborator. */
   canReviewApplications: boolean;
   /**
-   * A non-member collaborator whose grants are only REVIEW_APPLICATIONS (and
-   * possibly JUDGE): the page shows their workspaces and nothing else.
+   * A non-member collaborator whose grants are REVIEW_APPLICATIONS (and
+   * possibly JUDGE or MENTOR) only: the page shows their workspaces and nothing else.
    */
   isReviewerOnly: boolean;
+} & MentorPermissions;
+
+/** Mentor Desk flags (docs/MENTOR_DESK.md). */
+export type MentorPermissions = {
+  /** Holds the MENTOR grant on this event: the mentor console (the grant itself, never implied by a role). */
+  canMentor: boolean;
+  /** Mentor Desk settings, mentors, categories, assignments, office hours, rounds and the CSV: org owner/admin only. */
+  canManageMentorDesk: boolean;
+  /**
+   * A collaborator who is not an organisation member and whose grants are
+   * MENTOR (and possibly JUDGE) only. The page shows the mentor console (and
+   * the judging workspace for JUDGE) and nothing else.
+   */
+  isMentorOnly: boolean;
 };
+
+/**
+ * MENTOR is isolated like JUDGE: it opens the mentor console and nothing
+ * else, and no other permission check ever treats it as one of its grants.
+ */
+export function mentorPermissionsFor(isAdmin: boolean, isMember: boolean, grant: readonly EventPermission[]): MentorPermissions {
+  const hasMentor = grant.includes(EventPermission.MENTOR);
+  return {
+    canMentor: hasMentor,
+    canManageMentorDesk: isAdmin,
+    isMentorOnly: !isAdmin && !isMember && hasMentor
+      && grant.every((permission) => permission === EventPermission.MENTOR || permission === EventPermission.JUDGE),
+  };
+}
 
 export type SeriesCapabilities = {
   isAdmin: boolean;
@@ -146,7 +174,8 @@ export function eventCapabilities(
     ...judgingPermissionsFor(isAdmin, role != null, grant ?? []),
     canManageApplications: registrations,
     canReviewApplications: has(EventPermission.REVIEW_APPLICATIONS),
-    isReviewerOnly: !isAdmin && role == null && Boolean(grant?.includes(EventPermission.REVIEW_APPLICATIONS)) && Boolean(grant?.every((permission) => permission === EventPermission.REVIEW_APPLICATIONS || permission === EventPermission.JUDGE)),
+    isReviewerOnly: !isAdmin && role == null && Boolean(grant?.includes(EventPermission.REVIEW_APPLICATIONS)) && Boolean(grant?.every((permission) => permission === EventPermission.REVIEW_APPLICATIONS || permission === EventPermission.JUDGE || permission === EventPermission.MENTOR)),
+    ...mentorPermissionsFor(isAdmin, role != null, grant ?? []),
   };
 }
 

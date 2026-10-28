@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { outsideRequestActor } from "@/lib/requestActor";
 import type { AdmissionStatus, EventStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
@@ -68,13 +69,14 @@ export function newWebhookEventId() {
 export function emitWebhookEvent(emission: WebhookEmission) {
   // A registration change may have moved its application too (a settled
   // payment, a cancelled ticket): send the recorded application changes as well.
-  if (emission.type === "registration.status_changed") track(import("@/lib/admission/statusEvents").then((module) => module.drainApplicationEvents()).then(() => undefined));
-  track(enqueueWebhookEvent(emission).then(() => undefined), emission.type);
+  if (emission.type === "registration.status_changed") track(() => import("@/lib/admission/statusEvents").then((module) => module.drainApplicationEvents()).then(() => undefined));
+  track(() => enqueueWebhookEvent(emission).then(() => undefined), emission.type);
 }
 
-function track(work: Promise<void>, type = "application.status_changed") {
+function track(work: () => Promise<void>, type = "application.status_changed") {
   const pending = pendingEmits();
-  const task = work
+  // Queued in the background, never as the request's actor.
+  const task = outsideRequestActor(work)
     .catch(() => {
       // Category only: payload loading touches attendee names.
       console.warn(`[webhooks] could not queue ${type}`);

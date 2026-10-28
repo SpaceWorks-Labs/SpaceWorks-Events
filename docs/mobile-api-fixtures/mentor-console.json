@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "data": {
+    "timezone": "Europe/London",
+    "onShift": true,
+    "profile": {
+      "version": 3,
+      "skills": [
+        "compilers"
+      ],
+      "bio": "Compilers",
+      "affiliation": "",
+      "maxActiveTeams": 4,
+      "showOnPage": true,
+      "availability": [
+        {
+          "start": "2030-06-01T09:00",
+          "end": "2030-06-01T18:00"
+        }
+      ],
+      "eventStart": "2030-06-01T09:00",
+      "eventEnd": "2030-06-02T18:00"
+    },
+    "claim": {
+      "id": "clhelp000000000000000001",
+      "version": 2,
+      "claimId": "claim-1",
+      "claimGeneration": 1,
+      "claimExpiresAt": "2030-06-01T10:15:00.000Z",
+      "lapsed": false,
+      "category": "Code",
+      "summary": "Our build fails on deploy",
+      "location": "Table 12",
+      "who": "Byte Club",
+      "comments": []
+    },
+    "queueSize": 4,
+    "categories": [
+      {
+        "key": "code",
+        "label": "Code"
+      }
+    ],
+    "round": null
+  }
+}

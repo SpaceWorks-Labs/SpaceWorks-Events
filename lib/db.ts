@@ -40,12 +40,14 @@ function getPrisma(): PrismaClient {
     eventSeries?: { findMany: unknown };
     apiClient?: { findMany: unknown };
     apiCredential?: { findMany: unknown };
+    mobileSession?: { findMany: unknown };
   } | undefined;
   const delegateOk = Boolean(
     delegates &&
       typeof delegates.eventSeries?.findMany === "function" &&
       typeof delegates.apiClient?.findMany === "function" &&
-      typeof delegates.apiCredential?.findMany === "function",
+      typeof delegates.apiCredential?.findMany === "function" &&
+      typeof delegates.mobileSession?.findMany === "function",
   );
 
   if (delegateOk && existing) {

@@ -22,7 +22,7 @@ import { emitTeamWebhooks, type RegistrationStatusWebhook } from "@/lib/teamUnit
 
 export async function addManualRsvp(
   input: unknown,
-): Promise<ActionResult<{ count: number; status: RsvpStatus; }>> {
+): Promise<ActionResult<{ count: number; status: RsvpStatus; rsvpId: string; }>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "You must be signed in." };
   if (await isActionRateLimited("rsvp", session.user.id)) {
@@ -52,7 +52,7 @@ export async function addManualRsvp(
   });
   revalidateRsvpPaths(org.slug, { eventId: parsed.data.eventId, eventInstanceId: null });
   revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}/check-in`);
-  return { ok: true, data: { count: result.data.count, status: result.data.status } };
+  return { ok: true, data: { count: result.data.count, status: result.data.status, rsvpId: result.data.rsvpId } };
 }
 
 export async function updateRsvpRegistration(input: unknown): Promise<ActionResult> {
@@ -177,7 +177,7 @@ export async function deleteRsvp(input: unknown): Promise<ActionResult<{ undoId:
   if (!rsvp) return { ok: false, error: "RSVP not found." };
   if (rsvp.isCrew) return { ok: false, error: CREW_REGISTRATION_ERROR };
   // Paid tickets keep their money trail: they're cancelled (and refunded) as an order.
-  if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead." };
+  if (rsvp.order && rsvp.order.totalMinor > BigInt(0)) return { ok: false, error: "This ticket was part of a paid order. Use Payment → Cancel tickets instead.", code: "PAID_ORDER" };
 
   const teamEvent = rsvp.eventId && rsvp.event?.registrationMode === "TEAM" ? rsvp.eventId : null;
   const snapshot: Record<string, unknown> & { teamId?: string | null; submission?: SubmissionSnapshot | null; } = {

@@ -14,6 +14,8 @@ import { getRequestOrigin } from "@/lib/publicUrl";
 import { startOutboxWorker } from "@/lib/outboxWorker";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import type { ActionResult } from "./org";
+import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
+import { syncMentorCrewAfterGrant } from "@/lib/core/mentorDesk/crewLink";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -24,8 +26,8 @@ const permissions = z
   .refine((values) => new Set(values).size === values.length, "Each permission can be granted once.");
 const targetFields = z.object({ organisationSlug: z.string().min(1), eventId: z.string().min(1).optional(), eventSeriesId: z.string().min(1).optional() });
 const target = targetFields.refine((v) => Boolean(v.eventId) !== Boolean(v.eventSeriesId));
-/** Judging and applications are one-off-event only (docs/HACKATHON.md, docs/ADMISSION.md): a series grant can never carry JUDGE or REVIEW_APPLICATIONS. */
-const judgeOnlyOnEvents = (v: { eventSeriesId?: string; permissions: EventPermission[] }) => !(v.eventSeriesId && (v.permissions.includes(EventPermission.JUDGE) || v.permissions.includes(EventPermission.REVIEW_APPLICATIONS)));
+/** Judging, applications and the Mentor Desk are one-off-event only (docs/HACKATHON.md, docs/ADMISSION.md, docs/MENTOR_DESK.md): a series grant can never carry JUDGE, REVIEW_APPLICATIONS or MENTOR. */
+const judgeOnlyOnEvents = (v: { eventSeriesId?: string; permissions: EventPermission[] }) => !(v.eventSeriesId && (v.permissions.includes(EventPermission.JUDGE) || v.permissions.includes(EventPermission.REVIEW_APPLICATIONS) || v.permissions.includes(EventPermission.MENTOR)));
 const inviteSchema = targetFields
   .extend({ email: z.string().trim().email(), permissions })
   .refine((v) => Boolean(v.eventId) !== Boolean(v.eventSeriesId))
@@ -79,14 +81,19 @@ export async function revokeEventCollaborator(input: unknown): Promise<ActionRes
   if (!session?.user?.id || !parsed.success) return { ok: false, error: "Invalid request." };
   const org = await requireAdmin(parsed.data.organisationSlug, session.user.id);
   if (!org) return { ok: false, error: "You do not have permission." };
-  const deleted = await prisma.eventCollaborator.deleteMany({
-    where: {
-      id: parsed.data.collaboratorId,
-      ...(parsed.data.eventId
-        ? { eventId: parsed.data.eventId, event: { organisationId: org.id } }
-        : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
-    },
+  const where = {
+    id: parsed.data.collaboratorId,
+    ...(parsed.data.eventId
+      ? { eventId: parsed.data.eventId, event: { organisationId: org.id } }
+      : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
+  };
+  // A revoked MENTOR grant ends its assignments and claims (docs/MENTOR_DESK.md).
+  const { deleted, existing } = await prisma.$transaction(async (tx) => {
+    const existing = await tx.eventCollaborator.findFirst({ where, select: { eventId: true, userId: true, permissions: true } });
+    if (existing?.eventId) await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, [], session.user!.id!);
+    return { deleted: await tx.eventCollaborator.deleteMany({ where }), existing };
   });
+  if (deleted.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: [], actorUserId: session.user.id });
   if (!deleted.count) return { ok: false, error: "Collaborator not found." };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_REVOKED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId });
   if (parsed.data.eventId) revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}`);
@@ -100,15 +107,18 @@ export async function updateEventCollaboratorPermissions(input: unknown): Promis
   if (!session?.user?.id || !parsed.success) return { ok: false, error: "Invalid collaborator permissions." };
   const org = await requireAdmin(parsed.data.organisationSlug, session.user.id);
   if (!org) return { ok: false, error: "You do not have permission." };
-  const updated = await prisma.eventCollaborator.updateMany({
-    where: {
-      id: parsed.data.collaboratorId,
-      ...(parsed.data.eventId
-        ? { eventId: parsed.data.eventId, event: { organisationId: org.id } }
-        : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
-    },
-    data: { permissions: parsed.data.permissions },
+  const where = {
+    id: parsed.data.collaboratorId,
+    ...(parsed.data.eventId
+      ? { eventId: parsed.data.eventId, event: { organisationId: org.id } }
+      : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
+  };
+  const { updated, existing } = await prisma.$transaction(async (tx) => {
+    const existing = await tx.eventCollaborator.findFirst({ where, select: { eventId: true, userId: true, permissions: true } });
+    if (existing?.eventId) await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, parsed.data.permissions, session.user!.id!);
+    return { updated: await tx.eventCollaborator.updateMany({ where, data: { permissions: parsed.data.permissions } }), existing };
   });
+  if (updated.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: parsed.data.permissions, actorUserId: session.user.id });
   if (!updated.count) return { ok: false, error: "Collaborator not found." };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_PERMISSIONS_UPDATED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId, metadata: { permissions: parsed.data.permissions.join(",") } });
   if (parsed.data.eventId) revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}`);

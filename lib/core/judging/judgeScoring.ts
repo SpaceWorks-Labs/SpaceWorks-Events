@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { sqlUtcTimestamp, SQL_UTC_NOW } from "@/lib/sqlTimestamp";
 import type { JudgeContext } from "@/lib/judgingAccess";
 import { judgeReviewSchema, judgeScoresSchema } from "@/lib/validators";
-import { criteriaFor, EVENT_NOT_FOUND, fail, invalid, JUDGING_NOT_OPEN, type JudgingResult, lockEventShared, NOT_FOUND, ok } from "./shared";
+import { criteriaFor, EVENT_NOT_FOUND, fail, invalid, JUDGING_NOT_OPEN, type JudgingResult, lockEventShared, NOT_FOUND, ok, refuse } from "./shared";
 import { isRoundJudge } from "./judges";
 import { visibleSubmissionIds } from "./judgeVisibility";
 import { type JudgingRoundScope, resolveJudgingRound } from "./rounds/scope";
@@ -23,9 +23,9 @@ async function lockedJudgeTarget(tx: Prisma.TransactionClient, ctx: JudgeContext
   if (!event || event.organisationId !== ctx.organisationId || !event.submissionsEnabled) return fail(EVENT_NOT_FOUND);
   const round = await resolveJudgingRound(tx, event);
   if (!round || !(await isRoundJudge(tx, round, event.organisationId, ctx.userId))) return fail(NOT_FOUND);
-  if (round.status !== JudgingRoundStatus.OPEN || !round.id) return fail(JUDGING_NOT_OPEN);
+  if (round.status !== JudgingRoundStatus.OPEN || !round.id) return refuse(JUDGING_NOT_OPEN, "JUDGING_CLOSED");
   const visible = await visibleSubmissionIds(tx, round, ctx.userId, submissionId);
-  if (!visible.includes(submissionId)) return fail(NOT_FOUND);
+  if (!visible.includes(submissionId)) return refuse(NOT_FOUND, "NOT_VISIBLE");
   return ok({ round: { ...round, id: round.id } });
 }
 
@@ -75,9 +75,9 @@ export async function submitJudgeReview(ctx: JudgeContext, input: unknown): Prom
     const { round } = target.data;
     if (submit) {
       const criteria = await criteriaFor(tx, round);
-      if (criteria.length === 0) return fail("This event has no rubric yet.");
+      if (criteria.length === 0) return refuse("This event has no rubric yet.", "INCOMPLETE_SCORES");
       const scored = await tx.judgeScore.count({ where: { submissionId, judgeUserId: ctx.userId, criterionId: { in: criteria.map((c) => c.id) } } });
-      if (scored < criteria.length) return fail("Score every criterion before submitting your review.");
+      if (scored < criteria.length) return refuse("Score every criterion before submitting your review.", "INCOMPLETE_SCORES");
     }
     const submittedAt = submit ? new Date() : null;
     await tx.$executeRaw`

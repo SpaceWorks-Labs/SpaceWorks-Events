@@ -12,9 +12,10 @@ import { EntryFeeControl } from "@/components/event-dashboard/settings/EntryFeeC
 import { TicketDesignCard } from "@/components/event-dashboard/settings/TicketDesignCard";
 import { NoPermission } from "./shared";
 import { ApplicationsEnableCard } from "@/components/event-dashboard/admission/ApplicationSettings";
+import { MentorDeskSettingsCard } from "@/components/mentor-desk/organiser/MentorDeskSettingsCard";
 
 export async function SettingsPanel({ ctx, judgingInUse = false }: { ctx: EventDashboardContext; judgingInUse?: boolean; }) {
-  const { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign, applicationsCard } = await loadSettingsPanel({ ctx, judgingInUse });
+  const { permissions, organisation, event, collaborators, pending, tickets, judgingCard, entryFee, ticketDesign, applicationsCard, mentorDesk } = await loadSettingsPanel({ ctx, judgingInUse });
   return (
     <div className="flex flex-col gap-5">
       {tickets ? (
@@ -56,6 +57,7 @@ export async function SettingsPanel({ ctx, judgingInUse = false }: { ctx: EventD
         />
       ) : null}
       {applicationsCard ? <ApplicationsEnableCard scope={{ organisationSlug: organisation.slug, eventId: event.id }} canEnable={applicationsCard.canEnable} reason={applicationsCard.reason} /> : null}
+      {mentorDesk ? <MentorDeskSettingsCard scope={{ organisationSlug: organisation.slug, eventId: event.id }} enabled={mentorDesk.enabled} helpClaimedEmail={mentorDesk.helpClaimedEmail} crewTicket={mentorDesk.crewTicket} /> : null}
       {judgingCard ? <JudgingSettingsCard scope={judgingCard.scope} settings={judgingCard.settings} now={ctx.now.toISOString()} /> : null}
       {/* Address, clone, embed and delete are organisation-admin actions on the server. */}
       {permissions.isAdmin ? (

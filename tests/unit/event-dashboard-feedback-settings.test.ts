@@ -85,9 +85,10 @@ describe("co-organiser permission helpers", () => {
   it("returns short chip labels in canonical order without duplicates or unknown values", () => {
     expect(permissionChipLabels(["CHECK_IN", "EDIT_DETAILS", "CHECK_IN", "SOMETHING_ELSE"])).toEqual(["Edit details", "Check-in"]);
     expect(permissionChipLabels([])).toEqual([]);
-    expect(PERMISSION_OPTIONS).toHaveLength(7);
+    expect(PERMISSION_OPTIONS).toHaveLength(8);
     expect(permissionChipLabels(["REVIEW_APPLICATIONS"])).toEqual(["Review applications"]);
     expect(permissionChipLabels(["JUDGE"])).toEqual(["Judge"]);
+    expect(permissionChipLabels(["MENTOR", "JUDGE"])).toEqual(["Judge", "Mentor"]);
   });
 
   it("toggles a permission on and off, keeping canonical order", () => {

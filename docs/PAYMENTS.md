@@ -84,12 +84,36 @@ hours, with one reminder a few hours before it ends.
   terminal), make tickets complimentary, send a payment link, refund in part or
   in full, or cancel tickets. Refunds go back the way the buyer paid.
 - **Buyers** can cancel within the refund policy from their order page.
+- **Saying No to "Are you still coming?"** ([Attendance confirmation](ATTENDANCE.md)),
+  when the organiser has turned on *Free the place when a guest says No*: a
+  ticket on an order of its own, answered by the person who bought it, is
+  cancelled exactly as the buyer would cancel it, under the refund policy frozen
+  on the order (an order still owed at the desk is cancelled with its owed
+  payment; nothing is refunded because nothing was paid). The email and the
+  form name the refund the policy gives. Once that policy no longer allows it, the place is kept and a
+  refund request is opened for the organisers, once; if the guest then says
+  Yes while it is still open, it is withdrawn. An order with several tickets
+  (or a team ticket paying for the whole team), or a ticket somebody else paid
+  for, is never cancelled automatically: the answer is recorded, owners and
+  admins are emailed and told in chat, and the guest list shows *Said No · paid*.
+  The email and the form only promise a release when it would really happen.
 - **Cancelling an event or a series date** refunds everyone who paid in full
   (a pass gets its share for that date) and tells every guest by email.
 - **Chargebacks** arrive by webhook: the guest list marks the order, and the
   owners are emailed (and told in chat, if connected).
 - **Refused refunds** (for example a low provider balance) are emailed to the
   owners and admins so they can retry or refund another way.
+
+### In the mobile apps
+
+The Space Works apps sell the same tickets ([Mobile API](MOBILE_API.md)): a
+paid registration answers `PENDING_PAYMENT` with the order id and the hosted
+checkout, opened in the system browser, and is never a ticket until the
+provider's webhook confirms it. Signed-in buyers reach their orders by id (the
+access token is never sent to the app) to pay, cancel under the refund policy,
+ask for a refund, download the receipt and transfer tickets. Organisers with
+`MANAGE_REGISTRATIONS` settle at the desk, resend payment links and refund;
+the check-in preview shows what is owed.
 
 ## Reporting
 

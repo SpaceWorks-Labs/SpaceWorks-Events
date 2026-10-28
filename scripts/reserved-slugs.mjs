@@ -9,6 +9,7 @@ export const reservedOrganisationSlugs = Object.freeze([
   "account",
   "api",
   "assets",
+  "attend",
   "crew",
   "dashboard",
   "discover",

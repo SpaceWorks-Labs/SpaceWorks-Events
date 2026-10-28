@@ -18,6 +18,9 @@ describe("event browser DTO", () => {
       timezone: "UTC",
       location: "Venue",
       mapLinkUrl: null,
+      registrationManuallyClosedAt: null,
+      registrationCutoffBeforeManualClose: null,
+      registrationLeadBeforeManualClose: null,
       isOnline: false,
       capacity: null,
       status: EventStatus.PUBLISHED,
@@ -62,6 +65,10 @@ describe("event browser DTO", () => {
       currentJudgingRoundId: "round-secret",
       emailEntrantsOnResults: true,
       emailSubmissionReceipts: true,
+      attendanceCheckReleaseOnDecline: true,
+      mentorDeskEnabled: true,
+      mentorHelpClaimedEmail: true,
+      mentorsGetCrewTicket: true,
       shortCode: null,
       checkInStationPinHash: "bcrypt-secret",
       checkInStationPinEncrypted: "encrypted-secret",
@@ -80,6 +87,8 @@ describe("event browser DTO", () => {
     expect(serialized).not.toContain("resultsAnnouncedAt");
     expect(serialized).not.toContain("emailEntrantsOnResults");
     expect(serialized).not.toContain("emailSubmissionReceipts");
+    expect(serialized).not.toContain("attendanceCheckReleaseOnDecline");
+    expect(serialized).not.toContain("mentorDesk");
     expect(serialized).not.toContain("reviewsPerProject");
     expect(serialized).not.toContain("scoreNormalization");
     expect(serialized).not.toContain("currentJudgingRoundId");
