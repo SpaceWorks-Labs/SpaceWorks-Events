@@ -8,6 +8,7 @@ import { ClaimForm } from "@/components/event-dashboard/finance/ClaimForm";
 import { ClaimsList } from "@/components/event-dashboard/finance/ClaimsList";
 import { ClaimPayoutsList, FinanceSettingsForm, RefundRequestsList } from "@/components/event-dashboard/finance/FinanceAdmin";
 import { NoPermission } from "./shared";
+import { HelpLink } from "@/components/help/HelpLink";
 
 /**
  * The event dashboard's Finance tab (docs/FINANCE.md): money in and out
@@ -40,7 +41,10 @@ export async function FinancePanel({ ctx }: { ctx: EventDashboardContext; }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-h3 text-ink">Money in and out</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-h3 text-ink">Money in and out</h2>
+          <HelpLink article="finance/overview-and-budget" />
+        </div>
         <Button asChild variant="secondary"><Link href={data.exportHref} prefetch={false}><Download aria-hidden className="size-4" />Download CSV</Link></Button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

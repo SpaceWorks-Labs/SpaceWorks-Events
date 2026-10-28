@@ -24,6 +24,7 @@ import { TemplateSection } from "./EventBroadcastPanel/TemplateSection";
 import { DraftStatusBar, ReplaceDraftDialog } from "./EventBroadcastPanel/DraftControls";
 import { initialComposer, type ComposerContent } from "./EventBroadcastPanel/draft";
 import { useBroadcastDraft } from "./EventBroadcastPanel/useBroadcastDraft";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export type { BroadcastHistoryRow } from "./EventBroadcastPanel/shared";
 
@@ -205,7 +206,7 @@ export function EventBroadcastPanel(props: {
 
   return (
     <div className="flex flex-col gap-6">
-      <Callout tone="info">
+      <Callout tone="info" action={<HelpLink article="guests/emailing-guests" />}>
         Emails go only to people who already registered for this event. Messages are queued and delivered in the background, a few at a time, so large audiences take a few minutes. Send yourself a test first.
       </Callout>
 

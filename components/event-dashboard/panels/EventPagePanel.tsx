@@ -9,7 +9,7 @@ import { SubTabs } from "../SubTabs";
 import { NoPermission } from "./shared";
 
 export async function EventPagePanel({ ctx }: { ctx: EventDashboardContext; }) {
-  const { event, permissions, organisation, fields, website, dto, scheduleHref, counts, preview } = await loadEventPagePanel({ ctx });
+  const { event, permissions, organisation, fields, registrations, website, dto, scheduleHref, counts, preview } = await loadEventPagePanel({ ctx });
   const programme = <ProgrammeCard summary={programmeSummary(counts)} scheduleHref={scheduleHref} />;
   return (
     <SubTabs
@@ -18,7 +18,7 @@ export async function EventPagePanel({ ctx }: { ctx: EventDashboardContext; }) {
         {
           value: "details",
           label: "Details",
-          content: permissions.canEditEventDetails ? <EditEventForm organisationSlug={organisation.slug} event={dto} page={website.page} /> : <NoPermission>You do not have permission to edit event details.</NoPermission>,
+          content: permissions.canEditEventDetails ? <EditEventForm organisationSlug={organisation.slug} event={dto} page={website.page} registrations={registrations} /> : <NoPermission>You do not have permission to edit event details.</NoPermission>,
         },
         {
           value: "page",

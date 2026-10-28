@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { canCreateEvent, canPublishEvents, getMembership } from "@/lib/permissions";
 import { normalizedTeamSettings, updateEventSchema } from "@/lib/validators";
-import { countConfirmedForCapacity } from "@/lib/teamUnits";
+import { countConfirmedForCapacity, takesCapacity } from "@/lib/teamUnits";
 import type { ActionResult } from "../org";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { recordAuditEvent } from "@/lib/audit";
@@ -118,7 +118,8 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
         if (confirmed > data.capacity) return locked.registrationMode === RegistrationMode.TEAM ? ("capacityUnits" as const) : ("capacity" as const);
       }
       if (teamSettings) {
-        if (teamSettings.registrationMode !== locked.registrationMode && (await tx.rSVP.count({ where: { eventId: event.id } })) > 0) {
+        // Crew tickets (docs/CREW.md) never join teams, so they don't block a mode switch.
+        if (teamSettings.registrationMode !== locked.registrationMode && (await tx.rSVP.count({ where: { eventId: event.id, ...takesCapacity } })) > 0) {
           return "mode" as const;
         }
         if (teamSettings.registrationMode === RegistrationMode.TEAM && (await tx.ticketType.count({ where: { eventId: event.id, archivedAt: null, seatsPerTicket: { gt: 1 } } })) > 0) {

@@ -6,7 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getRequestOrigin } from "@/lib/publicUrl";
 import { requireOrgDashboardAccess } from "@/lib/permissions";
-import { eventForView } from "@/lib/frontend/eventView";
+import { eventForView, type EventView } from "@/lib/frontend/eventView";
 import { canViewEventDashboard } from "@/lib/eventAccess";
 import { eventCapabilities, type EventCapabilities } from "@/lib/eventDashboard/capabilities";
 
@@ -27,7 +27,7 @@ export const eventDashboardInclude = {
 } satisfies Prisma.EventInclude;
 
 type DashboardEventRecord = Prisma.EventGetPayload<{ include: typeof eventDashboardInclude; }>;
-export type DashboardEvent = Omit<DashboardEventRecord, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion"> & { stationEnabled: boolean; };
+export type DashboardEvent = EventView<DashboardEventRecord> & { stationEnabled: boolean; };
 
 /** What the viewer may see and do; computed once by `eventCapabilities` (lib/eventDashboard/capabilities.ts). */
 export type EventDashboardPermissions = EventCapabilities;

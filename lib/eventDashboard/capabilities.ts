@@ -21,6 +21,12 @@ export type EventCapabilities = {
   canViewAnalytics: boolean;
   /** Event and series invite lists (`MANAGE_INVITATIONS`). */
   canManageInvitations: boolean;
+  /**
+   * Guests → Crew (docs/CREW.md): crew list, crew tickets and the crew sign-up
+   * link (`MANAGE_REGISTRATIONS`, as app/actions/crew.ts re-checks). Being on
+   * the crew grants no dashboard access.
+   */
+  canManageCrew: boolean;
   /** Check-in desk, scanner, offline roster, undo check-in and badge printing (`CHECK_IN`). */
   canCheckIn: boolean;
   /** Check guests into or out of custom check-in lists (`CHECK_IN`, the same rule as entry check-in). */
@@ -135,6 +141,7 @@ export function eventCapabilities(
     canExportAttendees: registrations,
     canViewAnalytics: registrations,
     canManageInvitations: has(EventPermission.MANAGE_INVITATIONS),
+    canManageCrew: registrations,
     canCheckIn: has(EventPermission.CHECK_IN),
     canCheckInToLists: has(EventPermission.CHECK_IN),
     canManageCheckInLists: has(EventPermission.EDIT_DETAILS),

@@ -31,6 +31,7 @@ import { AnswersSection, ColourSection, LogosSection, PaperSection } from "./IdC
 import { DesignFileButtons } from "./IdCardDesigner/DesignFileButtons";
 import { Inspector } from "./IdCardDesigner/Inspector";
 import { StyleSection } from "./IdCardDesigner/StyleSection";
+import { HelpLink } from "@/components/help/HelpLink";
 
 export { FitArea, NumberSlider, SaveStatusPill, Section, SwatchGroup, SwitchLine, ToggleField } from "./IdCardDesigner/controls";
 export { ColourSection, PaperSection } from "./IdCardDesigner/sections";
@@ -135,6 +136,7 @@ export function IdCardDesigner({
           <h2 id="id-card-designer-title" className="text-h4 text-ink">Badge designer</h2>
           <p className="truncate text-caption text-ink-muted">{source.eventTitle} · every check-in desk prints this design</p>
         </div>
+        <HelpLink article="check-in/badges" />
         <div className="flex items-center gap-2" aria-live="polite">
           <SaveStatusPill status={status} />
           {status === "error" ? <Button size="sm" variant="secondary" onClick={retry}>Try again</Button> : null}

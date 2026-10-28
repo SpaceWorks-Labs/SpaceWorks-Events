@@ -72,6 +72,11 @@ export function RegistrationCard(props: {
   organisation: { name: string; slug: string; logoUrl: string | null };
   registrationFields: RegistrationFieldDefinition[];
   confirmedCount: number | null;
+  /**
+   * Crew tickets (docs/CREW.md): added to "N going" only. Spots left and the
+   * progress bar keep the attendee count, because crew never take capacity.
+   */
+  crewCount?: number | null;
   capacity: number | null;
   state: RegistrationState;
   title?: string;
@@ -89,7 +94,7 @@ export function RegistrationCard(props: {
   paidSalesOpen?: boolean;
   ticketing?: TicketingInfo | null;
 }) {
-  const { orgSlug, eventSlug, eventInstanceId, eventTitle, organisation, registrationFields, confirmedCount, capacity, state, accentColor, team, viewerRsvp = null, tickets = [], heldCount = 0, paidSalesOpen = false, ticketing = null } = props;
+  const { orgSlug, eventSlug, eventInstanceId, eventTitle, organisation, registrationFields, confirmedCount, crewCount, capacity, state, accentColor, team, viewerRsvp = null, tickets = [], heldCount = 0, paidSalesOpen = false, ticketing = null } = props;
   const router = useRouter();
   const prices = tickets.filter((ticket) => ticket.priceMinor > 0);
   const cheapest = prices.length > 0 ? prices.reduce((low, ticket) => (ticket.priceMinor < low.priceMinor ? ticket : low)) : null;
@@ -163,7 +168,7 @@ export function RegistrationCard(props: {
         {confirmedCount != null ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="font-semibold text-ink">{team ? `${confirmedCount} ${confirmedCount === 1 ? "place" : "places"} taken` : `${confirmedCount} going`}</span>
+              <span className="font-semibold text-ink">{team ? `${confirmedCount} ${confirmedCount === 1 ? "place" : "places"} taken` : `${confirmedCount + (crewCount ?? 0)} going`}</span>
               {spotsLeft != null ? <span className="text-ink-muted">{spotsLeft} {team ? (spotsLeft === 1 ? "place" : "places") : spotsLeft === 1 ? "spot" : "spots"} left</span> : null}
             </div>
             {capacity != null ? <ProgressBar value={confirmedCount} max={capacity} label="Places taken" /> : null}

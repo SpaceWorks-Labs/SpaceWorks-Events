@@ -1,0 +1,74 @@
+Every time someone registers with a ticket, Space Works Events creates an **order**: what they chose, what it cost, and how it was paid. One order can hold several tickets, extras and booking fees. This page covers finding an order, reading its status, settling it by hand, and the receipts buyers get.
+
+<Callout kind="permission">
+
+Owners, admins, and co-organisers with the **Registrations** permission on the event or series.
+
+</Callout>
+
+## Finding an order
+
+Orders live with the guests they belong to.
+
+<Steps>
+
+1. Open the event and choose the **Guests** tab, then **People**.
+2. Find the guest with the search box (name or email) or the status filters. Each guest with an order shows a payment chip next to their status.
+3. Open the guest's **More actions** menu and choose **Payment**.
+
+</Steps>
+
+The **Payment** dialog shows the order reference, how many tickets it holds, its **Status**, its **Total** (marked "test mode" for test payments), anything **Refunded**, and for money taken in person, how it was **Paid by**. Every action in the dialog applies to the whole order.
+
+<Screenshot name="guest-payment-dialog" alt="The Payment dialog for one guest's order, with the status, total, and the Refund, Cancel tickets and Correct record actions" />
+
+## What the payment chips mean
+
+| Chip | Meaning |
+| --- | --- |
+| **Awaiting** and the amount | The buyer is paying now; their places are held. Their registration shows as **Unpaid**. |
+| The amount **after approval** | A paid sign-up waiting for your approval or a waitlist place. Nothing has been charged. |
+| **Paid** and the amount | Paid online, or **offline** when you recorded it by hand. |
+| **To pay** the amount **at the desk** | Reserved to pay in person; the money is still owed. |
+| **Complimentary** | You waived the payment. |
+| **Paid**, **part refunded** | Some of the money has gone back. |
+| **Refunded** | Everything has gone back. |
+| **Disputed** | The buyer opened a chargeback with their bank. |
+| **Payment expired** | The time to pay ran out and the places went back on sale. |
+| **Cancelled** | The order was cancelled. |
+
+Test payments add "(test)" to the chip.
+
+## Settling an order by hand
+
+For an order that's awaiting payment or due at the desk, the **Payment** dialog offers:
+
+- **Mark as paid**: choose how you were paid in **Paid by** (cash, UPI, bank transfer, card terminal or other), add an optional **Reference** such as a UPI id, and confirm. The tickets are confirmed and each guest gets their ticket by email. If an online payment page was open, it's closed first.
+- **Make complimentary**: confirms the tickets with no charge.
+- **Send payment link**: emails the buyer a link to pay. For an order that expired or is waiting for approval, this also holds the places for 24 hours.
+
+If you recorded an in-person payment wrongly, use **Correct record** to change how it was paid or its reference, with a reason. The original record is kept and each correction is added to its history.
+
+To add a guest who has a ticket yourself, choose **Add guest** on **People**, pick their **Ticket**, and choose **Email a payment link**, **They've paid me already** or **Complimentary**.
+
+## Receipts
+
+Buyers get a PDF receipt for every order where money was collected, online or in person. It lists the items, any discount, the total, how it was paid (for example the card brand and last four digits, or "Cash"), the provider's payment reference, and any refunds.
+
+- The payment email links to the receipt, and the buyer can download it again at any time from their order page with **Download receipt (PDF)**.
+- The receipt names your organisation as the one that was paid. The owner sets your registered name, registration number and address in **Settings** → **Payments** → **Receipts**. See [Connecting Razorpay or Stripe](/help/payments/connect-a-provider#receipt-details).
+- Receipts for test payments say no real money moved.
+
+There's no button to resend a receipt. If a buyer can't find theirs, point them to the payment email, which links to their order page. What buyers see is described in [Your order and receipt](/help/attending/orders-and-receipts).
+
+## Downloading the orders list
+
+On the event's **Analytics** tab, the **Money** card has **Download orders (CSV)**. On a series, it's on the **Money across the series** card. The file has one row per order, including its reference, status, buyer, items, subtotal, discount and promo code letters, booking fees, extras, total, amount paid, payment method, the provider's payment reference, refunds, anything owed at the desk, any chargeback, and whether it was a test.
+
+The Money card appears once the event has taken or is owed money, or has complimentary or waiting paid orders. See [Revenue and reports](/help/payments/revenue).
+
+## Good to know
+
+- Order references are short codes you can quote to a buyer. Search the guest list by the buyer's name or email to find the order.
+- Chargebacks are answered in your payment provider's dashboard. The **Payment** dialog shows when one is open and, when the provider gives one, the date to respond by. The owners are emailed when one arrives.
+- A buyer's own orders and refunds are included when they download their personal data.

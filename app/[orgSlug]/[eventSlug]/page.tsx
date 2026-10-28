@@ -15,7 +15,7 @@ type Props = { params: Promise<{ orgSlug: string; eventSlug: string; }>; };
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function EventPage({ params }: Props) {
-  const { judging, mentors, org, preview, event, page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing } = await loadEventView({ params });
+  const { judging, mentors, org, preview, event, page, highlights, sessions, speakers, sponsors, faqs, resources, form, confirmed, viewerRsvp, held, tickets, paidSalesOpen, ticketing, crew, crewCount } = await loadEventView({ params });
   return (
     <EventWebsiteShell
       orgSlug={org.slug}
@@ -76,8 +76,10 @@ export default async function EventPage({ params }: Props) {
         description: resource.description,
         href: resource.externalUrl!,
       }))}
+      crew={crew}
       registrationFields={(form?.fields ?? []).map(toFieldDefinition)}
       confirmedCount={event.showRegistrationCount ? confirmed : null}
+      crewCount={crewCount}
       registrationOpen={
         event.status === "PUBLISHED" &&
         event.endDateTime > new Date() &&

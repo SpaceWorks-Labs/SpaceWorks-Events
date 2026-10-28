@@ -1,5 +1,6 @@
 import "server-only";
 
+import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import { EventPrivacyType, RegistrationMode, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { flattenZodErrors } from "@/app/actions/utils";
@@ -59,6 +60,8 @@ export async function addTeamMemberByLeader(
       if (!event) return fail(TEAM_NOT_FOUND);
       if (event.registrationMode !== RegistrationMode.TEAM) return fail(NOT_A_TEAM_EVENT);
       if (!isOpenForRegistration(event)) return fail("Registration is closed for this event.");
+      // A crew member already holds a free crew ticket (docs/CREW.md); the Event lock is held.
+      if (await hasCrewEmail(tx, event.id, [email])) return fail(CREW_EMAIL_REFUSED);
       const team = await lockedLeaderTeam(tx, auth);
       if (!team) return fail(TEAM_NOT_FOUND);
       if (team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");

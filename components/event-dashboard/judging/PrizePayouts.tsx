@@ -12,6 +12,7 @@ import { Dropdown, Field, Input, Textarea } from "@/components/ui/field";
 import { OFFLINE_METHOD_LABELS } from "@/lib/payments/paymentMethod";
 import { formatDayTime } from "@/lib/format/datetime";
 import type { PrizeLedgerView } from "@/lib/prizeLedger";
+import { HelpLink } from "@/components/help/HelpLink";
 
 type Scope = { organisationSlug: string; eventId: string; };
 type Winner = PrizeLedgerView["awards"][number]["winners"][number];
@@ -45,7 +46,7 @@ export function PrizePayouts({ scope, ledger, timezone }: { scope: Scope; ledger
         </Card>
       ))}
       <Card as="section" className="rounded-xl" aria-labelledby="prize-ledger-title">
-        <CardHeader title={<span id="prize-ledger-title">Payouts</span>} description="Every payout stays on record. A mistake is reversed, never edited." />
+        <CardHeader title={<span id="prize-ledger-title">Payouts</span>} description="Every payout stays on record. A mistake is reversed, never edited." action={<HelpLink article="hackathons/prize-payouts" />} />
         {ledger.payouts.length === 0 ? <p className="text-caption text-ink-muted">Nothing paid out yet.</p> : (
           <ul className="flex flex-col divide-y divide-line">
             {ledger.payouts.map((payout) => (

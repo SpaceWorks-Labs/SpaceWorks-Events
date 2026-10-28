@@ -8,8 +8,7 @@ const config: NextConfig = {
   // Netlify packages the build itself; the frontend container needs standalone output.
   output: process.env.SWE_FRONTEND_STANDALONE === "1" ? "standalone" : undefined,
   serverExternalPackages: ["sharp"],
-  turbopack: {
-    root,
-  },
+  // Keep the shared Turbopack rules (the guide's MDX loader) and move the root.
+  turbopack: { ...shared.turbopack, root },
 };
 export default config;

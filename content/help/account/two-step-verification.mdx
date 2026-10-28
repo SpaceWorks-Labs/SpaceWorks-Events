@@ -1,0 +1,93 @@
+Two-step verification adds a second check when you sign in: a six-digit code from an authenticator app on your phone. Someone who learns your password still can't get in without it. You can use any standard authenticator app, such as Google Authenticator, Microsoft Authenticator, 1Password or Authy.
+
+## Who has to use it
+
+- **Organisation staff must.** If you have any role in an organisation (owner, admin or member), or you're a co-organiser on any event or series, your dashboards stay closed until you set up an authenticator app. After that, you confirm a code once per sign-in before they open.
+- **Guests can choose.** If you only register for events, it's optional, but it's a good idea for any account.
+- **The server's super admin** signs in with email and password only, and isn't asked for an authenticator code.
+
+When you become staff, for example by creating an organisation or accepting an invitation, the next time you open a dashboard you're sent to **Account settings** → **Security** with the message "Set up an authenticator app to continue".
+
+## Turn it on
+
+<Steps>
+
+1. Open your account menu and choose **Account settings**, then the **Security** tab.
+2. In **Two-step verification**, choose **Set up authenticator**.
+3. Scan the QR code with your authenticator app. If you can't scan it, type the **Manual key** shown beside it into the app instead.
+4. Enter the six-digit code the app shows in **Six-digit code** and choose **Verify and enable**.
+5. The app shows ten one-time **recovery codes**. Save them somewhere safe, such as a password manager or a printed copy.
+6. Choose **I saved them — sign in again**, then sign in with your password and a code from the app.
+
+</Steps>
+
+<Screenshot name="account-security-two-step" alt="The Security tab with the Two-step verification card and the Set up authenticator button" />
+
+Turning it on signs you out of every browser and device, so each one has to sign in again with a code.
+
+<Callout kind="note">
+
+For your protection, setting up or turning off two-step verification only works within ten minutes of signing in. If you see "Sign in again before enabling MFA", sign out, sign back in and try again straight away. The setup itself also expires after ten minutes; if it does, choose **Set up authenticator** again.
+
+</Callout>
+
+## Signing in with a code
+
+After you enter your email and password, the app shows **Verify it's you**.
+
+<Steps>
+
+1. Open your authenticator app and find the Space Works Events entry.
+2. Type the current six-digit code into **Authenticator or recovery code**.
+3. Choose **Verify and sign in**.
+
+</Steps>
+
+Codes change every 30 seconds. If one is rejected, wait for the next code and try again, and check that your phone sets its clock automatically. To sign in as someone else, choose **Use a different account**.
+
+### After signing in with Google
+
+Google sign-in follows your Google account's own security, so it doesn't ask for a code at sign-in. If you're organisation staff, the app then shows **Confirm it's you** before your dashboards open.
+
+<Steps>
+
+1. Enter the current code from your authenticator app in **Six-digit authenticator code**.
+2. Choose **Verify and continue**.
+
+</Steps>
+
+You're asked again after 12 hours, and after you sign out everywhere or reset your password. This page only takes a code from the app, not a recovery code.
+
+## Recovery codes
+
+Recovery codes get you in when you don't have your phone. At the password sign-in, type one into **Authenticator or recovery code** instead of an app code.
+
+- Each code works **once**. Cross it off after using it.
+- You get ten codes when you turn two-step verification on. To get a fresh set, turn it off and on again.
+- The app can't show your codes again after setup, so keep them somewhere you'll find them.
+
+## Turn it off
+
+<Steps>
+
+1. Go to **Account settings** → **Security**.
+2. In **Two-step verification**, enter a current authenticator code or an unused recovery code in **Authenticator or recovery code**.
+3. Choose **Turn off two-step**, then confirm with **Turn off two-step** in the dialog.
+
+</Steps>
+
+You're signed out everywhere, and from then on password sign-in needs only your password, plus an emailed code from new devices. If you're organisation staff, your dashboards stay closed until you set up an authenticator app again.
+
+## If you lose your phone
+
+<Steps>
+
+1. Sign in with your email and password, and enter a **recovery code** at **Verify it's you**.
+2. Go to **Account settings** → **Security** and turn two-step verification off with another recovery code.
+3. Sign in again, set it up on your new phone, and save the new recovery codes.
+
+</Steps>
+
+If you normally use **Continue with Google**, you need a password for this, because the **Confirm it's you** page doesn't take recovery codes. Your **Account settings** open without a code, so sign in with Google, add a password under **Security** (see [Profile, appearance and security](/help/account/profile-and-security#password)), then follow the steps above. A [password reset](/help/account/forgotten-password) doesn't turn two-step verification off.
+
+If you have no phone and no recovery codes left, you can't remove two-step verification yourself. Contact the person who runs your server.

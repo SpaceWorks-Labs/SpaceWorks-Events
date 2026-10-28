@@ -24,7 +24,7 @@ export async function ticketDesignFor(checkInToken: string) {
   const rsvp = await prisma.rSVP.findUnique({
     where: { checkInToken },
     select: {
-      id: true, status: true, checkedInAt: true, guestName: true, guestEmail: true,
+      id: true, status: true, checkedInAt: true, guestName: true, guestEmail: true, isCrew: true,
       user: { select: { name: true } },
       team: { select: { name: true } },
       order: { select: { reference: true, currency: true } },
@@ -49,8 +49,9 @@ export async function ticketDesignFor(checkInToken: string) {
     time: formatTimeRange(start, end, timeZone, { withZone: true }),
     // Series dates have no venue of their own.
     venue: rsvp.event ? (rsvp.event.isOnline ? "Online" : rsvp.event.location.trim()) : "",
-    ticket: rsvp.ticketType?.name ?? "",
-    price: rsvp.ticketType ? (rsvp.ticketType.priceMinor > BigInt(0) && currency ? formatMoney(rsvp.ticketType.priceMinor, currency) : "Free") : "",
+    // A crew ticket (docs/CREW.md) is free and has no ticket type: it prints "Crew" and no price.
+    ticket: rsvp.isCrew ? "Crew" : rsvp.ticketType?.name ?? "",
+    price: rsvp.isCrew ? "" : rsvp.ticketType ? (rsvp.ticketType.priceMinor > BigInt(0) && currency ? formatMoney(rsvp.ticketType.priceMinor, currency) : "Free") : "",
     order: rsvp.order?.reference ?? "",
     registration: registrationNumber(rsvp.id),
     team: rsvp.team?.name ?? "",
