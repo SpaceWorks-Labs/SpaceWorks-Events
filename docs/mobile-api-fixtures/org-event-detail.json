@@ -34,6 +34,7 @@
       "waitlisted": 5,
       "pending": 0,
       "pendingPayment": 0,
+      "crew": 0,
       "checkedIn": 0,
       "capacity": 80,
       "capacityUsed": 42
@@ -48,6 +49,7 @@
       "judge": true,
       "checkInToLists": true,
       "manageOrders": true,
+      "manageCrew": true,
       "fileClaims": true,
       "manageFinance": true
     }

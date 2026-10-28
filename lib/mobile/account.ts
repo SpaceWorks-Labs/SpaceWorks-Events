@@ -112,6 +112,7 @@ const registrationExtraSelect = {
   id: true,
   createdAt: true,
   orderId: true,
+  isCrew: true,
   event: { select: eventSummarySelect },
   eventInstance: { select: { series: { select: { slug: true, organisation: { select: { logoUrl: true } } } } } },
 } satisfies Prisma.RSVPSelect;
@@ -149,6 +150,7 @@ function registrationDto(item: NormalisedAccountRegistration, extra: Registratio
     // The ticket is the owner's own bearer capability, and only a confirmed place has one.
     ticketToken: rsvp.status === RsvpStatus.CONFIRMED ? rsvp.checkInToken : null,
     orderId: extra?.orderId ?? null,
+    ...(extra?.isCrew ? { isCrew: true as const } : {}),
     event: summary,
     instanceId: instance?.id ?? null,
     ...(team ? { team } : {}),

@@ -1454,6 +1454,44 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/crew:
+    get:
+      tags: [Organiser]
+      summary: The event crew with check-in and the food summary (MANAGE_REGISTRATIONS)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CrewListResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Organiser]
+      summary: Add a crew member and email their free crew ticket
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [name, email], properties: { name: { type: string, maxLength: 200 }, email: { type: string, maxLength: 320 }, role: { type: string, maxLength: 80 }, foodPreference: { type: string, maxLength: 80 } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CrewListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/crew/{memberId}:
+    delete:
+      tags: [Organiser]
+      summary: Remove a crew member and their crew ticket
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: memberId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
   /api/ticket/{token}/status:
     get:
       tags: [Reused web endpoints]
@@ -1770,6 +1808,7 @@ components:
         canCancel: { type: boolean }
         ticketToken: { type: [string, "null"], description: Only for CONFIRMED registrations. }
         orderId: { type: [string, "null"], description: "The paid order this registration belongs to (GET /me/orders/{orderId})." }
+        isCrew: { const: true, description: The caller's free crew ticket; present only when true. }
         event: { $ref: "#/components/schemas/EventSummary" }
         instanceId: { type: [string, "null"], description: Set for a recurring-series occurrence; `event` then describes the series. }
         team: { $ref: "#/components/schemas/MyTeam" }
@@ -1991,7 +2030,7 @@ components:
     EventPermissions:
       type: object
       additionalProperties: false
-      required: [checkIn, manageRegistrations, sendEmails, schedule, manageFeedback, manageRegistrationWindow, judge, checkInToLists, manageOrders, fileClaims, manageFinance]
+      required: [checkIn, manageRegistrations, sendEmails, schedule, manageFeedback, manageRegistrationWindow, judge, checkInToLists, manageOrders, manageCrew, fileClaims, manageFinance]
       properties:
         checkIn: { type: boolean }
         manageRegistrations: { type: boolean }
@@ -2002,18 +2041,20 @@ components:
         judge: { type: boolean, description: Can open the judging workspace (OWNER/ADMIN or the JUDGE grant) on an event with submissions switched on. }
         checkInToLists: { type: boolean, description: Custom check-in lists (CHECK_IN). }
         manageOrders: { type: boolean, description: Paid orders, desk settlement, payment links and refunds (MANAGE_REGISTRATIONS). }
+        manageCrew: { type: boolean, description: The event crew and their free crew tickets (MANAGE_REGISTRATIONS). }
         fileClaims: { type: boolean, description: File and withdraw own expense claims (anyone on the event dashboard). }
         manageFinance: { type: boolean, description: Decide claims and refund requests (organisation OWNER/ADMIN). }
 
     EventCounts:
       type: object
       additionalProperties: false
-      required: [confirmed, waitlisted, pending, pendingPayment, checkedIn, capacity, capacityUsed]
+      required: [confirmed, waitlisted, pending, pendingPayment, crew, checkedIn, capacity, capacityUsed]
       properties:
         confirmed: { type: integer }
         waitlisted: { type: integer }
         pending: { type: integer }
         pendingPayment: { type: integer, description: Paid places held while the buyer pays; they count against capacity. }
+        crew: { type: integer, description: Crew tickets (docs/CREW.md); counted in confirmed, never against capacity. }
         checkedIn: { type: integer }
         capacity: { type: [integer, "null"] }
         capacityUsed:
@@ -2088,6 +2129,7 @@ components:
         isGuest: { type: boolean, description: True when the registration has no account. }
         teamName: { type: string, description: TEAM events only; absent for solo registrants. }
         orderId: { type: string, description: The paid order this guest's ticket belongs to. }
+        isCrew: { const: true, description: A free crew ticket; present only when true. }
         paymentOutcome: { type: string, enum: [LINK_SENT, REFUNDED], description: "Only in answers to approve, promote, reaccept and reject: a paid place was offered (the ticket confirms once paid) or a paid order refunded." }
 
     Detail:
@@ -2920,3 +2962,25 @@ components:
     CheckInListsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CheckInLists" } } }
     ListCheckInResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ListCheckInResult" } } }
     ParticipantClaimsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/ParticipantClaims" }, { type: "null" }] } } }
+    CrewMember:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, role, foodPreference, showOnPage, joinedViaLink, rsvpId, checkedInAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        foodPreference: { type: string }
+        showOnPage: { type: boolean }
+        joinedViaLink: { type: boolean }
+        rsvpId: { type: string }
+        checkedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+    CrewList:
+      type: object
+      additionalProperties: false
+      required: [members, food]
+      properties:
+        members: { type: array, items: { $ref: "#/components/schemas/CrewMember" } }
+        food: { type: array, items: { type: object, additionalProperties: false, required: [label, count], properties: { label: { type: string }, count: { type: integer } } } }
+    CrewListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CrewList" } } }

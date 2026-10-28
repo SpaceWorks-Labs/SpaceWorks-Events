@@ -116,6 +116,7 @@ const fixtures: Array<[file: string, component: string, zod: z.ZodType]> = [
   ["organiser-order.json", "OrganiserOrderResponse", dto.successEnvelope(dto.organiserOrderDtoSchema)],
   ["check-in-lists.json", "CheckInListsResponse", dto.successEnvelope(dto.checkInListsDtoSchema)],
   ["error-staff-mfa.json", "ErrorEnvelope", dto.errorEnvelopeSchema],
+  ["crew.json", "CrewListResponse", dto.successEnvelope(dto.crewListDtoSchema)],
 ];
 
 describe("mobile API contract", () => {
@@ -253,6 +254,8 @@ describe("mobile API contract", () => {
     ["CheckInList", dto.checkInListSchema],
     ["CheckInLists", dto.checkInListsDtoSchema],
     ["ListCheckInResult", dto.listCheckInResultSchema],
+    ["CrewMember", dto.crewMemberSchema],
+    ["CrewList", dto.crewListDtoSchema],
     ["FeedbackForm", dto.feedbackFormDtoSchema],
     ["EventPermissions", dto.eventPermissionsSchema],
     ["EventCounts", dto.eventCountsSchema],

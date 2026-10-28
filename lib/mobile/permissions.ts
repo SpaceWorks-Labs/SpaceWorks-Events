@@ -29,6 +29,7 @@ export function eventPermissionsFor(
     judge: Boolean(options.submissionsEnabled) && can.canJudge,
     checkInToLists: can.canCheckInToLists,
     manageOrders: can.canManageRegistrations,
+    manageCrew: can.canManageCrew,
     // Anyone on the event dashboard files their own claims (docs/FINANCE.md).
     fileClaims: role !== null || grant.length > 0,
     manageFinance: can.isAdmin,

@@ -136,6 +136,7 @@ export const guestRsvpSelect = {
   user: { select: { name: true, email: true } },
   team: { select: { name: true } },
   orderId: true,
+  isCrew: true,
 } as const;
 
 export function toGuest(rsvp: {
@@ -149,6 +150,7 @@ export function toGuest(rsvp: {
   user: { name: string | null; email: string | null } | null;
   team?: { name: string } | null;
   orderId?: string | null;
+  isCrew?: boolean;
 }): GuestDto {
   return {
     rsvpId: rsvp.id,
@@ -160,6 +162,7 @@ export function toGuest(rsvp: {
     isGuest: rsvp.userId == null,
     ...(rsvp.team ? { teamName: rsvp.team.name } : {}),
     ...(rsvp.orderId ? { orderId: rsvp.orderId } : {}),
+    ...(rsvp.isCrew ? { isCrew: true as const } : {}),
   };
 }
 

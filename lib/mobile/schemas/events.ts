@@ -53,6 +53,8 @@ export const registrationDtoSchema = z.object({
   ticketToken: z.string().nullable(),
   /** Space Works: the paid order this registration belongs to, if any. */
   orderId: z.string().nullable(),
+  /** Space Works: the caller's free crew ticket (docs/CREW.md); present only when true. */
+  isCrew: z.literal(true).optional(),
   event: eventSummarySchema,
   instanceId: z.string().nullable(),
   /** Present only for a registration in a team. */

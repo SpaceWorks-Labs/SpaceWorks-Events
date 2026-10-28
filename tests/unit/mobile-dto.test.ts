@@ -57,14 +57,14 @@ describe("mobile DTOs", () => {
   });
 
   it("derives permissions like the event dashboard", () => {
-    const extras = { checkInToLists: true, manageOrders: false, fileClaims: true, manageFinance: false };
+    const extras = { checkInToLists: true, manageOrders: false, manageCrew: false, fileClaims: true, manageFinance: false };
     const checkInOnly = eventPermissionsFor(null, ["CHECK_IN"]);
     expect(checkInOnly).toEqual({ checkIn: true, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: false, ...extras });
     expect(canSeeGuests(checkInOnly)).toBe(true);
     expect(canSeeGuests(eventPermissionsFor(null, ["EDIT_DETAILS"]))).toBe(false);
-    expect(eventPermissionsFor("ADMIN", [])).toEqual({ checkIn: true, manageRegistrations: true, sendEmails: true, schedule: true, manageFeedback: true, manageRegistrationWindow: true, judge: false, checkInToLists: true, manageOrders: true, fileClaims: true, manageFinance: true });
+    expect(eventPermissionsFor("ADMIN", [])).toEqual({ checkIn: true, manageRegistrations: true, sendEmails: true, schedule: true, manageFeedback: true, manageRegistrationWindow: true, judge: false, checkInToLists: true, manageOrders: true, manageCrew: true, fileClaims: true, manageFinance: true });
     // Space Works: the MANAGE_REGISTRATIONS grant manages guests and orders, as on the web.
-    expect(eventPermissionsFor(null, ["MANAGE_REGISTRATIONS"])).toMatchObject({ manageRegistrations: true, manageOrders: true, manageFinance: false });
+    expect(eventPermissionsFor(null, ["MANAGE_REGISTRATIONS"])).toMatchObject({ manageRegistrations: true, manageOrders: true, manageCrew: true, manageFinance: false });
     // A plain member files claims but decides nothing.
     expect(eventPermissionsFor("MEMBER", [])).toMatchObject({ fileClaims: true, manageFinance: false, checkIn: false });
     // Judging: OWNER/ADMIN or the JUDGE grant, only once the event takes submissions.
@@ -73,7 +73,7 @@ describe("mobile DTOs", () => {
     expect(eventPermissionsFor(null, ["JUDGE"]).judge).toBe(false);
     expect(eventPermissionsFor(null, ["CHECK_IN", "MANAGE_REGISTRATIONS"], { submissionsEnabled: true }).judge).toBe(false);
     // JUDGE never satisfies any other flag.
-    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, fileClaims: true, manageFinance: false });
+    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, manageCrew: false, fileClaims: true, manageFinance: false });
   });
 
 });

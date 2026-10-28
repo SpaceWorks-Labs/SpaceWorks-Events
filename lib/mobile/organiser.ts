@@ -70,7 +70,7 @@ async function loadCounts(eventIds: string[]): Promise<Map<string, Omit<EventCou
   const result = new Map<string, Omit<EventCountsDto, "capacity">>();
   if (eventIds.length === 0) return result;
   const now = new Date();
-  const [byStatus, checkedIn, teamed, teams, held] = await Promise.all([
+  const [byStatus, checkedIn, teamed, teams, held, crew] = await Promise.all([
     prisma.rSVP.groupBy({ by: ["eventId", "status"], where: { eventId: { in: eventIds } }, _count: { _all: true } }),
     prisma.rSVP.groupBy({ by: ["eventId"], where: { eventId: { in: eventIds }, checkedInAt: { not: null } }, _count: { _all: true } }),
     // TEAM events fill capacity in units: confirmed people outside teams plus confirmed teams.
@@ -78,8 +78,10 @@ async function loadCounts(eventIds: string[]): Promise<Map<string, Omit<EventCou
     prisma.team.groupBy({ by: ["eventId"], where: { eventId: { in: eventIds }, status: RsvpStatus.CONFIRMED }, _count: { _all: true } }),
     // Paid places held while the buyer pays take a seat until the hold ends (lib/payments/holds.ts).
     prisma.rSVP.groupBy({ by: ["eventId"], where: { eventId: { in: eventIds }, status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt: { gt: now } }, _count: { _all: true } }),
+    // Crew tickets (docs/CREW.md) are confirmed but never take a place.
+    prisma.rSVP.groupBy({ by: ["eventId"], where: { eventId: { in: eventIds }, isCrew: true }, _count: { _all: true } }),
   ]);
-  for (const id of eventIds) result.set(id, { confirmed: 0, waitlisted: 0, pending: 0, pendingPayment: 0, checkedIn: 0, capacityUsed: 0 });
+  for (const id of eventIds) result.set(id, { confirmed: 0, waitlisted: 0, pending: 0, pendingPayment: 0, crew: 0, checkedIn: 0, capacityUsed: 0 });
   for (const row of byStatus) {
     const entry = row.eventId ? result.get(row.eventId) : undefined;
     if (!entry) continue;
@@ -97,7 +99,11 @@ async function loadCounts(eventIds: string[]): Promise<Map<string, Omit<EventCou
     const entry = row.eventId ? result.get(row.eventId) : undefined;
     if (entry) entry.pendingPayment = row._count._all;
   }
-  for (const [id, entry] of result) entry.capacityUsed = entry.confirmed + entry.pendingPayment - (teamedBy.get(id) ?? 0) + (teamsBy.get(id) ?? 0);
+  for (const row of crew) {
+    const entry = row.eventId ? result.get(row.eventId) : undefined;
+    if (entry) entry.crew = row._count._all;
+  }
+  for (const [id, entry] of result) entry.capacityUsed = entry.confirmed - entry.crew + entry.pendingPayment - (teamedBy.get(id) ?? 0) + (teamsBy.get(id) ?? 0);
   return result;
 }
 

@@ -248,6 +248,20 @@ export const organiserOrderDtoSchema = z.object({
 
 export const paymentInfoSchema = z.object({ due: money.nullable(), orderId: z.string().nullable(), payAtDesk: z.boolean() }).strict();
 
+/** A crew member for the organiser (docs/CREW.md). The crew sign-up link stays on the website. */
+export const crewMemberSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  role: z.string(),
+  foodPreference: z.string(),
+  showOnPage: z.boolean(),
+  joinedViaLink: z.boolean(),
+  rsvpId: z.string(),
+  checkedInAt: iso.nullable(),
+}).strict();
+export const crewListDtoSchema = z.object({ members: z.array(crewMemberSchema), food: z.array(z.object({ label: z.string(), count: z.number().int() }).strict()) }).strict();
+
 export const checkInListSchema = z.object({ id: z.string(), name: z.string(), requiresEntryCheckIn: z.boolean(), checkedIn: z.number().int() }).strict();
 export const checkInListsDtoSchema = z.object({ lists: z.array(checkInListSchema) }).strict();
 

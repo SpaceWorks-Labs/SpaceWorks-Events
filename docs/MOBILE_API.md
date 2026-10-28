@@ -464,11 +464,12 @@ event with submissions switched on (the judging routes below);
 source (see [Permissions](PERMISSIONS.md#mobile-api)). The flags only hide controls; every
 mutation is re-checked server-side.
 
-`EventCounts = { "confirmed", "waitlisted", "pending", "pendingPayment", "checkedIn", "capacity|null", "capacityUsed" }`,
+`EventCounts = { "confirmed", "waitlisted", "pending", "pendingPayment", "crew", "checkedIn", "capacity|null", "capacityUsed" }`,
 returned only when the caller has `manageRegistrations` or `checkIn`, else `null`.
-`pendingPayment` counts paid places held while the buyer pays. `capacityUsed`
-is what `capacity` is compared with: on individual events it is `confirmed`
-plus live payment holds, and on team events it counts confirmed teams plus
+`pendingPayment` counts paid places held while the buyer pays and `crew` the
+crew tickets. `capacityUsed` is what `capacity` is compared with: on
+individual events it is `confirmed` minus crew plus live payment holds, and on
+team events it counts confirmed teams plus
 confirmed solo registrants (`confirmed` stays a count of people). Show
 `capacityUsed / capacity` for fill, not `confirmed / capacity`.
 
@@ -660,13 +661,27 @@ send call client-side.
   Decisions are held to the event in the path. Recording payouts, the budget
   and participant-claim settings stay on the website.
 
-### Pending (phase 8b)
+### Event crew (`manageCrew`: MANAGE_REGISTRATIONS)
 
-Upstream Yuyu also has app routes for event crew, attendance confirmation,
-judging rounds, the Mentor Desk and volunteer shifts. They arrive with those
-features: crew passes and crew counts, attendance replies, round-scoped
-judging lists and finalists, the help queue and mentor console, and shift
-sign-up and check-in. The routing, DTO and permission layer above is shaped
+Crew ([CREW.md](CREW.md)) hold free crew tickets: confirmed, counted in
+`confirmed` and `crew`, never against capacity (`capacityUsed` leaves them
+out), never paid and never in teams. Guests and the caller's own
+registrations carry `isCrew: true`.
+
+- `GET …/crew` → `{ "members": [{ "id", "name", "email", "role", "foodPreference", "showOnPage", "joinedViaLink", "rsvpId", "checkedInAt|null" }], "food": [{ "label", "count" }] }`.
+- `POST …/crew` `{ "name", "email", "role?", "foodPreference?" }` → `201`, the
+  list, by Guests → Crew's own action (it never converts a paid ticket, a team
+  member or an entrant, and emails the crew ticket).
+- `DELETE …/crew/:memberId` removes the member and their crew ticket.
+
+The crew sign-up link, photos and crew expense claims stay on the website.
+
+### Pending
+
+Attendance confirmation, judging rounds, the Mentor Desk and volunteer shifts
+arrive with those features: attendance replies, round-scoped judging lists
+and finalists, the help queue and mentor console, and shift sign-up and
+check-in. The routing, DTO and permission layer above is shaped
 for them (`eventRoute` requirements, `eventPermissionsFor`, `forUser`).
 
 ## Judging (judges)

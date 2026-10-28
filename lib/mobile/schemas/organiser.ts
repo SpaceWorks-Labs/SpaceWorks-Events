@@ -18,6 +18,8 @@ export const eventPermissionsSchema = z.object({
   checkInToLists: z.boolean(),
   /** Space Works: paid orders, desk settlement, payment links and refunds (MANAGE_REGISTRATIONS). */
   manageOrders: z.boolean(),
+  /** Space Works: the event crew and their free crew tickets (MANAGE_REGISTRATIONS). */
+  manageCrew: z.boolean(),
   /** Space Works: file and withdraw own expense claims (anyone on the event dashboard). */
   fileClaims: z.boolean(),
   /** Space Works: decide claims and refund requests (organisation OWNER/ADMIN). */
@@ -30,6 +32,8 @@ export const eventCountsSchema = z.object({
   pending: z.number().int(),
   /** Space Works: paid places held while the buyer pays (they count against capacity). */
   pendingPayment: z.number().int(),
+  /** Crew tickets (docs/CREW.md): confirmed and counted in `confirmed`, never against capacity. */
+  crew: z.number().int(),
   checkedIn: z.number().int(),
   capacity: z.number().int().nullable(),
   /** What `capacity` is compared with: confirmed RSVPs, or on TEAM events confirmed teams plus solo registrants. */
@@ -70,6 +74,8 @@ export const guestSchema = z.object({
   teamName: z.string().optional(),
   /** Space Works: the paid order this guest's ticket belongs to (GET orders/:orderId). */
   orderId: z.string().optional(),
+  /** Space Works: a free crew ticket (docs/CREW.md); present only when true. */
+  isCrew: z.literal(true).optional(),
   /**
    * Space Works, only in answers to approve, promote, reaccept and reject:
    * LINK_SENT (a paid place was offered; the ticket confirms once paid) or
