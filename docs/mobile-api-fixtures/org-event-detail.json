@@ -37,7 +37,13 @@
       "crew": 0,
       "checkedIn": 0,
       "capacity": 80,
-      "capacityUsed": 42
+      "capacityUsed": 42,
+      "attendance": {
+        "coming": 30,
+        "notComing": 4,
+        "noReply": 6,
+        "notAsked": 2
+      }
     },
     "myPermissions": {
       "checkIn": true,

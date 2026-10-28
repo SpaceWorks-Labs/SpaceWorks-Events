@@ -16,7 +16,7 @@ This page contains only work that is not currently implemented. Current behavior
 
 - Ask series dates and pass holders "Are you still coming?" (an instance-scoped check, a per-date Emails card and counts). Today only one-off events are asked.
 - Release one ticket of a paid order with several tickets (a partial cancellation with its share of the refund). Today such a No is left to the organisers.
-- Attendance confirmation in the mobile API. Nothing sends the question automatically, and that stays a deliberate choice unless organisers ask for it.
+- Sending the attendance question and reminders from the mobile app (answering, counts and shared links are in the mobile API). Nothing sends the question automatically, and that stays a deliberate choice unless organisers ask for it.
 
 ## Privacy and account lifecycle
 

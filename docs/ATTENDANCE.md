@@ -183,5 +183,11 @@ token or a note.
 The guide's articles are `content/help/guests/attendance-confirmation.mdx`
 (organisers) and `content/help/attending/still-coming.mdx` (guests).
 
-Not covered yet: series dates and passes, the mobile API, and any automatic
+The mobile API ([MOBILE_API.md](MOBILE_API.md)) lets an attendee read and
+answer their own question with their app session (`/me/registrations/:rsvpId/attendance`,
+same core, no token), gives owners and admins `EventCounts.attendance`, and
+shares one guest's link (`…/guests/:rsvpId/attendance-link`). Sending and
+reminders stay on the web.
+
+Not covered yet: series dates and passes, sending from the app, and any automatic
 sending (see `docs/FUTURE_PHASES.md`).

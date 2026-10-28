@@ -29,3 +29,6 @@ export const attendanceReplySchema = z.object({
     // Control characters never reach a stored note or the CSV.
     .transform((note) => note.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]+/g, " ").trim()),
 }).strict();
+
+/** The same reply from the guest's own app session: no token (the bearer session is the credential). */
+export const attendanceMobileReplySchema = attendanceReplySchema.omit({ token: true }).strict();

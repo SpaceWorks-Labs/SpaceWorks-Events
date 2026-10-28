@@ -235,6 +235,52 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
+  /api/mobile/v1/me/registrations/{rsvpId}/attendance:
+    get:
+      tags: [Me]
+      summary: '"Are you still coming?" for one of the caller''s own registrations'
+      description: |
+        Attendance confirmation (docs/ATTENDANCE.md). `{ "attendance": null }`
+        when the registration was never asked. Anyone else's RSVP is
+        `NOT_FOUND`. The /attend link token is never returned.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyAttendanceResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Me]
+      summary: Answer it (same rules as the /attend page)
+      description: |
+        Open until the event starts, and only while the registration is
+        confirmed. With "Free the place when a guest says No" on, a No
+        releases a free place, cancels a paid single ticket the caller bought
+        under the refund policy, or keeps the place and opens a refund request
+        once the policy has closed; an order with several tickets is never
+        cancelled. `released` true means the registration no longer exists.
+        Not asked: `NOT_FOUND`. Closed: `CONFLICT`.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [response]
+              properties:
+                response: { type: string, enum: [ATTENDING, NOT_ATTENDING] }
+                note: { type: string, maxLength: 500 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AttendanceReplyResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
   /api/mobile/v1/public/discover:
     get:
       tags: [Public]
@@ -488,6 +534,24 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { description: "`CONFLICT`, or `TEAM_MEMBER` for a guest in a team.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/{rsvpId}/attendance-link:
+    post:
+      tags: [Organiser]
+      summary: Share one confirmed guest's attendance link by hand (owners and admins)
+      description: |
+        Requires `sendEmails`. No email is sent. Each call issues a new
+        /attend link that replaces any earlier one (only its digest is
+        stored, so it can't be shown again); a guest not yet asked counts as
+        asked. Refused once the event has started or is cancelled, and for a
+        guest who isn't a confirmed, non-crew attendee. Audited without the token.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AttendanceLinkResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
   /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/{rsvpId}/reaccept:
@@ -2048,7 +2112,7 @@ components:
     EventCounts:
       type: object
       additionalProperties: false
-      required: [confirmed, waitlisted, pending, pendingPayment, crew, checkedIn, capacity, capacityUsed]
+      required: [confirmed, waitlisted, pending, pendingPayment, crew, checkedIn, capacity, capacityUsed, attendance]
       properties:
         confirmed: { type: integer }
         waitlisted: { type: integer }
@@ -2063,6 +2127,63 @@ components:
             What capacity is compared with. Equals confirmed on individual
             events; on team events it counts confirmed teams plus confirmed
             solo registrants, while confirmed stays a count of people.
+        attendance:
+          description: >-
+            Attendance confirmation replies (docs/ATTENDANCE.md). Only for
+            viewers with sendEmails, like the dashboard Overview line; null
+            otherwise and until anyone at the event was asked.
+          oneOf:
+            - { type: "null" }
+            - { $ref: "#/components/schemas/AttendanceCounts" }
+
+    AttendanceCounts:
+      type: object
+      additionalProperties: false
+      required: [coming, notComing, noReply, notAsked]
+      properties:
+        coming: { type: integer }
+        notComing: { type: integer }
+        noReply: { type: integer, description: Asked, still confirmed and not answered. }
+        notAsked: { type: integer, description: Confirmed, non-crew guests never asked. }
+
+    MyAttendance:
+      type: object
+      additionalProperties: false
+      required: [response, respondedAt, note, closed, releaseKind, releaseRefund]
+      properties:
+        response: { type: [string, "null"], enum: [ATTENDING, NOT_ATTENDING, null] }
+        respondedAt: { type: [string, "null"], format: date-time }
+        note: { type: string }
+        closed: { type: [string, "null"], enum: [cancelled, started, notConfirmed, null] }
+        releaseKind: { type: [string, "null"], enum: [free, paid, null], description: What a No would release right now; null keeps the place. }
+        releaseRefund: { type: [string, "null"], description: "A paid release's refund under the policy, formatted (for example ₹249.50); null when nothing comes back." }
+
+    MyAttendanceResult:
+      type: object
+      additionalProperties: false
+      required: [attendance]
+      properties:
+        attendance:
+          oneOf:
+            - { type: "null" }
+            - { $ref: "#/components/schemas/MyAttendance" }
+
+    AttendanceReply:
+      type: object
+      additionalProperties: false
+      required: [response, released, releaseFailed]
+      properties:
+        response: { type: string, enum: [ATTENDING, NOT_ATTENDING] }
+        released: { type: boolean }
+        releaseFailed: { type: [string, "null"], description: Why the place was kept after a No, when it was. }
+
+    AttendanceLink:
+      type: object
+      additionalProperties: false
+      required: [url, replaced]
+      properties:
+        url: { type: string, format: uri }
+        replaced: { type: boolean, description: True when the guest had a link already; that one stops working. }
 
     OrgEvents:
       type: object
@@ -2563,6 +2684,9 @@ components:
         registrationClosedReason: { type: [string, "null"], description: UI-safe reason when registration is closed. }
         registrationManuallyClosed: { type: boolean }
     RegistrationStateResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/RegistrationState" } } }
+    MyAttendanceResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MyAttendanceResult" } } }
+    AttendanceReplyResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/AttendanceReply" } } }
+    AttendanceLinkResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/AttendanceLink" } } }
     MyTeamResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MyTeamResult" } } }
     TeamListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/TeamList" } } }
     TeamResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/OrganiserTeam" } } }

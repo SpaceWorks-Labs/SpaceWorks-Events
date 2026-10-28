@@ -11,5 +11,5 @@ export { loadAttendanceCheckStatus, loadAttendanceReplyCounts, previewAttendance
 export { remindAttendanceChecksForUser, sendAttendanceChecksForUser, setAttendanceReleaseOnDeclineForUser } from "./attendanceCheck/send";
 export { issueAttendanceLinkForUser } from "./attendanceCheck/link";
 export { resolveAttendanceCheckByToken, type AttendanceFormView } from "./attendanceCheck/reply";
-export { respondToAttendanceCheck, type AttendanceReplyResult } from "./attendanceCheck/respond";
+export { respondToAttendanceCheck, respondToAttendanceCheckForUser, type AttendanceReplyResult } from "./attendanceCheck/respond";
 export { planRelease, releaseFor, type ReleasePlan } from "./attendanceCheck/release";

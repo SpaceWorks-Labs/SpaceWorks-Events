@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { attendanceReplySchema } from "@/lib/validators";
+import { attendanceMobileReplySchema, attendanceReplySchema } from "@/lib/validators";
 import type { ActionResult } from "@/app/actions/org";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { hashAttendanceToken } from "@/lib/attendanceToken";
@@ -21,12 +21,21 @@ const CHECK_SELECT = {
   event: { select: { title: true, startDateTime: true, status: true, organisationId: true, attendanceCheckReleaseOnDecline: true } },
 } as const;
 
+/** Which check: by its link (the guest's page), or by an app session's own registration. */
+type Locator = { tokenHash: string; } | { rsvpId: string; userId: string; };
+
+function findCheck(locator: Locator) {
+  return "tokenHash" in locator
+    ? prisma.attendanceCheck.findUnique({ where: { tokenHash: locator.tokenHash }, select: CHECK_SELECT })
+    : prisma.attendanceCheck.findFirst({ where: { rsvpId: locator.rsvpId, rsvp: { userId: locator.userId } }, select: CHECK_SELECT });
+}
+
 /**
  * Another window answered at the same moment and won the write: report what
  * is stored now instead of running the release a second time.
  */
-async function currentAnswer(tokenHash: string): Promise<ActionResult<AttendanceReplyResult>> {
-  const current = await prisma.attendanceCheck.findUnique({ where: { tokenHash }, select: { response: true, releaseOutcome: true } });
+async function currentAnswer(locator: Locator): Promise<ActionResult<AttendanceReplyResult>> {
+  const current = await findCheck(locator);
   if (!current?.response) return NO_LONGER_VALID;
   const outcome = asReleaseOutcome(current.releaseOutcome);
   return { ok: true, data: { response: current.response, released: false, ...(outcome ? { releaseFailed: keptMessage(outcome) } : {}) } };
@@ -45,15 +54,33 @@ async function currentAnswer(tokenHash: string): Promise<ActionResult<Attendance
  */
 export async function respondToAttendanceCheck(input: unknown): Promise<ActionResult<AttendanceReplyResult>> {
   const parsed = attendanceReplySchema.safeParse(input);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return { ok: false, error: issue?.path[0] === "note" ? issue.message : "Choose Yes or No." };
-  }
+  if (!parsed.success) return invalidReply(parsed.error.issues[0]);
   const { token, response, note } = parsed.data;
-  if (await isActionRateLimited("attendanceCheckReply", token)) return { ok: false, error: "Too many attempts. Please wait a minute and try again." };
+  if (await isActionRateLimited("attendanceCheckReply", token)) return TOO_MANY;
+  return answer({ tokenHash: hashAttendanceToken(token) }, response, note);
+}
 
-  const tokenHash = hashAttendanceToken(token);
-  const check = await prisma.attendanceCheck.findUnique({ where: { tokenHash }, select: CHECK_SELECT });
+/**
+ * The same answer from the guest's own app session (GET/POST
+ * /api/mobile/v1/me/registrations/:rsvpId/attendance): the bearer session
+ * replaces the link, and only the caller's own registration is reachable.
+ * The link token is neither needed nor returned.
+ */
+export async function respondToAttendanceCheckForUser(userId: string, rsvpId: string, input: unknown): Promise<ActionResult<AttendanceReplyResult>> {
+  const parsed = attendanceMobileReplySchema.safeParse(input);
+  if (!parsed.success) return invalidReply(parsed.error.issues[0]);
+  if (await isActionRateLimited("attendanceCheckReply", `rsvp:${rsvpId}`)) return TOO_MANY;
+  return answer({ rsvpId, userId }, parsed.data.response, parsed.data.note);
+}
+
+const TOO_MANY = { ok: false as const, error: "Too many attempts. Please wait a minute and try again." };
+
+function invalidReply(issue: { path: PropertyKey[]; message: string; } | undefined) {
+  return { ok: false as const, error: issue?.path[0] === "note" ? issue.message : "Choose Yes or No." };
+}
+
+async function answer(locator: Locator, response: AttendanceResponseValue, note: string): Promise<ActionResult<AttendanceReplyResult>> {
+  const check = await findCheck(locator);
   if (!check) return NO_LONGER_VALID;
   const eligible = await isEligibleRsvp(prisma, check.rsvpId, check.eventId);
   const closed = attendanceReplyClosedReason({ eligible, eventStart: check.event.startDateTime, eventStatus: check.event.status });
@@ -70,7 +97,7 @@ export async function respondToAttendanceCheck(input: unknown): Promise<ActionRe
   const updated = await prisma.$transaction(async (tx) => {
     // The token must still be current, and the answer the one this request read.
     const write = await tx.attendanceCheck.updateMany({
-      where: { id: check.id, tokenHash, response: check.response, respondedAt: check.respondedAt },
+      where: { id: check.id, ...("tokenHash" in locator ? { tokenHash: locator.tokenHash } : {}), response: check.response, respondedAt: check.respondedAt },
       data: { response, respondedAt: now, note: note || null, releaseOutcome: heldOutcome, ...(notify ? { organisersNotifiedAt: now } : {}) },
     });
     if (write.count !== 1) return false;
@@ -79,7 +106,7 @@ export async function respondToAttendanceCheck(input: unknown): Promise<ActionRe
     }
     return true;
   });
-  if (!updated) return currentAnswer(tokenHash);
+  if (!updated) return currentAnswer(locator);
 
   if (response === "ATTENDING") await withdrawRefundRequestOnYes(check, guestName, now);
   if (heldOutcome) return { ok: true, data: { response, released: false, releaseFailed: keptMessage(heldOutcome) } };
