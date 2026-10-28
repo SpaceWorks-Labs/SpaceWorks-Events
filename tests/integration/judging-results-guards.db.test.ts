@@ -6,9 +6,10 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { prisma } from "@/lib/db";
 import { countResultsAnnouncementRecipients, createEventAward, createJudgingCriterion, loadPublicResults, publishResults, setAwardWinner, setJudgingStatus } from "@/lib/core/judging";
-import { applyAdvancement, createJudgingRound, finalizeJudgingRound, previewAdvancement } from "@/lib/core/judgingRounds";
+import { applyAdvancement, createJudgingRound, finalizeJudgingRound, previewAdvancement, publishFinalists } from "@/lib/core/judgingRounds";
+import { publicJudgingMetadata } from "@/lib/publicJudgingPage";
 import { recordPrizePayout } from "@/lib/prizes";
-import { createEvent, grantJudges, must, openRound, organiser, project, review, setUpRounds, suffix, tearDownRounds, users } from "./helpers/judgingRounds";
+import { createEvent, grantJudges, must, openRound, organiser, orgSlug, project, review, setUpRounds, suffix, tearDownRounds, twoRoundEvent, users } from "./helpers/judgingRounds";
 
 /*
  * Publishing results (docs/HACKATHON.md "Rounds", "Awards"): award winners
@@ -70,6 +71,15 @@ describe.sequential("results publication guards", () => {
     const payout = { awardId: award.id, recipientName: "Team", amount: "100", method: OfflinePaymentMethod.CASH };
     expect(await recordPrizePayout(prizeCtx, { ...payout, submissionId: projects[2]!.id })).toEqual({ ok: false, error: "That project hasn't won this award." });
     expect(await recordPrizePayout(prizeCtx, { ...payout, submissionId: projects[0]!.id })).toEqual({ ok: true });
+  });
+
+  it("titles the results page for its finalists until results are published", async () => {
+    const { event, ctx, roundTwoId } = await twoRoundEvent([9, 7, 5]);
+    const plan = must(await previewAdvancement(ctx, roundTwoId, { mode: "top", count: 2 }));
+    must(await applyAdvancement(ctx, roundTwoId, { mode: "top", count: 2, fingerprint: plan.fingerprint }));
+    expect(await publicJudgingMetadata(orgSlug, event.slug, "results")).toMatchObject({ title: "Results", robots: { index: false } });
+    must(await publishFinalists(ctx, roundTwoId));
+    expect(await publicJudgingMetadata(orgSlug, event.slug, "results")).toMatchObject({ title: `Finalists · ${event.title}`, description: `Finalists of ${event.title}.` });
   });
 
   it("publishes a single round without finalising, emailing entrants but never crew", async () => {
