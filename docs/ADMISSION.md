@@ -213,6 +213,17 @@ team is below the minimum size) is passed over with `skipReason` and keeps
 its place. The older waitlist paths (`offerNextWaitlisted`,
 `promoteOldestWaitlistedUnit`, `fillWaitlists`) never touch admission events.
 
+## Mobile and other callers
+
+The mobile API reuses the dashboard's action bodies, so its guest-list
+approve/reject/promote/re-accept, Teams approve/reject/promote and order
+payment-link routes refuse applications with code `ADMISSION_MANAGED` (409).
+Its cancel route and attendance confirmation's release on "No" delete the
+registration, which withdraws and detaches the application (see Retention).
+Attendance confirmation asks CONFIRMED registrations only, so accepted
+applicants are asked like anyone else. Crew places of every kind (organiser,
+volunteer, mentor, judge crew) are crew tickets and never applications.
+
 ## Old paths refused
 
 `approveRsvp`, `rejectRsvp`, `promoteFromWaitlist`, `reacceptRsvp`
