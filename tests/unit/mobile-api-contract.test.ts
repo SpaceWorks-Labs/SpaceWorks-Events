@@ -120,6 +120,8 @@ const fixtures: Array<[file: string, component: string, zod: z.ZodType]> = [
   // Volunteer shifts (docs/VOLUNTEERS.md).
   ["my-shifts.json", "MyShiftsResponse", dto.successEnvelope(dto.myShiftsDtoSchema.nullable())],
   ["volunteer-roster.json", "VolunteerRosterResponse", dto.successEnvelope(dto.volunteerRosterDtoSchema)],
+  ["volunteer-signup-write.json", "VolunteerSignupWriteResponse", dto.successEnvelope(dto.volunteerSignupWriteDtoSchema)],
+  ["volunteer-hours-write.json", "VolunteerHoursWriteResponse", dto.successEnvelope(dto.volunteerHoursWriteDtoSchema)],
   ["judge-rounds.json", "JudgeRoundsResponse", dto.successEnvelope(dto.judgeRoundsDtoSchema)],
   ["participant-desk.json", "ParticipantDeskResponse", dto.successEnvelope(dto.participantDeskDtoSchema)],
   ["mentor-console.json", "MentorConsoleResponse", dto.successEnvelope(dto.mentorConsoleDtoSchema)],
@@ -269,6 +271,8 @@ describe("mobile API contract", () => {
     ["RosterShift", dto.rosterShiftSchema],
     ["Contributor", dto.contributorSchema],
     ["VolunteerRoster", dto.volunteerRosterDtoSchema],
+    ["VolunteerSignupWrite", dto.volunteerSignupWriteDtoSchema],
+    ["VolunteerHoursWrite", dto.volunteerHoursWriteDtoSchema],
     ["JudgeRound", dto.judgeRoundSchema],
     ["JudgeRounds", dto.judgeRoundsDtoSchema],
     ["JudgingRoundsSummary", dto.judgingRoundsSummaryDtoSchema],

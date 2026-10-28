@@ -10,6 +10,7 @@ import "server-only";
 import { HelpRequestStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { recordAuditEvent } from "@/lib/audit";
+import { recheckMentoringCertificatesLocked } from "@/lib/volunteer/mentoring";
 import { claimLeaseExpiry, helpDeadline, HELP_NOTE_MAX_LENGTH, HELP_PRIORITY_WINDOW_MS } from "@/lib/mentorDesk/rules";
 import { HELP_CLAIMED_KIND, enqueueMentorMessages } from "@/lib/outbox/mentor";
 import { deskEvent, liveMentor, type DeskOrganiserContext, type LockedEvent, type MentorContext } from "./access";
@@ -111,6 +112,9 @@ async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): 
       if (open >= row.category.openLimit) refuse(COPY.limit);
       await changeHelp(tx, row, { status: HelpRequestStatus.OPEN, resolvedAt: null, exclusiveUntil: new Date(now.getTime() + HELP_PRIORITY_WINDOW_MS), lastOpenedAt: now, openGeneration: row.openGeneration + 1 }, { actorUserId: actor.userId, kind: "reopen", note: input.note.trim() });
       await recordAuditEvent({ client: tx, action: "MENTOR_HELP_REOPENED", actorUserId: actor.userId, organisationId: actor.organisationId, targetType: "HelpRequest", targetId: row.id });
+      // The resolution no longer counts as mentoring evidence (docs/VOLUNTEERS.md).
+      const resolvers = await tx.helpRequestActivity.findMany({ where: { requestId: row.id, kind: "resolve" }, distinct: ["actorUserId"], select: { actorUserId: true } });
+      for (const resolver of resolvers) if (resolver.actorUserId) await recheckMentoringCertificatesLocked(tx, event.id, resolver.actorUserId);
       return;
     }
   }

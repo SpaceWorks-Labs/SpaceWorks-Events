@@ -52,7 +52,7 @@ export async function deliverVolunteerNotice(value: Prisma.JsonValue, messageId:
   if (!payload) return null;
   const member = await prisma.eventCrewMember.findUnique({
     where: { id: payload.crewMemberId },
-    select: { name: true, rsvp: { select: { status: true, checkInToken: true } }, event: { select: { organisationId: true, title: true, status: true, timezone: true } } },
+    select: { name: true, email: true, rsvp: { select: { status: true, checkInToken: true } }, event: { select: { organisationId: true, title: true, status: true, timezone: true } } },
   });
   if (!member || member.rsvp.status !== RsvpStatus.CONFIRMED || member.event.organisationId !== payload.organisationId || member.event.status === "CANCELLED") return "dropped";
   let shift: { title: string; zone: string; startsAt: Date; endsAt: Date } | undefined;
@@ -69,7 +69,8 @@ export async function deliverVolunteerNotice(value: Prisma.JsonValue, messageId:
     return "dropped";
   }
   await sendVolunteerNoticeEmail({
-    to: payload.to,
+    // The crew member's address now, not when the notice was queued (an organiser may have corrected it).
+    to: member.email,
     notice: payload.notice,
     eventTitle: member.event.title,
     checkInToken: member.rsvp.checkInToken,

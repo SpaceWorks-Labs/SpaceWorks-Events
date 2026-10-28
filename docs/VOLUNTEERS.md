@@ -36,7 +36,7 @@ where each rule lives and the deliberate differences.
 | Model / field | Meaning |
 | --- | --- |
 | `EventCrewMember.kind` | `CrewKind`, default `VOLUNTEER`. Display, badges, filters only. |
-| `EventCrewMember.userId` | Optional account link (`ON DELETE SET NULL`). Set from a converted registration's account, from a verified account with the crew email when the member is added or their email changes, and when that email accepts a collaborator invitation for the event (`linkCrewAccount`). Used to stop self-verification and for the Mentor Desk; never grants anything. |
+| `EventCrewMember.userId` | Optional account link (`ON DELETE SET NULL`). Set from a converted registration's account, or from a **verified** account whose email is exactly the crew email: when the member is added, when an unlinked member's email changes, when that account accepts a collaborator invitation for the event, or gets a MENTOR grant (`linkCrewAccount`). The link is **sticky**: an email change never removes it. It allows exactly two things: the account counts as the volunteer for the second-person rule (it can never verify the member's hours or issue their certificate), and it opens **that crew ticket's own actions** (My shifts, the crew ticket's claims) in the mobile app while the crew email is still the account's verified email. It grants no dashboard access and nothing else. |
 | `EventCrewJoinLink.kind` | The kind link sign-ups get (default `VOLUNTEER`). |
 | `Event.volunteerShiftsEnabled` | Shows shifts on crew tickets and allows volunteer actions. |
 | `Event.contributorCertificateTemplate` | The contributor certificate design (layered template, `lib/certificateTemplate.ts`); null uses the standard one. |
@@ -58,7 +58,10 @@ Database guards (migration `20261114000000_volunteer_shifts`, listed in
 - `volunteer_hours_guard`: hours change only with the entry that records the
   change (version + 1, an entry for the previous version with the new minutes
   and state, never back to `PENDING`), never move to another sign-up or event,
-  and are deleted only with their sign-up.
+  and are deleted only with their sign-up. Since
+  `20261114000100_volunteer_followups` it also checks every insert: a new
+  hours row starts `PENDING` at version 0 for a `CHECKED_OUT` sign-up of the
+  same event, with exactly that attendance's counted minutes.
 - `volunteer_correction_append_only`: corrections are never updated, deleted
   only with their sign-up.
 
@@ -96,7 +99,9 @@ Cores: `lib/volunteer/shifts.ts`, `lib/volunteer/signups.ts`.
   now has an overlapping approved shift. Runs after a place is freed, after
   places are added or the shift is edited, and when a closed shift reopens.
 - **Edit**: places never below the approved count; the window and grace are
-  fixed once anyone has attendance. **Close/reopen**. **Delete** only while
+  fixed once anyone has attendance; a new window is refused when it would
+  give volunteers with a place overlapping approved shifts (it names how
+  many; checked under the id-ordered crew locks). **Close/reopen**. **Delete** only while
   every sign-up is still `SCHEDULED`; volunteers with a place or on the
   waitlist are told it is cancelled. At most 200 shifts per event.
 
@@ -104,6 +109,11 @@ Cores: `lib/volunteer/shifts.ts`, `lib/volunteer/signups.ts`.
 
 Core: `lib/volunteer/attendance.ts`; arithmetic in `lib/volunteer/math.ts`.
 
+- Every command checks that shifts are on and the event is not cancelled,
+  takes the shift lock, then the crew member lock (the order every volunteer
+  core uses), and changes attendance only from the state it read (a
+  conditional update), so a check-in never overwrites a no-show and two
+  check-ins never both win.
 - **Check-in** (volunteer at the current time, or the desk): `APPROVED` and
   `SCHEDULED`, from `graceMinutes` before the start until the end, and only
   when the person has no other shift `CHECKED_IN` (one active duty).
@@ -168,7 +178,8 @@ Outbox kind `volunteer-notice` (`lib/outbox/volunteer.ts`,
 `lib/email/volunteer.ts`): transactional (not a bulk kind), sent as the
 organisation, and deleted after delivery because it links the crew ticket.
 The payload carries ids (plus, for a cancellation, the shift's title, zone and
-times, since the row may be gone). Notices:
+times, since the row may be gone); the recipient is the crew member's email at
+send time. Notices:
 
 | Notice | When | Dropped at send time when |
 | --- | --- | --- |

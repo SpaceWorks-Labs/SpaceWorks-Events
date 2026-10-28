@@ -21,6 +21,11 @@ import { CREW_KIND_LABELS, SECOND_PERSON, crewTicketLive, fail, isVolunteerSelf,
 
 const ADMIN_ONLY = "Only organisation owners and admins can issue certificates.";
 
+/** Whether a certificate's evidence still holds: the same verified minutes, or (with none) mentoring evidence. */
+async function stillBacked(client: Prisma.TransactionClient | typeof prisma, eventId: string, member: { id: string; userId: string | null }, minutes: number) {
+  return minutes > 0 ? (await verifiedMinutes(client, member.id)) === minutes : hasMentoringEvidence(client, eventId, member.userId);
+}
+
 export function generateCertificateToken() {
   return crypto.randomBytes(32).toString("base64url");
 }
@@ -44,7 +49,10 @@ export async function issueContributorCertificate(staff: VolunteerStaff, crewMem
       const member = await lockCrewMember(tx, staff.eventId, crewMemberId);
       if (!member || !crewTicketLive(member)) return fail("Crew member not found.");
       if (await isVolunteerSelf(tx, staff.userId, member)) return fail("Another organiser must issue your certificate.");
-      if (await tx.contributorCertificate.count({ where: { crewMemberId: member.id, revokedAt: null } })) return fail("This crew member already has a certificate.");
+      const live = await tx.contributorCertificate.findFirst({ where: { crewMemberId: member.id, revokedAt: null }, select: { minutes: true } });
+      if (live && (await stillBacked(tx, staff.eventId, member, live.minutes))) return fail("This crew member already has a certificate.");
+      // A certificate whose evidence is gone (hours or mentoring changed) is replaced.
+      if (live) await revokeCertificatesLocked(tx, member.id, "evidence_changed", now);
       const minutes = await verifiedMinutes(tx, member.id);
       // Verified hours, or mentoring evidence from the Mentor Desk (./mentoring.ts); never the kind alone.
       if (minutes <= 0 && !(await hasMentoringEvidence(tx, staff.eventId, member.userId))) return fail("Verify this volunteer's hours, or their mentoring, before issuing a certificate.");
@@ -105,7 +113,6 @@ export async function loadContributorCertificate(token: unknown) {
     },
   });
   if (!certificate || certificate.revokedAt || !crewTicketLive(certificate.crewMember)) return null;
-  const member = certificate.crewMember;
-  if (certificate.minutes > 0 ? (await verifiedMinutes(prisma, member.id)) !== certificate.minutes : !(await hasMentoringEvidence(prisma, member.eventId, member.userId))) return null;
+  if (!(await stillBacked(prisma, certificate.crewMember.eventId, certificate.crewMember, certificate.minutes))) return null;
   return certificate;
 }

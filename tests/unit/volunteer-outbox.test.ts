@@ -11,7 +11,7 @@ import { BULK_OUTBOX_KINDS } from "@/lib/outbox/due";
 /* The volunteer-notice outbox kind (docs/VOLUNTEERS.md). */
 
 const base = { to: "crew@example.test", organisationId: "org_1", crewMemberId: "crew_1" };
-const member = { name: "Asha", rsvp: { status: "CONFIRMED", checkInToken: "ticket-token" }, event: { organisationId: "org_1", title: "Launch", status: "PUBLISHED", timezone: "UTC" } };
+const member = { name: "Asha", email: "asha.now@example.test", rsvp: { status: "CONFIRMED", checkInToken: "ticket-token" }, event: { organisationId: "org_1", title: "Launch", status: "PUBLISHED", timezone: "UTC" } };
 const shift = { title: "Doors", zone: "Hall A", startsAt: new Date("2035-01-01T10:00:00Z"), endsAt: new Date("2035-01-01T12:00:00Z") };
 
 describe("volunteer notice outbox kind", () => {
@@ -46,7 +46,7 @@ describe("volunteer notice outbox kind", () => {
   it("sends a live approval and a revoked-certificate notice is dropped", async () => {
     mocks.signup.mockResolvedValue({ status: "APPROVED", shift });
     await expect(deliverVolunteerNotice({ ...base, notice: "promoted", signupId: "s_1" }, "<id>")).resolves.toBe("sent");
-    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ notice: "promoted", checkInToken: "ticket-token", shift, recipientName: "Asha" }));
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ to: "asha.now@example.test", notice: "promoted", checkInToken: "ticket-token", shift, recipientName: "Asha" }));
     mocks.certificates.mockResolvedValue(0);
     await expect(deliverVolunteerNotice({ ...base, notice: "certificate" }, "<id>")).resolves.toBe("dropped");
   });

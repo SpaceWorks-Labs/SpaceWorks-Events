@@ -64,3 +64,15 @@ export const volunteerRosterDtoSchema = z.object({
   shifts: z.array(rosterShiftSchema),
   contributors: z.array(contributorSchema),
 }).strict();
+
+/** The answer to a sign-up or desk write (small, so an idempotent replay keeps no names). */
+export const volunteerSignupWriteDtoSchema = z.object({
+  signupId: z.string(), status: signupStatus, attendance, minutes: z.number().int().nullable(),
+}).strict();
+
+/** The answer to an hours verification or adjustment. */
+export const volunteerHoursWriteDtoSchema = z.object({
+  hoursId: z.string(), state: hoursState, minutes: z.number().int(),
+  /** An issued certificate was revoked because the hours changed. */
+  revokedCertificate: z.boolean(),
+}).strict();

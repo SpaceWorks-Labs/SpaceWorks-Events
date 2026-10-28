@@ -691,14 +691,20 @@ with the whole roster:
 - `POST …/volunteer-shifts/signups/:signupId/:action` with `approve`,
   `decline`, `cancel`, `check-in`, `check-out` or `no-show`. The desk actions
   take `{ "occurredAt?", "reason?", "breakMinutes?" }`: an earlier time needs
-  a reason; breaks at check-out.
+  a reason; breaks at check-out. Answers `VolunteerSignupWrite`
+  (`{ "signupId", "status", "attendance", "minutes|null" }`).
 - `POST …/volunteer-shifts/hours/:hoursId/:action` with `verify` or `adjust`
   `{ "minutes", "reason" }`: organisation owners and admins only
-  (`FORBIDDEN` otherwise), never for their own hours.
+  (`FORBIDDEN` otherwise), never for their own hours. Answers
+  `VolunteerHoursWrite` (`{ "hoursId", "state", "minutes", "revokedCertificate" }`).
+- Both writes need an `Idempotency-Key` (as the Mentor Desk writes), scoped
+  to the path: a retried desk tap replays the first answer and never acts
+  twice. The kept answers carry ids and states only, never names.
 
 Volunteers (auth) use their own crew ticket, reached by its registration id
-when the ticket belongs to their account or their crew record is linked to it
-(any other id is `NOT_FOUND`):
+when the ticket belongs to their account, or their crew record is linked to
+their account and the crew email is still that account's verified email (any
+other id is `NOT_FOUND`):
 
 - `GET /me/registrations/:rsvpId/shifts` → `MyShifts|null` (null when the
   event has no shifts on): open shifts, their own sign-ups and attendance,

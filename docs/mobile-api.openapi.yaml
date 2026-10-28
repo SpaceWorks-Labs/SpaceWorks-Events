@@ -1948,13 +1948,14 @@ paths:
         - { $ref: "#/components/parameters/eventId" }
         - { name: signupId, in: path, required: true, schema: { type: string } }
         - { name: action, in: path, required: true, schema: { type: string, enum: [approve, decline, cancel, check-in, check-out, no-show] } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action, scoped to this path; a retry with the same key and body replays the first answer." }
       requestBody:
         required: false
         content:
           application/json:
             schema: { type: object, additionalProperties: false, properties: { occurredAt: { type: string, format: date-time, description: "Desk only: an earlier time (needs reason)." }, reason: { type: string, maxLength: 500 }, breakMinutes: { type: integer, minimum: 0, maximum: 720, description: Check-out only. } } }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VolunteerRosterResponse" } } } }
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VolunteerSignupWriteResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1970,13 +1971,14 @@ paths:
         - { $ref: "#/components/parameters/eventId" }
         - { name: hoursId, in: path, required: true, schema: { type: string } }
         - { name: action, in: path, required: true, schema: { type: string, enum: [verify, adjust] } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action, scoped to this path; a retry with the same key and body replays the first answer." }
       requestBody:
         required: false
         content:
           application/json:
             schema: { type: object, additionalProperties: false, properties: { minutes: { type: integer, minimum: 0, maximum: 1440 }, reason: { type: string, maxLength: 500 } } }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VolunteerRosterResponse" } } } }
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/VolunteerHoursWriteResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -3619,3 +3621,23 @@ components:
         shifts: { type: array, items: { $ref: "#/components/schemas/RosterShift" } }
         contributors: { type: array, items: { $ref: "#/components/schemas/Contributor" } }
     VolunteerRosterResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/VolunteerRoster" } } }
+    VolunteerSignupWrite:
+      type: object
+      additionalProperties: false
+      required: [signupId, status, attendance, minutes]
+      properties:
+        signupId: { type: string }
+        status: { $ref: "#/components/schemas/VolunteerSignupStatus" }
+        attendance: { $ref: "#/components/schemas/VolunteerAttendance" }
+        minutes: { type: [integer, "null"], description: Pending or verified minutes once checked out. }
+    VolunteerSignupWriteResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/VolunteerSignupWrite" } } }
+    VolunteerHoursWrite:
+      type: object
+      additionalProperties: false
+      required: [hoursId, state, minutes, revokedCertificate]
+      properties:
+        hoursId: { type: string }
+        state: { $ref: "#/components/schemas/VolunteerHoursState" }
+        minutes: { type: integer }
+        revokedCertificate: { type: boolean, description: An issued certificate was revoked because the hours changed. }
+    VolunteerHoursWriteResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/VolunteerHoursWrite" } } }

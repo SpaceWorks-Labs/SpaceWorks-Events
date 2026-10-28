@@ -17,7 +17,7 @@ vi.mock("@/lib/outboxWorker", () => ({ startOutboxWorker: vi.fn() }));
 
 import { prisma } from "@/lib/db";
 import { addCrewMemberAsOrganiser } from "@/lib/core/crew";
-import { createEvent, createUser, get, params, post, signIn, type SignedIn } from "../helpers/mobileApi";
+import { createEvent, createUser, get, keyed, params, post, signIn, type SignedIn } from "../helpers/mobileApi";
 import { GET as myShifts } from "@/app/api/mobile/v1/me/registrations/[rsvpId]/shifts/route";
 import { POST as myShiftAction } from "@/app/api/mobile/v1/me/registrations/[rsvpId]/shifts/[id]/[action]/route";
 import { GET as roster } from "@/app/api/mobile/v1/orgs/[orgSlug]/events/[eventId]/volunteer-shifts/route";
@@ -96,24 +96,28 @@ describe.sequential("volunteer shifts through the mobile API", () => {
     expect((await roster(get("/x", tokens.owner.accessToken), params({ orgSlug: `mob-vol-other-${suffix}`, eventId: ids.event }))).status).toBe(404);
     const teardown = await signupFor(ids.later);
     expect((await signupAction(post("/x", {}, tokens.helper.accessToken), at({ signupId: teardown.id, action: "launch" }))).status).toBe(404);
-    const approved = await signupAction(post("/x", {}, tokens.helper.accessToken), at({ signupId: teardown.id, action: "approve" }));
-    expect(approved.status).toBe(200);
+    // Desk and approval writes need an Idempotency-Key; a retry replays the first answer without acting twice.
+    expect((await signupAction(post("/x", {}, tokens.helper.accessToken), at({ signupId: teardown.id, action: "approve" }))).status).toBe(400);
+    const approved = await signupAction(keyed("/x", {}, tokens.helper.accessToken, `approve-${suffix}`), at({ signupId: teardown.id, action: "approve" }));
+    expect(await approved.json()).toEqual({ ok: true, data: { signupId: teardown.id, status: "APPROVED", attendance: "SCHEDULED", minutes: null } });
+    const replayed = await signupAction(keyed("/x", {}, tokens.helper.accessToken, `approve-${suffix}`), at({ signupId: teardown.id, action: "approve" }));
+    expect(replayed.headers.get("Idempotent-Replayed")).toBe("true");
     await expect(signupFor(ids.later)).resolves.toMatchObject({ status: "APPROVED", approvedByUserId: ids.helper });
     // The desk needs a reason for an earlier time.
     const early = new Date(Date.now() - 5 * MINUTE).toISOString();
-    const refused = await signupAction(post("/x", { occurredAt: early }, tokens.helper.accessToken), at({ signupId: teardown.id, action: "check-in" }));
+    const refused = await signupAction(keyed("/x", { occurredAt: early }, tokens.helper.accessToken, `early-${suffix}`), at({ signupId: teardown.id, action: "check-in" }));
     expect(refused.status).toBeGreaterThanOrEqual(400);
   });
 
   it("lets only owners and admins verify hours", async () => {
     const hours = await prisma.volunteerHours.findFirstOrThrow({ where: { signup: { shiftId: ids.soon } } });
-    expect((await hoursAction(post("/x", {}, tokens.helper.accessToken), at({ hoursId: hours.id, action: "verify" }))).status).toBe(403);
-    const verified = await hoursAction(post("/x", {}, tokens.owner.accessToken), at({ hoursId: hours.id, action: "verify" }));
+    expect((await hoursAction(keyed("/x", {}, tokens.helper.accessToken, `verify-h-${suffix}`), at({ hoursId: hours.id, action: "verify" }))).status).toBe(403);
+    const verified = await hoursAction(keyed("/x", {}, tokens.owner.accessToken, `verify-${suffix}`), at({ hoursId: hours.id, action: "verify" }));
     const body = await verified.json();
     expect(verified.status, JSON.stringify(body)).toBe(200);
-    expect(body.data.isAdmin).toBe(true);
+    expect(body.data).toEqual({ hoursId: hours.id, state: "VERIFIED", minutes: hours.minutes, revokedCertificate: false });
     await expect(prisma.volunteerHours.findUniqueOrThrow({ where: { id: hours.id } })).resolves.toMatchObject({ state: "VERIFIED" });
-    const adjust = await hoursAction(post("/x", { minutes: 5 }, tokens.owner.accessToken), at({ hoursId: hours.id, action: "adjust" }));
+    const adjust = await hoursAction(keyed("/x", { minutes: 5 }, tokens.owner.accessToken, `adjust-${suffix}`), at({ hoursId: hours.id, action: "adjust" }));
     expect(adjust.status).toBeGreaterThanOrEqual(400);
     const mineNow = await (await myShifts(get("/x", tokens.volunteer.accessToken), mine())).json();
     expect(mineNow.data.verifiedMinutes).toBe(hours.minutes);

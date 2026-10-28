@@ -46,14 +46,21 @@ export async function hasMentoringEvidence(client: Client, eventId: string, user
  * places on the event that rest on mentoring alone (no verified minutes).
  * Takes the crew member row locks itself, in id order.
  */
-export async function revokeMentoringCertificatesLocked(tx: Prisma.TransactionClient, eventId: string, userId: string) {
+export async function revokeMentoringCertificatesLocked(tx: Prisma.TransactionClient, eventId: string, userId: string, options: { recheck?: boolean } = {}) {
   const members = await tx.eventCrewMember.findMany({ where: { eventId, userId }, orderBy: { id: "asc" }, select: { id: true } });
   let revoked = 0;
   for (const member of members) {
     await tx.$queryRaw`SELECT "id" FROM "EventCrewMember" WHERE "id" = ${member.id} FOR UPDATE`;
     const live = await tx.contributorCertificate.count({ where: { crewMemberId: member.id, revokedAt: null, minutes: 0 } });
-    // The grant is part of the evidence, so its removal always ends a mentoring-only certificate.
-    if (live > 0) revoked += await revokeCertificatesLocked(tx, member.id, MENTORING_EVIDENCE_REMOVED);
+    if (live === 0) continue;
+    // Ending the grant always ends the evidence; other changes revoke only when no evidence is left.
+    if (options.recheck && (await hasMentoringEvidence(tx, eventId, userId))) continue;
+    revoked += await revokeCertificatesLocked(tx, member.id, MENTORING_EVIDENCE_REMOVED);
   }
   return revoked;
+}
+
+/** After mentoring evidence may have gone (a resolved help request reopened): revoke what no longer has any. */
+export function recheckMentoringCertificatesLocked(tx: Prisma.TransactionClient, eventId: string, userId: string) {
+  return revokeMentoringCertificatesLocked(tx, eventId, userId, { recheck: true });
 }

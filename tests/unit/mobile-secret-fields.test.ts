@@ -48,6 +48,18 @@ describe("mobile DTO secrets", () => {
     expect([...keysOf(dto.sessionDtoSchema)].filter((key) => MOBILE_FORBIDDEN.has(key))).toEqual(["accessToken"]);
   });
 
+  // Certificate links are bearer capabilities: only the caller's own registrations (feedback certificates)
+  // and own shifts (contributor certificate, docs/VOLUNTEERS.md) carry theirs.
+  const CERTIFICATE_LINK_ALLOWED = new Set(["myShiftsDtoSchema", "registrationsDtoSchema"]);
+  it.each(schemas.filter(([name]) => !CERTIFICATE_LINK_ALLOWED.has(name)))("%s carries no certificate link or bare token", (_name, schema) => {
+    expect([...keysOf(schema)].filter((key) => key === "certificateUrl" || key === "token")).toEqual([]);
+  });
+
+  it("keeps the certificate link to the caller's own shifts", () => {
+    expect(keysOf(dto.myShiftsDtoSchema).has("certificateUrl")).toBe(true);
+    expect(keysOf(dto.volunteerRosterDtoSchema).has("certificateUrl")).toBe(false);
+  });
+
   it.each(schemas.filter(([name]) => !TICKET_TOKEN_ALLOWED.has(name)))("%s carries no ticket token", (_name, schema) => {
     expect(keysOf(schema).has("ticketToken")).toBe(false);
   });
