@@ -88,6 +88,9 @@ describe.sequential("finalist advancement", () => {
     expect(candidates?.rows.map((row) => row.submissionId)).toEqual([projects[1]!.id, projects[0]!.id]);
     const award = must(await createEventAward(ctx, { name: "Overall winner", description: "" }));
     must(await setAwardWinner(ctx, { awardId: award.id, submissionId: projects[1]!.id, place: 1 }));
+    // With more than one round, the final round is finalised before publishing.
+    expect(await publishResults(ctx)).toMatchObject({ ok: false, error: expect.stringContaining("Finalise") });
+    must(await finalizeJudgingRound(ctx, roundTwoId, { reason: "One judge for the finals." }));
     must(await publishResults(ctx));
     // The first round's own ranking is still there for the record.
     const first = await prisma.judgingRound.findFirstOrThrow({ where: { eventId: event.id, position: 1 } });

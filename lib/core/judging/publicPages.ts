@@ -10,6 +10,7 @@ import { galleryFromSql, galleryOrderSql, galleryWhereSql } from "@/lib/galleryQ
 import { publicGalleryItemDto, publicWinnerDto, type PublicAwardBadgeDto, type PublicGalleryDto, type PublicResultsDto } from "@/lib/judgingDto";
 import { EVENT_AWARD_PLACE_MAX, EVENT_AWARDS_LIMIT } from "@/lib/validators";
 import { isId, isProjectGalleryVisible, nameSourceSelect, projectSelect } from "./shared";
+import { awardEligibleWhere } from "./rounds/awardEligibility";
 
 // ---------------------------------------------------------------------------
 // Public read models (callers apply the event page's visibility rules first)
@@ -17,7 +18,8 @@ import { isId, isProjectGalleryVisible, nameSourceSelect, projectSelect } from "
 
 /**
  * Published results for `/{org}/{event}/results`: awards and SUBMITTED
- * winners only, never scores or comments. Null (render a 404) unless results
+ * winners only (finalists of the final round when it takes advanced
+ * finalists), never scores or comments. Null (render a 404) unless results
  * are published. The caller must already have applied the event page's
  * publication, visibility, and invite rules for this viewer.
  *
@@ -28,6 +30,7 @@ import { isId, isProjectGalleryVisible, nameSourceSelect, projectSelect } from "
  */
 export async function loadPublicResults(eventId: string, options: { query?: string } = {}): Promise<PublicResultsDto | null> {
   if (!isId(eventId)) return null;
+  const eligible = await awardEligibleWhere(prisma, eventId);
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: {
@@ -43,7 +46,7 @@ export async function loadPublicResults(eventId: string, options: { query?: stri
           name: true,
           description: true,
           winners: {
-            where: { submission: { status: SubmissionStatus.SUBMITTED } },
+            where: { submission: { status: SubmissionStatus.SUBMITTED, ...eligible } },
             orderBy: [{ place: "asc" }, { id: "asc" }],
             take: EVENT_AWARD_PLACE_MAX,
             select: { place: true, submission: { select: { title: true, repoUrl: true, demoUrl: true, videoUrl: true, ...nameSourceSelect } } },

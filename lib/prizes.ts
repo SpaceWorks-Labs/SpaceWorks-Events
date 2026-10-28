@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { notifyChat } from "@/lib/chat/notify";
 import { DEFAULT_CURRENCY, formatMoney, parseMoneyToMinor } from "@/lib/payments/money";
+import { awardEligibleWhere } from "@/lib/core/judging/rounds/awardEligibility";
 
 /**
  * Prize money for hackathon awards (docs/HACKATHON.md). An award may carry a
@@ -69,7 +70,11 @@ export async function setAwardPrize(ctx: PrizeContext, input: unknown): Promise<
   });
 }
 
-/** Record prize money paid to a winner. Never more than the award's prize, when it has one. */
+/**
+ * Record prize money paid to a winner. Never more than the award's prize, when
+ * it has one, and only to a winner the final round allows (a finalist when it
+ * takes advanced finalists; lib/core/judging/rounds/awardEligibility.ts).
+ */
 export async function recordPrizePayout(ctx: PrizeContext, input: unknown): Promise<PrizeResult> {
   const parsed = prizePayoutSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the payout." };
@@ -80,7 +85,7 @@ export async function recordPrizePayout(ctx: PrizeContext, input: unknown): Prom
     const event = await lockEvent(tx, ctx);
     if (!event) return { ok: false, error: "Event not found." };
     const winner = await tx.eventAwardWinner.findFirst({
-      where: { awardId: data.awardId, submissionId: data.submissionId, award: { eventId: event.id } },
+      where: { awardId: data.awardId, submissionId: data.submissionId, award: { eventId: event.id }, submission: await awardEligibleWhere(tx, event.id) },
       select: { award: { select: { name: true, prizeMinor: true } }, submission: { select: { title: true } } },
     });
     if (!winner) return { ok: false, error: "That project hasn't won this award." };
