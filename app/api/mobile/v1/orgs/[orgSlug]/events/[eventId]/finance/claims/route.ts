@@ -14,7 +14,8 @@ export const GET = eventRoute("GET /api/mobile/v1/orgs/:orgSlug/events/:eventId/
 /**
  * File a claim (multipart: `category`, `description`, `amount`, `payeeName`,
  * `payeeEmail` and up to three `receipts` photos), by the Finance tab's own
- * action. Anyone on the event dashboard may file; needs an Idempotency-Key.
+ * action. Members and any event collaborator (JUDGE, MENTOR and
+ * REVIEW_APPLICATIONS included) file their own; needs an Idempotency-Key.
  */
 export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventId/finance/claims", (permissions) => permissions.fileClaims, async (request, _params, { auth, event }) => {
   const body = await readFormBody(request, MAX_BYTES);
@@ -28,4 +29,4 @@ export const POST = eventRoute("POST /api/mobile/v1/orgs/:orgSlug/events/:eventI
   const result = await submitStaffClaimAction(fields);
   if (!result.ok) return mobileActionError(result);
   return mobileOk(await loadMyStaffClaims(auth.userId, event.event.id), 201);
-}, { idempotent: { maxBytes: MAX_BYTES } });
+}, { idempotent: { maxBytes: MAX_BYTES }, anyGrant: true });

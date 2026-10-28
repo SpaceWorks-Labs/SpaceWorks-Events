@@ -41,6 +41,8 @@ export default async function EventManagePage({ params }: Props) {
         {ctx.permissions.canMentor ? <MentorConsole ctx={ctx} /> : null}
         {ctx.permissions.canJudge ? <JudgeWorkspace ctx={ctx} /> : null}
         {ctx.permissions.canReviewApplications && event.admissionEnabled ? <ReviewWorkspace ctx={ctx} /> : null}
+        {/* Any collaborator files their own expense claims on this event (docs/FINANCE.md). */}
+        <FinancePanel ctx={ctx} />
       </div>
     );
   }

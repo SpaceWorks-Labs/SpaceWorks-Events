@@ -20,6 +20,11 @@ event budget. Prize money for hackathon awards is in
 | Refund requests (decide) | Yes | — | Ask, from the order page |
 | Money summary and **Download CSV** | Yes | — | — |
 
+Any event grant counts as a co-organiser here, the isolated JUDGE, MENTOR
+and REVIEW_APPLICATIONS grants included: they file and withdraw their own
+claims on that event only (on the website below their workspace, in the app
+under `fileClaims`), and see nobody else's.
+
 There is no new co-organiser grant: deciding money is an owner/admin
 matter, like prize payouts and payment settings. Every step is audited.
 
@@ -43,6 +48,8 @@ matter, like prize payouts and payment settings. Every step is audited.
   approved; rejected and withdrawn ones don't count. The cap is checked under
   the event row lock, so two claims can't both slip under it. The ticket token
   is the proof; an account-owned ticket also needs that account signed in.
+  Claims belong to the registration, so a ticket with claims waiting,
+  approved or paid can't be transferred ([Paid tickets](PAYMENTS.md)).
 - **Crew** ([Event crew](CREW.md)) claim from their crew ticket page when
   the event turns on *Let crew claim expenses* (`Event.crewClaimsEnabled`,
   off by default), as kind `CREW`, with no cap; the participant switch and
@@ -187,8 +194,10 @@ create, edit, close (**Close to new claims**) and delete them
   still refundable) and whether to cancel the tickets: this runs the normal
   `refundOrder`, so refunds go back the way the buyer paid and team rules
   apply. The request is claimed before the refund runs and released if the
-  refund is refused before it commits; once a refund has committed, the
-  request stays approved, so two approvals never refund twice. Or they **decline**
+  refund is refused before it commits (only while it is still that approval;
+  a request opened by an attendance "No" whose guest has since said Yes is
+  withdrawn instead); once a refund has committed, the request stays
+  approved, so two approvals never refund twice. Or they **decline**
   with a reason the buyer sees. Audited `REFUND_REQUESTED`,
   `REFUND_REQUEST_APPROVED`, `REFUND_REQUEST_DECLINED`.
 

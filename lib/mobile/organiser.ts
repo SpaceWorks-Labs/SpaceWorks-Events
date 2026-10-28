@@ -46,7 +46,7 @@ export async function resolveOrgAccess(userId: string, orgSlug: string) {
 }
 
 /** Event in this organisation that the caller may see on the dashboard, or null (NOT_FOUND). */
-export async function resolveEventContext(userId: string, orgSlug: string, eventId: string): Promise<MobileEventContext | null> {
+export async function resolveEventContext(userId: string, orgSlug: string, eventId: string, options: { anyGrant?: boolean } = {}): Promise<MobileEventContext | null> {
   if (!eventId || eventId.length > 128) return null;
   const access = await resolveOrgAccess(userId, orgSlug);
   if (!access) return null;
@@ -58,8 +58,9 @@ export async function resolveEventContext(userId: string, orgSlug: string, event
     : await prisma.eventCollaborator.findFirst({ where: { eventId: event.id, userId }, select: { permissions: true } });
   // A JUDGE-only grant opens the judging workspace and nothing else: the
   // organiser routes treat it as no access, and the judging routes resolve
-  // judges separately (lib/mobile/judging.ts, docs/HACKATHON.md).
-  if (!access.membership && !(grant && hasOrganiserGrant(grant.permissions))) return null;
+  // judges separately (lib/mobile/judging.ts, docs/HACKATHON.md). Any grant
+  // files its own staff claims (`anyGrant`, docs/FINANCE.md).
+  if (!access.membership && !(grant && (options.anyGrant ? grant.permissions.length > 0 : hasOrganiserGrant(grant.permissions)))) return null;
   return {
     organisation: access.organisation,
     membership: access.membership,
