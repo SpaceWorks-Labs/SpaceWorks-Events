@@ -91,6 +91,19 @@ describe.sequential("claims under a reimbursement policy", () => {
     expect(await claim(crewTicket.checkInToken, "100", everyone)).toMatchObject({ ok: false });
     expect(await claim(crewTicket.checkInToken, "100", crewPolicy)).toMatchObject({ ok: true });
     expect(await prisma.expenseClaim.findFirstOrThrow({ where: { policyId: crewPolicy } })).toMatchObject({ kind: "CREW" });
+
+    // A policy for some crew kinds only (volunteers here), checked against the crew member's kind.
+    const volunteersOnly = await policy(event, { name: "Volunteer travel", eligibility: "CREW", crewKinds: ["VOLUNTEER"] });
+    const volunteer = await person(event, { crew: true });
+    const mentor = await person(event, { crew: true });
+    await prisma.eventCrewMember.create({ data: { eventId: event.id, rsvpId: volunteer.id, name: "Vol", email: volunteer.guestEmail!, kind: "VOLUNTEER" } });
+    await prisma.eventCrewMember.create({ data: { eventId: event.id, rsvpId: mentor.id, name: "Men", email: mentor.guestEmail!, kind: "MENTOR" } });
+    expect(await claim(volunteer.checkInToken, "100", volunteersOnly)).toMatchObject({ ok: true });
+    expect(await claim(mentor.checkInToken, "100", volunteersOnly)).toMatchObject({ ok: false, error: expect.stringContaining("other crew roles") });
+    expect(await savePolicy(admin(event), { name: "Bad", eligibility: "CONFIRMED_PARTICIPANT", cap: "100", categories: ["TRAVEL"], crewKinds: ["VOLUNTEER"] })).toMatchObject({ ok: true });
+    expect(await prisma.reimbursementPolicy.findFirstOrThrow({ where: { eventId: event.id, name: "Bad" } })).toMatchObject({ crewKinds: [] });
+    await expect(prisma.reimbursementPolicy.create({ data: { eventId: event.id, name: "Raw", eligibility: "CONFIRMED_PARTICIPANT", capPerPersonMinor: BigInt(1), categories: ["TRAVEL"], crewKinds: ["VOLUNTEER"] } })).rejects.toThrow();
+    expect(await savePolicy(admin(event), { policyId: volunteersOnly, name: "Volunteer travel", eligibility: "CREW", cap: "1000", categories: ["TRAVEL"], crewKinds: [] })).toMatchObject({ ok: false, error: expect.stringContaining("fixed once claims") });
   });
 
   it("re-checks eligibility and the frozen cap at approval, and records the approval check", async () => {

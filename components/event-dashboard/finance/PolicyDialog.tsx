@@ -8,6 +8,7 @@ import { Callout } from "@/components/ui/display";
 import { Dialog, DialogBody, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { Dropdown, Field, Input } from "@/components/ui/field";
 import { ELIGIBILITY_LABELS, ELIGIBILITY_STAGE } from "@/lib/claims/policyLabels";
+import { CREW_KINDS, CREW_KIND_LABELS } from "@/lib/crewKind";
 import type { PolicyAdminRow } from "@/lib/claims/policies/view";
 import { useSave, type FinanceScope } from "./shared";
 
@@ -22,7 +23,7 @@ export type PolicyOptions = {
 type PolicyInput = PolicyAdminRow["input"];
 
 const EMPTY: PolicyInput = {
-  policyId: "", name: "", eligibility: "CONFIRMED_PARTICIPANT", judgingRoundId: "", mentoringRoundId: "", requireFinalistsPublished: false,
+  policyId: "", name: "", eligibility: "CONFIRMED_PARTICIPANT", judgingRoundId: "", mentoringRoundId: "", requireFinalistsPublished: false, crewKinds: [],
   cap: "", categories: ["TRAVEL", "ACCOMMODATION"], claimOpensAt: "", claimClosesAt: "", attendanceRequired: false, budget: "", active: true, notifyWhenAvailable: false,
 };
 
@@ -41,7 +42,7 @@ export function PolicyDialog({ scope, initial, options, currency, onClose }: { s
         <DialogBody className="pb-6">
           <form className="flex flex-col gap-4" onSubmit={(event) => {
             event.preventDefault();
-            const input = { ...form, judgingRoundId: stage === "judging" ? form.judgingRoundId : "", mentoringRoundId: stage === "mentoring" ? form.mentoringRoundId : "" };
+            const input = { ...form, crewKinds: form.eligibility === "CREW" ? form.crewKinds : [], judgingRoundId: stage === "judging" ? form.judgingRoundId : "", mentoringRoundId: stage === "mentoring" ? form.mentoringRoundId : "" };
             save(() => saveReimbursementPolicyAction(scope, input), initial ? "Policy saved." : "Policy added.", onClose);
           }}>
             {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
@@ -63,6 +64,17 @@ export function PolicyDialog({ scope, initial, options, currency, onClose }: { s
             ) : null}
             {stage === "judging" ? (
               <CheckboxField checked={form.requireFinalistsPublished} onCheckedChange={(checked) => set("requireFinalistsPublished", checked === true)} label="Only once this round's finalists are published" />
+            ) : null}
+            {form.eligibility === "CREW" ? (
+              <fieldset className="flex flex-col gap-2">
+                <legend className="mb-1 text-body-ui font-semibold text-ink">Which crew</legend>
+                <p className="text-caption text-ink-muted">Leave all unticked for every crew member.</p>
+                <div className="grid gap-2 sm:grid-cols-4">
+                  {CREW_KINDS.map((kind) => (
+                    <CheckboxField key={kind} checked={form.crewKinds.includes(kind)} onCheckedChange={(checked) => set("crewKinds", checked === true ? [...form.crewKinds, kind] : form.crewKinds.filter((value) => value !== kind))} label={CREW_KIND_LABELS[kind]} />
+                  ))}
+                </div>
+              </fieldset>
             ) : null}
             <Field label={`Most each person gets back (${currency})`}>
               <Input inputMode="decimal" value={form.cap} onChange={(event) => set("cap", event.target.value)} maxLength={20} placeholder="0" required />

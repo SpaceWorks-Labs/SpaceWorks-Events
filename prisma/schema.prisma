@@ -2990,6 +2990,8 @@ model ReimbursementPolicy {
   mentoringRoundId          String?
   /// JUDGING_ROUND_ENTRY only: claims open once the round's finalists are published.
   requireFinalistsPublished Boolean                  @default(false)
+  /// CREW only: limit to these crew kinds (docs/VOLUNTEERS.md); empty is every crew member.
+  crewKinds                 CrewKind[]               @default([])
   capPerPersonMinor         BigInt
   /// At least one.
   categories                ExpenseCategory[]

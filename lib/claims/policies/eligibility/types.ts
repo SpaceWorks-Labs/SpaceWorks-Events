@@ -1,4 +1,4 @@
-import type { Prisma, ReimbursementEligibility, RsvpStatus } from "@prisma/client";
+import type { CrewKind, Prisma, ReimbursementEligibility, RsvpStatus } from "@prisma/client";
 
 /** The registration a claim is for: a participant's or a crew member's ticket. */
 export type Claimant = {
@@ -17,6 +17,8 @@ export type EligibilityTerms = {
   mentoringRoundId: string | null;
   requireFinalistsPublished: boolean;
   attendanceRequired: boolean;
+  /** CREW only: these crew kinds; empty is every crew member. */
+  crewKinds: CrewKind[];
 };
 
 /** Plain facts kept in the snapshot: ids, statuses and flags, never names or contact details. */

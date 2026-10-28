@@ -80,7 +80,10 @@ create, edit, close (**Close to new claims**) and delete them
   (a registry: a new kind adds its enum value, its stage column and CHECK,
   and one resolver):
   - `CONFIRMED_PARTICIPANT`: every confirmed participant who is not crew.
-  - `CREW`: every confirmed crew member ([Event crew](CREW.md)).
+  - `CREW`: every confirmed crew member ([Event crew](CREW.md)), or only
+    those of the crew kinds the policy names (`crewKinds`, for example
+    volunteers only; empty is every crew member; a CHECK keeps kinds to
+    `CREW` policies).
   - `JUDGING_ROUND_ENTRY` (`judgingRoundId`, a round that takes advanced
     projects): the person's team's project, or their own when solo, has a
     `JudgingRoundEntry` in the round and is not withdrawn or disqualified;

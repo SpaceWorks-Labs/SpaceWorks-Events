@@ -4,6 +4,7 @@ import { ExpenseClaimStatus, JudgingRoundEntrySource, MentoringRoundStatus, type
 import { formatMoney, minorToDecimalString } from "@/lib/payments/money";
 import { zonedDatetimeLocalValue } from "@/lib/timeZone";
 import { CATEGORY_LABELS } from "../shared";
+import { CREW_KIND_LABELS } from "@/lib/crewKind";
 import { ELIGIBILITY_LABELS } from "../policyLabels";
 import { policyUsage } from "./claims";
 import { evaluateEligibility, type Claimant } from "./eligibility";
@@ -33,9 +34,10 @@ export async function listPolicies(client: Prisma.TransactionClient, eventId: st
 
 export type ListedPolicy = Awaited<ReturnType<typeof listPolicies>>[number];
 
-export function whoLabel(policy: { eligibility: string; stageName: string | null }) {
+export function whoLabel(policy: { eligibility: string; stageName: string | null; crewKinds?: Array<keyof typeof CREW_KIND_LABELS> }) {
   const label = ELIGIBILITY_LABELS[policy.eligibility] ?? policy.eligibility;
-  return policy.stageName ? `${label}: ${policy.stageName}` : label;
+  if (policy.stageName) return `${label}: ${policy.stageName}`;
+  return policy.crewKinds?.length ? `${label}: ${policy.crewKinds.map((kind) => CREW_KIND_LABELS[kind]).join(", ")}` : label;
 }
 
 /** The rounds a policy form can pick: judging rounds that take advanced projects, and mentoring rounds not skipped. */
@@ -71,6 +73,7 @@ export function policyAdminRows(policies: ListedPolicy[], currency: string, time
       judgingRoundId: policy.judgingRoundId ?? "",
       mentoringRoundId: policy.mentoringRoundId ?? "",
       requireFinalistsPublished: policy.requireFinalistsPublished,
+      crewKinds: [...policy.crewKinds] as string[],
       cap: minorToDecimalString(policy.capPerPersonMinor, currency),
       categories: [...policy.categories] as string[],
       claimOpensAt: policy.claimOpensAt ? zonedDatetimeLocalValue(policy.claimOpensAt, timeZone) : "",

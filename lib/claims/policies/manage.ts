@@ -1,6 +1,6 @@
 import "server-only";
 
-import { ExpenseCategory, JudgingRoundEntrySource, MentoringRoundStatus, ReimbursementEligibility, type Prisma } from "@prisma/client";
+import { CrewKind, ExpenseCategory, JudgingRoundEntrySource, MentoringRoundStatus, ReimbursementEligibility, type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { recordAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -28,6 +28,7 @@ const saveSchema = z.object({
   judgingRoundId: optionalId,
   mentoringRoundId: optionalId,
   requireFinalistsPublished: z.boolean().default(false),
+  crewKinds: z.array(z.nativeEnum(CrewKind)).max(4).default([]),
   cap: z.string().trim().min(1, "Enter the most each person gets back.").max(20),
   categories: z.array(z.nativeEnum(ExpenseCategory)).min(1, "Choose at least one category.").max(9),
   claimOpensAt: z.string().trim().max(20).default(""),
@@ -96,6 +97,7 @@ export async function savePolicy(ctx: PolicyAdminContext, input: unknown): Promi
     const values = {
       name: data.name, eligibility: data.eligibility, ...stage, capPerPersonMinor: cap, budgetMinor: budget, categories: [...new Set(data.categories)], ...window,
       requireFinalistsPublished: data.eligibility === ReimbursementEligibility.JUDGING_ROUND_ENTRY && data.requireFinalistsPublished,
+      crewKinds: data.eligibility === ReimbursementEligibility.CREW ? [...new Set(data.crewKinds)] : [],
       attendanceRequired: data.attendanceRequired, active: data.active, notifyWhenAvailable: data.notifyWhenAvailable,
     };
     let policyId = data.policyId;
@@ -103,9 +105,10 @@ export async function savePolicy(ctx: PolicyAdminContext, input: unknown): Promi
       if ((await tx.reimbursementPolicy.count({ where: { eventId: event.id } })) >= MAX_POLICIES_PER_EVENT) return fail(`An event can have up to ${MAX_POLICIES_PER_EVENT} reimbursement policies.`);
       policyId = (await tx.reimbursementPolicy.create({ data: { eventId: event.id, ...values }, select: { id: true } })).id;
     } else {
-      const current = await tx.reimbursementPolicy.findFirst({ where: { id: policyId, eventId: event.id }, select: { eligibility: true, judgingRoundId: true, mentoringRoundId: true, _count: { select: { claims: true } } } });
+      const current = await tx.reimbursementPolicy.findFirst({ where: { id: policyId, eventId: event.id }, select: { eligibility: true, judgingRoundId: true, mentoringRoundId: true, crewKinds: true, _count: { select: { claims: true } } } });
       if (!current) return fail("Policy not found.");
-      const whoChanged = current.eligibility !== values.eligibility || current.judgingRoundId !== values.judgingRoundId || current.mentoringRoundId !== values.mentoringRoundId;
+      const sameKinds = [...current.crewKinds].sort().join() === [...values.crewKinds].sort().join();
+      const whoChanged = current.eligibility !== values.eligibility || current.judgingRoundId !== values.judgingRoundId || current.mentoringRoundId !== values.mentoringRoundId || !sameKinds;
       if (whoChanged && current._count.claims > 0) return fail("Who a policy is for is fixed once claims are filed under it. Close it and add a new policy instead.");
       await tx.reimbursementPolicy.update({ where: { id: policyId }, data: values });
     }

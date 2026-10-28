@@ -49,7 +49,7 @@ describe("reimbursement cap and budget math", () => {
 
 const policy = {
   id: "p1", name: "Finalist travel", eligibility: ReimbursementEligibility.JUDGING_ROUND_ENTRY, judgingRoundId: "r1", mentoringRoundId: null,
-  requireFinalistsPublished: true, attendanceRequired: true, capPerPersonMinor: n(500000), categories: ["TRAVEL" as const], claimOpensAt: null, claimClosesAt: new Date("2030-01-01T00:00:00Z"),
+  requireFinalistsPublished: true, attendanceRequired: true, crewKinds: [], capPerPersonMinor: n(500000), categories: ["TRAVEL" as const], claimOpensAt: null, claimClosesAt: new Date("2030-01-01T00:00:00Z"),
 };
 
 describe("frozen policy terms", () => {
@@ -58,7 +58,7 @@ describe("frozen policy terms", () => {
     const json = snapshotJson({ version: 1, terms, submitted: recordCheck({ eligible: true, reason: null, facts: { checkedIn: true } }, new Date("2029-12-01T00:00:00Z")) });
     const read = readSnapshot(json as never);
     expect(read?.terms).toEqual({ ...terms, capPerPersonMinor: "500000", claimClosesAt: "2030-01-01T00:00:00.000Z" });
-    expect(eligibilityTerms(read!.terms)).toEqual({ eligibility: "JUDGING_ROUND_ENTRY", judgingRoundId: "r1", mentoringRoundId: null, requireFinalistsPublished: true, attendanceRequired: true });
+    expect(eligibilityTerms(read!.terms)).toEqual({ eligibility: "JUDGING_ROUND_ENTRY", judgingRoundId: "r1", mentoringRoundId: null, requireFinalistsPublished: true, attendanceRequired: true, crewKinds: [] });
     expect(readSnapshot({ version: 2 } as never)).toBeNull();
     expect(readSnapshot(null)).toBeNull();
     expect(() => snapshotJson({ ...read!, terms: { ...read!.terms, capPerPersonMinor: "-1" } })).toThrow();
@@ -66,7 +66,7 @@ describe("frozen policy terms", () => {
 });
 
 const person = (overrides: Partial<Claimant> = {}): Claimant => ({ rsvpId: "rsvp", eventId: "event", status: RsvpStatus.CONFIRMED, isCrew: false, teamId: null, checkedInAt: new Date(), ...overrides });
-const terms = (overrides: Partial<EligibilityTerms> = {}): EligibilityTerms => ({ eligibility: ReimbursementEligibility.CONFIRMED_PARTICIPANT, judgingRoundId: null, mentoringRoundId: null, requireFinalistsPublished: false, attendanceRequired: false, ...overrides });
+const terms = (overrides: Partial<EligibilityTerms> = {}): EligibilityTerms => ({ eligibility: ReimbursementEligibility.CONFIRMED_PARTICIPANT, judgingRoundId: null, mentoringRoundId: null, requireFinalistsPublished: false, attendanceRequired: false, crewKinds: [], ...overrides });
 
 /** A minimal Prisma stand-in for the judging resolver. */
 function judgingClient(submission: { status: string; inRound: boolean } | null, publishedAt: Date | null) {
@@ -97,6 +97,16 @@ describe("eligibility resolvers", () => {
     expect((await evaluateEligibility(client, person({ isCrew: true }), terms())).eligible).toBe(false);
     expect((await evaluateEligibility(client, person({ isCrew: true }), terms({ eligibility: ReimbursementEligibility.CREW }))).eligible).toBe(true);
     expect((await evaluateEligibility(client, person(), terms({ eligibility: ReimbursementEligibility.CREW }))).eligible).toBe(false);
+  });
+
+  it("limits a crew policy to its crew kinds when it names any", async () => {
+    const volunteers = terms({ eligibility: ReimbursementEligibility.CREW, crewKinds: ["VOLUNTEER"] });
+    const client = (kind: string | null) => ({ eventCrewMember: { findUnique: async () => (kind ? { kind } : null) } }) as never;
+    expect((await evaluateEligibility(client("VOLUNTEER"), person({ isCrew: true }), volunteers)).eligible).toBe(true);
+    expect((await evaluateEligibility(client("MENTOR"), person({ isCrew: true }), volunteers)).reason).toContain("other crew roles");
+    expect((await evaluateEligibility(client(null), person({ isCrew: true }), volunteers)).eligible).toBe(false);
+    expect(await ELIGIBILITY_RESOLVERS.CREW.candidates({} as never, "event", volunteers)).toEqual({ isCrew: true, crewMember: { kind: { in: ["VOLUNTEER"] } } });
+    expect(await ELIGIBILITY_RESOLVERS.CREW.candidates({} as never, "event", terms({ eligibility: ReimbursementEligibility.CREW }))).toEqual({ isCrew: true });
   });
 
   it("qualifies a judging round's entries unless withdrawn, disqualified or unpublished", async () => {

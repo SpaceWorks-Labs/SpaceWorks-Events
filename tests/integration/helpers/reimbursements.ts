@@ -81,7 +81,7 @@ export async function checkIn(event: Event, roundId: string, teamId: string, awa
   return prisma.mentoringCheckIn.create({ data: { eventId: event.id, roundId, teamId, mentorUserId: ctx.ownerId, formSnapshot: [], answers: {}, away, startedAt: new Date(), submittedAt: new Date() } });
 }
 
-type PolicyFields = { name?: string; eligibility?: string; judgingRoundId?: string; mentoringRoundId?: string; cap?: string; budget?: string; categories?: string[]; attendanceRequired?: boolean; requireFinalistsPublished?: boolean; claimOpensAt?: string; claimClosesAt?: string; notifyWhenAvailable?: boolean; active?: boolean };
+type PolicyFields = { name?: string; eligibility?: string; crewKinds?: string[]; judgingRoundId?: string; mentoringRoundId?: string; cap?: string; budget?: string; categories?: string[]; attendanceRequired?: boolean; requireFinalistsPublished?: boolean; claimOpensAt?: string; claimClosesAt?: string; notifyWhenAvailable?: boolean; active?: boolean };
 
 export async function policy(event: Event, fields: PolicyFields = {}) {
   const result = await savePolicy(admin(event), { name: "Travel", eligibility: "CONFIRMED_PARTICIPANT", cap: "1000", categories: ["TRAVEL", "ACCOMMODATION"], ...fields });
