@@ -17,6 +17,37 @@ date tickets), paid team places and entry fees, prize payouts, event finance
 check-in lists, chat notifications, webhooks, staff MFA and the login
 protections.
 
+## Status
+
+All merged into `dev` locally (28 Oct 2026); nothing pushed. Migrations run
+from `20261107020000` to `20261118050000`; each is described in
+[production-operations.md](../production-operations.md#recent-schema-migrations).
+
+| # | Branch | Merge |
+| --- | --- | --- |
+| 1 | `fix/yuyu-sync-3` | `7fd1af4a` |
+| 2 | `feat/hackathon-email-toggles` | `f5aaa088` |
+| 3 | `feat/event-crew` | `a10ab52e` |
+| — | `fix/event-view-fields` (pre-existing `dev` bugs: event view fields, registration lock, copy) | `50949b2e` |
+| 9a | `feat/help-centre` | `6f122083` |
+| 5 | `feat/judging-rounds` | `c8d15512` |
+| 8a | `feat/mobile-api` (foundation, staff MFA fail-closed, crew endpoints) | `3bc670e7` |
+| 6 | `feat/mentor-desk` | `c9b7c6d2` |
+| 8b | `feat/mobile-api` phase 8b (judging rounds and Mentor Desk endpoints, idempotent writes) | `e74f745e` |
+| 4 | `feat/attendance-confirmation` | `df5a5540` |
+| 8c | `feat/mobile-api` review fixes (path-bound idempotency, mentor claim fence) | `ce444f6c` |
+| 7 | `feat/volunteer-shifts` | `29f0fe38` |
+| 10 | `feat/hackathon-admission` (multi-stage applications, reviewer panels, offers, Accept & pay; added after approval) | `3a12c9b7` |
+| 11 | `feat/stage-reimbursements` (reimbursement policies per judging round, mentoring round, admission stage, crew and participants; added after approval) | `734fab21` |
+
+- Phase 9b is done: each feature branch added its own guide articles (crew,
+  still coming, hackathon email switches, rounds and finalists, the Mentor
+  Desk, volunteer shifts, applications, reimbursement policies). No article
+  covers the mobile app yet, since there is no app to describe.
+- Open: `chore/yuyu-parity` (Yuyu's series-occurrence e2e test and the full
+  migration impact table), and the admission hardening migration
+  (`20261117040000`), whose row in the migration table is still to be written.
+
 ## Branches, in order
 
 Each branch starts from `dev` after the previous one merges. Migrations are
