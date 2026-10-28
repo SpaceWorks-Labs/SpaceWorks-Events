@@ -3,11 +3,11 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
+const sqlOf = (name: string) => readFileSync(resolve(root, `prisma/migrations/${name}/migration.sql`), "utf8").split("\n").filter((line) => !line.trim().startsWith("--")).join("\n");
 
 describe("attendance confirmation migration", () => {
   it("adds a new table and one defaulted Event column, with no scheduling fields", () => {
-    const sql = readFileSync(resolve(root, "prisma/migrations/20261111000000_attendance_confirmation/migration.sql"), "utf8");
-    const code = sql.split("\n").filter((line) => !line.trim().startsWith("--")).join("\n");
+    const code = sqlOf("20261111000000_attendance_confirmation");
     expect(code).not.toMatch(/\b(DROP|INSERT|RENAME)\b/i);
     expect(code).not.toMatch(/^\s*(UPDATE|DELETE)\s/im);
     // The only change to an existing table is one column with a constant default.
@@ -28,11 +28,22 @@ describe("attendance confirmation migration", () => {
     expect(code).toContain('"AttendanceCheck_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE');
   });
 
-  it("makes the production schema check require every attendance object, and both foreign keys to cascade", () => {
+  it("adds the follow-up columns in their own additive migration", () => {
+    const code = sqlOf("20261111000100_attendance_followups");
+    expect(code).not.toMatch(/\b(DROP|INSERT|RENAME)\b/i);
+    expect(code).not.toMatch(/^\s*(UPDATE|DELETE)\s/im);
+    expect(code).toContain('ADD COLUMN "organisersNotifiedAt" TIMESTAMP(3)');
+    expect(code).toContain('ADD COLUMN "refundRequestOpenedAt" TIMESTAMP(3)');
+    expect(code).toContain('ADD COLUMN "refundRequestId" TEXT');
+    expect(code).toContain('"AttendanceCheck_refundRequestId_fkey" FOREIGN KEY ("refundRequestId") REFERENCES "RefundRequest"("id") ON DELETE SET NULL');
+  });
+
+  it("makes the production schema check require every attendance object, with the right deletes", () => {
     const script = readFileSync(resolve(root, "scripts/verify-production-schema.mjs"), "utf8");
-    for (const name of ["AttendanceCheck_token_hash_shape", "AttendanceCheck_note_length", "AttendanceCheck_response_pair", "AttendanceCheck_release_outcome", "AttendanceCheck_rsvpId_key", "AttendanceCheck_tokenHash_key", "AttendanceCheck_eventId_response_idx", "attendanceCheckReleaseOnDecline"]) {
+    for (const name of ["AttendanceCheck_token_hash_shape", "AttendanceCheck_note_length", "AttendanceCheck_response_pair", "AttendanceCheck_release_outcome", "AttendanceCheck_rsvpId_key", "AttendanceCheck_tokenHash_key", "AttendanceCheck_eventId_response_idx", "AttendanceCheck_refundRequestId_idx", "attendanceCheckReleaseOnDecline"]) {
       expect(script).toContain(name);
     }
     expect(script).toContain('["AttendanceCheck_rsvpId_fkey", "AttendanceCheck_eventId_fkey"].filter((name) => !attendanceConstraints.some((row) => row.conname === name && row.confdeltype === "c"))');
+    expect(script).toContain('row.conname === "AttendanceCheck_refundRequestId_fkey" && row.confdeltype === "n"');
   });
 });

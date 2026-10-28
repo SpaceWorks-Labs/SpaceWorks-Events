@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   submit: vi.fn(),
+  limited: vi.fn(async () => false),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
 vi.mock("@/lib/core/attendanceCheck", () => ({ resolveAttendanceCheckByToken: mocks.resolve }));
 vi.mock("@/app/actions/attendance-check", () => ({ submitAttendanceReply: mocks.submit }));
+vi.mock("@/lib/actionRateLimit", () => ({ isActionRateLimited: mocks.limited }));
 
 import AttendPage, { metadata } from "@/app/attend/[token]/page";
 import { AttendanceReplyForm, type AttendanceReplyFormProps } from "@/components/attendance/AttendanceReplyForm";
@@ -80,6 +82,13 @@ describe("/attend/[token] page", () => {
     for (const token of ["short", "A".repeat(44), "A".repeat(42) + "!", ""]) {
       await expect(renderPage(token), token).rejects.toThrow("NEXT_NOT_FOUND");
     }
+    expect(mocks.resolve).not.toHaveBeenCalled();
+  });
+
+  it("answers the same 404 to an address opening links too fast, without a lookup", async () => {
+    mocks.limited.mockResolvedValueOnce(true);
+    await expect(renderPage(TOKEN)).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(mocks.limited).toHaveBeenCalledWith("attendanceCheckView");
     expect(mocks.resolve).not.toHaveBeenCalled();
   });
 
@@ -154,6 +163,7 @@ describe("AttendanceReplyForm on a paid ticket", () => {
     const paid = renderForm({ releaseKind: "paid", preselect: "NOT_ATTENDING" });
     expect(paid).toContain("Answering No releases your place");
     expect(paid).toContain("refund policy");
+    expect(renderForm({ releaseKind: "paid", releaseRefund: "₹249.50", preselect: "NOT_ATTENDING" })).toContain("₹249.50 is refunded under the event&#x27;s refund policy");
     // A paid place organisers handle (several tickets, someone else paid, policy closed) is never promised.
     expect(renderForm({ releaseKind: null, preselect: "NOT_ATTENDING" })).not.toContain("refund policy");
   });

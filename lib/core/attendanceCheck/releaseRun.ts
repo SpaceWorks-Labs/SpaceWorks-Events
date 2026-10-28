@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Prisma } from "@prisma/client";
+import { RefundRequestStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { notifyChat } from "@/lib/chat/notify";
@@ -26,16 +26,18 @@ export function keptMessage(outcome: AttendanceReleaseOutcome): string {
   }
 }
 
+const HANDLED_REQUEST = "The event's refund window has closed, so your place is kept. Your earlier refund request has already been handled, so contact the organisers if anything has changed.";
+
+type Notice = { organisationId: string; eventId: string; eventTitle: string; rsvpId: string; guestName: string; outcome: AttendanceReleaseOutcome; };
+
 /**
- * A "No" on a paid ticket that is not released automatically (several
- * tickets on the order, or bought by someone else): owners and admins are
- * emailed and the organisation's chat hears it as a cancellation. Inside the
- * reply's transaction, so the notice exists exactly when the reply does.
- * Counts and names only; never the guest's note or any link.
+ * A "No" whose paid place is kept for the organisers (several tickets on the
+ * order, bought by someone else, or a refund request already handled):
+ * owners and admins are emailed and the chat hears it as a cancellation.
+ * Called once per check (`organisersNotifiedAt`), inside the transaction
+ * that sets it. Names only; never the guest's note or any link.
  */
-export async function notifyOrganisersOfKeptPlace(tx: Prisma.TransactionClient, params: {
-  organisationId: string; eventId: string; eventTitle: string; rsvpId: string; guestName: string; outcome: "multiTicket" | "notBuyer";
-}) {
+export async function notifyOrganisersOfKeptPlace(tx: Prisma.TransactionClient, params: Notice) {
   const line = `${params.guestName} answered No to "Are you still coming?" for ${params.eventTitle}. ${ATTENDANCE_RELEASE_OUTCOME_LABELS[params.outcome]}`;
   await noticeEach(tx, await organiserEmails(tx, params.organisationId), {
     organisationId: params.organisationId,
@@ -49,8 +51,9 @@ export async function notifyOrganisersOfKeptPlace(tx: Prisma.TransactionClient, 
   });
 }
 
-type CheckForRelease = {
+export type CheckForRelease = {
   id: string; rsvpId: string; eventId: string;
+  organisersNotifiedAt: Date | null; refundRequestOpenedAt: Date | null; refundRequestId: string | null;
   rsvp: { userId: string | null; checkInToken: string; };
   event: { title: string; organisationId: string; };
 };
@@ -74,14 +77,41 @@ async function failed(check: CheckForRelease, message: string) {
 }
 
 /**
+ * A closed policy: one refund request per check, ever (`refundRequestOpenedAt`).
+ * A later "No" while that request is still open changes nothing; once it has
+ * been decided or withdrawn, organisers are told instead (once).
+ */
+async function refundRequestOnce(check: CheckForRelease, orderId: string, note: string, guestName: string, now: Date) {
+  if (check.refundRequestOpenedAt) {
+    const request = check.refundRequestId ? await prisma.refundRequest.findUnique({ where: { id: check.refundRequestId }, select: { status: true } }) : null;
+    await recordOutcome(check.id, "refundRequested");
+    if (request?.status === RefundRequestStatus.OPEN) return { released: false as const, message: keptMessage("refundRequested") };
+    await prisma.$transaction(async (tx) => {
+      const first = await tx.attendanceCheck.updateMany({ where: { id: check.id, organisersNotifiedAt: null }, data: { organisersNotifiedAt: now } });
+      if (first.count === 1) await notifyOrganisersOfKeptPlace(tx, { organisationId: check.event.organisationId, eventId: check.eventId, eventTitle: check.event.title, rsvpId: check.rsvpId, guestName, outcome: "refundRequested" });
+    });
+    return { released: false as const, message: HANDLED_REQUEST };
+  }
+  // The guest's note goes to the organisers with the request (Finance).
+  const reason = `Answered No to attendance confirmation for ${check.event.title}${note ? `: ${note}` : "."}`.slice(0, 1000);
+  const result = await requestRefundForOrder(orderId, reason, (tx, requestId) => tx.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestId: requestId, refundRequestOpenedAt: now } }));
+  // An open request on the order (the buyer's own) already reaches the organisers.
+  if (!result.ok && result.error !== ALREADY_REQUESTED) return failed(check, result.error);
+  if (!result.ok) await prisma.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestOpenedAt: now } });
+  await recordOutcome(check.id, "refundRequested");
+  return { released: false as const, message: keptMessage("refundRequested") };
+}
+
+/**
  * Runs a release plan after the reply has committed. Free places go through
  * the guest's own cancellation without revalidating (it would re-render the
  * retired /attend page as a 404); a paid single ticket through the buyer's
- * own cancellation under its refund policy (never a full refund by default);
- * a closed policy opens a refund request instead. Anything refused leaves
- * the reply recorded with `releaseOutcome = "failed"`.
+ * own cancellation under its refund policy (never a full refund by default;
+ * an owed desk payment is cancelled); a closed policy opens a refund request
+ * instead. Anything refused leaves the reply recorded with
+ * `releaseOutcome = "failed"`.
  */
-export async function carryOutRelease(params: { check: CheckForRelease; plan: ReleasePlan; note: string; now: Date; }): Promise<{ released: true; } | { released: false; message: string; }> {
+export async function carryOutRelease(params: { check: CheckForRelease; plan: ReleasePlan; note: string; guestName: string; now: Date; }): Promise<{ released: true; } | { released: false; message: string; }> {
   const { check, plan } = params;
   switch (plan.kind) {
     case "hold":
@@ -101,13 +131,30 @@ export async function carryOutRelease(params: { check: CheckForRelease; plan: Re
       }
       return released(check, true);
     }
-    case "refundRequest": {
-      const reason = `Answered No to attendance confirmation for ${check.event.title}${params.note ? `: ${params.note}` : "."}`.slice(0, 1000);
-      const result = await requestRefundForOrder(plan.orderId, reason);
-      // An open request on the order already reaches the organisers.
-      if (!result.ok && result.error !== ALREADY_REQUESTED) return failed(check, result.error);
-      await recordOutcome(check.id, "refundRequested");
-      return { released: false, message: keptMessage("refundRequested") };
-    }
+    case "refundRequest":
+      return refundRequestOnce(check, plan.orderId, params.note, params.guestName, params.now);
   }
+}
+
+/**
+ * A "Yes" after a "No" opened a refund request: while that request is still
+ * open it is withdrawn (audited) and organisers are told the guest is coming
+ * after all. A request already decided is left alone; Finance shows the
+ * guest's current answer beside it.
+ */
+export async function withdrawRefundRequestOnYes(check: CheckForRelease, guestName: string, now: Date) {
+  if (!check.refundRequestId) return;
+  const requestId = check.refundRequestId;
+  await prisma.$transaction(async (tx) => {
+    const withdrawn = await tx.refundRequest.updateMany({
+      where: { id: requestId, status: RefundRequestStatus.OPEN },
+      data: { status: RefundRequestStatus.WITHDRAWN, decisionNote: "Withdrawn: the guest said they're coming after all.", decidedAt: now },
+    });
+    if (withdrawn.count !== 1) return;
+    const request = await tx.refundRequest.findUniqueOrThrow({ where: { id: requestId }, select: { orderId: true, order: { select: { reference: true } } } });
+    await recordAuditEvent({ action: "REFUND_REQUEST_WITHDRAWN", organisationId: check.event.organisationId, targetType: "RefundRequest", targetId: requestId, metadata: { orderId: request.orderId, attendance: true }, client: tx });
+    const line = `${guestName} now says they're coming to ${check.event.title}, so their refund request on order ${request.order.reference} was withdrawn.`;
+    await noticeEach(tx, await organiserEmails(tx, check.event.organisationId), { organisationId: check.event.organisationId, subject: noticeSubject("Coming after all", check.event.title), lines: [line] });
+    await notifyChat(tx, check.event.organisationId, "claim", line);
+  });
 }

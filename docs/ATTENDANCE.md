@@ -58,7 +58,9 @@ ticket.
 - Everything is refused once the event has started and for a cancelled event.
 - Sends and reminders share a limit of 10 per hour (`attendanceCheckSend`),
   shared links 60 per 10 minutes (`attendanceCheckLink`), the switch 30 per
-  minute, replies 10 per minute per link and per address.
+  minute, replies 10 per minute per link and per address, and opening
+  `/attend/:token` 60 per minute per address (`attendanceCheckView`; a limited
+  request gets the same 404 as an unknown link).
 
 ## The email
 
@@ -68,12 +70,16 @@ reminders), with the date and time in the event's own time zone, the place
 it**) that open the form with that answer preselected. Links use the absolute
 `NEXT_PUBLIC_BASE_URL`. At delivery a question is dropped if its link was
 replaced, the guest already answered, is no longer eligible, or the event was
-cancelled, and it expires when the event starts.
+cancelled, and it expires when the event starts. The email goes to the
+registration's address at delivery (the account's current email, or the
+guest's), not the one it was queued for.
 
 The email says a No gives up the place **only when release is on and that
 registration would actually be released right now** (computed at delivery by
-`releaseKindFor`): free places, and paid single tickets whose buyer is replying
-while the refund policy still allows a cancellation. It never promises the
+`releaseFor`): free places, and paid single tickets whose buyer is replying
+while the refund policy still allows a cancellation. For a paid ticket it
+names the refund the policy gives ("No cancels your ticket and refunds ₹X
+under the refund policy"); the form says the same, computed when it renders. It never promises the
 waitlist.
 
 ## The guest's form (`/attend/:token`)
@@ -95,17 +101,38 @@ it on, a No is handled after the reply has been recorded
 
 | Registration | What a No does |
 | --- | --- |
-| Free (no order, or nothing collected on it) | The guest's own cancellation (`cancelRegistrationByToken` in `lib/rsvpCancel.ts`, without revalidation): capacity, waitlist promotion and team rules (leader handover, team units) apply as on the ticket page. |
-| Paid order with only this ticket, the replier is the buyer, refund policy open | The buyer's own cancellation (`cancelOrderAsBuyer`), refunding what the policy says, after the reply commits. |
-| The same, refund policy closed | The place is kept and a refund request is opened for the organisers (`requestRefundForOrder`; an already open request is reused). Guests shows **Said No · paid**. |
-| Paid order with several tickets, a team ticket covering the whole team, or a ticket somebody else paid for | Nothing is cancelled. Owners and admins are emailed and the chat hears a cancellation notice; Guests shows **Said No · paid**. |
+| Free (no order, or an order that cost nothing) | The guest's own cancellation (`cancelRegistrationByToken` in `lib/rsvpCancel.ts`, without revalidation): capacity, waitlist promotion and team rules (leader handover, team units) apply as on the ticket page. |
+| An order that cost money (paid, or still owed at the desk) with only this ticket, the replier is the buyer, refund policy open | The buyer's own cancellation (`cancelOrderAsBuyer`), refunding what the policy says after the reply commits. Nothing collected means nothing refunded, and an owed desk payment is cancelled. |
+| The same with money collected, refund policy closed | The place is kept and a refund request is opened for the organisers (`requestRefundForOrder`; an already open request is reused). Guests shows **Said No · paid**. |
+| An order that cost money with several tickets (desk orders included), a team ticket covering the whole team, or a ticket somebody else paid for | Nothing is cancelled. Owners and admins are emailed and the chat hears a cancellation notice; Guests shows **Said No · paid**. |
 | Already checked in, or any refused cancellation | The place is kept; the reply is recorded with `releaseOutcome = "failed"`. |
 
 The guest path never refunds "everything" by default: only `cancelOrderAsBuyer`
 with the policy's amount is used. What happened is stored in
 `AttendanceCheck.releaseOutcome` (`multiTicket`, `notBuyer`, `refundRequested`,
-`failed`; a CHECK keeps it to a No). A later Yes clears it; a repeated No on a
-place already with the organisers is not handled twice.
+`failed`; a CHECK keeps it to a No). A later Yes clears it.
+
+Changing the answer back and forth never repeats anything for the organisers:
+`organisersNotifiedAt` and `refundRequestOpenedAt` are set once and never
+cleared, so a check sends at most one kept-place notice and opens at most one
+refund request. A **Yes** after a No that opened a refund request withdraws
+that request while it is still open (`WITHDRAWN`, audited as
+`REFUND_REQUEST_WITHDRAWN`) and tells the organisers the guest is coming after
+all; a request already approved or declined is left alone, and the Finance
+tab shows the guest's current answer beside it. A later No never opens
+another request; if the first one was already handled, the organisers get the
+kept-place notice (once) instead.
+
+Each reply is written only if the answer it replaces is still the stored one
+(response and its time), so when two windows answer at once only one plans and
+runs a release; the other is told what was stored.
+
+**Where the note goes.** A guest's note is kept with their answer (Guests →
+People, the attendee CSV, their own data export). When a closed policy opens a
+refund request, the note is included in the request's reason, which the
+organisers see in the Finance tab and in the refund-request email. The
+kept-place notice (email and chat) and every audit entry carry names and ids
+only, never the note.
 
 ## What organisers see
 
@@ -129,7 +156,9 @@ place already with the organisers is not handled twice.
 
 `AttendanceCheck` (one per registration, cascading with the registration and
 the event) stores the SHA-256 digest of the 256-bit token, `sentAt`, the reply,
-its time, the note and `releaseOutcome`. CHECK constraints keep the digest
+its time, the note, `releaseOutcome`, `organisersNotifiedAt`,
+`refundRequestOpenedAt` and the refund request it opened (`refundRequestId`,
+`ON DELETE SET NULL`). CHECK constraints keep the digest
 shape, the note length, the reply/time pair and the release outcome. Sends,
 reminders, setting changes, shared links, released places and kept paid places
 are audited (`ATTENDANCE_CHECK_SENT`, `_REMINDED`, `_SETTINGS_UPDATED`,

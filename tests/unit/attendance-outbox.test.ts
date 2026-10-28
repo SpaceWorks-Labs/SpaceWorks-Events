@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   createMany: vi.fn(),
   checkFind: vi.fn(),
   eligible: vi.fn(),
-  releaseKind: vi.fn(),
+  release: vi.fn(),
   send: vi.fn(),
 }));
 
@@ -26,7 +26,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/email/attendance", () => ({ sendAttendanceCheckEmail: mocks.send }));
 vi.mock("@/lib/core/attendanceCheck/eligible", () => ({ isEligibleRsvp: mocks.eligible }));
-vi.mock("@/lib/core/attendanceCheck/release", () => ({ releaseKindFor: mocks.releaseKind }));
+vi.mock("@/lib/core/attendanceCheck/release", () => ({ releaseFor: mocks.release }));
 vi.mock("@/lib/email/passwordReset", () => ({ sendPasswordResetEmail: vi.fn() }));
 vi.mock("@/lib/email/emailVerification", () => ({ sendEmailVerificationEmail: vi.fn() }));
 vi.mock("@/lib/opsAlerts", () => ({ reportOpsAlert: vi.fn() }));
@@ -82,7 +82,7 @@ describe("attendance outbox delivery", () => {
     tokenHash: hashAttendanceToken(token),
     response: null,
     eventId: "evt_1",
-    rsvp: { guestName: "Ada", user: null },
+    rsvp: { guestName: "Ada", guestEmail: "ada-now@example.test", user: null },
     event: { title: "Launch", status: "PUBLISHED", startDateTime: new Date(Date.now() + 86_400_000), timezone: "Europe/London", location: "Hall", isOnline: false, attendanceCheckReleaseOnDecline: false, organisation: { name: "Acme" } },
     ...overrides,
   });
@@ -93,7 +93,7 @@ describe("attendance outbox delivery", () => {
     mocks.deleteMany.mockResolvedValue({ count: 1 });
     mocks.send.mockResolvedValue(undefined);
     mocks.eligible.mockResolvedValue(true);
-    mocks.releaseKind.mockResolvedValue(null);
+    mocks.release.mockResolvedValue(null);
   });
 
   it("sends the current question and deletes the capability row", async () => {
@@ -101,8 +101,9 @@ describe("attendance outbox delivery", () => {
     mocks.checkFind.mockResolvedValue(check());
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 1, failed: 0 });
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({
-      to: "a@example.test", eventTitle: "Launch", organisationName: "Acme", timezone: "Europe/London", location: "Hall",
-      attendPath: `/attend/${token}`, recipientName: "Ada", reminder: true, releaseKind: null,
+      // Sent to the registration's address at delivery, not the one queued.
+      to: "ada-now@example.test", eventTitle: "Launch", organisationName: "Acme", timezone: "Europe/London", location: "Hall",
+      attendPath: `/attend/${token}`, recipientName: "Ada", reminder: true, releaseKind: null, releaseRefund: null,
     }));
     expect(mocks.deleteMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "msg_1", status: OutboxStatus.PROCESSING }) });
     expect(mocks.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: OutboxStatus.SENT }) }));
@@ -111,10 +112,10 @@ describe("attendance outbox delivery", () => {
   it("tells the email what a No would release for this registration, computed at delivery", async () => {
     mocks.findMany.mockResolvedValue([message({ to: "a@example.test", rsvpId: "rsvp_1", token })]);
     mocks.checkFind.mockResolvedValue(check({ event: { ...check().event, attendanceCheckReleaseOnDecline: true } }));
-    mocks.releaseKind.mockResolvedValue("paid");
+    mocks.release.mockResolvedValue({ kind: "paid", refund: "₹499.00" });
     await deliverOutboxBatch();
-    expect(mocks.releaseKind).toHaveBeenCalledWith("rsvp_1", true);
-    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ releaseKind: "paid" }));
+    expect(mocks.release).toHaveBeenCalledWith("rsvp_1", true);
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ releaseKind: "paid", releaseRefund: "₹499.00" }));
   });
 
   it("says Online for an online event", async () => {

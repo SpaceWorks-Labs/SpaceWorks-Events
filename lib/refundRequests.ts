@@ -45,15 +45,17 @@ export async function requestRefund(orderToken: string, reason: unknown): Promis
  * (docs/ATTENDANCE.md). The caller has already authorised the guest (their
  * attendance link) and checked they bought the order. Same rules as the
  * buyer's own request: paid, confirmed orders only, one open request each.
+ * `onCreated` runs in the request's own transaction (the attendance check
+ * records which request it opened).
  */
-export async function requestRefundForOrder(orderId: string, reason: string): Promise<Result> {
+export async function requestRefundForOrder(orderId: string, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>): Promise<Result> {
   const parsedReason = reasonSchema.safeParse(reason);
   if (!parsedReason.success) return { ok: false, error: parsedReason.error.issues[0]?.message ?? "Say why." };
   const order = await prisma.order.findUnique({ where: { id: orderId }, select: ORDER_FOR_REQUEST });
-  return openRefundRequest(order, parsedReason.data);
+  return openRefundRequest(order, parsedReason.data, onCreated);
 }
 
-async function openRefundRequest(order: Prisma.OrderGetPayload<{ select: typeof ORDER_FOR_REQUEST; }> | null, reason: string): Promise<Result> {
+async function openRefundRequest(order: Prisma.OrderGetPayload<{ select: typeof ORDER_FOR_REQUEST; }> | null, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>): Promise<Result> {
   if (!order) return { ok: false, error: "Order not found." };
   if (order.status !== OrderStatus.CONFIRMED || order.payments.length === 0) return { ok: false, error: "Only paid orders can ask for a refund." };
   const title = orderSubject(order)?.title ?? "your event";
@@ -61,6 +63,7 @@ async function openRefundRequest(order: Prisma.OrderGetPayload<{ select: typeof 
     await prisma.$transaction(async (tx) => {
       const request = await tx.refundRequest.create({ data: { organisationId: order.organisationId, orderId: order.id, reason }, select: { id: true } });
       await recordAuditEvent({ action: "REFUND_REQUESTED", organisationId: order.organisationId, targetType: "RefundRequest", targetId: request.id, metadata: { orderId: order.id }, client: tx });
+      await onCreated?.(tx, request.id);
       await notifyChat(tx, order.organisationId, "claim", `${order.buyerName || "A buyer"} asked for a refund on order ${order.reference} (${title}).`);
       await noticeEach(tx, await organiserEmails(tx, order.organisationId), {
         organisationId: order.organisationId,

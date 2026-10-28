@@ -2410,13 +2410,24 @@ model AttendanceCheck {
   /// "notBuyer" (a paid order; organisers were told), "refundRequested"
   /// (refund window closed; a refund request was opened) or "failed".
   releaseOutcome String?
+  /// Set once when owners and admins were told about a "No" on a paid place
+  /// that was kept; never cleared, so changing the answer back and forth
+  /// never repeats the notice.
+  organisersNotifiedAt  DateTime?
+  /// Set once when a "No" opened a refund request (policy closed); never
+  /// cleared, so a later "No" never opens another one.
+  refundRequestOpenedAt DateTime?
+  /// That refund request, withdrawn if the guest says Yes while it is open.
+  refundRequestId       String?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  rsvp  RSVP  @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rsvp          RSVP           @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  event         Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  refundRequest RefundRequest? @relation(fields: [refundRequestId], references: [id], onDelete: SetNull)
 
   @@index([eventId, response])
+  @@index([refundRequestId])
 }
 
 /// One rubric line. Frozen once judging leaves NOT_STARTED. CHECK
@@ -2813,6 +2824,8 @@ model RefundRequest {
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   decidedBy    User?        @relation("RefundRequestDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  /// A guest's "No" to attendance confirmation that opened this request (docs/ATTENDANCE.md).
+  attendanceChecks AttendanceCheck[]
 
   @@index([orderId, status])
   @@index([organisationId, status, createdAt])

@@ -112,6 +112,9 @@ export function parseAnswerPreselect(value: unknown): AttendanceResponseValue | 
  */
 export type AttendanceReleaseKind = "free" | "paid";
 
+/** A release a "No" would make, with the refund it gives (formatted; null when nothing comes back). */
+export type AttendanceRelease = { kind: AttendanceReleaseKind; refund: string | null };
+
 export type AttendanceSummary = {
   /** Guests asked so far (rows that still exist). */
   asked: number;

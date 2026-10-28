@@ -125,6 +125,16 @@ describe("outbox delivery", () => {
     expect(await queuedFor(event.id)).toHaveLength(0);
   });
 
+  it("sends to the registration's current address, not the one queued", async () => {
+    const event = await makeEvent();
+    const rsvp = await guest(event.id);
+    await sendAttendanceChecksForUser(att.ownerId, ref(event));
+    const moved = `moved-${att.suffix}@example.test`;
+    await prisma.rSVP.update({ where: { id: rsvp.id }, data: { guestEmail: moved } });
+    await deliverEventAttendance(event.id, deliverOutboxBatch);
+    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ to: moved }));
+  });
+
   it("says a No releases the place only when the switch is on at delivery", async () => {
     const event = await makeEvent();
     await guest(event.id);

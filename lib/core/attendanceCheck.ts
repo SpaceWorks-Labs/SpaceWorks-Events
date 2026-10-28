@@ -10,5 +10,6 @@ export { ATTENDANCE_AUDIT } from "./attendanceCheck/shared";
 export { loadAttendanceCheckStatus, loadAttendanceReplyCounts, previewAttendanceCheckSendForUser, type AttendanceCheckStatus } from "./attendanceCheck/status";
 export { remindAttendanceChecksForUser, sendAttendanceChecksForUser, setAttendanceReleaseOnDeclineForUser } from "./attendanceCheck/send";
 export { issueAttendanceLinkForUser } from "./attendanceCheck/link";
-export { resolveAttendanceCheckByToken, respondToAttendanceCheck, type AttendanceFormView, type AttendanceReplyResult } from "./attendanceCheck/reply";
-export { planRelease, releaseKindFor, type ReleasePlan } from "./attendanceCheck/release";
+export { resolveAttendanceCheckByToken, type AttendanceFormView } from "./attendanceCheck/reply";
+export { respondToAttendanceCheck, type AttendanceReplyResult } from "./attendanceCheck/respond";
+export { planRelease, releaseFor, type ReleasePlan } from "./attendanceCheck/release";

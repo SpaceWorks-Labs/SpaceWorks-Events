@@ -25,14 +25,19 @@ export type AttendanceCheckEmailParams = {
    * just recorded. It never promises the waitlist.
    */
   releaseKind?: AttendanceReleaseKind | null;
+  /** For a paid release: the refund the buyer policy gives, formatted (null or absent when nothing comes back). */
+  releaseRefund?: string | null;
   /** Absolute base for links; defaults to NEXT_PUBLIC_BASE_URL. */
   baseUrl?: string;
 };
 
 const SECONDARY_BUTTON_STYLE = `background-color: ${EMAIL_COLORS.panel}; color: ${EMAIL_COLORS.ink}; padding: 12px 26px; border-radius: 10px; border: 2px solid ${EMAIL_COLORS.ink}; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;`;
 
-function purposeOf(releaseKind: AttendanceReleaseKind | null | undefined) {
-  if (releaseKind === "paid") return "Your answer helps them plan. If you can't come, answering No gives up your place so someone else can have it, and cancels your order under the event's refund policy.";
+function purposeOf(releaseKind: AttendanceReleaseKind | null | undefined, refund: string | null | undefined) {
+  if (releaseKind === "paid") {
+    const money = refund ? `cancels your ticket and refunds ${refund} under the event's refund policy` : "cancels your ticket under the event's refund policy";
+    return `Your answer helps them plan. If you can't come, answering No gives up your place so someone else can have it, and ${money}.`;
+  }
   if (releaseKind === "free") return "Your answer helps them plan. If you can't come, answering No gives up your place so someone else can have it.";
   return "Your answer helps them plan.";
 }
@@ -48,7 +53,7 @@ export function buildAttendanceCheckEmail(params: AttendanceCheckEmailParams): {
   const when = `${formatDayTime(params.startDateTime, zone)} ${formatTimeZoneName(params.startDateTime, zone)}`.trim();
   const where = params.location.replace(/[\u0000-\u001F\u007F]+/g, " ").trim().slice(0, 300);
   const subject = `${params.reminder ? "Reminder: are" : "Are"} you still coming to ${headerText(params.eventTitle)}?`;
-  const purpose = purposeOf(params.releaseKind);
+  const purpose = purposeOf(params.releaseKind, params.releaseRefund);
   const html = emailLayout(escapeHtml(subject), `
           <h2 style="${HEADING_STYLE}">Are you still coming?</h2>
           <p style="${BODY_STYLE}">${salutation.html}<br><br>${escapeHtml(params.organisationName)} would like to know whether you can still make it to <strong>${escapeHtml(params.eventTitle)}</strong>. ${escapeHtml(purpose)}</p>

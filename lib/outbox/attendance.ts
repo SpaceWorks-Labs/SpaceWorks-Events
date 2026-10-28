@@ -14,7 +14,9 @@ import { isBoundedString, isEmail } from "./payloads";
 export const ATTENDANCE_CHECK_KIND = "attendance-check";
 
 /**
- * "Are you still coming?" for one eligible registration. Queued only by an
+ * "Are you still coming?" for one eligible registration. `to` is where it
+ * was addressed when queued; delivery sends to the registration's current
+ * address. Queued only by an
  * organiser's explicit send or reminder, never by the worker. Carries the raw
  * `/attend/{token}` token (a capability), which exists nowhere else; dropped
  * when the token was rotated, the guest already replied or is no longer
@@ -56,7 +58,7 @@ export async function deliverAttendanceCheck(value: Prisma.JsonValue, messageId:
       tokenHash: true,
       response: true,
       eventId: true,
-      rsvp: { select: { guestName: true, user: { select: { name: true } } } },
+      rsvp: { select: { guestName: true, guestEmail: true, user: { select: { name: true, email: true } } } },
       event: { select: { title: true, status: true, startDateTime: true, timezone: true, location: true, isOnline: true, attendanceCheckReleaseOnDecline: true, organisation: { select: { name: true } } } },
     },
   });
@@ -68,8 +70,13 @@ export async function deliverAttendanceCheck(value: Prisma.JsonValue, messageId:
     !(await isEligibleRsvp(prisma, payload.rsvpId, check.eventId))
   ) return "dropped";
   if (!attendanceCheckOpen(check.event.startDateTime)) return "expired";
+  // The registration's address now (an account email may have changed since the send).
+  const to = (check.rsvp.user?.email ?? check.rsvp.guestEmail ?? "").trim();
+  if (!to) return "dropped";
+  // Loaded on demand: the release rules pull in the payment operations.
+  const release = await (await import("@/lib/core/attendanceCheck/release")).releaseFor(payload.rsvpId, check.event.attendanceCheckReleaseOnDecline);
   await sendAttendanceCheckEmail({
-    to: payload.to,
+    to,
     eventTitle: check.event.title,
     organisationName: check.event.organisation.name,
     startDateTime: check.event.startDateTime,
@@ -78,8 +85,8 @@ export async function deliverAttendanceCheck(value: Prisma.JsonValue, messageId:
     attendPath: attendancePath(payload.token),
     recipientName: check.rsvp.user?.name?.trim() || check.rsvp.guestName?.trim() || undefined,
     reminder: payload.reminder === true,
-    // Loaded on demand: the release rules pull in the payment operations.
-    releaseKind: await (await import("@/lib/core/attendanceCheck/release")).releaseKindFor(payload.rsvpId, check.event.attendanceCheckReleaseOnDecline),
+    releaseKind: release?.kind ?? null,
+    releaseRefund: release?.refund ?? null,
     messageId,
   });
   return "sent";

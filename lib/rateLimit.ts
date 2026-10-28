@@ -45,7 +45,8 @@ export type Bucket =
   | "attendanceCheckSend"
   | "attendanceCheckSettings"
   | "attendanceCheckLink"
-  | "attendanceCheckReply";
+  | "attendanceCheckReply"
+  | "attendanceCheckView";
 
 const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   global: { max: 300, windowMs: 60_000 },
@@ -123,6 +124,8 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   attendanceCheckLink: { max: 60, windowMs: 10 * 60_000 },
   // Public replies on /attend/{token}, per link and per client address.
   attendanceCheckReply: { max: 10, windowMs: 60_000 },
+  // Opening /attend/{token}, per client address: links are unguessable, this only blunts scraping.
+  attendanceCheckView: { max: 60, windowMs: 60_000 },
 };
 
 // Local fallback store

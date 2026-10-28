@@ -1,4 +1,4 @@
-import { EventStatus, OrderStatus, TeamTicketMode, PaymentRefundStatus, RefundRequestStatus, RsvpStatus, type RefundPolicyKind } from "@prisma/client";
+import { OrderStatus, TeamTicketMode, PaymentRefundStatus, RefundRequestStatus, RsvpStatus } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
@@ -18,68 +18,21 @@ vi.mock("@/lib/outboxWorker", async (importOriginal) => ({ ...(await importOrigi
 vi.mock("@/lib/email/attendance", () => ({ sendAttendanceCheckEmail: mocks.send }));
 
 import { prisma } from "@/lib/db";
-import { ATTENDANCE_AUDIT, resolveAttendanceCheckByToken, respondToAttendanceCheck, sendAttendanceChecksForUser } from "@/lib/core/attendanceCheck";
+import { ATTENDANCE_AUDIT, resolveAttendanceCheckByToken, respondToAttendanceCheck } from "@/lib/core/attendanceCheck";
 import { settleOrderByHand } from "@/lib/payments/operations";
 import { submitRsvpCore } from "@/lib/rsvpCore";
+import { askAndToken, buyPaid, email, noticesTo, owner, paidEvent, setUpPaidAttendance, tearDownPaidAttendance } from "./helpers/attendancePaid";
 import { deliverOutboxBatch } from "@/lib/outbox";
 import { listAttendeesPage } from "@/lib/eventDashboard/attendees";
-import { hashAttendanceToken } from "@/lib/attendanceToken";
-import { createTeamEvent, paid, setUpPaidOrg, tearDownPaidOrg } from "./helpers/paidOrg";
+import { createTeamEvent, paid } from "./helpers/paidOrg";
 import { deliverAttendanceQueue } from "./helpers/attendance";
 
-const HOUR = 3_600_000;
-let ownerId = "";
-let ownerEmail = "";
-let counter = 0;
-const email = (name: string) => `${name}-${paid.suffix}@example.test`;
-
-async function paidEvent(policy: { kind: RefundPolicyKind; hours?: number; percent?: number; }, release = true) {
-  counter += 1;
-  const start = new Date(Date.now() + 30 * 24 * HOUR);
-  const event = await prisma.event.create({ data: {
-    organisationId: paid.organisationId, title: `Paid attendance ${counter}`, slug: `paid-att-${paid.suffix}-${counter}`, currency: "INR", capacity: 50,
-    startDateTime: start, endDateTime: new Date(start.getTime() + 2 * HOUR), timezone: "UTC", status: EventStatus.PUBLISHED, page: { create: { isPublished: true } },
-    refundPolicyKind: policy.kind, refundPolicyHours: policy.hours ?? null, refundPolicyPercent: policy.percent ?? null, attendanceCheckReleaseOnDecline: release,
-  } });
-  const ticket = await prisma.ticketType.create({ data: { eventId: event.id, name: "General", priceMinor: BigInt(49900), payAtDesk: true } });
-  return { event, ticket };
-}
-
-/** Buy at the desk and record the money as collected in person: a confirmed, paid order. */
-async function buyPaid(event: { id: string; slug: string; }, ticketTypeId: string, buyer: string, friends: string[] = []) {
-  const result = await submitRsvpCore({
-    orgSlug: paid.orgSlug, eventSlug: event.slug, guestEmail: email(buyer), name: "Paying Guest", answers: {}, payAtDesk: true,
-    items: [{ ticketTypeId, quantity: 1 + friends.length }], attendees: friends.map((friend) => ({ name: "Friend", email: email(friend) })),
-  }, { userId: null });
-  expect(result).toMatchObject({ ok: true });
-  const order = await prisma.order.findFirstOrThrow({ where: { eventId: event.id, buyerEmail: email(buyer) }, include: { rsvps: true } });
-  await settleOrderByHand({ orderId: order.id, organisationId: paid.organisationId, actorUserId: ownerId, mode: "offline", method: "CASH" });
-  return order;
-}
-
-async function askAndToken(event: { id: string; organisationId: string; }, rsvpId: string) {
-  await sendAttendanceChecksForUser(ownerId, { organisationSlug: paid.orgSlug, eventId: event.id });
-  const check = await prisma.attendanceCheck.findUniqueOrThrow({ where: { rsvpId } });
-  const messages = await prisma.outboxMessage.findMany({ where: { kind: "attendance-check", payload: { path: ["rsvpId"], equals: rsvpId } } });
-  return messages.map((message) => (message.payload as { token: string }).token).find((raw) => hashAttendanceToken(raw) === check.tokenHash)!;
-}
-
-const noticesTo = (to: string, subject: string) => prisma.outboxMessage.count({ where: { kind: "operator-notice", AND: [{ payload: { path: ["to"], equals: to } }, { payload: { path: ["subject"], string_contains: subject } }] } });
-
-beforeAll(async () => {
-  await setUpPaidOrg("Paid attendance");
-  ownerEmail = email("owner");
-  ownerId = (await prisma.user.create({ data: { email: ownerEmail, name: "Owner", emailVerified: new Date(), memberships: { create: { organisationId: paid.organisationId, role: "OWNER" } } } })).id;
-});
+beforeAll(() => setUpPaidAttendance("Paid attendance"));
 beforeEach(() => {
   mocks.send.mockReset();
   mocks.send.mockResolvedValue(undefined);
 });
-afterAll(async () => {
-  await prisma.$executeRaw`DELETE FROM "OutboxMessage" WHERE "payload"->>'to' LIKE ${`%${paid.suffix}@example.test`}`;
-  await prisma.user.deleteMany({ where: { email: { endsWith: `${paid.suffix}@example.test` } } });
-  await tearDownPaidOrg();
-});
+afterAll(() => tearDownPaidAttendance());
 
 describe("a paid single ticket replied to by its buyer", () => {
   it("is cancelled under the refund policy after the reply commits, refunding only what the policy allows", async () => {
@@ -118,7 +71,7 @@ describe("once the refund policy has closed", () => {
     expect(await prisma.attendanceCheck.findUniqueOrThrow({ where: { rsvpId: rsvp.id } })).toMatchObject({ releaseOutcome: "refundRequested" });
     const requests = await prisma.refundRequest.findMany({ where: { orderId: order.id } });
     expect(requests).toEqual([expect.objectContaining({ status: RefundRequestStatus.OPEN, reason: expect.stringContaining("Ill") })]);
-    expect(await noticesTo(ownerEmail, "Refund request")).toBe(1);
+    expect(await noticesTo(owner.email, "Refund request")).toBe(1);
 
     // Changing to Yes and back to No never opens a second request.
     await respondToAttendanceCheck({ token, response: "ATTENDING" });
@@ -138,6 +91,7 @@ describe("paid places organisers handle", () => {
     const token = await askAndToken(event, buyerRsvp.id);
     const friendToken = await askAndToken(event, friendRsvp.id);
     expect((await resolveAttendanceCheckByToken(token))?.releaseKind).toBeNull();
+    const before = await noticesTo(owner.email, "Said No");
 
     const reply = await respondToAttendanceCheck({ token, response: "NOT_ATTENDING" });
     expect(reply).toMatchObject({ ok: true, data: { released: false, releaseFailed: expect.stringContaining("nothing was cancelled") } });
@@ -146,12 +100,12 @@ describe("paid places organisers handle", () => {
     expect(await prisma.rSVP.count({ where: { orderId: order.id, status: RsvpStatus.CONFIRMED } })).toBe(2);
     expect(await prisma.paymentRefund.count({ where: { payment: { orderId: order.id } } })).toBe(0);
     expect(await prisma.attendanceCheck.findUniqueOrThrow({ where: { rsvpId: buyerRsvp.id } })).toMatchObject({ releaseOutcome: "multiTicket" });
-    expect(await noticesTo(ownerEmail, "Said No")).toBe(2);
+    expect(await noticesTo(owner.email, "Said No")).toBe(before + 2);
     expect(await prisma.auditEvent.count({ where: { action: ATTENDANCE_AUDIT.keptPaid, targetId: event.id } })).toBe(2);
 
     // Saying No again doesn't repeat the notice.
     expect(await respondToAttendanceCheck({ token, response: "NOT_ATTENDING", note: "Still no" })).toMatchObject({ ok: true, data: { released: false } });
-    expect(await noticesTo(ownerEmail, "Said No")).toBe(2);
+    expect(await noticesTo(owner.email, "Said No")).toBe(before + 2);
   });
 
   it("never cancels a ticket somebody else paid for", async () => {
@@ -165,7 +119,7 @@ describe("paid places organisers handle", () => {
     expect(await respondToAttendanceCheck({ token, response: "NOT_ATTENDING" })).toMatchObject({ ok: true, data: { released: false } });
     expect(await prisma.attendanceCheck.findUniqueOrThrow({ where: { rsvpId: rsvp.id } })).toMatchObject({ releaseOutcome: "notBuyer" });
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe(OrderStatus.CONFIRMED);
-    expect(await noticesTo(ownerEmail, "Said No")).toBeGreaterThanOrEqual(3);
+    expect(await noticesTo(owner.email, "Said No")).toBeGreaterThanOrEqual(3);
   });
 
   it("never cancels a team ticket that pays for the whole team when its leader says No", async () => {
@@ -177,7 +131,7 @@ describe("paid places organisers handle", () => {
     }, { userId: null, team: { mode: "create", name: `Paid team ${paid.suffix}` } });
     expect(created).toMatchObject({ ok: true });
     const order = await prisma.order.findFirstOrThrow({ where: { eventId: event.id }, include: { rsvps: true } });
-    await settleOrderByHand({ orderId: order.id, organisationId: paid.organisationId, actorUserId: ownerId, mode: "offline", method: "CASH" });
+    await settleOrderByHand({ orderId: order.id, organisationId: paid.organisationId, actorUserId: owner.id, mode: "offline", method: "CASH" });
     const team = await prisma.team.findFirstOrThrow({ where: { eventId: event.id } });
     // A teammate joins free under the team ticket (PER_TEAM).
     await prisma.rSVP.create({ data: { eventId: event.id, teamId: team.id, guestEmail: email("team-mate"), attendeeKey: `guest:${email("team-mate")}`, status: RsvpStatus.CONFIRMED } });

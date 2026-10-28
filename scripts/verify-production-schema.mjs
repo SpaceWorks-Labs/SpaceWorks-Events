@@ -147,18 +147,19 @@ try {
     prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Event' AND column_name = 'attendanceCheckReleaseOnDecline'`,
     prisma.$queryRaw`
       SELECT conname, confdeltype FROM pg_constraint
-      WHERE conname IN ('AttendanceCheck_token_hash_shape', 'AttendanceCheck_note_length', 'AttendanceCheck_response_pair', 'AttendanceCheck_release_outcome', 'AttendanceCheck_rsvpId_fkey', 'AttendanceCheck_eventId_fkey')
+      WHERE conname IN ('AttendanceCheck_token_hash_shape', 'AttendanceCheck_note_length', 'AttendanceCheck_response_pair', 'AttendanceCheck_release_outcome', 'AttendanceCheck_rsvpId_fkey', 'AttendanceCheck_eventId_fkey', 'AttendanceCheck_refundRequestId_fkey')
     `,
-    prisma.$queryRaw`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname IN ('AttendanceCheck_rsvpId_key', 'AttendanceCheck_tokenHash_key', 'AttendanceCheck_eventId_response_idx')`,
+    prisma.$queryRaw`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname IN ('AttendanceCheck_rsvpId_key', 'AttendanceCheck_tokenHash_key', 'AttendanceCheck_eventId_response_idx', 'AttendanceCheck_refundRequestId_idx')`,
   ]);
   const attendanceConstraintNames = new Set(attendanceConstraints.map((row) => row.conname));
   const attendanceIndexNames = new Set(attendanceIndexes.map((row) => row.indexname));
   missing.push(
     ...(attendanceTables.length ? [] : ["AttendanceCheck"]),
     ...(attendanceColumns.length ? [] : ["Event.attendanceCheckReleaseOnDecline"]),
-    ...["AttendanceCheck_token_hash_shape", "AttendanceCheck_note_length", "AttendanceCheck_response_pair", "AttendanceCheck_release_outcome", "AttendanceCheck_rsvpId_fkey", "AttendanceCheck_eventId_fkey"].filter((name) => !attendanceConstraintNames.has(name)),
+    ...["AttendanceCheck_token_hash_shape", "AttendanceCheck_note_length", "AttendanceCheck_response_pair", "AttendanceCheck_release_outcome", "AttendanceCheck_rsvpId_fkey", "AttendanceCheck_eventId_fkey", "AttendanceCheck_refundRequestId_fkey"].filter((name) => !attendanceConstraintNames.has(name)),
+    ...(attendanceConstraints.some((row) => row.conname === "AttendanceCheck_refundRequestId_fkey" && row.confdeltype === "n") ? [] : ["AttendanceCheck_refundRequestId_fkey:ON DELETE SET NULL"]),
     ...["AttendanceCheck_rsvpId_fkey", "AttendanceCheck_eventId_fkey"].filter((name) => !attendanceConstraints.some((row) => row.conname === name && row.confdeltype === "c")).map((name) => `${name}:ON DELETE CASCADE`),
-    ...["AttendanceCheck_rsvpId_key", "AttendanceCheck_tokenHash_key", "AttendanceCheck_eventId_response_idx"].filter((name) => !attendanceIndexNames.has(name)),
+    ...["AttendanceCheck_rsvpId_key", "AttendanceCheck_tokenHash_key", "AttendanceCheck_eventId_response_idx", "AttendanceCheck_refundRequestId_idx"].filter((name) => !attendanceIndexNames.has(name)),
   );
   if (missing.length > 0) {
     throw new Error(`Database schema contract failed; missing: ${missing.join(", ")}`);

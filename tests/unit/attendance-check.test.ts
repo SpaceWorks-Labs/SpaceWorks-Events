@@ -190,7 +190,10 @@ describe("attendance email", () => {
     expect(free.html).toContain("answering No gives up your place so someone else can have it");
     expect(free.text).not.toMatch(/waitlist|refund/i);
     const paid = buildAttendanceCheckEmail({ ...params, releaseKind: "paid" });
-    expect(paid.text).toContain("cancels your order under the event's refund policy");
+    expect(paid.text).toContain("cancels your ticket under the event's refund policy");
+    const refunded = buildAttendanceCheckEmail({ ...params, releaseKind: "paid", releaseRefund: "₹249.50" });
+    expect(refunded.text).toContain("cancels your ticket and refunds ₹249.50 under the event's refund policy");
+    expect(refunded.html).toContain("refunds ₹249.50");
   });
 
   it("marks reminders, omits an empty location and keeps headers single-line", () => {

@@ -68,6 +68,7 @@ export default async function AttendPage({ params, searchParams }: Props) {
         initialNote={view.note}
         preselect={preselect}
         releaseKind={view.releaseKind}
+        releaseRefund={view.releaseRefund}
         closed={view.closed}
         timeZone={timeZone}
       />

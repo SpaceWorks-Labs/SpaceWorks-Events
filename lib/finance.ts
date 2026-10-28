@@ -55,7 +55,7 @@ export async function loadEventFinance(eventId: string, organisationId: string) 
       where: { order: { eventId } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: LIST_LIMIT,
-      select: { id: true, status: true, reason: true, approvedMinor: true, cancelTickets: true, decisionNote: true, createdAt: true, order: { select: { reference: true, buyerName: true, buyerEmail: true, totalMinor: true, currency: true, status: true } } },
+      select: { id: true, status: true, reason: true, approvedMinor: true, cancelTickets: true, decisionNote: true, createdAt: true, attendanceChecks: { select: { response: true }, take: 1 }, order: { select: { reference: true, buyerName: true, buyerEmail: true, totalMinor: true, currency: true, status: true } } },
     }),
   ]);
   // Totals come from every claim, not just the listed page.
@@ -129,6 +129,8 @@ export async function loadEventFinance(eventId: string, organisationId: string) 
       approved: request.approvedMinor != null ? formatMoney(request.approvedMinor, request.order.currency) : null,
       cancelTickets: request.cancelTickets,
       note: request.decisionNote,
+      // Opened by a guest's "No" to attendance confirmation: their answer now (docs/ATTENDANCE.md).
+      attendanceAnswer: request.attendanceChecks[0]?.response ?? null,
       createdAt: request.createdAt.toISOString(),
     })),
     capped: claims.length === LIST_LIMIT,

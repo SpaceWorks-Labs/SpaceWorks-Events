@@ -42,6 +42,8 @@ export type AttendanceReplyFormProps = {
   preselect: AttendanceResponseValue | null;
   /** What a "No" would release right now (null: the place is kept). */
   releaseKind: AttendanceReleaseKind | null;
+  /** For a paid release: the refund the buyer policy gives, formatted (null when nothing comes back). */
+  releaseRefund?: string | null;
   closed: AttendanceReplyClosed | null;
   /** The event's (already validated) timezone. */
   timeZone: string;
@@ -54,6 +56,7 @@ export type AttendanceReplyFormProps = {
  */
 export function AttendanceReplyForm(props: AttendanceReplyFormProps) {
   const { token, attendeeName, attendeeEmail, teamName, releaseKind, closed, timeZone } = props;
+  const paidCopy = props.releaseRefund ? ` Your ticket is cancelled and ${props.releaseRefund} is refunded under the event's refund policy.` : " Your ticket is cancelled under the event's refund policy.";
   const initialSaved: Saved | null = props.initialResponse
     ? { response: props.initialResponse, respondedAt: props.initialRespondedAt, note: props.initialNote }
     : null;
@@ -157,7 +160,7 @@ export function AttendanceReplyForm(props: AttendanceReplyFormProps) {
           <div className="flex flex-col gap-1.5">
             <h2 className="text-h4 text-ink">Your place has been released</h2>
             <p className="text-body-ui text-ink-secondary">
-              Thanks for letting the organisers know. Your registration is cancelled and your place can go to someone else.{releasedKind === "paid" ? " Your order is cancelled under the event's refund policy, and the buyer gets an email about any refund." : ""} This can&apos;t be undone here; if your plans change, register again from the event page while places are left.
+              Thanks for letting the organisers know. Your registration is cancelled and your place can go to someone else.{releasedKind === "paid" ? `${paidCopy} You'll get an email about it.` : ""} This can&apos;t be undone here; if your plans change, register again from the event page while places are left.
             </p>
           </div>
         </div>
@@ -239,7 +242,7 @@ export function AttendanceReplyForm(props: AttendanceReplyFormProps) {
 
         {willRelease ? (
           <Callout tone="warning" title="Answering No releases your place">
-            Your registration will be cancelled and your place can go to someone else.{releaseKind === "paid" ? " Your order is cancelled under the event's refund policy." : ""} You can&apos;t take it back from this page.
+            Your registration will be cancelled and your place can go to someone else.{releaseKind === "paid" ? paidCopy : ""} You can&apos;t take it back from this page.
           </Callout>
         ) : null}
 

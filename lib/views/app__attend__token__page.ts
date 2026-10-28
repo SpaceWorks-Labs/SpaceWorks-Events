@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { isAttendanceTokenShape } from "@/lib/attendanceToken";
 import { parseAnswerPreselect } from "@/lib/attendanceCheck";
 import { resolveAttendanceCheckByToken } from "@/lib/core/attendanceCheck";
+import { isActionRateLimited } from "@/lib/actionRateLimit";
 
 /**
  * "Are you still coming?" by its link (docs/ATTENDANCE.md). The link is the
@@ -13,6 +14,8 @@ export async function loadAttendView({ params, searchParams }: { params: Promise
   const [{ token }, query] = await Promise.all([params, searchParams]);
   const raw = token?.trim() ?? "";
   if (!isAttendanceTokenShape(raw)) notFound();
+  // Per client address; a limited request is the same plain 404 as an unknown link.
+  if (await isActionRateLimited("attendanceCheckView")) notFound();
   const view = await resolveAttendanceCheckByToken(raw);
   if (!view) notFound();
   return { view, token: raw, preselect: parseAnswerPreselect(query.answer) };
