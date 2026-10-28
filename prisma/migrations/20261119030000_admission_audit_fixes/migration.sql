@@ -17,3 +17,15 @@ CREATE TRIGGER "rsvp_admission_crew_detached"
   BEFORE UPDATE OF "isCrew" ON "RSVP"
   FOR EACH ROW WHEN (NEW."isCrew" AND NOT OLD."isCrew")
   EXECUTE FUNCTION "admission_crew_detached"();
+
+-- * ADMISSION_STAGE reimbursement policies pay ACCEPTED applicants only
+--   (docs/FINANCE.md), so the requireAccepted option goes. It arrived in this
+--   same release (20261118050000), so no released build reads it.
+ALTER TABLE "ReimbursementPolicy" DROP CONSTRAINT "ReimbursementPolicy_stage_shape";
+ALTER TABLE "ReimbursementPolicy" DROP COLUMN "requireAccepted";
+ALTER TABLE "ReimbursementPolicy" ADD CONSTRAINT "ReimbursementPolicy_stage_shape" CHECK (
+  ("eligibility" = 'JUDGING_ROUND_ENTRY') = ("judgingRoundId" IS NOT NULL)
+  AND ("eligibility" = 'MENTORING_ROUND') = ("mentoringRoundId" IS NOT NULL)
+  AND ("eligibility" = 'ADMISSION_STAGE') = ("admissionStageId" IS NOT NULL)
+  AND (NOT "requireFinalistsPublished" OR "eligibility" = 'JUDGING_ROUND_ENTRY')
+);

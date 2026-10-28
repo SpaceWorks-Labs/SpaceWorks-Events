@@ -20,9 +20,8 @@ export type EligibilityTerms = {
   /** CREW only: these crew kinds; empty is every crew member. */
   crewKinds: CrewKind[];
   admissionStageId: string | null;
-  /** ADMISSION_STAGE only: the application must also be accepted. */
-  requireAccepted: boolean;
 };
+
 
 /** Plain facts kept in the snapshot: ids, statuses and flags, never names or contact details. */
 export type EligibilityFacts = Record<string, string | boolean | null>;
