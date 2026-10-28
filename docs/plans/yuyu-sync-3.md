@@ -19,8 +19,9 @@ protections.
 
 ## Status
 
-All merged into `dev` locally (28 Oct 2026); nothing pushed. Migrations run
-from `20261107020000` to `20261118050000`; each is described in
+All merged into `dev` locally (28 Oct 2026); nothing pushed. Released as
+**0.11.0** (`CHANGELOG.md`). Migrations run from `20261107020000` to
+`20261119030000`; each is described in
 [production-operations.md](../production-operations.md#recent-schema-migrations).
 
 | # | Branch | Merge |
@@ -39,14 +40,56 @@ from `20261107020000` to `20261118050000`; each is described in
 | 7 | `feat/volunteer-shifts` | `29f0fe38` |
 | 10 | `feat/hackathon-admission` (multi-stage applications, reviewer panels, offers, Accept & pay; added after approval) | `3a12c9b7` |
 | 11 | `feat/stage-reimbursements` (reimbursement policies per judging round, mentoring round, admission stage, crew and participants; added after approval) | `734fab21` |
+| — | `chore/yuyu-parity` (series-occurrence e2e from Yuyu, migration impact table) | `5925df5c` |
+| — | `fix/audit-mentor-desk` | `aeef37b4` |
+| — | `fix/audit-judging` | `bc29b347` |
+| — | `fix/audit-money-mobile` | `6af8eb4b` |
+| — | `fix/audit-admission-privacy` | `b1a3e49a` |
+| — | `chore/deploy-hardening` (reserved-address preflight, `db:verify` coverage, 0.11.0) | pending |
 
 - Phase 9b is done: each feature branch added its own guide articles (crew,
   still coming, hackathon email switches, rounds and finalists, the Mentor
   Desk, volunteer shifts, applications, reimbursement policies). No article
   covers the mobile app yet, since there is no app to describe.
-- Open: `chore/yuyu-parity` (Yuyu's series-occurrence e2e test and the full
-  migration impact table), and the admission hardening migration
-  (`20261117040000`), whose row in the migration table is still to be written.
+- `chore/yuyu-parity` landed Yuyu's series-occurrence e2e test and the full
+  migration impact table, including the admission hardening row.
+
+### Final audit (28 Oct 2026, on `dev` at `5925df5c`)
+
+Seven read-only review tracks; no Blockers. Owner decisions taken during the
+audit: admission-stage reimbursements pay accepted applicants only (the
+`requireAccepted` option is gone); results emails leave crew out; any event
+collaborator grant may file their own staff claims on that event.
+
+- **A, decisions and Yuyu** (no upstream commit missing): mobile idempotency
+  on every money write, no waiving an applicant's place, per-stage fresh
+  eyes, attendance release records an open refund request, no override
+  check-in for unaccepted applications, docs (mobile apps not built yet,
+  deferrals, the Android fingerprint rename, the Yuyu review list).
+- **B, hackathon end to end**: an applicant joining the crew has their
+  application withdrawn first; crew stay out of the participant Mentor Desk;
+  multi-round results publish only from a finalised final round.
+- **C, Mentor Desk**: grant removal fenced by row locks, one lock order for
+  help, rounds and visits, eligible visits only, assignment runs refuse
+  closed rounds and skip covered teams, mobile conflict and raise-for-team
+  routes, documented differences.
+- **D, judging**: winners must be final-round finalists, finalised rounds
+  freeze their counted reviews, judges can recuse, deletion undo leaves
+  opened rounds alone.
+- **E, money**: owed desk tickets and paid team leaders cancel through their
+  order, a paid solo applicant is one unit on team events, event-first lock
+  order on declined team refunds, refund reopen race, no reinstating a
+  refunded entry.
+- **F, security and privacy**: `JUDGE` collaborators pass the staff
+  authenticator check, ticket transfers refused while claims are in play,
+  the personal export covers every participation table, secret columns
+  forbidden in views, `/order/` kept out of crawlers.
+- **G, deploy** (`chore/deploy-hardening`): the reserved-address check runs
+  before migrating (VPS updater, Helm migration Job; documented for Render),
+  `/order` and `/verify-mfa` reserved too with a test that every top-level
+  route is, `db:verify` covers the remaining tables, triggers, keys and
+  CHECKs, reimbursement notices queue as bulk email, the CI catalog check,
+  operations and configuration notes, and the 0.11.0 changelog and version.
 
 ## Branches, in order
 
