@@ -7,7 +7,7 @@ import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { createSafeWebpDerivative } from "@/lib/imageValidation";
 import { uploadFile } from "@/lib/storage";
 import { recordAuditEvent } from "@/lib/audit";
-import { certificateTemplateSchema } from "@/lib/certificateTemplate";
+import { certificateMergeTags, certificateTemplateSchema } from "@/lib/certificateTemplate";
 import { certificateImagesAreOwned } from "@/lib/certificateAssets";
 import { certificateMergeValues, renderCustomCertificate } from "@/lib/renderCertificate";
 import type { ActionResult } from "./org";
@@ -50,13 +50,13 @@ export async function uploadCertificateAsset(data: FormData): Promise<ActionResu
 }
 
 export async function previewCertificate(input: unknown): Promise<ActionResult<{ image: string }>> {
-  const parsed = scope.extend({ template: certificateTemplateSchema, name: z.string().trim().min(1).max(200) }).strict().safeParse(input);
+  const parsed = scope.extend({ template: certificateTemplateSchema, name: z.string().trim().min(1).max(200), contributor: z.boolean().optional() }).strict().safeParse(input);
   if (!parsed.success) return { ok: false, error: "Check the certificate layers and preview name." };
   const context = await access(parsed.data);
   if (!context) return { ok: false, error: "Preview unavailable. Check access or try again shortly." };
   if (!await certificateImagesAreOwned(parsed.data.template, context.organisation.id)) return { ok: false, error: "Invalid certificate image." };
   try {
-    const values = certificateMergeValues({ name: parsed.data.name, eventTitle: context.event.title, eventStart: context.event.startDateTime, timeZone: context.event.timezone, organisationName: context.organisation.name, issuedAt: new Date() });
+    const values = certificateMergeValues({ name: parsed.data.name, eventTitle: context.event.title, eventStart: context.event.startDateTime, timeZone: context.event.timezone, organisationName: context.organisation.name, issuedAt: new Date(), ...(parsed.data.contributor ? { role: certificateMergeTags.role.sample, hours: certificateMergeTags.hours.sample } : {}) });
     const jpeg = await renderCustomCertificate(parsed.data.template, values, context.organisation.id);
     return { ok: true, data: { image: `data:image/jpeg;base64,${jpeg.toString("base64")}` } };
   } catch {

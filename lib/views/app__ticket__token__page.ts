@@ -13,6 +13,7 @@ import { isActiveHold } from "@/lib/payments/holds";
 import { loadTicketTeamSection, ticketSubmissionMode, ticketViewerId } from "@/lib/teamTicketSection";
 import { loadTicketClaims } from "@/lib/claims/ticketView";
 import { loadTicketApplication } from "@/lib/admission/ticketView";
+import { loadMyShifts } from "@/lib/volunteer/ticketView";
 import { ticketDesignFor } from "@/lib/ticketDesign/resolve";
 import { formatMoney } from "@/lib/payments/money";
 type Props = {
@@ -233,9 +234,11 @@ export async function loadTicketView({ params, searchParams }: Props) {
     ? { href: `/account/mentoring/${encodeURIComponent(rsvp.eventId)}`, signedIn: Boolean(rsvp.userId && (viewerId ?? (await auth())?.user?.id) === rsvp.userId), hasAccount: Boolean(rsvp.userId) }
     : null;
   const claims = await loadTicketClaims(rsvp);
+  // "My shifts" (docs/VOLUNTEERS.md): crew tickets of events with volunteer shifts on.
+  const myShifts = isCrew ? await loadMyShifts(rsvp) : null;
   // Applications (docs/ADMISSION.md): where this registration's application stands, and the offer.
   const application = await loadTicketApplication(rsvp);
   // A designed ticket (docs/TICKET_DESIGNER.md) is shown above the live check-in stub.
   const designedTicket = rsvp.status === "CONFIRMED" ? Boolean((await ticketDesignFor(rsvp.checkInToken))?.custom) : false;
-  return { isCrew, designedTicket, claims, application, teamSection, submissionMode, mentorDesk, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
+  return { isCrew, myShifts, designedTicket, claims, application, teamSection, submissionMode, mentorDesk, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
 }

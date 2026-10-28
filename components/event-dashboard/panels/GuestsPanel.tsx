@@ -4,11 +4,11 @@ import { EventInvitePanel } from "@/components/invites/EventInvitePanel";
 import { SubTabs, type SubTab } from "../SubTabs";
 import { GuestsPeople } from "./GuestsPeople";
 import { GuestsTeams } from "./GuestsTeams";
-import { GuestsCrew } from "./GuestsCrew";
+import { CrewTab } from "@/components/event-dashboard/crew/CrewTab";
 import { NoPermission } from "./shared";
 
 export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
-  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teamsPage, savedViews, crew, origin } = await loadGuestsPanel({ ctx });
+  const { permissions, organisation, event, attendees, fields, invites, ticketTypes, teamMode, teamsPage, savedViews, crew, shifts, origin, now } = await loadGuestsPanel({ ctx });
   const teamsTab: SubTab[] = teamMode
     ? [
         {
@@ -47,8 +47,8 @@ export async function GuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
           value: "crew",
           label: "Crew",
           count: crew ? crew.members.length : undefined,
-          content: crew ? (
-            <GuestsCrew organisationSlug={organisation.slug} eventId={event.id} origin={origin} crew={crew} />
+          content: crew && shifts ? (
+            <CrewTab organisationSlug={organisation.slug} eventId={event.id} origin={origin} crew={crew} shifts={shifts} now={now} />
           ) : (
             <NoPermission>You do not have permission to manage the crew for this event.</NoPermission>
           ),

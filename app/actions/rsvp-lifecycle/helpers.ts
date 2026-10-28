@@ -4,7 +4,7 @@ import { ADMISSION_MANAGED, isApplicationRsvp } from "@/lib/admission/guards";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { prisma } from "@/lib/db";
 import { canManageRegistrationsFor } from "@/lib/eventAccess";
-import { PaymentOperationError } from "@/lib/payments/operations";
+import { AdmissionManagedError, PaymentOperationError } from "@/lib/payments/operations";
 import type { ActionResult } from "../org";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
@@ -57,7 +57,7 @@ export async function loadRsvpContext(
     // Crew tickets are confirmed by the crew list, never approved, declined or promoted here (docs/CREW.md).
     if (rsvp.isCrew) return { error: CREW_REGISTRATION_ERROR } as const;
     // Applications are decided only through released decisions (docs/ADMISSION.md).
-    if (event.admissionEnabled && (await isApplicationRsvp(rsvp.id))) return { error: ADMISSION_MANAGED } as const;
+    if (event.admissionEnabled && (await isApplicationRsvp(rsvp.id))) return { error: ADMISSION_MANAGED, code: "ADMISSION_MANAGED" } as const;
     return { org, event, rsvp, instance: null as null };
   }
 
@@ -94,7 +94,7 @@ export async function paymentOperation(run: () => Promise<unknown>): Promise<Act
     await run();
     return { ok: true };
   } catch (error) {
-    if (error instanceof PaymentOperationError) return { ok: false, error: error.message };
+    if (error instanceof PaymentOperationError) return { ok: false, error: error.message, ...(error instanceof AdmissionManagedError ? { code: error.code } : {}) };
     throw error;
   }
 }

@@ -79,8 +79,10 @@ super admin are exempt. The permission helpers underneath fail closed too.
   only), `TOO_MANY_ATTEMPTS` (429, sign-in blocked for the address or account),
   `REAUTH_REQUIRED` (401, sign in again before signing out everywhere),
   `PAID_ORDER` (409, money was taken: use the order's refund rules),
-  `REGISTRATION_CLOSED` (409) and `PAYMENT_UNAVAILABLE` (503, the payment
-  provider can't be reached).
+  `REGISTRATION_CLOSED` (409), `PAYMENT_UNAVAILABLE` (503, the payment
+  provider can't be reached) and `ADMISSION_MANAGED` (409, the registration,
+  team or order is an application: decide it through Applications,
+  docs/ADMISSION.md).
 - Team and judging refusals carry their own codes so the app can react
   without parsing messages:
   - `TEAM_MEMBER` (409): an individual approve, reject, promote or re-accept
@@ -699,6 +701,44 @@ registrations carry `isCrew: true`.
 - `DELETE …/crew/:memberId` removes the member and their crew ticket.
 
 The crew sign-up link, photos and crew expense claims stay on the website.
+
+### Volunteer shifts ([VOLUNTEERS.md](VOLUNTEERS.md))
+
+Organiser routes (`manageCrew`: MANAGE_REGISTRATIONS; staff authenticator as
+every `/orgs` route) run the Guests → Crew → Shifts Server Actions and answer
+with the whole roster:
+
+- `GET …/volunteer-shifts` → `VolunteerRoster`: `enabled`, `isAdmin`,
+  `timeZone`, `shifts` (window, places, approval, grace, `closed`, `approved`,
+  and `signups` with name, crew kind, status, attendance, times, breaks,
+  `hours|null` and `isViewer`) and `contributors` (verified minutes, pending
+  hours, certificate issued, eligibility and expense claim counts). No emails,
+  tokens or adjustment reasons.
+- `POST …/volunteer-shifts/signups/:signupId/:action` with `approve`,
+  `decline`, `cancel`, `check-in`, `check-out` or `no-show`. The desk actions
+  take `{ "occurredAt?", "reason?", "breakMinutes?" }`: an earlier time needs
+  a reason; breaks at check-out. Answers `VolunteerSignupWrite`
+  (`{ "signupId", "status", "attendance", "minutes|null" }`).
+- `POST …/volunteer-shifts/hours/:hoursId/:action` with `verify` or `adjust`
+  `{ "minutes", "reason" }`: organisation owners and admins only
+  (`FORBIDDEN` otherwise), never for their own hours. Answers
+  `VolunteerHoursWrite` (`{ "hoursId", "state", "minutes", "revokedCertificate" }`).
+- Both writes need an `Idempotency-Key` (as the Mentor Desk writes), scoped
+  to the path: a retried desk tap replays the first answer and never acts
+  twice. The kept answers carry ids and states only, never names.
+
+Volunteers (auth) use their own crew ticket, reached by its registration id
+when the ticket belongs to their account, or their crew record is linked to
+their account and the crew email is still that account's verified email (any
+other id is `NOT_FOUND`):
+
+- `GET /me/registrations/:rsvpId/shifts` → `MyShifts|null` (null when the
+  event has no shifts on): open shifts, their own sign-ups and attendance,
+  verified minutes and `certificateUrl` (their own contributor certificate
+  download, a bearer capability, or null).
+- `POST /me/registrations/:rsvpId/shifts/:id/:action` with `apply` (a shift
+  id), `withdraw`, `check-in` or `check-out` (one of their sign-up ids) runs
+  the crew ticket's own action (rate limited per ticket) → `MyShifts`.
 
 ### Pending
 

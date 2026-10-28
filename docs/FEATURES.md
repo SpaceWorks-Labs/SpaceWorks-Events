@@ -97,6 +97,7 @@ One-off events can register people in teams (hackathons, game jams, competitions
 ## Event crew
 
 One-off events can list their organising team. The design contract is [Event crew](CREW.md).
+When volunteer shifts are on, crew sign up for shifts from their crew ticket, check in and out of each shift, and get verified hours and a contributor certificate; see [Volunteer shifts](VOLUNTEERS.md).
 
 ## Applications and shortlisting
 

@@ -13,6 +13,7 @@ import { TicketMentorDeskCard } from "@/components/mentor-desk/participant/Ticke
 import { TicketDownloadButton } from "@/components/ticket/TicketDownloadButton";
 import { TicketClaims } from "@/components/ticket/TicketClaims";
 import { TicketApplicationCard } from "@/components/ticket/TicketApplicationCard";
+import { MyShifts } from "@/components/ticket/MyShifts";
 import { TicketStatusStorageSync } from "@/components/ticket/TicketStatusStorageSync";
 import { HideAfterLiveCheckIn, LiveCheckedInChip, LiveTicketCard, LiveTicketProvider } from "@/components/ticket/LiveTicket";
 import { googleCalendarEventUrl } from "@/lib/calendarInvite";
@@ -32,7 +33,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: Props): Promise<Metadata> { return loadRouteMetadata({ params }); }
 
 export default async function TicketPage({ params, searchParams }: Props) {
-  const { isCrew, designedTicket, claims, application, teamSection, submissionMode, mentorDesk, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
+  const { isCrew, myShifts, designedTicket, claims, application, teamSection, submissionMode, mentorDesk, inTeam, rsvp, orgName, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, payment, hold, returningFromCheckout, otherDates } = await loadTicketView({ params, searchParams });
   const teamBlock = teamSection?.kind === "member" ? (
     <TicketTeamCard ticketToken={rsvp.checkInToken} team={teamSection.team} manageHref={teamSection.manageHref} canLeave={teamSection.canLeave} eventPageHref={eventPageHref} />
   ) : teamSection?.kind === "solo" ? (
@@ -210,6 +211,8 @@ export default async function TicketPage({ params, searchParams }: Props) {
         {submissionMode ? <TicketSubmissionCard ticketToken={rsvp.checkInToken} mode={submissionMode} /> : null}
 
         {mentorDesk ? <TicketMentorDeskCard desk={mentorDesk} /> : null}
+
+        {myShifts ? <MyShifts ticketToken={rsvp.checkInToken} view={myShifts} /> : null}
 
         {claims ? <TicketClaims ticketToken={rsvp.checkInToken} view={claims} /> : null}
 

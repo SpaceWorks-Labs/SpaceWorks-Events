@@ -7788,5 +7788,218 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "text": "Can I charge for tickets? Yes, once the person who runs this server turns paid events on. Your organisation's owner connects your own Razorpay or Stripe account, and the money goes straight to you, with no fee added by the platform. See Turning on paid events. Why do I need an authenticator app? Organisation staff and co-organisers can reach guest lists and contact details, so each sign-in needs an authenticator code. See Two-step verification. Who in my team can do what? That depends on their role. Owners and admins create, publish and run events, and invite people. Only the owner changes roles, connects payments, sets up the organisation's email, manages API access and can delete the organisation. Members can't create or publish events. Co-organisers get exactly the permissions you give them on one event. See Roles and permissions. Why can't I create an event? Usually because you haven't verified your email yet (the app says Verify your email before creating events.), or your role doesn't allow it. See Common problems. Can I edit someone's registration or move their ticket? Yes. On the guest list, open the guest's More actions menu and choose Edit registration or transfer ticket. For guests who signed in to register, you can view the registration but not move it. Copy ticket link in the same menu copies their ticket address if they've lost the email. How do I refund someone? On the Guests tab, open the guest's More actions menu, choose Payment, then Refund. You can refund in part or in full. Owners and admins can do this, and so can co-organisers who manage registrations. Refund requests that buyers send appear in the Finance tab. See Refunds and cancellations. Does check-in work without Wi-Fi? Yes. Before the doors open, choose Make available offline on the check-in desk. See Checking in offline. Can I leave an organisation? Yes: Account settings → Organisations → Leave. The only owner can't leave; see Your data and memberships. How do I connect other tools? Owners and admins can post activity to a team chat (see Chat notifications) and set up webhooks under Settings → Webhooks. Only the owner manages API access. Owners and admins see the guide's Connecting other tools section once signed in."
       }
     ]
+  },
+  "volunteers/contributor-certificates": {
+    "headings": [
+      {
+        "id": "who-can-get-one",
+        "title": "Who can get one",
+        "level": 2
+      },
+      {
+        "id": "issue-a-certificate",
+        "title": "Issue a certificate",
+        "level": 2
+      },
+      {
+        "id": "when-hours-change",
+        "title": "When hours change",
+        "level": 2
+      },
+      {
+        "id": "design-the-certificate",
+        "title": "Design the certificate",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "A contributor certificate thanks someone on your crew for their work. It prints their name, their role and the hours they gave, and they download it from their crew ticket. It is separate from the attendee certificate people get after the feedback form. Only organisation owners and admins can design, issue and revoke contributor certificates. Nobody can issue a certificate to themselves."
+      },
+      {
+        "heading": "Who can get one",
+        "anchor": "who-can-get-one",
+        "text": "A volunteer needs verified hours above zero: pending hours don't count, and neither does a role on its own. Mentors can be issued a certificate without shift hours once they have mentored on the Mentor Desk: worked with a team they were assigned to, resolved a help request, or visited a team in a mentoring round. Being called a mentor on the crew isn't enough, and removing someone's mentor access revokes a certificate that rested on their mentoring. See Volunteer shifts and hours for verifying hours."
+      },
+      {
+        "heading": "Issue a certificate",
+        "anchor": "issue-a-certificate",
+        "text": "Open the event and choose Guests → Crew → Shifts. Under Contributors and certificates, find the person. Choose Issue certificate. They get an email, and Download your certificate appears on their crew ticket. The certificate keeps the role, hours and design it was issued with. Each person has at most one certificate at a time."
+      },
+      {
+        "heading": "When hours change",
+        "anchor": "when-hours-change",
+        "text": "If you verify more hours or adjust someone's hours after their certificate was issued, the certificate is revoked automatically, so a download never shows hours that are out of date. Choose Issue certificate again to give them a new one with the current hours. To take a certificate back for another reason, choose Revoke. The download link stops working."
+      },
+      {
+        "heading": "Design the certificate",
+        "anchor": "design-the-certificate",
+        "text": "Without a design, certificates use a standard Space Works Events layout: \"Certificate of contribution\" with the person's name, role, hours and the event. Under Contributors and certificates, choose Design certificate. Upload a background, then add text and image layers, just like the attendee certificate. In a text layer, insert Contributor role and Hours contributed where the role (\"Volunteer · Registration desk\") and the hours (\"6.5 hours\") should go. Choose Save design. Certificates you issue after saving use the new design. Certificates already issued keep the design they had."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "The role printed is the person's crew kind and their role, for example \"Mentor · Workshops\", or just the kind when there's no role. Removing someone from the crew removes their shifts, hours and certificate. See Signing up for shifts for what volunteers see."
+      }
+    ]
+  },
+  "volunteers/my-shifts": {
+    "headings": [
+      {
+        "id": "find-my-shifts",
+        "title": "Find My shifts",
+        "level": 2
+      },
+      {
+        "id": "sign-up-for-a-shift",
+        "title": "Sign up for a shift",
+        "level": 2
+      },
+      {
+        "id": "check-in-and-out",
+        "title": "Check in and out",
+        "level": 2
+      },
+      {
+        "id": "your-hours",
+        "title": "Your hours",
+        "level": 2
+      },
+      {
+        "id": "withdraw-from-a-shift",
+        "title": "Withdraw from a shift",
+        "level": 2
+      },
+      {
+        "id": "your-certificate",
+        "title": "Your certificate",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "If you're on an event's crew and the organisers run volunteer shifts, your crew ticket has a My shifts section. Use it to sign up for shifts, check in and out when you're on duty, and see the time you've given."
+      },
+      {
+        "heading": "Find My shifts",
+        "anchor": "find-my-shifts",
+        "text": "Open the crew ticket the organisers emailed you (\"You're on the crew for …\"). If your ticket belongs to an account, sign in to that account first. My shifts appears below your ticket once the organisers turn shifts on. If you don't see it, ask the organisers."
+      },
+      {
+        "heading": "Sign up for a shift",
+        "anchor": "sign-up-for-a-shift",
+        "text": "Under Open shifts, find a shift. Each shows its time, where it is, the task and how many places are left. Choose Sign up. What happens next depends on the shift: You have a place: you're on it. You also get an email. Waiting for approval: the organisers confirm each sign-up. You get an email when they approve you. On the waitlist: the shift is full. If a place opens up before the shift starts, the first person on the waitlist gets it, and you get an email if that's you. You can't hold places on two shifts that overlap. Sign-ups close at the time the organisers set, at the latest when the shift starts."
+      },
+      {
+        "heading": "Check in and out",
+        "anchor": "check-in-and-out",
+        "text": "When you arrive for your shift, open your crew ticket and choose Check in. It opens a little before the shift starts. When you finish, choose Check out. You can only be checked in to one shift at a time. If you forget to check out before the check-out window closes, ask the desk to record your time. Checking in to a shift is separate from the event check-in with your QR code."
+      },
+      {
+        "heading": "Your hours",
+        "anchor": "your-hours",
+        "text": "After you check out, your time shows as waiting for verification. An organiser checks it, and it then shows as verified. The total at the top of My shifts is your verified time. Your hours are a thank-you record, not pay. If you also spend money for the event, use Claim expenses on the same ticket, when the organisers allow it. See Claiming expenses."
+      },
+      {
+        "heading": "Withdraw from a shift",
+        "anchor": "withdraw-from-a-shift",
+        "text": "Choose Withdraw next to a shift you no longer want, any time before you check in. Your place goes to the next person on the waitlist. You can sign up again later if there's room, unless the organisers declined you for that shift."
+      },
+      {
+        "heading": "Your certificate",
+        "anchor": "your-certificate",
+        "text": "When the organisers issue you a contributor certificate, you get an email and Download your certificate appears in My shifts. It shows your role and your verified hours. If your hours change later, the old certificate stops working until the organisers issue a new one."
+      }
+    ]
+  },
+  "volunteers/shifts-and-hours": {
+    "headings": [
+      {
+        "id": "turn-on-shifts",
+        "title": "Turn on shifts",
+        "level": 2
+      },
+      {
+        "id": "add-a-shift",
+        "title": "Add a shift",
+        "level": 2
+      },
+      {
+        "id": "sign-ups-and-the-waitlist",
+        "title": "Sign-ups and the waitlist",
+        "level": 2
+      },
+      {
+        "id": "the-attendance-desk",
+        "title": "The attendance desk",
+        "level": 2
+      },
+      {
+        "id": "verify-hours",
+        "title": "Verify hours",
+        "level": 2
+      },
+      {
+        "id": "hours-claims-and-the-csv",
+        "title": "Hours, claims and the CSV",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "Volunteer shifts help you plan who covers which job and when, and keep a fair record of the time your crew gives. Your crew sign up from their crew ticket, you approve them, the desk checks them in and out of each shift, and an owner or admin verifies the hours afterwards. Shifts are for people on the event crew. Add the people first in Guests → Crew. Anyone on the crew can sign up, whatever kind you gave them: the kind (Organiser, Volunteer, Mentor or Judge) is only a label for badges and filters, and never lets anyone do more. Owners and admins, and co-organisers with Manage registrations, run shifts and the attendance desk. Only owners and admins verify or adjust hours and issue certificates."
+      },
+      {
+        "heading": "Turn on shifts",
+        "anchor": "turn-on-shifts",
+        "text": "Open the event and choose Guests → Crew. Choose Shifts above the crew list. Turn on Volunteer shifts. Until shifts are on, crew tickets don't show any shifts. You can add shifts before you turn them on."
+      },
+      {
+        "heading": "Add a shift",
+        "anchor": "add-a-shift",
+        "text": "In Shifts, choose Add shift. Give it a Title, and optionally a Zone (where) and a Task (what). Set when it Starts and Ends, in the event's timezone. A shift can be up to 12 hours; split longer duties into several shifts. Set when Sign-ups close. It must be at or before the start; leave it empty to close at the start. Set the Places. 0 means no limit. Set the Check-in grace: how many minutes before the start volunteers can check in, and after the end they can still check out. Up to 60. Choose whether Organisers approve each sign-up, and whether to Keep a waitlist when full. Choose Add shift. You can't lower the places below the number of people who already have one. Once anyone has checked in, the shift's times can't change."
+      },
+      {
+        "heading": "Sign-ups and the waitlist",
+        "anchor": "sign-ups-and-the-waitlist",
+        "text": "Each sign-up shows its state: Waiting for approval: the shift needs approval. Choose Approve or Decline. Has a place: approved. The volunteer gets an email. Waitlisted: the shift was full. When a place opens up, the first person on the waitlist who is still free gets it and an email. Withdrew or Declined: no longer on the shift. A volunteer can't hold places on two shifts at the same time. If approving would overlap another shift they already have, the app refuses, and the waitlist skips people who are now busy elsewhere. Back-to-back shifts are fine. Choose Cancel place to take someone off a shift before it starts. They get an email, and the place goes to the waitlist. Close a shift (the lock button) to stop new sign-ups; reopening it offers free places to the waitlist again. Delete works only while nobody has checked in; volunteers with a place or on the waitlist are emailed that it is cancelled."
+      },
+      {
+        "heading": "The attendance desk",
+        "anchor": "the-attendance-desk",
+        "text": "Shift attendance is separate from the event check-in. Checking someone into a shift doesn't check them into the event, and the other way round. Volunteers can check themselves in and out on their crew ticket. At the desk, use the buttons on each volunteer: Check in: from the grace period before the start until the end. Check out: until the grace period after the end. Enter any Break minutes; they are taken off the time. No-show: after the shift ends, for someone who never checked in. If someone forgot, change the Time to when it really happened and give a reason. The reason is kept with the attendance record and can't be edited. A person can only be on one shift at a time, and two shifts' recorded time can never overlap."
+      },
+      {
+        "heading": "Verify hours",
+        "anchor": "verify-hours",
+        "text": "When a volunteer checks out, their time appears under Hours as To verify. The minutes are the time between check-in and check-out, less breaks. Under Hours, find the volunteer. Choose Verify. Verified hours can be corrected with Adjust: enter whole minutes (up to 1,440) and a reason. Every verification and adjustment is kept and can't be changed or deleted. You can never verify or adjust your own hours, even as an owner. Another owner or admin has to. This keeps the record fair when organisers volunteer too. Changing someone's hours revokes their certificate if they have one, because it would no longer match. Issue a new one afterwards: see Contributor certificates."
+      },
+      {
+        "heading": "Hours, claims and the CSV",
+        "anchor": "hours-claims-and-the-csv",
+        "text": "Hours are a record of time given, never money. Contributors and certificates lists each person's verified hours beside the number of expense claims they made from their crew ticket; you decide and pay claims in Finance. Choose Download hours CSV for one row per sign-up with the shift, attendance times, breaks, minutes and whether they are verified. It has names but no email addresses."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "Volunteers can withdraw from a shift until they check in. After that, ask them to check out instead. Emails go out when a place is confirmed, when someone comes off the waitlist, when you cancel a place or delete a shift, and when a certificate is issued. See Signing up for shifts for what your crew see."
+      }
+    ]
   }
 };

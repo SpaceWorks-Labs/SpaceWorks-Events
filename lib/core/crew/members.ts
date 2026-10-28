@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, RsvpStatus } from "@prisma/client";
+import { CrewKind, Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { notifyChatAbout } from "@/lib/chat/notify";
 import { enqueueCrewTicket } from "@/lib/outbox/crew";
@@ -20,6 +20,7 @@ import {
   findRegistrationByEmail,
   isUniqueViolation,
   lockEventForCrew,
+  verifiedAccountFor,
   organiserCrewSchema,
   summariseFoodPreferences,
   uniqueViolationModel,
@@ -39,11 +40,22 @@ import {
 /** Returned instead of a reason when a link sign-up must not change anything; the caller answers as for a duplicate. */
 export const LINK_SIGNUP_IGNORED = "link-signup-ignored";
 const BOUGHT_A_TICKET = "This person bought a ticket. Cancel or refund their order first.";
+const VOLUNTEER_RECORD_EMAIL = "This crew member has verified hours or a certificate, so their email can't change. Remove them and add them again with the new address.";
+
+/** Verification history or a live contributor certificate (docs/VOLUNTEERS.md). */
+async function hasVolunteerRecord(tx: Prisma.TransactionClient, crewMemberId: string) {
+  const [entries, certificates] = await Promise.all([
+    tx.volunteerHoursEntry.count({ where: { hours: { signup: { crewMemberId } } } }),
+    tx.contributorCertificate.count({ where: { crewMemberId, revokedAt: null } }),
+  ]);
+  return entries + certificates > 0;
+}
+
 const ACCOUNT_CREW_EMAIL = "This crew ticket belongs to a signed-in account, so its email follows the account. Remove them from the crew and add the new address instead.";
 
 const organiserCrewSelect = {
   id: true, name: true, email: true, foodPreference: true, role: true, bio: true, photoUrl: true, linkedinUrl: true,
-  showOnPage: true, joinedViaLink: true, sortOrder: true, createdAt: true,
+  showOnPage: true, joinedViaLink: true, sortOrder: true, createdAt: true, kind: true, userId: true,
   rsvp: { select: { id: true, checkedInAt: true } },
 } as const satisfies Prisma.EventCrewMemberSelect;
 
@@ -51,11 +63,15 @@ export type OrganiserCrewMember = {
   id: string; name: string; email: string; foodPreference: string; role: string; bio: string;
   photoUrl: string | null; linkedinUrl: string | null; showOnPage: boolean; joinedViaLink: boolean;
   sortOrder: number; createdAt: string; rsvpId: string; checkedInAt: string | null;
+  /** Display, badges and filters only (docs/VOLUNTEERS.md). */
+  kind: CrewKind;
+  /** Whether the member is linked to an account. */
+  hasAccount: boolean;
 };
 
 function toOrganiserCrewMember(row: Prisma.EventCrewMemberGetPayload<{ select: typeof organiserCrewSelect }>): OrganiserCrewMember {
-  const { rsvp, createdAt, ...rest } = row;
-  return { ...rest, createdAt: createdAt.toISOString(), rsvpId: rsvp.id, checkedInAt: rsvp.checkedInAt?.toISOString() ?? null };
+  const { rsvp, createdAt, userId, ...rest } = row;
+  return { ...rest, createdAt: createdAt.toISOString(), rsvpId: rsvp.id, checkedInAt: rsvp.checkedInAt?.toISOString() ?? null, hasAccount: userId != null };
 }
 
 export async function listCrewForOrganiser(ctx: OrganiserCrewContext): Promise<{ members: OrganiserCrewMember[]; food: Array<{ label: string; count: number }> }> {
@@ -81,7 +97,7 @@ type AddOutcome = { id: string; rsvpId: string; webhook: WebhookEmission | null;
 export async function addCrewMemberTx(
   event: EventForCrew,
   profile: CrewProfileInput,
-  options: { showOnPage: boolean; joinedViaLink: boolean },
+  options: { showOnPage: boolean; joinedViaLink: boolean; kind?: CrewKind },
 ): Promise<CrewResult<AddOutcome>> {
   const data = cleanProfile(profile);
   if (data.photoUrl && !isOrganisationUploadUrl(data.photoUrl, event.organisationId, CREW_PHOTO_CATEGORY)) return fail("Choose an uploaded crew photo.");
@@ -124,8 +140,10 @@ export async function addCrewMemberTx(
         webhook = { type: "registration.created", rsvpId: rsvp.id };
       }
       const last = await tx.eventCrewMember.aggregate({ where: { eventId: event.id }, _max: { sortOrder: true } });
+      // The account behind a converted registration, or a verified account with this email.
+      const userId = existing?.userId ?? (await verifiedAccountFor(tx, data.email));
       const member = await tx.eventCrewMember.create({
-        data: { eventId: event.id, rsvpId: rsvp.id, ...data, showOnPage: options.showOnPage, joinedViaLink: options.joinedViaLink, sortOrder: (last._max.sortOrder ?? -1) + 1 },
+        data: { eventId: event.id, rsvpId: rsvp.id, ...data, showOnPage: options.showOnPage, joinedViaLink: options.joinedViaLink, kind: options.kind ?? CrewKind.VOLUNTEER, userId, sortOrder: (last._max.sortOrder ?? -1) + 1 },
         select: { id: true },
       });
       await enqueueCrewTicket(tx, { to: data.email, checkInToken: rsvp.checkInToken, organisationId: locked.organisationId });
@@ -154,8 +172,8 @@ export async function addCrewMemberAsOrganiser(ctx: OrganiserCrewContext, input:
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the crew member's details.");
   const event = await organiserEvent(ctx);
   if (!event) return fail("Event not found.");
-  const { showOnPage, ...profile } = parsed.data;
-  const result = await addCrewMemberTx(event, profile, { showOnPage, joinedViaLink: false });
+  const { showOnPage, kind, ...profile } = parsed.data;
+  const result = await addCrewMemberTx(event, profile, { showOnPage, joinedViaLink: false, kind });
   await afterCrewAdded(event.id, result);
   return result.ok ? { ok: true, data: { id: result.data.id } } : result;
 }
@@ -165,7 +183,7 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the crew member's details.");
   const event = await organiserEvent(ctx);
   if (!event) return fail("Event not found.");
-  const { showOnPage, ...profile } = parsed.data;
+  const { showOnPage, kind, ...profile } = parsed.data;
   const data = cleanProfile(profile);
   if (data.photoUrl && !isOrganisationUploadUrl(data.photoUrl, event.organisationId, CREW_PHOTO_CATEGORY)) {
     // A member can keep the photo they already have; anything else must be a fresh crew upload.
@@ -176,16 +194,20 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
     return await prisma.$transaction(async (tx): Promise<CrewResult> => {
       // Under the Event row lock, like adding: a new address is checked against the event's registrations.
       if (!(await lockEventForCrew(tx, event.id))) return fail("Event not found.");
-      const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
+      const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, userId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
       if (!member) return fail("Crew member not found.");
       if (data.email !== member.email) {
+        // Verified hours and certificates belong to this person: a new address must not let anyone verify or certify their own work.
+        if (await hasVolunteerRecord(tx, member.id)) return fail(VOLUNTEER_RECORD_EMAIL);
         // An account-tied ticket belongs to that account: its link is never sent to another address.
         const accountEmail = member.rsvp.user?.email?.trim().toLowerCase();
         if (member.rsvp.userId && data.email !== accountEmail) return fail(ACCOUNT_CREW_EMAIL);
         if (await tx.eventCrewMember.findUnique({ where: { eventId_email: { eventId: event.id, email: data.email } }, select: { id: true } })) return fail(ALREADY_ON_CREW);
         if (await findRegistrationByEmail(tx, event.id, data.email, member.rsvpId)) return fail(ALREADY_REGISTERED);
       }
-      await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage } });
+      // The account link is sticky: a new email never unlinks it (docs/VOLUNTEERS.md), it can only gain one.
+      const relink = data.email !== member.email && !member.userId ? { userId: member.rsvp.userId ?? (await verifiedAccountFor(tx, data.email)) } : {};
+      await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage, ...(kind ? { kind } : {}), ...relink } });
       // A new address gets the ticket too; the old one keeps working (same QR).
       if (data.email !== member.email) await enqueueCrewTicket(tx, { to: data.email, checkInToken: member.rsvp.checkInToken, organisationId: event.organisationId });
       // An account-linked ticket takes its identity from the account, so only guest tickets change.

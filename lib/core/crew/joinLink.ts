@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { EventStatus } from "@prisma/client";
+import { CrewKind, EventStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { addCrewMemberTx, afterCrewAdded, LINK_SIGNUP_IGNORED, organiserEvent } from "./members";
 import { ALREADY_ON_CREW, ALREADY_REGISTERED, crewProfileSchema, eventForCrewSelect, fail, type CrewResult, type OrganiserCrewContext } from "./shared";
@@ -28,16 +28,20 @@ export function crewJoinPath(token: string): string {
   return `/crew/${encodeURIComponent(token)}`;
 }
 
-export async function getCrewJoinLink(ctx: OrganiserCrewContext): Promise<{ token: string; createdAt: string } | null> {
+export async function getCrewJoinLink(ctx: OrganiserCrewContext): Promise<{ token: string; createdAt: string; kind: CrewKind } | null> {
   const link = await prisma.eventCrewJoinLink.findFirst({
     where: { eventId: ctx.eventId, event: { organisationId: ctx.organisationId } },
-    select: { token: true, createdAt: true },
+    select: { token: true, createdAt: true, kind: true },
   });
-  return link ? { token: link.token, createdAt: link.createdAt.toISOString() } : null;
+  return link ? { token: link.token, createdAt: link.createdAt.toISOString(), kind: link.kind } : null;
 }
 
-/** "create" keeps an existing link; "rotate" replaces it (the old link stops working); "disable" removes it. */
-export async function setCrewJoinLink(ctx: OrganiserCrewContext, action: "create" | "rotate" | "disable"): Promise<CrewResult<{ token: string } | null>> {
+/**
+ * "create" keeps an existing link (setting its kind); "rotate" replaces it (the
+ * old link stops working); "disable" removes it. `kind` is the crew kind
+ * people who join get (default VOLUNTEER); it grants nothing.
+ */
+export async function setCrewJoinLink(ctx: OrganiserCrewContext, action: "create" | "rotate" | "disable", kind: CrewKind = CrewKind.VOLUNTEER): Promise<CrewResult<{ token: string } | null>> {
   const event = await organiserEvent(ctx);
   if (!event) return fail("Event not found.");
   if (action === "disable") {
@@ -47,8 +51,8 @@ export async function setCrewJoinLink(ctx: OrganiserCrewContext, action: "create
   const token = generateCrewJoinToken();
   const link = await prisma.eventCrewJoinLink.upsert({
     where: { eventId: event.id },
-    create: { eventId: event.id, token },
-    update: action === "rotate" ? { token, createdAt: new Date() } : {},
+    create: { eventId: event.id, token, kind },
+    update: action === "rotate" ? { token, kind, createdAt: new Date() } : { kind },
     select: { token: true },
   });
   return { ok: true, data: { token: link.token } };
@@ -65,6 +69,8 @@ export type CrewJoinPage = {
   timezone: string;
   /** False once the event is cancelled or over: the page explains instead of showing the form. */
   open: boolean;
+  /** The crew kind people who join through this link get. */
+  kind: CrewKind;
 };
 
 function isCrewJoinOpen(event: { status: EventStatus; endDateTime: Date }) {
@@ -76,7 +82,7 @@ export async function loadCrewJoinPage(token: unknown): Promise<CrewJoinPage | n
   if (!isCrewJoinTokenShape(token)) return null;
   const link = await prisma.eventCrewJoinLink.findUnique({
     where: { token },
-    select: { event: { select: { id: true, title: true, slug: true, status: true, startDateTime: true, endDateTime: true, timezone: true, organisation: { select: { id: true, name: true, slug: true } } } } },
+    select: { kind: true, event: { select: { id: true, title: true, slug: true, status: true, startDateTime: true, endDateTime: true, timezone: true, organisation: { select: { id: true, name: true, slug: true } } } } },
   });
   if (!link) return null;
   const { event } = link;
@@ -90,6 +96,7 @@ export async function loadCrewJoinPage(token: unknown): Promise<CrewJoinPage | n
     startDateTime: event.startDateTime.toISOString(),
     timezone: event.timezone,
     open: isCrewJoinOpen(event),
+    kind: link.kind,
   };
 }
 
@@ -111,7 +118,7 @@ export async function joinCrewWithLink(token: unknown, input: unknown): Promise<
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check your details.");
   const event = await prisma.event.findUnique({ where: { id: page.eventId }, select: eventForCrewSelect });
   if (!event) return fail(INVALID_LINK);
-  const result = await addCrewMemberTx(event, parsed.data, { showOnPage: false, joinedViaLink: true });
+  const result = await addCrewMemberTx(event, parsed.data, { showOnPage: false, joinedViaLink: true, kind: page.kind });
   await afterCrewAdded(event.id, result);
   // Generic wording: the link must not reveal whether an email is on the crew or registered.
   if (!result.ok && ![ALREADY_ON_CREW, ALREADY_REGISTERED, LINK_SIGNUP_IGNORED].includes(result.error)) return result;

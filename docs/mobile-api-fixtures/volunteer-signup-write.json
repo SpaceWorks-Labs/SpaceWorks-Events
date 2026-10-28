@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "data": {
+    "signupId": "signup_1",
+    "status": "APPROVED",
+    "attendance": "CHECKED_OUT",
+    "minutes": 150
+  }
+}

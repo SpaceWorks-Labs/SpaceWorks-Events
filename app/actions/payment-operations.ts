@@ -10,7 +10,7 @@ import { prisma } from "@/lib/db";
 import { canAccessEvent } from "@/lib/eventAccess";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { parseMoneyToMinor } from "@/lib/payments/money";
-import { amendOfflinePayment, PaymentOperationError, refundOrder, sendPaymentLink, settleOrderByHand } from "@/lib/payments/operations";
+import { AdmissionManagedError, amendOfflinePayment, PaymentOperationError, refundOrder, sendPaymentLink, settleOrderByHand } from "@/lib/payments/operations";
 import { submitManualTicketOrderCore } from "@/lib/rsvpCore";
 import { attendeeNameSchema } from "@/lib/validators";
 
@@ -57,7 +57,7 @@ async function run(path: string, operation: () => Promise<unknown>): Promise<Act
   try {
     await operation();
   } catch (error) {
-    if (error instanceof PaymentOperationError) return { ok: false, error: error.message };
+    if (error instanceof PaymentOperationError) return { ok: false, error: error.message, ...(error instanceof AdmissionManagedError ? { code: error.code } : {}) };
     throw error;
   }
   revalidatePath(path);

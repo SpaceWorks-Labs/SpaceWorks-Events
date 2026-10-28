@@ -27,7 +27,7 @@ export async function reacceptRsvpFor(userId: string, input: unknown): Promise<A
 
   const { organisationSlug, rsvpId, eventId, eventInstanceId } = parsed.data;
   const ctx = await loadRsvpContext(organisationSlug, userId, rsvpId, eventId, eventInstanceId);
-  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error };
+  if ("error" in ctx && ctx.error) return { ok: false, error: ctx.error, ...("code" in ctx && ctx.code ? { code: ctx.code } : {}) };
   if (!("rsvp" in ctx)) return { ok: false, error: "Invalid state." };
   const { org, rsvp } = ctx;
   if (rsvp.status !== RsvpStatus.REJECTED) return { ok: false, error: "Only declined registrations can be re-accepted." };

@@ -51,6 +51,8 @@ describe("event browser DTO", () => {
       admissionRsvpDays: 7,
       admissionOfferCapacity: null,
       emailApplicantsOnStageAdvance: false,
+      volunteerShiftsEnabled: true,
+      contributorCertificateTemplate: null,
       ticketDesignId: null,
       submissionsEnabled: true,
       submissionsOpenAt: null,

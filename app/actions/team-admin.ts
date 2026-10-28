@@ -72,7 +72,7 @@ async function transition(input: unknown, action: TeamTransition): Promise<Actio
   const gate = await organiserGate(parsed.data.organisationSlug, parsed.data.eventId);
   if (!gate.ok) return gate;
   // Applications are decided only through released decisions (docs/ADMISSION.md).
-  if (await isApplicationTeam(parsed.data.teamId)) return { ok: false, error: ADMISSION_MANAGED };
+  if (await isApplicationTeam(parsed.data.teamId)) return { ok: false, error: ADMISSION_MANAGED, code: "ADMISSION_MANAGED" };
   const result = await transitionTeamStatus(gate.ctx, parsed.data.teamId, action);
   if (!result.ok) return result;
   await recordAuditEvent({

@@ -20,6 +20,7 @@ import { registration } from "./sections/registration";
 import { applications } from "./sections/applications";
 import { payments } from "./sections/payments";
 import { guests } from "./sections/guests";
+import { volunteers } from "./sections/volunteers";
 import { checkIn } from "./sections/check-in";
 import { hackathons } from "./sections/hackathons";
 import { finance } from "./sections/finance";
@@ -58,6 +59,7 @@ export const helpSections = [
   applications,
   payments,
   guests,
+  volunteers,
   checkIn,
   hackathons,
   finance,

@@ -15,6 +15,8 @@ export type EventClientDto = Omit<Event,
   | "ticketDesignId"
   // Applications have their own view (lib/admission/).
   | "admissionEnabled" | "admissionMode" | "admissionRsvpDays" | "admissionOfferCapacity" | "emailApplicantsOnStageAdvance"
+  // Volunteer shifts have their own view (lib/eventDashboard/volunteerShifts.ts).
+  | "volunteerShiftsEnabled" | "contributorCertificateTemplate"
   // Attendance confirmation has its own status DTO (lib/eventDashboard/attendanceCheckCard.ts).
   | "attendanceCheckReleaseOnDecline"
   // The mobile sign-up close snapshot only matters to lib/core/registrationWindow.ts.
