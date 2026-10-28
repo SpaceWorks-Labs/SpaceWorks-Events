@@ -47,6 +47,7 @@ import { useJudgeSubmissionsList } from "./JudgeWorkspaceClient/useJudgeSubmissi
 export function JudgeWorkspaceClient({
   organisationSlug,
   eventId,
+  roundId = null,
   judgingStatus,
   criteria,
   initialPage,
@@ -65,7 +66,7 @@ export function JudgeWorkspaceClient({
   const [, startTransition] = useTransition();
   const request = useRef(0);
 
-  const { filter, setFilter, query, setQuery, submissions, setSubmissions, nextCursor, counts, loadingList, listError, fetchPage } = useJudgeSubmissionsList({ organisationSlug, eventId, initialPage });
+  const { filter, setFilter, query, setQuery, submissions, setSubmissions, nextCursor, counts, loadingList, listError, fetchPage } = useJudgeSubmissionsList({ organisationSlug, eventId, roundId, initialPage });
 
   // Keyboard and screen-reader focus: the list button that opened a submission
   // unmounts with the list, so focus returns to it when the judge goes back,
@@ -103,7 +104,7 @@ export function JudgeWorkspaceClient({
     const ticket = ++request.current;
     setOpeningId(submissionId);
     startTransition(async () => {
-      const res = await loadJudgeSubmission({ organisationSlug, eventId, submissionId });
+      const res = await loadJudgeSubmission({ organisationSlug, eventId, submissionId, ...(roundId ? { roundId } : {}) });
       if (ticket !== request.current) return;
       setOpeningId(null);
       if (!res.ok || !res.data) {
@@ -132,7 +133,7 @@ export function JudgeWorkspaceClient({
     const ticket = ++request.current;
     setFindingNext(true);
     startTransition(async () => {
-      const res = await loadNextJudgeSubmission({ organisationSlug, eventId });
+      const res = await loadNextJudgeSubmission({ organisationSlug, eventId, ...(roundId ? { roundId } : {}) });
       if (ticket !== request.current) return;
       setFindingNext(false);
       if (!res.ok || !res.data) {

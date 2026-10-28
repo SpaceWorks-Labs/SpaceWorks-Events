@@ -22,6 +22,7 @@ export const opsEventSelect = {
   judgesSeeAll: true,
   resultsPublishedAt: true,
   reviewsPerProject: true,
+  scoreNormalization: true,
 } satisfies Prisma.EventSelect;
 
 export type OpsEvent = Prisma.EventGetPayload<{ select: typeof opsEventSelect }>;

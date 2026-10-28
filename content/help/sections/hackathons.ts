@@ -11,6 +11,8 @@ export const hackathons = {
     { slug: "hackathons/entry-fees", title: "Project entry fees", summary: "Charge a fee when a team or solo entrant submits a project." },
     { slug: "hackathons/judging", title: "Judges, rubric and scoring", summary: "Invite judges, build the rubric, and score projects." },
     { slug: "hackathons/progress", title: "Assigning judges and tracking progress", summary: "Spread projects across judges and spot reviews that need attention." },
+    { slug: "hackathons/rounds", title: "Judging in rounds", summary: "Judge in stages, each round with its own rubric and judges." },
+    { slug: "hackathons/finalists", title: "Finalists", summary: "Advance the best projects to the next round and announce them." },
     { slug: "hackathons/results", title: "Awards and results", summary: "Rank projects, give awards and publish the results page." },
     { slug: "hackathons/prize-payouts", title: "Prize payouts", summary: "Record prize money for winners and track what has been paid." },
   ],

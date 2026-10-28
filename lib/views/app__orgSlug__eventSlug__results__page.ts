@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { isProjectGalleryVisible, loadPublicResults } from "@/lib/core/judging";
 import { parseSearchParam } from "@/lib/judgingPaging";
 import { publicJudgingMetadata, resolvePublicJudgingEvent } from "@/lib/publicJudgingPage";
+import { loadPublicFinalists } from "@/lib/core/judgingRounds";
 
 type Props = {
   params: Promise<{ orgSlug: string; eventSlug: string; }>;
@@ -15,8 +16,10 @@ export async function loadResultsMetadata({ params, searchParams }: Props) {
 
 /**
  * Public results (docs/HACKATHON.md): awards and winning projects, only once
- * the organiser has published results. Never scores or judge comments. The
- * event page's visibility rules apply first; anything else is a 404.
+ * the organiser has published results, and a Finalists block per round whose
+ * finalists are published (docs/HACKATHON.md "Rounds"), which can come
+ * before the results. Never scores, ranks or judge comments. The event
+ * page's visibility rules apply first; with neither published it is a 404.
  * `q` searches the winners.
  */
 export async function loadResultsView({ params, searchParams }: Props) {
@@ -24,7 +27,7 @@ export async function loadResultsView({ params, searchParams }: Props) {
   const resolved = await resolvePublicJudgingEvent(orgSlug, eventSlug);
   if (!resolved) notFound();
   const { org, event, preview } = resolved;
-  const results = await loadPublicResults(event.id, { query: parseSearchParam(sp.q) });
-  if (!results) notFound();
-  return { org, event, preview, results, galleryOpen: isProjectGalleryVisible(event) };
+  const [results, finalists] = await Promise.all([loadPublicResults(event.id, { query: parseSearchParam(sp.q) }), loadPublicFinalists(event.id)]);
+  if (!results && finalists.length === 0) notFound();
+  return { org, event, preview, results, finalists, galleryOpen: isProjectGalleryVisible(event) };
 }

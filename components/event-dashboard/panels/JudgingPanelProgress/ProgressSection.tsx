@@ -25,6 +25,7 @@ export function ProgressSection<R>({
   empty,
   head,
   renderRow,
+  roundId = null,
 }: {
   scope: JudgingScope;
   section: JudgingProgressSection;
@@ -35,6 +36,8 @@ export function ProgressSection<R>({
   empty: string;
   head: ReactNode;
   renderRow: (row: R) => ReactNode;
+  /** Another judging round than the current one (docs/HACKATHON.md "Rounds"). */
+  roundId?: string | null;
 }) {
   const [data, setData] = useState<NumberedPage<R>>(initial);
   const [loading, setLoading] = useState(false);
@@ -50,7 +53,7 @@ export function ProgressSection<R>({
       setError(null);
       let res: Awaited<ReturnType<typeof loadJudgingProgressPage>>;
       try {
-        res = await loadJudgingProgressPage({ ...scope, section, page });
+        res = await loadJudgingProgressPage({ ...scope, section, page, ...(roundId ? { roundId } : {}) });
       } catch {
         res = { ok: false, error: "Couldn't load the list. Try again." };
       }
@@ -63,7 +66,7 @@ export function ProgressSection<R>({
       setData(res.data.page as unknown as NumberedPage<R>);
       pageRef.current = res.data.page.page;
     },
-    [scope, section],
+    [scope, section, roundId],
   );
 
   // A server refresh: show page 1 as rendered, or re-read the page showing.

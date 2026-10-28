@@ -5,7 +5,7 @@ export type EventClientDto = Omit<Event,
   "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion"
   // Judging settings have their own DTOs (lib/core/judging.ts).
   | "submissionsEnabled" | "submissionsOpenAt" | "submissionsCloseAt" | "judgingStatus" | "judgesSeeAll"
-  | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization"
+  | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization" | "currentJudgingRoundId"
   | "emailEntrantsOnResults" | "emailSubmissionReceipts"
   // The entry fee is a BigInt and lives with the judging settings too.
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"

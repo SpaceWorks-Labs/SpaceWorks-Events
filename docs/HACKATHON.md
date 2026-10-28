@@ -49,7 +49,7 @@ never only in the UI:
 
 | Switch | Gates | When off |
 | --- | --- | --- |
-| Email entrants when results are published (`emailEntrantsOnResults`) | `results-published` | Publishing still works and records `resultsPublishedAt`, but queues nothing and leaves `resultsAnnouncedAt` as it was (unset, or older than the publication). |
+| Email entrants when results are published (`emailEntrantsOnResults`) | `results-published`, and `finalists-announced` ([Rounds](#rounds)) | Publishing still works and records `resultsPublishedAt`, but queues nothing and leaves `resultsAnnouncedAt` as it was (unset, or older than the publication). Publishing a round's finalists likewise emails nobody. |
 | Email a receipt when a project is submitted (`emailSubmissionReceipts`) | `submission-received` | Submitting queues no receipt, and neither does a project submitted once its entry fee is paid (`confirmEntryFeeTx`). Read under the Event lock in the submit transaction, and in the payment transaction on the entry-fee path. The entrant's confirmation mentions an emailed receipt only when one was queued. |
 
 Everything else is registration, capability or money email and **always**
@@ -337,6 +337,129 @@ interest. Rules are pure functions in `lib/judgingProgress.ts`.
   at any time: ranks only guide manual award choices, and public pages never
   show scores or ranks.
 
+## Rounds
+
+Judging can run in stages (a Space Works addition to Yuyu's single-round
+judging; the round workflow follows the Space Works platform design in
+`backend/apps/events/judging`, and finalist advancement is new). Cores in
+`lib/core/judging/rounds/` (entry `lib/core/judgingRounds.ts`), the pure
+advancement plan in `lib/judgingAdvancement.ts`; actions in
+`app/actions/judging-rounds.ts`; owners and admins only
+(`resolveJudgingOrganiser`), every change under the organiser Event lock and
+audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
+`JUDGING_ROUNDS_REORDERED`, `JUDGING_ROUND_PANEL_UPDATED`,
+`JUDGING_ROUND_FINALIZED`, `_UNFINALIZED`, `JUDGING_FINALISTS_ADVANCED`,
+`JUDGING_FINALISTS_PUBLISHED`, `_UNPUBLISHED`, `JUDGE_ASSIGNED`,
+`JUDGE_UNASSIGNED`; counts and ids only).
+
+- **Model.** `JudgingRound` (`position` unique per event; `status` DRAFT, OPEN,
+  CLOSED, at most one OPEN per event by a partial unique index;
+  `reviewsPerProject`, `scoreNormalization`, `judgesSeeAll`, `freshEyes`,
+  `entrySource` ALL_SUBMITTED or ADVANCED, planned `opensAt`/`closesAt`,
+  `finalistsPublishedAt`, `finalizedAt` with an optional
+  `finalizeExceptionReason`). Criteria, assignments and reviews belong to a
+  round (`roundId`; the assignment and review uniques include it); scores
+  follow their criterion. `JudgingRoundEntry` holds an ADVANCED round's
+  finalists (`sourceRank`, who advanced them, when); `JudgingRoundJudge` a
+  round's own panel; `JudgingAssignmentRun` each applied automatic
+  assignment. Triggers keep every round row in its own event.
+- **Single round, as before.** Every event starts with one round, "Main"
+  (the migration backfilled it for events with judging data; the first
+  rubric line, settings save or status change creates it). The **current
+  round** is the latest round that has opened, else the first
+  (`Event.currentJudgingRoundId`). For this release the event-level
+  `judgingStatus` (DRAFT is `NOT_STARTED`), `judgesSeeAll`,
+  `reviewsPerProject` and `scoreNormalization` mirror it, both ways (code
+  keeps them in step; a trigger copies event-level writes onto the round),
+  and a trigger fills a missing `roundId` with it. Every rule above
+  (visibility, conflicts, scoring, Score next project, automatic assignment,
+  Progress, Results, CSV, awards, publication, entry fees) runs unchanged on
+  the current round, so an event with one round behaves exactly as before.
+  The contract release makes `roundId` NOT NULL and drops the mirror.
+  Events whose judging was already CLOSED before the upgrade get a CLOSED,
+  not finalised, Main round: finalise it before advancing finalists from it.
+- **Order and status.** Rounds open in order: a round opens only when every
+  earlier round is CLOSED and no later round has opened, with a rubric, and
+  (ADVANCED) with finalists. Closing freezes scores; reopening and resetting
+  to DRAFT follow the rules above, and never once a later round has opened.
+  The first round always judges every submitted project (CHECK). Only DRAFT
+  rounds other than the first can be deleted (later ones move up); rounds
+  that have opened or hold finalists keep their place when reordering.
+- **Rubric per round.** Each round has its own criteria, weights and maximum
+  scores, editable only while it is DRAFT (frozen once it opens).
+- **Panels.** Organisers choose who judges each round. No panel (the
+  default, said so in the UI) means everyone who can judge the event; with a
+  panel only its members, who must still hold `JUDGE` or be owners or
+  admins, see, score, are assigned or are counted in that round.
+- **Fresh eyes** (optional, per round, fixed once the round opens): a judge
+  neither sees nor is assigned a project they submitted a review for in an
+  earlier round; a hard rule in visibility, manual and automatic assignment
+  and Progress. Because it can't change mid-round, counted reviews, finalising
+  coverage and the advancement ranking never need to re-apply it.
+- **Automatic assignment per round** (the current round): **Balanced** as
+  above, or **Random**: the server draws a 128-bit seed (shown with the
+  preview; **Re-roll** previews with a new one) and breaks ties with
+  SHA-256(seed, id) instead of the fixed hash, over the same sorted inputs,
+  so a seed always gives the same plan while conflicts, fresh eyes, the
+  target and even loads hold exactly as for Balanced. Apply needs the
+  previewed seed and plan fingerprint and stores a `JudgingAssignmentRun`
+  (strategy, mode, seed, target, counts, input and plan fingerprints).
+  Manual assigning and unassigning afterwards are audited naming the round
+  and the latest run.
+- **Finalising** (from the Space Works design): a CLOSED round is finalised
+  when every project it judges has the target number of counted reviews, or
+  with a reason when some fall short (missing reviews are never counted as
+  zero). A finalised round can't reopen, and its target and score method
+  can't change; finalising can be undone until finalists have advanced. It
+  is separate from publishing results.
+- **Advancing finalists** into an ADVANCED round from the round before it,
+  once that round is closed and finalised: the top N scored projects of its
+  ranking (the Results table's order; a tie at the cut is flagged) or a
+  hand-picked list of its SUBMITTED projects. Preview writes nothing and
+  returns a fingerprint of the choice, ranks and current finalists; Apply
+  takes the Event lock, re-plans, and refuses a changed plan. Refused once
+  the round opens (finalists are frozen) or while its finalists are
+  published. Disqualified and withdrawn projects never advance, and one
+  disqualified later simply drops out of the round.
+- **Judges** see only an ADVANCED round's finalists (still SUBMITTED), under
+  the round's own visibility, panel, fresh-eyes and conflict rules. A judge
+  reviews a project again, separately, in each round.
+- **Results, awards and prizes come from the final round.** Results,
+  the Awards picker and the CSV rank the current round (the final one once
+  it has opened); publishing results is refused while a later round is still
+  DRAFT. When the final round judges advanced finalists, only its finalists
+  can win an award (checked on the server). Prizes and payouts follow the
+  award winners as before.
+- **Judges' round switcher** offers the rounds that have opened and the
+  current round, never a later DRAFT round (refused on the server too).
+- **Publishing finalists** (separate from results) sets
+  `finalistsPublishedAt`, shows a **Finalists** block on
+  `/{org}/{event}/results` (titles, entrant display names and links,
+  alphabetical; never scores or ranks; the page exists once either finalists
+  or results are published). When **Email entrants when results are
+  published** is on (`Event.emailEntrantsOnResults`, off by default; the
+  single gate is `entrantJudgingEmailsEnabled`), it queues one transactional
+  `finalists-announced` email per address of the finalists' confirmed
+  entrant members, listing every finalist project of that person, once per
+  round: each recipient is recorded in `JudgingFinalistNotice` (a SHA-256 of
+  the address), which outlives the outbox row. Unpublishing withdraws
+  undelivered emails and forgets those recipients, so republishing emails
+  only them. Publishing with the switch off emails nobody. No webhook: the
+  webhook catalogue has no judging events yet.
+- **Entry fees** gate entry into round 1 exactly as before (only SUBMITTED
+  projects are judged); later rounds never charge.
+- **Dashboard.** Judging → **Rounds** lists the rounds (status pills with a
+  word, current, finalists published) and the chosen round's settings,
+  judges, rubric and finalists, with Edit, Choose judges, Open/Close/Reopen,
+  Finalise, Advance finalists, Publish finalists and Delete. Score, Progress
+  and Results get a **Round** switcher when there is more than one round;
+  other rounds show read-only (the score method, target, automatic
+  assignment and publishing act on the current round), and the Results
+  export carries `round`.
+- **Conflicts** are decided in one place, `conflictKeysFor`
+  (`lib/core/judging/judges.ts`), which every path uses; the Mentor Desk adds
+  mentored teams there.
+
 ## Results and awards
 
 - `EventAward`: name (e.g. "Overall winner", "Best design"), description,
@@ -482,6 +605,19 @@ interest. Rules are pure functions in `lib/judgingProgress.ts`.
   falling back, public-safe DTOs, the results page search, and the event
   page's visibility rules (organisation, gallery switch, window, page
   release, status, invite-only) as a real 404.
+  `tests/integration/judging-rounds.db.test.ts`: the first round and the
+  event mirror, one OPEN round per event, round order and status rules, the
+  first round taking everyone, reorder and delete, per-round panels, tenancy
+  and owner/admin-only actions. `judging-rounds-advance.db.test.ts`: preview
+  then apply with a fingerprint, only from a finalised round, disqualified
+  and withdrawn never advance, frozen finalists, judges seeing only
+  finalists, final-round results, award candidates and publication,
+  finalist publication and email once, and finalising with coverage or a
+  reason. `judging-rounds-assign.db.test.ts`: seeded Random runs reproduced
+  and recorded, conflict-free and balanced, manual changes audited, panels
+  narrowing the pool, fresh eyes. `judging-rounds-migration.db.test.ts`: the
+  migration backfill, the expand-phase fill and mirror triggers, and
+  cascades.
   `tests/integration/hackathon-email-toggles.db.test.ts`: both switches
   `NOT NULL DEFAULT false`, also for rows written without them; publishing
   with the results switch off queues
@@ -516,7 +652,10 @@ interest. Rules are pure functions in `lib/judgingProgress.ts`.
   fallbacks, publication gating, short links, the bound and escaped search,
   event scoping, and every order's id tiebreak),
   `tests/unit/judging-assignment.test.ts` (balance, conflicts, shortfalls,
-  determinism, keep and replace), `tests/unit/judging-progress.test.ts`
+  determinism, keep and replace), `tests/unit/judging-assignment-random.test.ts`
+  (seeded runs per seed, across seeds, conflicts, coverage and loads),
+  `tests/unit/judging-advancement.test.ts` (top N, ties at the cut, hand
+  picks, the fingerprint), `tests/unit/judging-rounds-copy.test.ts`, `tests/unit/judging-progress.test.ts`
   (outlier and stale rules, target, schemas),
   `tests/unit/judging-ops-copy.test.ts`,
   `tests/unit/event-capabilities.test.ts` (judging flags for every

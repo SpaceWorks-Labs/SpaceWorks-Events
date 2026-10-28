@@ -5,6 +5,8 @@
  * - `results-published` (Event.emailEntrantsOnResults): queued when results
  *   are published, or later with "Send results email now"
  *   (sendResultsAnnouncement in lib/core/judging/announcement.ts).
+ * - `finalists-announced` (Event.emailEntrantsOnResults too): queued when a
+ *   judging round's finalists are published (lib/core/judging/rounds/finalists.ts).
  * - `submission-received` (Event.emailSubmissionReceipts): the receipt queued
  *   when a project becomes SUBMITTED, whether submitted directly
  *   (lib/core/judging/entrantSubmissions.ts) or once its entry fee is paid
@@ -23,7 +25,7 @@
  * access.
  */
 
-export const GATED_HACKATHON_EMAIL_KINDS = ["results-published", "submission-received"] as const;
+export const GATED_HACKATHON_EMAIL_KINDS = ["results-published", "submission-received", "finalists-announced"] as const;
 
 export const ALWAYS_SENT_EMAIL_KINDS = [
   "rsvp-confirmation",

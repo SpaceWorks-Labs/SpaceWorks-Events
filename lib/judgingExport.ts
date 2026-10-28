@@ -18,8 +18,10 @@ export type ParsedJudgingExport = {
   status: SubmissionViewFilter;
   /** Results only: the score chip (ranks never change). */
   scored: ResultsScoreFilter;
-  /** Results only; null means the event's saved method. */
+  /** Results only; null means the round's saved method. */
   method: JudgingExportMethod | null;
+  /** Results only: the judging round the table shows; absent means the current round. */
+  round?: string;
 };
 
 const judgingExportParamsSchema = z.object({
@@ -28,6 +30,7 @@ const judgingExportParamsSchema = z.object({
   status: z.enum(SUBMISSION_VIEW_FILTERS).optional().default("all"),
   scored: z.enum(RESULTS_SCORE_FILTERS).optional().default("all"),
   method: z.enum(["RAW", "ZSCORE"]).optional(),
+  round: z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).optional(),
 });
 
 /** Null for any malformed value (the route answers it with its empty 404). */
@@ -38,12 +41,13 @@ export function parseJudgingExportSearchParams(params: URLSearchParams): ParsedJ
     status: params.get("status") ?? undefined,
     scored: params.get("scored") ?? undefined,
     method: params.get("method") ?? undefined,
+    round: params.get("round") ?? undefined,
   });
   if (!parsed.success) return null;
   // Each view has its own filters; a parameter of the other view is malformed.
   if (parsed.data.view === "results" && parsed.data.status !== "all") return null;
-  if (parsed.data.view === "submissions" && (parsed.data.scored !== "all" || parsed.data.method)) return null;
-  return { view: parsed.data.view, query: parsed.data.q, status: parsed.data.status, scored: parsed.data.scored, method: parsed.data.method ?? null };
+  if (parsed.data.view === "submissions" && (parsed.data.scored !== "all" || parsed.data.method || parsed.data.round)) return null;
+  return { view: parsed.data.view, query: parsed.data.q, status: parsed.data.status, scored: parsed.data.scored, method: parsed.data.method ?? null, ...(parsed.data.round ? { round: parsed.data.round } : {}) };
 }
 
 function withQuery(base: string, params: URLSearchParams): string {
@@ -51,12 +55,13 @@ function withQuery(base: string, params: URLSearchParams): string {
   return query ? `${base}?${query}` : base;
 }
 
-/** Judging → Results → Export: the search and score chip showing, and the score method the table ranks by. */
-export function judgingResultsExportHref(base: string, view: { query: string; method: JudgingExportMethod; scored?: ResultsScoreFilter }): string {
+/** Judging → Results → Export: the search and score chip showing, the score method the table ranks by, and the round it shows. */
+export function judgingResultsExportHref(base: string, view: { query: string; method: JudgingExportMethod; scored?: ResultsScoreFilter; roundId?: string | null }): string {
   const params = new URLSearchParams();
   if (view.query.trim()) params.set("q", view.query.trim());
   if (view.scored && view.scored !== "all") params.set("scored", view.scored);
   params.set("method", view.method);
+  if (view.roundId) params.set("round", view.roundId);
   return withQuery(base, params);
 }
 

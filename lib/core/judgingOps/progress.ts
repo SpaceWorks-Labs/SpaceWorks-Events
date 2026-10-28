@@ -2,10 +2,12 @@ import "server-only";
 
 /** The judging Progress dashboard: build the whole model, then page each list. */
 
-import { SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { conflictKeysFor, listEligibleJudges, type ConflictKeys, type EligibleJudgeDto } from "@/lib/core/judging";
+import { conflictKeysFor, type ConflictKeys, type EligibleJudgeDto } from "@/lib/core/judging";
+import { listRoundJudges } from "@/lib/core/judging/judges";
 import { conflictedPairs, judgeWorkOnSubmitted } from "@/lib/core/judging/judgeWork";
+import { judgingStatusFor, resolveJudgingRound, roundProjectsWhere } from "@/lib/core/judging/rounds/scope";
+import { freshEyesBlockedPairs } from "@/lib/core/judging/rounds/freshEyes";
 import { entrantDisplayName } from "@/lib/judgingDto";
 import { judgeWeightedPercent } from "@/lib/judgingScore";
 import { pairKey } from "@/lib/judgingAssignment";
@@ -44,30 +46,35 @@ type ProgressModel = {
 };
 
 /**
- * Compute the whole Progress model for the event (bounded by the event's own
- * projects, judges and reviews, as the results table is). Counted reviews,
- * conflicts of interest and eligibility follow `loadJudgingResults`.
+ * Compute the whole Progress model for one round of the event (the current
+ * round unless `roundId`; bounded by its own projects, judges and reviews,
+ * as the results table is). Counted reviews, conflicts of interest and
+ * eligibility follow `loadJudgingResults`.
  */
-async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Promise<ProgressModel | null> {
+async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date, roundId?: string | null): Promise<ProgressModel | null> {
   const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: opsEventSelect });
   if (!event) return null;
-  const submittedOnly = { eventId: event.id, status: SubmissionStatus.SUBMITTED };
+  const round = await resolveJudgingRound(prisma, event, roundId);
+  if (!round) return null;
+  const submittedOnly = roundProjectsWhere(round);
   const [projects, criteria, eligible, pairs, assignments] = await Promise.all([
     prisma.submission.findMany({
       where: submittedOnly,
       select: { id: true, title: true, teamId: true, rsvpId: true, team: { select: { name: true } }, rsvp: { select: { guestName: true, user: { select: { name: true } } } } },
       orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
     }),
-    prisma.judgingCriterion.findMany({ where: { eventId: event.id }, select: { id: true, weight: true, maxScore: true }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
-    listEligibleJudges(ctx),
+    prisma.judgingCriterion.findMany({ where: { eventId: event.id, roundId: round.id }, select: { id: true, weight: true, maxScore: true }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
+    listRoundJudges(ctx, round),
     // One row per (judge, project) with work, scores aggregated in SQL.
-    judgeWorkOnSubmitted(prisma, event.id, { withScores: true }),
-    prisma.judgeAssignment.findMany({ where: { eventId: event.id, submission: submittedOnly }, select: { submissionId: true, judgeUserId: true } }),
+    judgeWorkOnSubmitted(prisma, round, { withScores: true }),
+    prisma.judgeAssignment.findMany({ where: { eventId: event.id, roundId: round.id, submission: submittedOnly }, select: { submissionId: true, judgeUserId: true } }),
   ]);
   const judgeById = new Map<string, EligibleJudgeDto>(eligible.map((judge) => [judge.userId, judge]));
   const conflicts: Map<string, ConflictKeys> = await conflictKeysFor(prisma, event.id, [...judgeById.keys()]);
+  // Pairs a judge may not take: conflicts of interest, and earlier-round reviews when the round has fresh eyes on.
   const conflicted = conflictedPairs(projects, conflicts);
   const projectById = new Map(projects.map((row) => [row.id, row]));
+  for (const key of await freshEyesBlockedPairs(prisma, round)) if (projectById.has(key.slice(key.indexOf("\u0000") + 1))) conflicted.add(key);
   // A pair counts only when the judge can still judge the event and has no conflict with that entrant.
   const valid = (judgeUserId: string, submissionId: string) =>
     projectById.has(submissionId) && judgeById.has(judgeUserId) && !conflicted.has(pairKey(judgeUserId, submissionId));
@@ -91,7 +98,7 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
   }
 
   const validAssignments = assignments.filter((row) => valid(row.judgeUserId, row.submissionId));
-  const target = effectiveReviewTarget(event.reviewsPerProject);
+  const target = effectiveReviewTarget(round.reviewsPerProject);
 
   // Per project.
   const reviewsByProject = new Map<string, string[]>();
@@ -166,8 +173,8 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
     const submittedSet = submittedByJudge.get(judge.userId) ?? new Set<string>();
     const started = startedByJudge.get(judge.userId) ?? 0;
     if (judge.kind === "admin" && assignedSet.size === 0 && submittedSet.size === 0 && started === 0) continue;
-    const expected = event.judgesSeeAll ? projects.length - (conflictedByJudge.get(judge.userId) ?? 0) : assignedSet.size;
-    const done = event.judgesSeeAll ? submittedSet.size : [...submittedSet].filter((id) => assignedSet.has(id)).length;
+    const expected = round.judgesSeeAll ? projects.length - (conflictedByJudge.get(judge.userId) ?? 0) : assignedSet.size;
+    const done = round.judgesSeeAll ? submittedSet.size : [...submittedSet].filter((id) => assignedSet.has(id)).length;
     judgeRows.push({
       userId: judge.userId,
       name: judge.name,
@@ -197,10 +204,10 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
   return {
     summary: {
       target,
-      targetIsDefault: event.reviewsPerProject == null,
-      reviewsPerProject: event.reviewsPerProject,
-      judgingStatus: event.judgingStatus,
-      judgesSeeAll: event.judgesSeeAll,
+      targetIsDefault: round.reviewsPerProject == null,
+      reviewsPerProject: round.reviewsPerProject,
+      judgingStatus: judgingStatusFor(round.status),
+      judgesSeeAll: round.judgesSeeAll,
       projects: projects.length,
       projectsAtTarget: projects.length - belowTarget.length,
       reviewsCounted: submittedPairs.size,
@@ -213,9 +220,9 @@ async function buildProgressModel(ctx: JudgingOrganiserContext, now: Date): Prom
   };
 }
 
-/** The Progress tab: the summary and the first page of every list. Null when the event is gone. */
-export async function loadJudgingProgress(ctx: JudgingOrganiserContext, now: Date = new Date()): Promise<JudgingProgressDto | null> {
-  const model = await buildProgressModel(ctx, now);
+/** The Progress tab: the summary and the first page of every list, for one round. Null when the event (or that round) is gone. */
+export async function loadJudgingProgress(ctx: JudgingOrganiserContext, now: Date = new Date(), options: { roundId?: string | null } = {}): Promise<JudgingProgressDto | null> {
+  const model = await buildProgressModel(ctx, now, options.roundId);
   if (!model) return null;
   return {
     summary: model.summary,
@@ -227,10 +234,10 @@ export async function loadJudgingProgress(ctx: JudgingOrganiserContext, now: Dat
 }
 
 /** One numbered page of one Progress list (a page past the end shows the last page). */
-export async function loadJudgingProgressPage(ctx: JudgingOrganiserContext, input: unknown, now: Date = new Date()): Promise<JudgingProgressSectionDto | null> {
+export async function loadJudgingProgressPage(ctx: JudgingOrganiserContext, input: unknown, now: Date = new Date(), options: { roundId?: string | null } = {}): Promise<JudgingProgressSectionDto | null> {
   const parsed = judgingProgressQuerySchema.safeParse(input);
   if (!parsed.success) return null;
-  const model = await buildProgressModel(ctx, now);
+  const model = await buildProgressModel(ctx, now, options.roundId);
   if (!model) return null;
   const { section, page } = parsed.data as { section: JudgingProgressSection; page: number };
   switch (section) {
