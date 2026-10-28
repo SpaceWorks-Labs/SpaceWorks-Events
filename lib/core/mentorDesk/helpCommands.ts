@@ -9,7 +9,7 @@ import "server-only";
  * generation; organisers act on the version alone.
  */
 
-import { HelpRequestStatus, Prisma } from "@prisma/client";
+import { HelpRequestOrigin, HelpRequestStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { recordAuditEvent } from "@/lib/audit";
 import { recheckMentoringCertificatesLocked } from "@/lib/volunteer/mentoring";
@@ -18,7 +18,7 @@ import { HELP_CLAIMED_KIND, enqueueMentorMessages } from "@/lib/outbox/mentor";
 import { deskEvent, liveMentor, type DeskOrganiserContext, type LockedEvent, type MentorContext } from "./access";
 import { visitEligible } from "./eligibility";
 import { changeHelp, claimValues, CLEARED_CLAIM, clearMentorClaims, type HelpRow, lockHelpRow, requireBeforeDeadline, requireLive, requireStatus } from "./helpShared";
-import { COPY, checkVersion, type DeskResult, fail, inTransaction, refuse } from "./shared";
+import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockTeam, refuse } from "./shared";
 
 export type HelpAction = "claim" | "renew" | "release" | "resolve" | "assign" | "reopen";
 
@@ -35,9 +35,13 @@ const schema = z.object({
 type Input = z.infer<typeof schema>;
 type Actor = MentorContext | DeskOrganiserContext;
 
-/** Who gets the optional "a mentor is on the way" email: the raiser, else the team leader or registrant. */
+/**
+ * Who gets the optional "a mentor is on the way" email: the participant who
+ * raised it (TEAM origin), else the team leader or the solo registrant. A
+ * MENTOR or ROUND request names a mentor as its raiser, never the team.
+ */
 async function claimedRecipient(tx: Prisma.TransactionClient, row: HelpRow): Promise<string | null> {
-  if (row.raisedByUserId) {
+  if (row.origin === HelpRequestOrigin.TEAM && row.raisedByUserId) {
     const user = await tx.user.findUnique({ where: { id: row.raisedByUserId }, select: { email: true } });
     if (user?.email) return user.email;
   }
@@ -73,6 +77,14 @@ async function takeClaim(tx: Prisma.TransactionClient, event: LockedEvent, row: 
   }
 }
 
+/** Locks the request's team or solo registration (a request never changes scope), so the open limit is counted under it. */
+async function lockRequestScope(tx: Prisma.TransactionClient, eventId: string, requestId: string) {
+  const scope = await tx.helpRequest.findFirst({ where: { id: requestId, eventId }, select: { teamId: true, rsvpId: true } });
+  if (!scope) refuse(COPY.notFound);
+  if (scope.teamId) await lockTeam(tx, scope.teamId);
+  else if (scope.rsvpId) await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${scope.rsvpId} FOR UPDATE`;
+}
+
 async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): Promise<void> {
   const event = await deskEvent(tx, actor);
   const isOrganiser = actor.kind === "organiser";
@@ -81,6 +93,9 @@ async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): 
   const now = new Date();
   // Mentors act only while on shift (policy.mentor_for in every command).
   const self = isOrganiser ? null : await liveMentor(tx, event.id, actor.userId, { at: now });
+  // Locks in one order everywhere: the grant (FOR SHARE) and the team or registration before the request row.
+  if (input.action === "assign" && input.mentorUserId) await liveMentor(tx, event.id, input.mentorUserId, { at: now });
+  if (input.action === "reopen") await lockRequestScope(tx, event.id, input.requestId);
   const row = await lockHelpRow(tx, event.id, input.requestId);
   if (!isOrganiser && (input.action === "release" || input.action === "resolve") && row.claimedByUserId !== actor.userId) refuse(COPY.notFound);
   checkVersion(row, input.expectedVersion);
@@ -116,7 +131,7 @@ async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): 
     case "reopen": {
       requireStatus(row, HelpRequestStatus.RESOLVED);
       if (!input.note.trim()) refuse(COPY.reasonRequired);
-      // Reopening counts against the team's open limit like a new request.
+      // Reopening counts against the team's open limit like a new request (counted under the team or registration lock).
       const open = await tx.helpRequest.count({ where: { eventId: event.id, categoryId: row.categoryId, teamId: row.teamId, rsvpId: row.rsvpId, status: { in: [HelpRequestStatus.OPEN, HelpRequestStatus.CLAIMED] } } });
       if (open >= row.category.openLimit) refuse(COPY.limit);
       await changeHelp(tx, row, { status: HelpRequestStatus.OPEN, resolvedAt: null, exclusiveUntil: new Date(now.getTime() + HELP_PRIORITY_WINDOW_MS), lastOpenedAt: now, openGeneration: row.openGeneration + 1 }, { actorUserId: actor.userId, kind: "reopen", note: input.note.trim() });

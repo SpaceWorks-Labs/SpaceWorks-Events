@@ -6,7 +6,7 @@ import "server-only";
  * DECLARED or AFFILIATION conflict blocks visits, claims and assignments.
  */
 
-import { MentorAssignmentStatus, MentoringRoundStatus, Prisma } from "@prisma/client";
+import { MentorAssignmentStatus, MentoringRoundStatus, Prisma, RsvpStatus } from "@prisma/client";
 import { skillAndPriorityEligible } from "@/lib/mentorDesk/rules";
 import { teamMemberUserIds } from "./access";
 
@@ -40,7 +40,8 @@ export async function isBlockedForTeam(tx: Prisma.TransactionClient, eventId: st
 }
 
 /**
- * Whether this mentor may take help from this team or registration now.
+ * Whether this mentor may take help from this team or registration now: only
+ * a CONFIRMED team or a CONFIRMED solo registration (never a crew ticket).
  * `skillTags` empty skips the skill check; `priorityUntil` opens the
  * assigned-mentor window.
  */
@@ -55,11 +56,12 @@ export async function visitEligible(tx: Prisma.TransactionClient, params: {
   const now = params.now ?? new Date();
   const { teamId, rsvpId } = params.scope;
   if (rsvpId) {
-    const rsvp = await tx.rSVP.findFirst({ where: { id: rsvpId, eventId: params.eventId }, select: { userId: true } });
+    const rsvp = await tx.rSVP.findFirst({ where: { id: rsvpId, eventId: params.eventId, status: RsvpStatus.CONFIRMED, isCrew: false }, select: { userId: true } });
     if (!rsvp || rsvp.userId === params.mentor.userId) return false;
     return skillAndPriorityEligible({ assignedToMentor: false, teamHasAssignedMentor: false, priorityUntil: null, now, mentorSkills: params.mentor.skills, skillTags: params.skillTags ?? [] });
   }
   if (!teamId) return false;
+  if (!(await tx.team.findFirst({ where: { id: teamId, eventId: params.eventId, status: RsvpStatus.CONFIRMED }, select: { id: true } }))) return false;
   if (await isBlockedForTeam(tx, params.eventId, params.mentor.userId, teamId)) return false;
   const roundId = await liveRoundId(tx, params.eventId);
   const assigned = await tx.mentorTeamAssignment.findMany({ where: activeAssignmentWhere(params.eventId, teamId, roundId, now), select: { mentorUserId: true } });
@@ -77,13 +79,16 @@ export async function visitEligible(tx: Prisma.TransactionClient, params: {
  * Teams a judge must not score because of the Mentor Desk (policy.is_conflicted
  * for judging): any team they mentored (ACTIVE or ENDED assignment, in any
  * round) or hold an active conflict with. A proposal that was never activated
- * does not count. Empty unless the desk is on.
+ * does not count. Empty while the desk is off, unless an assignment was ever
+ * activated: mentoring that happened stays a conflict when the desk is
+ * turned off later.
  */
 export async function mentorJudgingConflicts(client: Prisma.TransactionClient, eventId: string, userIds: readonly string[]): Promise<Map<string, Set<string>>> {
   const result = new Map<string, Set<string>>();
   if (userIds.length === 0) return result;
   const event = await client.event.findUnique({ where: { id: eventId }, select: { mentorDeskEnabled: true } });
-  if (!event?.mentorDeskEnabled) return result;
+  if (!event) return result;
+  if (!event.mentorDeskEnabled && !(await client.mentorTeamAssignment.findFirst({ where: { eventId, activatedAt: { not: null } }, select: { id: true } }))) return result;
   const ids = [...userIds];
   const [assignments, conflicts] = await Promise.all([
     client.mentorTeamAssignment.findMany({ where: { eventId, mentorUserId: { in: ids }, activatedAt: { not: null } }, select: { mentorUserId: true, teamId: true } }),

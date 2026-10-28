@@ -55,6 +55,8 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
     if (claim.count !== 1) return { ok: false, reason: "unavailable" };
     let mentorGrant: { eventId: string; userId: string; before: EventPermission[]; after: EventPermission[] } | undefined;
     if (invite.eventId) {
+      // Locked like any grant change, so a mentor command in flight is fenced (docs/MENTOR_DESK.md).
+      await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${invite.eventId} AND "userId" = ${user.id} FOR UPDATE`;
       const before = await tx.eventCollaborator.findUnique({ where: { eventId_userId: { eventId: invite.eventId, userId: user.id } }, select: { permissions: true } });
       await tx.eventCollaborator.upsert({
         where: { eventId_userId: { eventId: invite.eventId, userId: user.id } },

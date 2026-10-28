@@ -13,6 +13,7 @@ export const helpRowSelect = {
   teamId: true,
   rsvpId: true,
   raisedByUserId: true,
+  origin: true,
   status: true,
   claimedByUserId: true,
   claimId: true,
