@@ -29,7 +29,7 @@ export const mobileErrorCodeSchema = z.enum([
   "INCOMPLETE_SCORES", "NOT_VISIBLE", "INTERNAL_ERROR",
   // Space Works additions: staff authenticator, sign-in protections, payments.
   "STAFF_MFA_REQUIRED", "STAFF_MFA_ENROLMENT_REQUIRED", "EMAIL_CODE_REQUIRED", "TOO_MANY_ATTEMPTS", "REAUTH_REQUIRED",
-  "PAID_ORDER", "REGISTRATION_CLOSED", "PAYMENT_UNAVAILABLE", "PAYLOAD_TOO_LARGE",
+  "PAID_ORDER", "REGISTRATION_CLOSED", "PAYMENT_UNAVAILABLE", "PAYLOAD_TOO_LARGE", "IDEMPOTENCY_STALE",
 ]);
 
 export const errorEnvelopeSchema = z.object({

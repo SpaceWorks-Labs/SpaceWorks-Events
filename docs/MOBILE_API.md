@@ -755,7 +755,8 @@ the current round only: a `?roundId=` naming any other round answers
   submitted reviews. Managing rounds stays on the website.
 - `GET /public/events/:orgSlug/:eventSlug/finalists` → published finalists
   per round: titles, entrant display names and links, never scores or ranks,
-  under the results page's visibility rules.
+  under the results page's visibility rules. `NOT_FOUND` until a round's
+  finalists are published; rate limited per address like search.
 
 ## Mentor Desk
 
@@ -766,11 +767,24 @@ that raised it and mentors who may see it; it is never logged.
 
 **Idempotency.** Every Mentor Desk write needs an `Idempotency-Key` header (8
 to 128 printable characters, a fresh one per user action, kept for retries of
-that action). The first request runs; a retry with the same key and body
+that action). The first request runs; a retry with the same key, path and body
 within a day gets the first answer again with `Idempotent-Replayed: true`. The
-same key with another body, or while the first is still running, is
-`CONFLICT`. Commands also take the record's `expectedVersion` (from the last
-read) and answer `CONFLICT` when someone changed it first.
+same key on another path (another event, request, slot or round) or with
+another body, or while the first is still running, is `CONFLICT`; it never
+replays another resource's answer.
+
+- Only definitive answers are kept. A 5xx, `RATE_LIMITED`, `UNAUTHENTICATED`
+  or a staff authenticator refusal is not, so retry it with the same key
+  (after signing in or confirming the code).
+- Use a new key only after a definitive 4xx answer, which the same key would
+  replay.
+- `IDEMPOTENCY_STALE` (409): an earlier request with this key started over a
+  minute ago and never finished, so its outcome is unknown and it is never run
+  again under that key. Re-read the record; if the change is not there, send
+  the action again with a new key.
+
+Commands also take the record's `expectedVersion` (from the last read) and
+answer `CONFLICT` when someone changed it first.
 
 **Participants** (signed in, with a CONFIRMED registration on the event or a
 place in a team that has one; a ticket alone is never enough), under
@@ -798,15 +812,19 @@ it opens the console and nothing else (organiser routes answer `NOT_FOUND`).
   their own team's or a conflicted team's), with `eligible`.
 - `POST …/help/:requestId/claim|renew|release|resolve` `{ "expectedVersion",
   "claimId"?, "claimGeneration"?, "note"? }`: a claim is a lease; renew it
-  before it expires. Of two mentors claiming at once one wins and the other
+  before it expires. Renew, release and resolve must name the held `claimId`
+  and `claimGeneration` (from the console), as on the website. Of two mentors claiming at once one wins and the other
   gets `CONFLICT`. `POST …/help/:requestId/comment`.
 - `GET …/teams` (assigned teams and declared conflicts, names only),
   `PUT …/profile`, `GET`/`POST …/slots`, `POST …/slots/:slotId/reschedule`
   and `…/cancel`.
 - Mentoring rounds: `POST …/rounds/:roundId/teams/:teamId/claim|heartbeat|release|check-in`
   `{ "expectedVersion", "leaseId"?, "generation"?, "formVersion"?, "answers"?, "away"?, "nominate"? }`
-  (send a heartbeat while with the team; each with its own key), and
-  `POST …/rounds/:roundId/teams/:teamId/nominate`.
+  (send a heartbeat while with the team; each with its own key). Every
+  command sends the round's `expectedVersion`, but only `claim` checks it;
+  heartbeat, release and check-in are fenced by the lease's `leaseId` and
+  `generation` instead, so a heartbeat needs no fresh read.
+- `POST …/rounds/:roundId/teams/:teamId/nominate`.
 
 **Organisers** (organisation owners and admins), under
 `/orgs/:orgSlug/events/:eventId/mentor-desk`: `GET …/queue` (every request,

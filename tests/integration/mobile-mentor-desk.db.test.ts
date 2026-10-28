@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 process.env.REDIS_URL = "";
 process.env.TRUSTED_PROXY_IP_HEADER = "x-real-ip";
+process.env.MFA_ENCRYPTION_KEY ||= Buffer.alloc(32, 9).toString("base64");
 
 vi.mock("next-auth", () => ({ default: () => ({ auth: async () => null, handlers: {}, signIn: vi.fn(), signOut: vi.fn() }), CredentialsSignin: class extends Error {} }));
 vi.mock("next-auth/providers/google", () => ({ default: vi.fn() }));
