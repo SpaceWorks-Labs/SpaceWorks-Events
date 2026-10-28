@@ -8,6 +8,7 @@ import { useToast } from "@/components/feedback/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { SwitchRow } from "@/components/ui/choice";
 import { Card, EmptyState } from "@/components/ui/display";
+import { HelpLink } from "@/components/help/HelpLink";
 import type { DashboardShift, DashboardVolunteerShifts } from "@/lib/eventDashboard/volunteerShifts";
 import { ContributorsCard } from "./ContributorsCard";
 import { HoursCard } from "./HoursCard";
@@ -59,7 +60,10 @@ export function ShiftsPanel({ organisationSlug, eventId, data, now }: { organisa
           <h2 className="text-h4 text-ink">Shifts</h2>
           <p className="text-caption text-ink-muted">{data.shifts.length === 1 ? "1 shift" : `${data.shifts.length} shifts`}. Times in {data.timeZone}.</p>
         </div>
-        <Button variant="primary" startIcon={<Plus />} onClick={() => setEditing("new")}>Add shift</Button>
+        <div className="flex items-center gap-2">
+          <HelpLink article="volunteers/shifts-and-hours" />
+          <Button variant="primary" startIcon={<Plus />} onClick={() => setEditing("new")}>Add shift</Button>
+        </div>
       </div>
 
       {data.shifts.length === 0 ? (

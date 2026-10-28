@@ -19,6 +19,7 @@ import { eventPage } from "./sections/event-page";
 import { registration } from "./sections/registration";
 import { payments } from "./sections/payments";
 import { guests } from "./sections/guests";
+import { volunteers } from "./sections/volunteers";
 import { checkIn } from "./sections/check-in";
 import { hackathons } from "./sections/hackathons";
 import { finance } from "./sections/finance";
@@ -56,6 +57,7 @@ export const helpSections = [
   registration,
   payments,
   guests,
+  volunteers,
   checkIn,
   hackathons,
   finance,
