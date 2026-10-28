@@ -17,6 +17,10 @@ vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
 vi.mock("@/lib/rateLimit", () => ({ checkRateLimitById: mocks.rateLimit }));
 vi.mock("@/lib/admission/accountExport", () => ({ loadAccountApplications: async () => [] }));
+vi.mock("@/lib/accountDataExport/participation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/accountDataExport/participation")>()),
+  loadParticipationSource: async () => ({ crew: [], expenseClaims: [], volunteerSignups: [], contributorCertificates: [], mentorProfiles: [], helpRequests: [], helpComments: [], officeHourBookings: [], teamSeekerProfiles: [], teamJoinRequests: [], prizePayouts: [] }),
+}));
 vi.mock("@/lib/db", () => ({ prisma: {
   user: { findUnique: mocks.user },
   account: { findMany: mocks.accounts },
@@ -206,5 +210,6 @@ describe("account data export route", () => {
     expect(mocks.audit).toHaveBeenCalledWith({ action: "ACCOUNT_DATA_EXPORTED", actorUserId: "user_1", targetType: "User", targetId: "user_1" });
     const body = JSON.parse(await response.text());
     expect(body.profile.email).toBe("ada@example.test");
+    expect(body).toMatchObject({ applications: [], crewPlaces: [], expenseClaims: [], volunteerShifts: [], mentorProfiles: [], helpRequests: [], officeHourBookings: [], teamJoinRequests: [], prizePayouts: [] });
   });
 });
