@@ -27,6 +27,9 @@ enum EventPermission {
   /// Hackathon judging workspace only (docs/HACKATHON.md). A collaborator with
   /// just this grant sees no guests, answers, emails, check-in, or editing.
   JUDGE
+  /// Mentor Desk console only (docs/MENTOR_DESK.md): the help queue, own
+  /// teams, office-hour slots and round visits. Never satisfies another check.
+  MENTOR
 }
 
 enum EventStatus {
@@ -377,6 +380,23 @@ model User {
   claimPayoutsRecorded         ClaimPayout[]  @relation("ClaimPayoutRecordedBy")
   ticketDesignsUpdated         TicketDesign[] @relation("TicketDesignUpdatedBy")
   refundRequestsDecided        RefundRequest[] @relation("RefundRequestDecidedBy")
+  mentorProfiles               MentorProfile[]
+  helpRequestsRaised           HelpRequest[] @relation("HelpRequestRaisedBy")
+  helpRequestsClaimed          HelpRequest[] @relation("HelpRequestClaimedBy")
+  helpActivities               HelpRequestActivity[]
+  helpComments                 HelpRequestComment[]
+  mentorRunsCreated            MentorAssignmentRun[]
+  mentorAssignments            MentorTeamAssignment[] @relation("MentorAssignmentMentor")
+  mentorAssignmentsCreated     MentorTeamAssignment[] @relation("MentorAssignmentCreatedBy")
+  mentorConflicts              MentorConflict[]
+  mentorConflictsRecorded      MentorConflict[] @relation("MentorConflictCreatedBy")
+  officeHourSlots              OfficeHourSlot[]
+  officeHourBookings           OfficeHourBooking[]
+  officeHourChanges            OfficeHourChange[]
+  mentoringRoundSeats          MentoringRoundMentor[]
+  mentoringVisits              MentoringVisit[]
+  mentoringCheckIns            MentoringCheckIn[]
+  mentorNominations            MentorNomination[]
 }
 
 model Account {
@@ -848,6 +868,23 @@ model Event {
   judgingCriteria     JudgingCriterion[]
   judgeAssignments    JudgeAssignment[]
   awards              EventAward[]
+  /// Mentor Desk (docs/MENTOR_DESK.md), off by default: mentors, the help
+  /// queue, assignments, office hours and mentoring rounds. When on, a judge
+  /// who mentored a team is conflicted for it.
+  mentorDeskEnabled                   Boolean          @default(false)
+  /// Email the team when a mentor claims its help request (off by default).
+  mentorHelpClaimedEmail              Boolean          @default(false)
+  /// Accepting a MENTOR grant also adds the mentor to the event crew with a
+  /// free crew ticket (docs/CREW.md); removing the grant removes that ticket.
+  mentorsGetCrewTicket                Boolean          @default(false)
+  mentorProfiles        MentorProfile[]
+  helpCategories        HelpCategory[]
+  helpRequests          HelpRequest[]
+  mentorAssignmentRuns  MentorAssignmentRun[]
+  mentorTeamAssignments MentorTeamAssignment[]
+  mentorConflicts       MentorConflict[]
+  officeHourSlots       OfficeHourSlot[]
+  mentoringRounds       MentoringRound[]
   @@unique([organisationId, slug])
   @@index([organisationId])
   @@index([organisationId, status])
@@ -1616,6 +1653,7 @@ model RSVP {
   submission        Submission?
   submissionLink    SubmissionLink?
   expenseClaims     ExpenseClaim[]
+  helpRequests      HelpRequest[]
   crewMember        EventCrewMember?
   @@index([eventId])
   /// "Your registrations" and the personal data export look RSVPs up by user.
@@ -1665,6 +1703,8 @@ model EventCrewMember {
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   rsvp  RSVP  @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  /// Set when the Mentor Desk added this place for a mentor (docs/MENTOR_DESK.md).
+  mentorProfile MentorProfile?
 
   @@unique([eventId, email])
   @@index([eventId, sortOrder])
@@ -2329,6 +2369,13 @@ model Team {
   members      RSVP[]            @relation("TeamMembers")
   joinRequests TeamJoinRequest[]
   orders       Order[]
+  helpRequests       HelpRequest[]
+  mentorAssignments  MentorTeamAssignment[]
+  mentorConflicts    MentorConflict[]
+  officeHourBookings OfficeHourBooking[]
+  mentoringVisits    MentoringVisit[]
+  mentoringCheckIns  MentoringCheckIn[]
+  mentorNominations  MentorNomination[]
 
   submission   Submission?
   @@unique([eventId, nameKey])
@@ -2851,6 +2898,456 @@ model TicketDesign {
   defaultFor   Organisation? @relation("OrganisationDefaultTicketDesign")
 
   @@index([organisationId, eventId, updatedAt])
+  @@index([eventId])
+}
+
+// ---------------------------------------------------------------------------
+// Mentor Desk (docs/MENTOR_DESK.md), ported from the Space Works platform
+// design. Every row is keyed by its event; the organisation is reached through
+// the event. CHECK constraints, partial unique indexes and the append-only
+// triggers live in prisma/migrations/20261113000000_mentor_desk.
+// ---------------------------------------------------------------------------
+
+enum HelpRequestStatus {
+  OPEN
+  CLAIMED
+  RESOLVED
+  CANCELLED
+  EXPIRED
+}
+
+enum HelpRequestOrigin {
+  TEAM
+  MENTOR
+  ROUND
+}
+
+enum MentorAssignmentMode {
+  MANUAL
+  ROUND_ROBIN
+  SKILL_MATCH
+  RANDOM
+}
+
+enum MentorAssignmentStatus {
+  PROPOSED
+  ACTIVE
+  ENDED
+}
+
+enum MentorConflictKind {
+  DECLARED
+  AFFILIATION
+}
+
+enum MentoringRoundStatus {
+  DRAFT
+  LIVE
+  CLOSED
+  SKIPPED
+}
+
+enum OfficeHourBookingStatus {
+  BOOKED
+  CANCELLED
+}
+
+/// A MENTOR grant holder's profile on one event, created when the grant is
+/// accepted. `affiliation` is private to organisers and the mentor;
+/// `availability` is a list of UTC windows inside the event
+/// ([{"startsAt","endsAt"}]); outside them the mentor is off shift. CHECK:
+/// 1 <= maxActiveTeams <= 100, at most 8 skills.
+model MentorProfile {
+  id             String   @id @default(cuid())
+  eventId        String
+  userId         String
+  skills         String[] @default([])
+  bio            String   @default("")
+  affiliation    String   @default("")
+  availability   Json     @default("[]")
+  maxActiveTeams Int      @default(4)
+  showOnPage     Boolean  @default(false)
+  /// The crew place created for this mentor by `mentorsGetCrewTicket`; only
+  /// such a place is removed with the grant.
+  crewMemberId   String?  @unique
+  version        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event      Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  crewMember EventCrewMember? @relation(fields: [crewMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, userId])
+}
+
+/// A help category with its queue policy. CHECK: openLimit 1..10 per team,
+/// claimMinutes 1..60, expiryMinutes 15..10080. The key never changes.
+model HelpCategory {
+  id            String   @id @default(cuid())
+  eventId       String
+  key           String
+  label         String
+  skillTags     String[] @default([])
+  priority      Int      @default(0)
+  openLimit     Int      @default(1)
+  claimMinutes  Int      @default(10)
+  expiryMinutes Int      @default(240)
+  contactNote   String   @default("")
+  position      Int      @default(0)
+  active        Boolean  @default(true)
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  event    Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  requests HelpRequest[]
+
+  @@unique([eventId, key])
+}
+
+/// One help request from a team or a solo registration (CHECK: exactly one).
+/// OPEN -> CLAIMED -> RESOLVED, or CANCELLED/EXPIRED. A claim is a lease
+/// (claimId, claimGeneration, claimExpiresAt; CHECK keeps the claim shape) and
+/// a mentor holds at most one claim per event (partial unique index). The
+/// deadline is min(expiresAt, event end), checked inside every command.
+model HelpRequest {
+  id              String            @id @default(cuid())
+  eventId         String
+  categoryId      String
+  teamId          String?
+  rsvpId          String?
+  raisedByUserId  String?
+  origin          HelpRequestOrigin
+  roundId         String?
+  /// Up to 1000 characters. Private: never in webhooks, chat or audit metadata.
+  summary         String
+  location        String            @default("")
+  status          HelpRequestStatus @default(OPEN)
+  priority        Int               @default(0)
+  claimedByUserId String?
+  claimId         String?
+  claimGeneration Int               @default(0)
+  claimExpiresAt  DateTime?
+  openGeneration  Int               @default(1)
+  /// Assigned mentors have the request to themselves until then.
+  exclusiveUntil  DateTime
+  expiresAt       DateTime
+  lastOpenedAt    DateTime          @default(now())
+  firstClaimedAt  DateTime?
+  lastClaimedAt   DateTime?
+  resolvedAt      DateTime?
+  cancelledAt     DateTime?
+  /// The team's 1..5 rating once resolved.
+  rating          Int?
+  dedupKey        String            @default("")
+  version         Int               @default(1)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  event      Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category   HelpCategory          @relation(fields: [categoryId], references: [id], onDelete: NoAction)
+  team       Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  rsvp       RSVP?                 @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  raisedBy   User?                 @relation("HelpRequestRaisedBy", fields: [raisedByUserId], references: [id], onDelete: SetNull)
+  claimedBy  User?                 @relation("HelpRequestClaimedBy", fields: [claimedByUserId], references: [id], onDelete: NoAction)
+  round      MentoringRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  activities HelpRequestActivity[]
+  comments   HelpRequestComment[]
+
+  @@index([eventId, status, priority, createdAt])
+  @@index([teamId, status])
+  @@index([rsvpId, status])
+  @@index([status, expiresAt])
+}
+
+/// Append-only history of a help request (trigger); only the actor may be cleared.
+model HelpRequestActivity {
+  id          String   @id @default(cuid())
+  requestId   String
+  eventId     String
+  actorUserId String?
+  kind        String
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+
+  request HelpRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+}
+
+/// Append-only comment on an open or claimed request (trigger), 1..2000 characters.
+model HelpRequestComment {
+  id           String   @id @default(cuid())
+  requestId    String
+  eventId      String
+  authorUserId String?
+  /// "TEAM" or "MENTOR".
+  origin       String
+  body         String
+  createdAt    DateTime @default(now())
+
+  request HelpRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User?       @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+}
+
+/// An applied assignment run (append-only): every decision and every team
+/// left uncovered. RANDOM runs keep their seed so the result can be replayed.
+model MentorAssignmentRun {
+  id               String               @id @default(cuid())
+  eventId          String
+  roundId          String?
+  mode             MentorAssignmentMode
+  seed             String?
+  inputFingerprint String
+  decisions        Json
+  uncoveredTeamIds String[]             @default([])
+  createdByUserId  String?
+  createdAt        DateTime             @default(now())
+
+  event       Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round       MentoringRound?        @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  createdBy   User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignments MentorTeamAssignment[]
+
+  @@index([eventId, createdAt])
+}
+
+/// A mentor looking after a team, event-wide (no round) or for one round.
+/// PROPOSED -> ACTIVE -> ENDED (CHECK keeps endedAt with ENDED). One live
+/// mapping per mentor, team and round scope (partial unique index).
+model MentorTeamAssignment {
+  id              String                 @id @default(cuid())
+  eventId         String
+  roundId         String?
+  mentorUserId    String
+  teamId          String
+  mode            MentorAssignmentMode
+  status          MentorAssignmentStatus @default(ACTIVE)
+  runId           String?
+  /// An organiser changed this mapping by hand after a run.
+  manualOverride  Boolean                @default(false)
+  activeFrom      DateTime               @default(now())
+  /// Set when the mapping first becomes ACTIVE. Only activated mappings count
+  /// as "mentored" (judging conflicts, fresh eyes); a rejected proposal never does.
+  activatedAt     DateTime?
+  endedAt         DateTime?
+  createdByUserId String?
+  version         Int                    @default(1)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  event     Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round     MentoringRound?      @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  mentor    User                 @relation("MentorAssignmentMentor", fields: [mentorUserId], references: [id], onDelete: Cascade)
+  team      Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  run       MentorAssignmentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  createdBy User?                @relation("MentorAssignmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+  @@index([mentorUserId, status])
+  @@index([teamId])
+}
+
+/// A declared or affiliation conflict between a mentor and a team (one live
+/// row per kind, partial unique index). Team membership always conflicts.
+model MentorConflict {
+  id           String             @id @default(cuid())
+  eventId      String
+  mentorUserId String
+  teamId       String
+  kind         MentorConflictKind
+  reason       String             @default("")
+  /// Who recorded it: a mentor clears only conflicts they declared themselves.
+  createdByUserId String?
+  active       Boolean            @default(true)
+  version      Int                @default(1)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  event  Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mentor    User  @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+  team      Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("MentorConflictCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, mentorUserId])
+  @@index([teamId])
+}
+
+/// A mentor's office-hour slot. CHECK: endsAt > startsAt, capacity 1..50,
+/// bookingDeadline <= startsAt.
+model OfficeHourSlot {
+  id              String    @id @default(cuid())
+  eventId         String
+  mentorUserId    String
+  startsAt        DateTime
+  endsAt          DateTime
+  location        String    @default("")
+  capacity        Int       @default(1)
+  bookingDeadline DateTime
+  cancelledAt     DateTime?
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  event    Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mentor   User                @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+  bookings OfficeHourBooking[]
+  changes  OfficeHourChange[]
+
+  @@index([eventId, startsAt])
+  @@index([mentorUserId, startsAt])
+}
+
+/// A team's place in an office-hour slot; one live booking per slot and team.
+model OfficeHourBooking {
+  id             String                  @id @default(cuid())
+  eventId        String
+  slotId         String
+  teamId         String
+  bookedByUserId String?
+  status         OfficeHourBookingStatus @default(BOOKED)
+  cancelReason   String?
+  createdAt      DateTime                @default(now())
+  cancelledAt    DateTime?
+
+  slot     OfficeHourSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  team     Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  bookedBy User?          @relation(fields: [bookedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+  @@index([teamId, status])
+}
+
+/// Append-only log of office-hour schedule changes, each with a reason.
+model OfficeHourChange {
+  id          String   @id @default(cuid())
+  eventId     String
+  slotId      String
+  actorUserId String?
+  reason      String
+  oldSchedule Json
+  newSchedule Json
+  createdAt   DateTime @default(now())
+
+  slot  OfficeHourSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  actor User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([slotId, createdAt])
+}
+
+/// A mentoring round (stage): team check-in visits, never judging. At most
+/// one LIVE round per event (partial unique index). The form, triggers and
+/// overrides are frozen once the round leaves DRAFT. With no
+/// MentoringRoundMentor rows every eligible mentor takes part.
+model MentoringRound {
+  id                     String               @id @default(cuid())
+  eventId                String
+  position               Int
+  label                  String
+  opensAt                DateTime
+  closesAt               DateTime
+  status                 MentoringRoundStatus @default(DRAFT)
+  formSchema             Json                 @default("[]")
+  formVersion            Int                  @default(1)
+  helpTriggerRules       Json                 @default("[]")
+  allowFreshEyesOverride Boolean              @default(false)
+  allowConflictOverride  Boolean              @default(false)
+  /// Never assign a mentor to a team they mentored in an earlier round.
+  freshEyesAcrossStages  Boolean              @default(false)
+  version                Int                  @default(1)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  event          Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mentors        MentoringRoundMentor[]
+  visits         MentoringVisit[]
+  checkIns       MentoringCheckIn[]
+  nominations    MentorNomination[]
+  assignments    MentorTeamAssignment[]
+  assignmentRuns MentorAssignmentRun[]
+  helpRequests   HelpRequest[]
+
+  @@unique([eventId, position])
+}
+
+/// The organiser-chosen mentor pool of one round.
+model MentoringRoundMentor {
+  id           String   @id @default(cuid())
+  roundId      String
+  mentorUserId String
+  createdAt    DateTime @default(now())
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, mentorUserId])
+}
+
+/// The 10-minute heartbeat lease on a team during a round visit.
+model MentoringVisit {
+  id             String   @id @default(cuid())
+  eventId        String
+  roundId        String
+  teamId         String
+  mentorUserId   String
+  leaseId        String
+  generation     Int      @default(1)
+  expiresAt      DateTime
+  heartbeatAt    DateTime
+  startedAt      DateTime
+  overrideReason String   @default("")
+  version        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team   Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, teamId])
+}
+
+/// One submitted check-in per team and round (append-only), possibly "away".
+model MentoringCheckIn {
+  id             String   @id @default(cuid())
+  eventId        String
+  roundId        String
+  teamId         String
+  mentorUserId   String
+  formSnapshot   Json
+  answers        Json
+  overrideReason String   @default("")
+  away           Boolean  @default(false)
+  startedAt      DateTime
+  submittedAt    DateTime
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team   Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, teamId])
+  @@index([eventId, mentorUserId])
+}
+
+/// A mentor's private advisory nomination after a real (non-away) visit.
+/// Organisers see it as a shortlist signal; it never enters judging scores.
+model MentorNomination {
+  id           String   @id @default(cuid())
+  eventId      String
+  roundId      String
+  teamId       String
+  mentorUserId String
+  createdAt    DateTime @default(now())
+
+  round  MentoringRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  team   Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  mentor User           @relation(fields: [mentorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, mentorUserId, teamId])
   @@index([eventId])
 }
 

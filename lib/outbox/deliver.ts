@@ -21,6 +21,7 @@ import { CHAT_MESSAGE_KIND } from "@/lib/chat/notify";
 import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload, asEmailVerificationPayload, asEventInvitePayload, asEventReminderPayload, asOperatorNoticePayload, asPasswordResetPayload, asRsvpConfirmationPayload, asRsvpStatusPayload, asSignInCodePayload, containsCapability, isExpired, messageId, retryDelayMs } from "./payloads";
 import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
+import { deliverMentorMessage, isMentorMessageKind } from "./mentor";
 import { deliverCrewMessage, isCrewMessageKind } from "./crew";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
@@ -206,12 +207,14 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind)) {
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind)) {
         const outcome = isTeamMessageKind(message.kind)
           ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
           : isCrewMessageKind(message.kind)
             ? await deliverCrewMessage(message.payload, stableMessageId)
-            : await deliverJudgingMessage(message.kind, message.payload, stableMessageId);
+            : isMentorMessageKind(message.kind)
+              ? await deliverMentorMessage(message.kind, message.payload, stableMessageId)
+              : await deliverJudgingMessage(message.kind, message.payload, stableMessageId);
         if (!outcome) throw new PermanentOutboxError();
         if (outcome === "dropped") {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });

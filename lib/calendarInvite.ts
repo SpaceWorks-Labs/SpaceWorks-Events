@@ -52,7 +52,7 @@ function foldCalendarLine(line: string) {
 }
 
 /** Builds a portable UTC iCalendar event. Calendar clients display UTC values in the recipient's local timezone. */
-export function createCalendarInvite(event: CalendarEvent & { uid: string; createdAt?: Date }) {
+export function createCalendarInvite(event: CalendarEvent & { uid: string; createdAt?: Date; description?: string }) {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -65,7 +65,7 @@ export function createCalendarInvite(event: CalendarEvent & { uid: string; creat
     `DTSTART:${formatCalendarDate(event.startDateTime)}`,
     `DTEND:${formatCalendarDate(event.endDateTime)}`,
     `SUMMARY:${escapeCalendarText(event.title)}`,
-    `DESCRIPTION:${escapeCalendarText(`Your confirmed Space Works Events RSVP. Event timezone: ${event.timezone}`)}`,
+    `DESCRIPTION:${escapeCalendarText(event.description ?? `Your confirmed Space Works Events RSVP. Event timezone: ${event.timezone}`)}`,
     ...(event.location?.trim() ? [`LOCATION:${escapeCalendarText(event.location.trim())}`] : []),
     "STATUS:CONFIRMED",
     "END:VEVENT",

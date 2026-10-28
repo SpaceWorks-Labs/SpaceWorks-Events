@@ -4169,6 +4169,47 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       }
     ]
   },
+  "hackathons/getting-help": {
+    "headings": [
+      {
+        "id": "asking-for-help",
+        "title": "Asking for help",
+        "level": 2
+      },
+      {
+        "id": "booking-office-hours",
+        "title": "Booking office hours",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "When an event runs a Mentor Desk, you can ask its mentors for help during the event and, as a team, book time with them."
+      },
+      {
+        "heading": "Asking for help",
+        "anchor": "asking-for-help",
+        "text": "Open your team page (the private link your team leader got by email), or sign in and choose Get help on your ticket. Under Get help from a mentor, choose what you need help with, describe the problem and say where you are. Choose Ask for help. Your request shows Waiting until a mentor picks it up, then Mentor on the way. You can add a message, or Cancel request if you sorted it out. Once it's resolved, rate how it went from 1 to 5. Only your team, the mentors and the organisers see what you wrote. A ticket link alone can't ask for help: sign in with the account you registered with, or use your team page. A team can have only a few waiting requests in each category, and a request closes on its own if nobody picks it up in time or when the event ends."
+      },
+      {
+        "heading": "Booking office hours",
+        "anchor": "booking-office-hours",
+        "text": "Teams can book time with a mentor under Mentors and office hours. Pick an open slot and choose Book. Everyone in your team and the mentor get an email with a calendar invite. You can't book two slots at the same time, and you can cancel a booking until the slot starts. After that, ask the organisers."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "The mentors listed on the event page chose to be listed. Asking for help is free: it never adds anything to your ticket."
+      }
+    ]
+  },
   "hackathons/judging": {
     "headings": [
       {
@@ -4247,6 +4288,148 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "heading": "How the score is worked out",
         "anchor": "how-the-score-is-worked-out",
         "text": "For each judge, the app works out a weighted percentage: every criterion's score as a share of its maximum, weighted by the criterion's weight. A project's result is the average of those percentages across the judges who submitted a review, rounded to one decimal place. Projects with the same score share a rank. If some judges mark much harder than others, you can rank by an adjusted score instead. See Awards and results."
+      }
+    ]
+  },
+  "hackathons/mentor-console": {
+    "headings": [
+      {
+        "id": "your-profile-and-shifts",
+        "title": "Your profile and shifts",
+        "level": 2
+      },
+      {
+        "id": "helping-teams",
+        "title": "Helping teams",
+        "level": 2
+      },
+      {
+        "id": "your-teams-and-conflicts",
+        "title": "Your teams and conflicts",
+        "level": 2
+      },
+      {
+        "id": "office-hours",
+        "title": "Office hours",
+        "level": 2
+      },
+      {
+        "id": "round-visits",
+        "title": "Round visits",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "As a mentor you see the event's mentor console and nothing else: the help queue, the teams you look after, your office hours, round visits and your profile. Mentors: people invited to the event with the Mentor permission, after setting up an authenticator app."
+      },
+      {
+        "heading": "Your profile and shifts",
+        "anchor": "your-profile-and-shifts",
+        "text": "Open Profile to set your skills, bio and availability. You can only claim help and visit teams while you're inside one of your availability windows. Your affiliation is private to you and the organisers."
+      },
+      {
+        "heading": "Helping teams",
+        "anchor": "helping-teams",
+        "text": "Open My queue. Requests you can take have a Claim button; greyed-out ones need another mentor (a skill you don't have, or a team's own mentor gets a few minutes first). Choose Claim, then head over to the team. Use More time if you need longer, message the team, and choose Resolved when you're done, or Release to hand it back. You hold one request at a time. If you leave a claim, it lapses and returns to the queue. You can also Raise a request for a team you're with."
+      },
+      {
+        "heading": "Your teams and conflicts",
+        "anchor": "your-teams-and-conflicts",
+        "text": "My teams lists the teams the organisers assigned to you. If you have a conflict of interest with a team (a friend, a colleague), declare it there: you won't get its requests, assignments or visits. Only the organisers can clear a conflict they recorded."
+      },
+      {
+        "heading": "Office hours",
+        "anchor": "office-hours",
+        "text": "Under My office hours, add slots inside your availability. Teams book them from their team page and you both get a calendar invite. Cancelling a slot needs a reason and tells the booked teams."
+      },
+      {
+        "heading": "Round visits",
+        "anchor": "round-visits",
+        "text": "When the organisers open a mentoring round you're part of, Round visits lists the teams. Choose Start visit on a team. Nobody else can visit it while you're there. Fill in the check-in form, or tick The team was away. Optionally Nominate this team, then choose Submit check-in. Each team gets one check-in per round, and you don't visit the same team twice across rounds unless the organisers allow it and you give a reason. Nominations are a private signal for the organisers and never change judging scores."
+      }
+    ]
+  },
+  "hackathons/mentor-desk": {
+    "headings": [
+      {
+        "id": "turning-it-on",
+        "title": "Turning it on",
+        "level": 2
+      },
+      {
+        "id": "inviting-mentors",
+        "title": "Inviting mentors",
+        "level": 2
+      },
+      {
+        "id": "help-categories",
+        "title": "Help categories",
+        "level": 2
+      },
+      {
+        "id": "the-live-queue",
+        "title": "The live queue",
+        "level": 2
+      },
+      {
+        "id": "assigning-mentors-to-teams",
+        "title": "Assigning mentors to teams",
+        "level": 2
+      },
+      {
+        "id": "office-hours-and-rounds",
+        "title": "Office hours and rounds",
+        "level": 2
+      },
+      {
+        "id": "good-to-know",
+        "title": "Good to know",
+        "level": 2
+      }
+    ],
+    "sections": [
+      {
+        "heading": null,
+        "anchor": null,
+        "text": "The Mentor Desk helps teams get help from mentors during your event. Teams ask for help and a mentor on shift picks the request up; you can also assign mentors to teams, let teams book office hours, and run mentoring rounds where mentors check in on every team. Turning the Mentor Desk on and running it: owners and admins of the organisation. Mentors are invited as co-organisers with the Mentor permission and only ever see their own mentor console."
+      },
+      {
+        "heading": "Turning it on",
+        "anchor": "turning-it-on",
+        "text": "Open the event and choose the Settings tab. In Mentor Desk, turn on Turn on the Mentor Desk and choose Save. Optionally turn on Email the team when a mentor picks up their request (once per request) and Give mentors a crew ticket. A Mentors tab appears on the event. Turning the desk off later hides it again and stops all mentor access; nothing is deleted. While the Mentor Desk is on, a judge who mentored a team, or has a conflict with it, never judges that team's project, in any round."
+      },
+      {
+        "heading": "Inviting mentors",
+        "anchor": "inviting-mentors",
+        "text": "In Settings → Co-organisers, invite each mentor by email and give them only the Mentor permission. When they accept, they appear under Mentors → Mentors. Open Edit profile to set their skills, a short bio, a private affiliation, the most teams they look after at once and their availability. Mentors must set up an authenticator app, like all organisers. Outside their availability windows they are off shift: they can still edit their profile, but they can't claim help or visit teams. With no windows at all they are off duty. Turn on Show on the event page to list a mentor in the event page's Mentors section, with their name, bio and skills. Their affiliation and email are never shown. With Give mentors a crew ticket on, mentors who accept their invite join the crew with a free crew ticket (role \"Mentor\", not listed publicly). Removing a mentor removes that ticket. Someone already registered for the event keeps their own ticket."
+      },
+      {
+        "heading": "Help categories",
+        "anchor": "help-categories",
+        "text": "Under Mentors → Categories, add what teams can ask for, such as \"Cloud\" or \"Design\". For each category you choose: Priority: higher-priority requests come first in the queue. Skill tags: only mentors with one of these skills may claim the request (a team's assigned mentor always may). Open per team: how many waiting requests a team may have in the category (1 to 10). Claim minutes: how long a mentor holds a request before it returns to the queue (1 to 60; mentors can ask for more time). Expiry minutes: when an unanswered request closes (15 minutes to 7 days, never after the event ends)."
+      },
+      {
+        "heading": "The live queue",
+        "anchor": "the-live-queue",
+        "text": "Mentors → Queue shows every waiting and claimed request and refreshes every 15 seconds. You can Assign a request to a mentor on shift, Release or Resolve a claim, and Reopen a resolved request with a reason. A claim a mentor leaves goes back to the queue within a minute."
+      },
+      {
+        "heading": "Assigning mentors to teams",
+        "anchor": "assigning-mentors-to-teams",
+        "text": "Under Mentors → Assignments, choose the scope (the whole event or one mentoring round) and a mode: Skill match, Round robin or Random. Preview changes nothing. Random shows a seed: the same seed always gives the same result, and Re-roll draws again. Apply records the run and lists any teams left without a mentor. You can also Assign by hand. Assignments never give a mentor their own team, a team they have a conflict with, or more teams than their limit. Record conflicts under Mentors → Mentors → Conflicts of interest."
+      },
+      {
+        "heading": "Office hours and rounds",
+        "anchor": "office-hours-and-rounds",
+        "text": "Under Office hours, open slots for any mentor inside their availability. Teams book them from their team page and everyone gets a calendar invite. Under Rounds, add mentoring rounds: a window, a short check-in form, optional rules that raise help from the answers, and the round's own Mentor pool (none chosen means every mentor). Open one round at a time. Mentors can nominate teams after a real visit; nominations appear as a private shortlist on the round and never change judging scores."
+      },
+      {
+        "heading": "Good to know",
+        "anchor": "good-to-know",
+        "text": "CSV exports help requests (without their text or contact details) and assignments. Help request text is private to the team, the mentors and the organisers. Removing a mentor ends their assignments, hands their claims back to the queue and cancels their future office hours, emailing the booked teams."
       }
     ]
   },
