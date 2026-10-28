@@ -17,6 +17,12 @@ export function ticketLimit(ticket: PublicTicketType) {
   return Math.max(0, Math.min(ticket.maxPerOrder, ticket.remaining ?? ticket.maxPerOrder));
 }
 
+/** What a series pass covers; the count is unknown (null) when the dates are not loaded. */
+export function passLabel(passDates: number | null) {
+  if (passDates == null) return "Pass for all remaining dates";
+  return passDates === 1 ? "Pass for the 1 remaining date" : `Pass for all ${passDates} remaining dates`;
+}
+
 function availabilityNote(ticket: PublicTicketType, paidSalesOpen: boolean) {
   if (ticket.sales === "not_started") return "Not on sale yet";
   if (ticket.sales === "ended") return "Sales ended";
@@ -73,7 +79,7 @@ export function TicketPicker({ tickets, quantities, onChange, error, paidSalesOp
                     <span className="font-semibold">{ticket.name}</span>
                     <span>{price}</span>
                   </p>
-                  {ticket.pass ? <p className="text-caption font-semibold text-ink-secondary">Pass for all {ticket.passDates ?? "remaining"} remaining {ticket.passDates === 1 ? "date" : "dates"}</p> : null}
+                  {ticket.pass ? <p className="text-caption font-semibold text-ink-secondary">{passLabel(ticket.passDates)}</p> : null}
                   {details.length ? <p className="text-caption font-semibold text-ink-secondary">{details.join(" · ")}</p> : null}
                   {ticket.description || note ? <p className="text-caption text-ink-muted">{[ticket.description, note].filter(Boolean).join(" · ")}</p> : null}
                 </div>

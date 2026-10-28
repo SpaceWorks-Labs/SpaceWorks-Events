@@ -87,7 +87,7 @@ describe("leaveOrganisation", () => {
     mocks.membershipFindUnique.mockResolvedValue({ id: "membership_1", role: "OWNER" });
     mocks.membershipCount.mockResolvedValue(1);
     const result = await leaveOrganisation({ organisationSlug: "acme" });
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("Transfer ownership or delete the organisation first") });
+    expect(result).toMatchObject({ ok: false, error: "You are the only owner, so you can't leave. Delete the organisation from its settings instead." });
     expect(mocks.queryRaw).toHaveBeenCalledTimes(1);
     expect(mocks.queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.membershipCount.mock.invocationCallOrder[0]!);
     expect(mocks.membershipCount).toHaveBeenCalledWith({ where: { organisationId: "org_1", role: "OWNER" } });

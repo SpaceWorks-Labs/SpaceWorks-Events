@@ -15,7 +15,8 @@ export type EventClientDto = Omit<Event,
   | "ticketDesignId"
 >;
 
-export function toEventClientDto(event: Omit<Event, "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion">): EventClientDto {
+/** Copies only the DTO fields, so a full Event record never reaches the browser. */
+export function toEventClientDto(event: EventClientDto): EventClientDto {
   return {
     id: event.id,
     organisationId: event.organisationId,
