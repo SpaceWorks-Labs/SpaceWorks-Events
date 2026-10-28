@@ -42,6 +42,8 @@ tags:
   - name: Claims
   - name: Payments
   - name: Finance
+  - name: Mentor Desk
+  - name: Mentor console
 
 paths:
   /api/mobile/v1/auth/login:
@@ -584,6 +586,7 @@ paths:
         bucket. An organiser without the judging right gets `FORBIDDEN`; an
         event without submissions switched on is `NOT_FOUND`.
       parameters:
+        - { name: roundId, in: query, schema: { type: string }, description: A round to show; the current round when absent. }
         - { $ref: "#/components/parameters/orgSlug" }
         - { $ref: "#/components/parameters/eventId" }
         - { name: filter, in: query, schema: { type: string, enum: [all, todo, inProgress, reviewed], default: all } }
@@ -606,7 +609,7 @@ paths:
         for: one they started first, then the fewest submitted reviews, then the
         oldest submission. `next` is null when nothing is left or judging is not
         `OPEN`; `remaining` counts what is left including `next`.
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: roundId, in: query, schema: { type: string }, description: A round to show; the current round when absent. }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeNextResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -618,7 +621,7 @@ paths:
     get:
       tags: [Judging]
       summary: The rubric and the judging status
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: roundId, in: query, schema: { type: string }, description: A round to show; the current round when absent. }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgingCriteriaResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -631,7 +634,7 @@ paths:
       tags: [Judging]
       summary: One project with this judge's own saved scores and comment
       description: "`NOT_VISIBLE` (404) for a project this judge may not score (unassigned, conflict of interest, not submitted, or another event's); `NOT_FOUND` (404) when the event no longer takes submissions, as on every judging route."
-      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }, { name: roundId, in: query, schema: { type: string }, description: A round to show; the current round when absent. }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeSubmissionDetailResponse" } } } }
         "403": { $ref: "#/components/responses/Error" }
@@ -1492,6 +1495,409 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/rounds:
+    get:
+      tags: [Judging]
+      summary: "Rounds this judge may open (opened rounds and the current one)"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeRoundsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/rounds/summary:
+    get:
+      tags: [Judging]
+      summary: "Judging rounds, read-only (organisation owners and admins)"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgingRoundsSummaryResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/events/{orgSlug}/{eventSlug}/finalists:
+    get:
+      tags: [Public]
+      summary: "Published finalists (titles, entrant names, links; never scores)"
+      security: [{}, { bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventSlug" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PublicFinalistsResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}:
+    get:
+      tags: [Mentor Desk]
+      summary: "The participant's Mentor Desk: categories, own requests, mentors, slots, bookings"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantDeskResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}/help:
+    post:
+      tags: [Mentor Desk]
+      summary: "Raise a help request"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}/help/{requestId}:
+    get:
+      tags: [Mentor Desk]
+      summary: "One of the team's own help requests"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantHelpResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}/help/{requestId}/comment:
+    post:
+      tags: [Mentor Desk]
+      summary: "Comment on the team's request"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}/help/{requestId}/cancel:
+    post:
+      tags: [Mentor Desk]
+      summary: "Cancel the team's open request"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}/help/{requestId}/rate:
+    post:
+      tags: [Mentor Desk]
+      summary: "Rate a resolved request"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}/office-hours/{slotId}/book:
+    post:
+      tags: [Mentor Desk]
+      summary: "Book an office-hour slot"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: slotId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/mentoring/{orgSlug}/{eventId}/bookings/{bookingId}/cancel:
+    post:
+      tags: [Mentor Desk]
+      summary: "Cancel an office-hour booking"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: bookingId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor:
+    get:
+      tags: [Mentor console]
+      summary: "The mentor console"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MentorConsoleResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/queue:
+    get:
+      tags: [Mentor console]
+      summary: "Open help this mentor may see, 25 at a time"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: cursor, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MentorQueueResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/teams:
+    get:
+      tags: [Mentor console]
+      summary: "Teams assigned to this mentor (names only)"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MentorTeamsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/slots:
+    get:
+      tags: [Mentor console]
+      summary: "This mentor's coming office-hour slots"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MentorSlotsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Mentor console]
+      summary: "Open an office-hour slot"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/profile:
+    put:
+      tags: [Mentor console]
+      summary: "Update this mentor's own profile"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/slots/{slotId}/reschedule:
+    post:
+      tags: [Mentor console]
+      summary: "Move one of this mentor's slots"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: slotId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/slots/{slotId}/cancel:
+    post:
+      tags: [Mentor console]
+      summary: "Cancel one of this mentor's slots"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: slotId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/help/{requestId}/comment:
+    post:
+      tags: [Mentor console]
+      summary: "Comment on the held request"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/help/{requestId}/{command}:
+    post:
+      tags: [Mentor console]
+      summary: "Claim, renew, release or resolve a help request (command)"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }, { name: command, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/rounds/{roundId}/teams/{teamId}/{command}:
+    post:
+      tags: [Mentor console]
+      summary: "A round visit: claim, heartbeat, release or check-in (command)"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: roundId, in: path, required: true, schema: { type: string } }, { name: teamId, in: path, required: true, schema: { type: string } }, { name: command, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor/rounds/{roundId}/teams/{teamId}/nominate:
+    post:
+      tags: [Mentor console]
+      summary: "Nominate a team you checked in with"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: roundId, in: path, required: true, schema: { type: string } }, { name: teamId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor-desk/queue:
+    get:
+      tags: [Mentor Desk]
+      summary: "Every help request with mentors to assign (owners and admins)"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskQueueResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor-desk/help/{requestId}/assign:
+    post:
+      tags: [Mentor Desk]
+      summary: "Hand a request to a mentor"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/mentor-desk/help/{requestId}/reopen:
+    post:
+      tags: [Mentor Desk]
+      summary: "Put a claimed request back in the queue"
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: requestId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true, description: "The command's fields (see docs/MOBILE_API.md); the event comes from the path." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeskWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
   /api/ticket/{token}/status:
     get:
       tags: [Reused web endpoints]
@@ -1645,7 +2051,7 @@ components:
     EventStatus: { type: string, enum: [DRAFT, PUBLISHED, HIDDEN, CANCELLED] }
     PrivacyType: { type: string, enum: [PUBLIC, HIDDEN_LINK, APPROVAL_REQUIRED, INVITE_ONLY] }
     MembershipRole: { type: string, enum: [OWNER, ADMIN, MEMBER] }
-    EventPermission: { type: string, enum: [EDIT_DETAILS, MANAGE_REGISTRATIONS, MANAGE_INVITATIONS, CHECK_IN, PUBLISH_AND_SCHEDULE, JUDGE] }
+    EventPermission: { type: string, enum: [EDIT_DETAILS, MANAGE_REGISTRATIONS, MANAGE_INVITATIONS, CHECK_IN, PUBLISH_AND_SCHEDULE, JUDGE, MENTOR] }
     FieldType: { type: string, enum: [TEXT, TEXTAREA, EMAIL, PHONE, SELECT, MULTI_SELECT, RADIO, CHECKBOX, NUMBER, DATE] }
     Attendance: { type: string, enum: [ANY, CHECKED_IN, NOT_CHECKED_IN], default: ANY }
     RegistrationMode: { type: string, enum: [INDIVIDUAL, TEAM], description: "TEAM: capacity counts teams plus solo registrants (\"teams & solo places\")." }
@@ -1748,12 +2154,13 @@ components:
     Me:
       type: object
       additionalProperties: false
-      required: [user, organisations, collaborations, judging, staffMfa]
+      required: [user, organisations, collaborations, judging, mentoring, staffMfa]
       properties:
         user: { $ref: "#/components/schemas/User" }
         organisations: { type: array, items: { $ref: "#/components/schemas/OrgSummary" } }
         collaborations: { type: array, items: { $ref: "#/components/schemas/Collaboration" } }
         judging: { type: array, items: { $ref: "#/components/schemas/JudgingEvent" } }
+        mentoring: { type: array, items: { $ref: "#/components/schemas/MentoringEvent" }, description: Events this user mentors while their Mentor Desk is on. }
         staffMfa: { type: string, enum: [ok, verify, enrol], description: "The staff authenticator rule for this app session: verify (POST /auth/mfa) or enrol (on the website). Attendees are always ok." }
 
     EventSummary:
@@ -2467,9 +2874,13 @@ components:
     JudgeSubmissionList:
       type: object
       additionalProperties: false
-      required: [judgingStatus, submissions, nextCursor, counts]
+      required: [judgingStatus, round, submissions, nextCursor, counts]
       properties:
         judgingStatus: { $ref: "#/components/schemas/JudgingStatus" }
+        round:
+          oneOf:
+            - { $ref: "#/components/schemas/JudgeRound" }
+            - { type: "null" }
         submissions: { type: array, items: { $ref: "#/components/schemas/JudgeSubmission" } }
         nextCursor: { type: [string, "null"] }
         counts:
@@ -2485,9 +2896,13 @@ components:
     JudgingCriteria:
       type: object
       additionalProperties: false
-      required: [judgingStatus, criteria]
+      required: [judgingStatus, round, criteria]
       properties:
         judgingStatus: { $ref: "#/components/schemas/JudgingStatus" }
+        round:
+          oneOf:
+            - { $ref: "#/components/schemas/JudgeRound" }
+            - { type: "null" }
         criteria: { type: array, items: { $ref: "#/components/schemas/JudgingCriterion" } }
 
     JudgeSubmissionDetail:
@@ -2984,3 +3399,28 @@ components:
         members: { type: array, items: { $ref: "#/components/schemas/CrewMember" } }
         food: { type: array, items: { type: object, additionalProperties: false, required: [label, count], properties: { label: { type: string }, count: { type: integer } } } }
     CrewListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CrewList" } } }
+    JudgeRound: {type: object, properties: {id: {type: string}, name: {type: string}, position: {type: integer}, judgingStatus: {type: string, enum: [NOT_STARTED, OPEN, CLOSED]}, isCurrent: {type: boolean}}, required: [id, name, position, judgingStatus, isCurrent], additionalProperties: false}
+    JudgeRounds: {type: object, properties: {rounds: {type: array, items: {type: object, properties: {id: {type: string}, name: {type: string}, position: {type: integer}, judgingStatus: {type: string, enum: [NOT_STARTED, OPEN, CLOSED]}, isCurrent: {type: boolean}}, required: [id, name, position, judgingStatus, isCurrent], additionalProperties: false}}, currentRoundId: {type: [string, 'null']}, onPanel: {type: boolean}}, required: [rounds, currentRoundId, onPanel], additionalProperties: false}
+    JudgingRoundsSummary: {type: object, properties: {rounds: {type: array, items: {type: object, properties: {id: {type: string}, name: {type: string}, position: {type: integer}, status: {type: string, enum: [DRAFT, OPEN, CLOSED]}, entrySource: {type: string, enum: [ALL_SUBMITTED, ADVANCED]}, judgesSeeAll: {type: boolean}, freshEyes: {type: boolean}, reviewsPerProject: {anyOf: [{type: integer}, {type: 'null'}]}, opensAt: {anyOf: [{type: string, format: date-time}, {type: 'null'}]}, closesAt: {anyOf: [{type: string, format: date-time}, {type: 'null'}]}, finalistsPublishedAt: {anyOf: [{type: string, format: date-time}, {type: 'null'}]}, finalizedAt: {anyOf: [{type: string, format: date-time}, {type: 'null'}]}, isCurrent: {type: boolean}, isFinal: {type: boolean}, panelSize: {type: integer}, criteria: {type: integer}, finalists: {type: integer}, reviewsSubmitted: {type: integer}}, required: [id, name, position, status, entrySource, judgesSeeAll, freshEyes, reviewsPerProject, opensAt, closesAt, finalistsPublishedAt, finalizedAt, isCurrent, isFinal, panelSize, criteria, finalists, reviewsSubmitted], additionalProperties: false}}}, required: [rounds], additionalProperties: false}
+    PublicFinalists: {type: object, properties: {rounds: {type: array, items: {type: object, properties: {roundName: {type: string}, publishedAt: {type: string, format: date-time}, finalists: {type: array, items: {type: object, properties: {title: {type: string}, entrantName: {type: string}, isTeam: {type: boolean}, links: {type: object, properties: {repo: {anyOf: [{type: string, format: uri}, {type: 'null'}]}, demo: {anyOf: [{type: string, format: uri}, {type: 'null'}]}, video: {anyOf: [{type: string, format: uri}, {type: 'null'}]}}, required: [repo, demo, video], additionalProperties: false}}, required: [title, entrantName, isTeam, links], additionalProperties: false}}}, required: [roundName, publishedAt, finalists], additionalProperties: false}}}, required: [rounds], additionalProperties: false}
+    ParticipantHelp: {type: object, properties: {id: {type: string}, version: {type: integer}, status: {type: string, enum: [OPEN, CLAIMED, RESOLVED, CANCELLED, EXPIRED]}, category: {type: string}, summary: {type: string}, location: {type: string}, rating: {anyOf: [{type: integer}, {type: 'null'}]}, createdAt: {type: string, format: date-time}, deadline: {type: string, format: date-time}, open: {type: boolean}, comments: {type: array, items: {type: object, properties: {id: {type: string}, origin: {type: string}, body: {type: string}, createdAt: {type: string, format: date-time}}, required: [id, origin, body, createdAt], additionalProperties: false}}}, required: [id, version, status, category, summary, location, rating, createdAt, deadline, open, comments], additionalProperties: false}
+    ParticipantDesk: {type: object, properties: {timezone: {type: string}, isTeam: {type: boolean}, categories: {type: array, items: {type: object, properties: {key: {type: string}, label: {type: string}, contactNote: {type: string}}, required: [key, label, contactNote], additionalProperties: false}}, requests: {type: array, items: {type: object, properties: {id: {type: string}, version: {type: integer}, status: {type: string, enum: [OPEN, CLAIMED, RESOLVED, CANCELLED, EXPIRED]}, category: {type: string}, summary: {type: string}, location: {type: string}, rating: {anyOf: [{type: integer}, {type: 'null'}]}, createdAt: {type: string, format: date-time}, deadline: {type: string, format: date-time}, open: {type: boolean}, comments: {type: array, items: {type: object, properties: {id: {type: string}, origin: {type: string}, body: {type: string}, createdAt: {type: string, format: date-time}}, required: [id, origin, body, createdAt], additionalProperties: false}}}, required: [id, version, status, category, summary, location, rating, createdAt, deadline, open, comments], additionalProperties: false}}, mentors: {type: array, items: {type: object, properties: {id: {type: string}, name: {type: string}, bio: {type: string}, skills: {type: array, items: {type: string}}}, required: [id, name, bio, skills], additionalProperties: false}}, slots: {type: array, items: {type: object, properties: {id: {type: string}, version: {type: integer}, startsAt: {type: string, format: date-time}, endsAt: {type: string, format: date-time}, location: {type: string}, mentorName: {type: string}, placesLeft: {type: integer}}, required: [id, version, startsAt, endsAt, location, mentorName, placesLeft], additionalProperties: false}}, bookings: {type: array, items: {type: object, properties: {id: {type: string}, startsAt: {type: string, format: date-time}, endsAt: {type: string, format: date-time}, location: {type: string}, mentorName: {type: string}, started: {type: boolean}}, required: [id, startsAt, endsAt, location, mentorName, started], additionalProperties: false}}}, required: [timezone, isTeam, categories, requests, mentors, slots, bookings], additionalProperties: false}
+    DeskWrite: {anyOf: [{type: object, properties: {id: {type: string}, leaseId: {type: string}, generation: {type: integer}, checkInId: {type: string}}, additionalProperties: false}, {type: 'null'}]}
+    MentorQueueItem: {type: object, properties: {id: {type: string}, version: {type: integer}, category: {type: string}, priority: {type: integer}, summary: {type: string}, location: {type: string}, who: {type: string}, assignedToMe: {type: boolean}, eligible: {type: boolean}, deadline: {type: string, format: date-time}, createdAt: {type: string, format: date-time}}, required: [id, version, category, priority, summary, location, who, assignedToMe, eligible, deadline, createdAt], additionalProperties: false}
+    MentorQueue: {type: object, properties: {requests: {type: array, items: {type: object, properties: {id: {type: string}, version: {type: integer}, category: {type: string}, priority: {type: integer}, summary: {type: string}, location: {type: string}, who: {type: string}, assignedToMe: {type: boolean}, eligible: {type: boolean}, deadline: {type: string, format: date-time}, createdAt: {type: string, format: date-time}}, required: [id, version, category, priority, summary, location, who, assignedToMe, eligible, deadline, createdAt], additionalProperties: false}}, nextCursor: {type: [string, 'null']}}, required: [requests, nextCursor], additionalProperties: false}
+    MentorConsole: {type: object, properties: {timezone: {type: string}, onShift: {type: boolean}, profile: {type: object, properties: {version: {type: integer}, skills: {type: array, items: {type: string}}, bio: {type: string}, affiliation: {type: string}, maxActiveTeams: {type: integer}, showOnPage: {type: boolean}, availability: {type: array, items: {type: object, properties: {start: {type: string}, end: {type: string}}, required: [start, end], additionalProperties: false}}, eventStart: {type: string}, eventEnd: {type: string}}, required: [version, skills, bio, affiliation, maxActiveTeams, showOnPage, availability, eventStart, eventEnd], additionalProperties: false}, claim: {anyOf: [{type: object, properties: {id: {type: string}, version: {type: integer}, claimId: {type: string}, claimGeneration: {type: integer}, claimExpiresAt: {type: string, format: date-time}, lapsed: {type: boolean}, category: {type: string}, summary: {type: string}, location: {type: string}, who: {type: string}, comments: {type: array, items: {type: object, properties: {id: {type: string}, origin: {type: string}, body: {type: string}, createdAt: {type: string, format: date-time}}, required: [id, origin, body, createdAt], additionalProperties: false}}}, required: [id, version, claimId, claimGeneration, claimExpiresAt, lapsed, category, summary, location, who, comments], additionalProperties: false}, {type: 'null'}]}, queueSize: {type: integer}, categories: {type: array, items: {type: object, properties: {key: {type: string}, label: {type: string}}, required: [key, label], additionalProperties: false}}, round: {anyOf: [{type: object, properties: {id: {type: string}, version: {type: integer}, label: {type: string}, formVersion: {type: integer}, closesAt: {type: string, format: date-time}, inPool: {type: boolean}, allowFreshEyesOverride: {type: boolean}, allowConflictOverride: {type: boolean}, form: {type: array, items: {type: object, propertyNames: {type: string}, additionalProperties: {}}}, board: {type: array, items: {type: object, properties: {teamId: {type: string}, teamName: {type: string}, state: {type: string, enum: [due, seen, busy, done, conflict]}}, required: [teamId, teamName, state], additionalProperties: false}}, leases: {type: object, propertyNames: {type: string}, additionalProperties: {type: object, properties: {leaseId: {type: string}, generation: {type: integer}, version: {type: integer}, expiresAt: {type: string, format: date-time}}, required: [leaseId, generation, version, expiresAt], additionalProperties: false}}}, required: [id, version, label, formVersion, closesAt, inPool, allowFreshEyesOverride, allowConflictOverride, form, board, leases], additionalProperties: false}, {type: 'null'}]}}, required: [timezone, onShift, profile, claim, queueSize, categories, round], additionalProperties: false}
+    MentorTeams: {type: object, properties: {myTeams: {type: array, items: {type: object, properties: {teamId: {type: string}, teamName: {type: string}, roundId: {type: [string, 'null']}}, required: [teamId, teamName, roundId], additionalProperties: false}}, conflicts: {type: array, items: {type: object, properties: {teamId: {type: string}, teamName: {type: string}, kind: {type: string}, version: {type: integer}, mine: {type: boolean}}, required: [teamId, teamName, kind, version, mine], additionalProperties: false}}}, required: [myTeams, conflicts], additionalProperties: false}
+    MentorSlots: {type: object, properties: {slots: {type: array, items: {type: object, properties: {id: {type: string}, version: {type: integer}, startsAt: {type: string, format: date-time}, endsAt: {type: string, format: date-time}, start: {type: string}, end: {type: string}, location: {type: string}, capacity: {type: integer}, teams: {type: array, items: {type: string}}}, required: [id, version, startsAt, endsAt, start, end, location, capacity, teams], additionalProperties: false}}}, required: [slots], additionalProperties: false}
+    DeskQueue: {type: object, properties: {requests: {type: array, items: {type: object, properties: {id: {type: string}, version: {type: integer}, status: {type: string, enum: [OPEN, CLAIMED, RESOLVED, CANCELLED, EXPIRED]}, origin: {type: string}, category: {type: string}, priority: {type: integer}, summary: {type: string}, location: {type: string}, who: {type: string}, claimedBy: {type: [string, 'null']}, claimedByUserId: {type: [string, 'null']}, claimExpiresAt: {anyOf: [{type: string, format: date-time}, {type: 'null'}]}, deadline: {type: string, format: date-time}, createdAt: {type: string, format: date-time}, rating: {anyOf: [{type: integer}, {type: 'null'}]}, lapsed: {type: boolean}}, required: [id, version, status, origin, category, priority, summary, location, who, claimedBy, claimedByUserId, claimExpiresAt, deadline, createdAt, rating, lapsed], additionalProperties: false}}, mentors: {type: array, items: {type: object, properties: {userId: {type: string}, name: {type: string}, onShift: {type: boolean}, load: {type: integer}}, required: [userId, name, onShift, load], additionalProperties: false}}}, required: [requests, mentors], additionalProperties: false}
+    JudgeRoundsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/JudgeRounds" } } }
+    JudgingRoundsSummaryResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/JudgingRoundsSummary" } } }
+    PublicFinalistsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/PublicFinalists" } } }
+    ParticipantHelpResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ParticipantHelp" } } }
+    ParticipantDeskResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ParticipantDesk" } } }
+    DeskWriteResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/DeskWrite" } } }
+    MentorQueueResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MentorQueue" } } }
+    MentorConsoleResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MentorConsole" } } }
+    MentorTeamsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MentorTeams" } } }
+    MentorSlotsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MentorSlots" } } }
+    DeskQueueResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/DeskQueue" } } }
+    MentoringEvent: { type: object, additionalProperties: false, required: [organisation, eventId, eventTitle, startDateTime, endDateTime, timezone], properties: { organisation: { type: object, additionalProperties: false, required: [slug, name], properties: { slug: { type: string }, name: { type: string } } }, eventId: { type: string }, eventTitle: { type: string }, startDateTime: { $ref: "#/components/schemas/DateTime" }, endDateTime: { $ref: "#/components/schemas/DateTime" }, timezone: { type: string } } }

@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "data": {
+    "timezone": "Europe/London",
+    "isTeam": true,
+    "categories": [
+      {
+        "key": "code",
+        "label": "Code",
+        "contactNote": ""
+      }
+    ],
+    "requests": [
+      {
+        "id": "clhelp000000000000000001",
+        "version": 2,
+        "status": "CLAIMED",
+        "category": "Code",
+        "summary": "Our build fails on deploy",
+        "location": "Table 12",
+        "rating": null,
+        "createdAt": "2030-06-01T10:00:00.000Z",
+        "deadline": "2030-06-01T14:00:00.000Z",
+        "open": true,
+        "comments": [
+          {
+            "id": "clcomm000000000000000001",
+            "origin": "MENTOR",
+            "body": "On my way",
+            "createdAt": "2030-06-01T10:05:00.000Z"
+          }
+        ]
+      }
+    ],
+    "mentors": [
+      {
+        "id": "cluser0000000000000000009",
+        "name": "Grace Hopper",
+        "bio": "Compilers",
+        "skills": [
+          "compilers"
+        ]
+      }
+    ],
+    "slots": [
+      {
+        "id": "clslot000000000000000001",
+        "version": 1,
+        "startsAt": "2030-06-01T15:00:00.000Z",
+        "endsAt": "2030-06-01T15:20:00.000Z",
+        "location": "Room B",
+        "mentorName": "Grace Hopper",
+        "placesLeft": 1
+      }
+    ],
+    "bookings": []
+  }
+}

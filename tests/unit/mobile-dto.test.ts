@@ -73,7 +73,9 @@ describe("mobile DTOs", () => {
     expect(eventPermissionsFor(null, ["JUDGE"]).judge).toBe(false);
     expect(eventPermissionsFor(null, ["CHECK_IN", "MANAGE_REGISTRATIONS"], { submissionsEnabled: true }).judge).toBe(false);
     // JUDGE never satisfies any other flag.
-    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, manageCrew: false, fileClaims: true, manageFinance: false });
+    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, manageCrew: false, fileClaims: false, manageFinance: false });
+    // MENTOR is isolated like JUDGE: the console only, no organiser flags.
+    expect(Object.values(eventPermissionsFor(null, ["MENTOR"])).some(Boolean)).toBe(false);
   });
 
 });

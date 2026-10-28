@@ -345,6 +345,7 @@ model User {
   accounts          Account[]
   sessions          Session[]
   mobileSessions    MobileSession[]
+  mobileIdempotencyKeys MobileIdempotencyKey[]
   devices           UserDevice[]
   memberships       Membership[]
   rsvps             RSVP[]
@@ -466,6 +467,29 @@ model MobileSession {
   @@index([userId, revokedAt])
   @@index([refreshExpiresAt])
   @@index([previousRefreshTokenHashes], type: Gin)
+}
+
+/// A mobile write already answered, by its Idempotency-Key, so a retry after a
+/// lost response replays the answer instead of acting twice. Keyed by user,
+/// route and a SHA-256 of the key; only small DTOs (ids and versions, never
+/// help text) are stored, and rows expire after a day.
+model MobileIdempotencyKey {
+  id          String   @id @default(cuid())
+  userId      String
+  route       String
+  keyHash     String
+  /// SHA-256 of the request body; the same key with another body is refused.
+  requestHash String
+  /// 0 while the first request is still running.
+  status      Int      @default(0)
+  body        Json?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, route, keyHash])
+  @@index([expiresAt])
 }
 
 /// A browser this account signed in from with a password. A sign-in from a

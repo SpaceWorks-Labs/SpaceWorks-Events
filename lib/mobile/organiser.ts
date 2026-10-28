@@ -9,7 +9,7 @@ import { getMembership, isOrgAdmin } from "@/lib/permissions";
 import { attendeeDisplayName, eventSummarySelect, guestRsvpSelect, toEventSummary, toGuest } from "@/lib/mobile/dto";
 import type { EventCountsDto, EventPermissionsDto } from "@/lib/mobile/schemas";
 import { canSeeGuests, eventPermissionsFor } from "@/lib/mobile/permissions";
-import { hasNonJudgePermission } from "@/lib/judgingPermissions";
+import { hasOrganiserGrant } from "@/lib/mobile/permissions";
 
 export { canSeeGuests, eventPermissionsFor };
 import {
@@ -57,7 +57,7 @@ export async function resolveEventContext(userId: string, orgSlug: string, event
   // A JUDGE-only grant opens the judging workspace and nothing else: the
   // organiser routes treat it as no access, and the judging routes resolve
   // judges separately (lib/mobile/judging.ts, docs/HACKATHON.md).
-  if (!access.membership && !(grant && hasNonJudgePermission(grant.permissions))) return null;
+  if (!access.membership && !(grant && hasOrganiserGrant(grant.permissions))) return null;
   return {
     organisation: access.organisation,
     membership: access.membership,
@@ -120,7 +120,7 @@ export async function listOrgEvents(userId: string, orgSlug: string, filter: "up
         select: { eventId: true, permissions: true },
       });
   // A JUDGE-only grant does not list the event here (judges find it in GET /me `judging`).
-  const visibleGrantEventIds = allGrants.filter((row) => hasNonJudgePermission(row.permissions)).map((row) => row.eventId!);
+  const visibleGrantEventIds = allGrants.filter((row) => hasOrganiserGrant(row.permissions)).map((row) => row.eventId!);
   if (!access.membership && visibleGrantEventIds.length === 0) return null;
   const grantByEvent = new Map(allGrants.map((grant) => [grant.eventId!, grant.permissions]));
 

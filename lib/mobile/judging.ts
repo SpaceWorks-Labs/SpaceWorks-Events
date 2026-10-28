@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { prisma } from "@/lib/db";
-import { listJudgeSubmissionsPage, listSubmissionsForJudge, loadSubmissionForJudge } from "@/lib/core/judging";
+import { listSubmissionsForJudge, loadSubmissionForJudge } from "@/lib/core/judging";
 import { resolveJudgeContext, type JudgeContext } from "@/lib/judgingAccess";
 import type { JudgeSubmissionDetailDto } from "@/lib/judgingDto";
 import { decodeSubmissionCursor, JUDGE_SUBMISSION_FILTERS, JUDGING_SEARCH_MAX_LENGTH } from "@/lib/judgingPaging";
@@ -11,7 +11,7 @@ import { toJudgeSubmission } from "@/lib/mobile/dto";
 import { mobileError, mobileOk } from "@/lib/mobile/http";
 import { resolveEventContext } from "@/lib/mobile/organiser";
 import { authedMobileRoute, type AuthedRouteContext } from "@/lib/mobile/route";
-import { judgeSubmissionDetailDtoSchema, judgeSubmissionListDtoSchema, judgingCriteriaDtoSchema } from "@/lib/mobile/schemas";
+import { judgeRoundSchema, judgeRoundsDtoSchema, judgeSubmissionDetailDtoSchema, judgeSubmissionListDtoSchema, judgingCriteriaDtoSchema } from "@/lib/mobile/schemas";
 
 /*
  * Judge workspace for the mobile apps (docs/MOBILE_API.md, docs/HACKATHON.md).
@@ -52,7 +52,12 @@ export const judgeListQuerySchema = z.object({
   filter: z.enum(["all", "todo", "inProgress", "reviewed"]).default("all"),
   q: z.string().trim().max(JUDGING_SEARCH_MAX_LENGTH).optional(),
   cursor: z.string().trim().min(1).max(160).optional(),
+  /** A round to show; the current round (the one judges score) when absent. */
+  roundId: z.string().trim().min(1).max(128).optional(),
 }).strict();
+
+/** `?roundId=` on the single-project, next and criteria reads. */
+export const roundQuerySchema = z.object({ roundId: z.string().trim().min(1).max(128).optional() }).strict();
 
 export type JudgeListQuery = z.infer<typeof judgeListQuerySchema>;
 
@@ -68,24 +73,22 @@ export function isValidSubmissionCursor(cursor: string | undefined) {
 }
 
 /** Which of these submissions this judge has a review row for (a saved comment counts as a draft). */
-async function reviewRowIds(judgeUserId: string, submissionIds: string[]) {
-  if (submissionIds.length === 0) return new Set<string>();
-  const rows = await prisma.judgeReview.findMany({ where: { judgeUserId, submissionId: { in: submissionIds } }, select: { submissionId: true } });
+async function reviewRowIds(judgeUserId: string, submissionIds: string[], roundId: string | null) {
+  if (submissionIds.length === 0 || !roundId) return new Set<string>();
+  const rows = await prisma.judgeReview.findMany({ where: { judgeUserId, roundId, submissionId: { in: submissionIds } }, select: { submissionId: true } });
   return new Set(rows.map((row) => row.submissionId));
 }
 
 /** One page of the judge's list with totals; null when the event is not a judging event for this judge. */
 export async function listJudgeSubmissionsForMobile(ctx: JudgeContext, query: JudgeListQuery) {
   const input = { query: query.q ?? "", filter: FILTER_TO_CORE[query.filter], cursor: query.cursor ?? null };
-  const [page, event] = await Promise.all([
-    // Re-checks eligibility and submissionsEnabled; null otherwise.
-    listJudgeSubmissionsPage(ctx, input),
-    prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: { judgingStatus: true } }),
-  ]);
-  if (!page || !event) return null;
-  const drafts = await reviewRowIds(ctx.userId, page.submissions.map((row) => row.id));
+  // Re-checks eligibility, submissionsEnabled and that the round may be shown (never a later DRAFT round); null otherwise.
+  const page = await listSubmissionsForJudge(ctx, input, { roundId: query.roundId ?? null });
+  if (!page) return null;
+  const drafts = await reviewRowIds(ctx.userId, page.submissions.map((row) => row.id), page.round?.id ?? null);
   return judgeSubmissionListDtoSchema.parse({
-    judgingStatus: event.judgingStatus,
+    judgingStatus: page.judgingStatus,
+    round: page.round ? toJudgeRound(page.round) : null,
     submissions: page.submissions.map((row) => toJudgeSubmission(row, drafts.has(row.id))),
     nextCursor: page.nextCursor,
     counts: { all: page.counts.all, todo: page.counts.todo, inProgress: page.counts.in_progress, reviewed: page.counts.reviewed },
@@ -116,28 +119,40 @@ export function toJudgeDetail(detail: JudgeSubmissionDetailDto) {
  * cores' EVENT_NOT_FOUND); NOT_VISIBLE is kept for a project this judge may not
  * score (not SUBMITTED, unassigned, conflict of interest, or another event's).
  */
-export async function loadJudgeDetailForMobile(ctx: JudgeContext, submissionId: string): Promise<
+export function toJudgeRound(round: { id: string; name: string; position: number; judgingStatus: string; isCurrent: boolean; }) {
+  return judgeRoundSchema.parse({ id: round.id, name: round.name, position: round.position, judgingStatus: round.judgingStatus, isCurrent: round.isCurrent });
+}
+
+/** The rounds this judge may open (opened rounds and the current one, never a later DRAFT round). */
+export async function listJudgeRoundsForMobile(ctx: JudgeContext) {
+  const workspace = await listSubmissionsForJudge(ctx, { query: "", filter: "all", cursor: null });
+  if (!workspace) return null;
+  return judgeRoundsDtoSchema.parse({ rounds: workspace.rounds.map(toJudgeRound), currentRoundId: workspace.rounds.find((round) => round.isCurrent)?.id ?? null, onPanel: workspace.onPanel });
+}
+
+export async function loadJudgeDetailForMobile(ctx: JudgeContext, submissionId: string, roundId?: string): Promise<
   { ok: true; detail: ReturnType<typeof toJudgeDetail> } | { ok: false; code: "NOT_FOUND" | "NOT_VISIBLE" }
 > {
-  const detail = await loadSubmissionForJudge(ctx, submissionId);
+  const detail = await loadSubmissionForJudge(ctx, submissionId, { roundId: roundId ?? null });
   if (detail) return { ok: true, detail: toJudgeDetail(detail) };
   const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: { submissionsEnabled: true } });
   return { ok: false, code: event?.submissionsEnabled ? "NOT_VISIBLE" : "NOT_FOUND" };
 }
 
 /** The detail response, or its refusal. */
-export async function judgeDetailResponse(ctx: JudgeContext, submissionId: string) {
-  const result = await loadJudgeDetailForMobile(ctx, submissionId);
+export async function judgeDetailResponse(ctx: JudgeContext, submissionId: string, roundId?: string) {
+  const result = await loadJudgeDetailForMobile(ctx, submissionId, roundId);
   return result.ok ? mobileOk(result.detail) : mobileError(result.code);
 }
 
 /** The rubric and judging status; null when the event is not a judging event for this judge. */
-export async function loadJudgingCriteriaForMobile(ctx: JudgeContext) {
+export async function loadJudgingCriteriaForMobile(ctx: JudgeContext, roundId?: string) {
   // The workspace read re-checks eligibility and submissionsEnabled; only its rubric and status are returned.
-  const workspace = await listSubmissionsForJudge(ctx, { query: "", filter: "all", cursor: null });
+  const workspace = await listSubmissionsForJudge(ctx, { query: "", filter: "all", cursor: null }, { roundId: roundId ?? null });
   if (!workspace) return null;
   return judgingCriteriaDtoSchema.parse({
     judgingStatus: workspace.judgingStatus,
+    round: workspace.round ? toJudgeRound(workspace.round) : null,
     criteria: workspace.criteria.map((criterion) => ({
       id: criterion.id,
       name: criterion.name,
