@@ -10,7 +10,7 @@ import { prisma } from "@/lib/db";
 import { flushWebhookEmits } from "@/lib/webhooks/emit";
 import { acceptEventCollaboratorInviteToken } from "@/lib/inviteAcceptance";
 import { hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
-import { joinCrewWithLink, setCrewJoinLink } from "@/lib/core/crew";
+import { joinCrewWithLink, setCrewJoinLink, updateCrewMemberAsOrganiser } from "@/lib/core/crew";
 import { decideVolunteerSignup, manageContributorCertificate, reviewVolunteerHours, saveVolunteerShift, setVolunteerShifts } from "@/app/actions/volunteer-shifts";
 import { myShiftAction } from "@/app/actions/my-shifts";
 import { crew, crewEmail, ctxFor, setUpCrewOrgs, tearDownCrewOrgs } from "./helpers/crew";
@@ -110,6 +110,8 @@ describe.sequential("volunteer shift permissions", () => {
     await expect(joinCrewWithLink(link.data.token, { name: "Mentor Person", email })).resolves.toMatchObject({ ok: true });
     const joined = await prisma.eventCrewMember.findFirstOrThrow({ where: { eventId: event.id, email } });
     expect(joined).toMatchObject({ kind: "MENTOR", joinedViaLink: true, userId: null });
+    // An edit that doesn't send a kind keeps it.
+    await expect(updateCrewMemberAsOrganiser(ctxFor(event), joined.id, { name: "Mentor Person", email, role: "Workshops" })).resolves.toMatchObject({ ok: true });
     const person = await prisma.user.create({ data: { name: "Mentor", email } });
     users.push(person.id);
     const token = `invite-${crew.suffix}`;

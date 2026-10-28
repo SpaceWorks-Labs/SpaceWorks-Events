@@ -44,8 +44,11 @@ export const crewProfileSchema = z
   })
   .strict();
 
-/** Organisers also choose the crew kind (display, badges and filters only; never authority). */
-export const organiserCrewSchema = crewProfileSchema.extend({ showOnPage: z.boolean().default(true), kind: z.nativeEnum(CrewKind).default(CrewKind.VOLUNTEER) }).strict();
+/**
+ * Organisers also choose the crew kind (display, badges and filters only;
+ * never authority). Omitted: VOLUNTEER for a new member, unchanged on edit.
+ */
+export const organiserCrewSchema = crewProfileSchema.extend({ showOnPage: z.boolean().default(true), kind: z.nativeEnum(CrewKind).optional() }).strict();
 
 export type CrewProfileInput = z.infer<typeof crewProfileSchema>;
 

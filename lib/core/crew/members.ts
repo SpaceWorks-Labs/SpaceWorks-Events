@@ -191,7 +191,7 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
       }
       // A new email drops an account link that no longer matches; a verified account with the new email is linked instead.
       const relink = data.email !== member.email ? { userId: member.rsvp.userId ?? (await verifiedAccountFor(tx, data.email)) } : {};
-      await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage, kind, ...relink } });
+      await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage, ...(kind ? { kind } : {}), ...relink } });
       // A new address gets the ticket too; the old one keeps working (same QR).
       if (data.email !== member.email) await enqueueCrewTicket(tx, { to: data.email, checkInToken: member.rsvp.checkInToken, organisationId: event.organisationId });
       // An account-linked ticket takes its identity from the account, so only guest tickets change.

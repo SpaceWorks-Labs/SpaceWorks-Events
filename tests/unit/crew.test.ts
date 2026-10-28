@@ -129,7 +129,6 @@ describe("organiserCrewSchema", () => {
       role: "",
       bio: "",
       showOnPage: true,
-      kind: "VOLUNTEER",
     });
     // The crew kind is display only and must be a known kind.
     expect(organiserCrewSchema.parse({ ...base, kind: "MENTOR" }).kind).toBe("MENTOR");
