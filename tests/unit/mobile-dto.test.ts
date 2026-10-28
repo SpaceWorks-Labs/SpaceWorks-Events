@@ -57,12 +57,12 @@ describe("mobile DTOs", () => {
   });
 
   it("derives permissions like the event dashboard", () => {
-    const extras = { checkInToLists: true, manageOrders: false, manageCrew: false, fileClaims: true, manageFinance: false };
+    const extras = { checkInToLists: true, manageOrders: false, manageCrew: false, fileClaims: true, manageFinance: false, manageApplications: false, reviewApplications: false };
     const checkInOnly = eventPermissionsFor(null, ["CHECK_IN"]);
     expect(checkInOnly).toEqual({ checkIn: true, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: false, ...extras });
     expect(canSeeGuests(checkInOnly)).toBe(true);
     expect(canSeeGuests(eventPermissionsFor(null, ["EDIT_DETAILS"]))).toBe(false);
-    expect(eventPermissionsFor("ADMIN", [])).toEqual({ checkIn: true, manageRegistrations: true, sendEmails: true, schedule: true, manageFeedback: true, manageRegistrationWindow: true, judge: false, checkInToLists: true, manageOrders: true, manageCrew: true, fileClaims: true, manageFinance: true });
+    expect(eventPermissionsFor("ADMIN", [])).toEqual({ checkIn: true, manageRegistrations: true, sendEmails: true, schedule: true, manageFeedback: true, manageRegistrationWindow: true, judge: false, checkInToLists: true, manageOrders: true, manageCrew: true, fileClaims: true, manageFinance: true, manageApplications: false, reviewApplications: false });
     // Space Works: the MANAGE_REGISTRATIONS grant manages guests and orders, as on the web.
     expect(eventPermissionsFor(null, ["MANAGE_REGISTRATIONS"])).toMatchObject({ manageRegistrations: true, manageOrders: true, manageCrew: true, manageFinance: false });
     // A plain member files claims but decides nothing.
@@ -73,9 +73,15 @@ describe("mobile DTOs", () => {
     expect(eventPermissionsFor(null, ["JUDGE"]).judge).toBe(false);
     expect(eventPermissionsFor(null, ["CHECK_IN", "MANAGE_REGISTRATIONS"], { submissionsEnabled: true }).judge).toBe(false);
     // JUDGE never satisfies any other flag.
-    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, manageCrew: false, fileClaims: false, manageFinance: false });
+    expect(eventPermissionsFor(null, ["JUDGE"], { submissionsEnabled: true })).toEqual({ checkIn: false, manageRegistrations: false, sendEmails: false, schedule: false, manageFeedback: false, manageRegistrationWindow: false, judge: true, checkInToLists: false, manageOrders: false, manageCrew: false, fileClaims: false, manageFinance: false, manageApplications: false, reviewApplications: false });
     // MENTOR is isolated like JUDGE: the console only, no organiser flags.
     expect(Object.values(eventPermissionsFor(null, ["MENTOR"])).some(Boolean)).toBe(false);
+    // Applications (docs/ADMISSION.md): only on events taking them; REVIEW_APPLICATIONS opens the review workspace alone.
+    expect(eventPermissionsFor(null, ["MANAGE_REGISTRATIONS"], { admissionEnabled: true })).toMatchObject({ manageApplications: true, reviewApplications: false });
+    expect(eventPermissionsFor("OWNER", [], { admissionEnabled: true })).toMatchObject({ manageApplications: true, reviewApplications: true });
+    expect(eventPermissionsFor("OWNER", [])).toMatchObject({ manageApplications: false, reviewApplications: false });
+    const reviewer = eventPermissionsFor(null, ["REVIEW_APPLICATIONS"], { admissionEnabled: true });
+    expect(Object.entries(reviewer).filter(([, value]) => value).map(([key]) => key)).toEqual(["reviewApplications"]);
   });
 
 });

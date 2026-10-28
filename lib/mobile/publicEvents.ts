@@ -89,6 +89,7 @@ export async function loadPublicEvent(params: { orgSlug: string; eventSlug: stri
       capacity: true,
       showRegistrationCount: true,
       privacyType: true,
+      admissionEnabled: true,
       registrationClosesAt: true,
       registrationLeadMinutes: true,
       registrationMode: true,
@@ -180,6 +181,8 @@ export async function loadPublicEvent(params: { orgSlug: string; eventSlug: stri
     },
     registration: {
       requiresApproval: event.privacyType === EventPrivacyType.APPROVAL_REQUIRED,
+      // Applications (docs/ADMISSION.md): registering means applying ("Apply").
+      takesApplications: event.admissionEnabled,
       fields: (form?.fields ?? []).map(toRegistrationField),
       myRsvp: myRsvp ? {
         rsvpId: myRsvp.id,

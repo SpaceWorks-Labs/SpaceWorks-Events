@@ -30,7 +30,8 @@
           "checkedIn": 12,
           "capacity": 80,
           "capacityUsed": 42,
-          "attendance": null
+          "attendance": null,
+          "applications": null
         },
         "myPermissions": {
           "checkIn": true,
@@ -44,7 +45,9 @@
           "manageOrders": true,
           "manageCrew": true,
           "fileClaims": true,
-          "manageFinance": true
+          "manageFinance": true,
+          "manageApplications": false,
+          "reviewApplications": false
         }
       }
     ]

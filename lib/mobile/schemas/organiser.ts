@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { applicationCountsSchema } from "./admission";
 import { attendanceCountsSchema } from "./attendance";
 import { attendanceSchema, iso, privacyTypeSchema, rsvpStatusSchema, url } from "./core";
 import { eventSummarySchema } from "./events";
@@ -25,6 +26,10 @@ export const eventPermissionsSchema = z.object({
   fileClaims: z.boolean(),
   /** Space Works: decide claims and refund requests (organisation OWNER/ADMIN). */
   manageFinance: z.boolean(),
+  /** Applications (docs/ADMISSION.md), on an event taking them: the summary (OWNER/ADMIN or MANAGE_REGISTRATIONS). */
+  manageApplications: z.boolean(),
+  /** Applications: the review workspace (OWNER/ADMIN or REVIEW_APPLICATIONS). */
+  reviewApplications: z.boolean(),
 }).strict();
 
 export const eventCountsSchema = z.object({
@@ -41,6 +46,8 @@ export const eventCountsSchema = z.object({
   capacityUsed: z.number().int(),
   /** Attendance confirmation replies (docs/ATTENDANCE.md): only for viewers who may email guests, and null until anyone was asked. */
   attendance: attendanceCountsSchema.nullable(),
+  /** Applications (docs/ADMISSION.md): only for viewers who manage them, on an event taking applications. */
+  applications: applicationCountsSchema.nullable(),
 }).strict();
 
 export const orgEventsDtoSchema = z.object({

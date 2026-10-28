@@ -301,6 +301,31 @@ cancels a paid single ticket the caller bought under the refund policy
 The bearer session is the credential: the link token is never needed or
 returned. Not asked or anyone else's RSVP: `NOT_FOUND`; closed: `CONFLICT`.
 
+### Applications (auth; [Applications and shortlisting](ADMISSION.md))
+
+On events taking applications every registration is an application. The
+caller's own registration, through the app session (the ticket token is
+looked up on the server, never sent or returned), over the same cores as the
+ticket page:
+
+- `GET /me/registrations/:rsvpId/application` → `{ "application": MyApplication|null }`:
+  `{ "status", "statusLabel", "stage": { "name", "position" }|null, "respondBy|null",
+  "teamName|null", "isLeader", "actions": ["accept"|"decline"|"withdraw"], "paid",
+  "paying", "answers": [field]|null }`. `null` when the registration isn't an
+  application; anyone else's registration is `NOT_FOUND`. Never reviews or scores.
+- `POST /me/registrations/:rsvpId/application/respond` `{ "response": "accept|decline|withdraw" }`
+  (Idempotency-Key) → `{ "status", "paying", "checkoutUrl|null" }`. The team
+  leader answers for a team. A free place is confirmed at once. A paid place
+  is **never confirmed unpaid**: accepting holds it and `checkoutUrl` opens
+  the hosted payment page (the same checkout path as the ticket page); poll
+  `GET .../application` until it is `ACCEPTED`. Decline and withdraw are
+  refused (`CONFLICT`) while a payment hold is live.
+- `PUT /me/registrations/:rsvpId/application/answers` `{ "answers": { key: value } }`
+  (Idempotency-Key) while the application is in review and before the first
+  released decision, with the registration form's validation → the
+  application as `GET` returns it. Replaced answers are kept; reviews of them
+  stop counting.
+
 ## Public (no auth required; a valid bearer, if sent, identifies the attendee; an invalid one is 401)
 
 `EventSummary = { "id", "slug", "title", "coverImageUrl|null", "startDateTime", "endDateTime", "timezone", "location", "mapLinkUrl|null", "isOnline", "accentColor|null", "status", "registrationMode": "INDIVIDUAL|TEAM", "organisation": { "slug", "name", "logoUrl|null" } }`
@@ -341,7 +366,7 @@ content is returned.
 ```json
 {
   "event": EventSummary & { "description", "tags", "capacity|null", "showRegistrationCount", "confirmedCount|null", "privacyType", "registrationOpen", "registrationFull", "registrationClosedReason|null", "onlineUrl": null },
-  "registration": { "requiresApproval": false, "fields": [RegistrationField], "myRsvp": { "rsvpId", "status", "ticketToken|null" } | null },
+  "registration": { "requiresApproval": false, "takesApplications": false, "fields": [RegistrationField], "myRsvp": { "rsvpId", "status", "ticketToken|null" } | null },
   "schedule": [{ "trackName|null", "sessions": [{ "id", "title", "startDateTime", "endDateTime", "delayMinutes", "room": null, "speakers": ["name"] }] }],
   "speakers": [{ "name", "title|null", "photoUrl|null" }],
   "feedbackOpen": false
@@ -503,7 +528,37 @@ up to 200.
 `EventCounts.attendance` is `{ "coming", "notComing", "noReply", "notAsked" }`
 for viewers with `sendEmails` once anyone at the event was asked
 ([Attendance confirmation](ATTENDANCE.md)), and `null` otherwise, as on the
-dashboard Overview.
+dashboard Overview. `EventCounts.applications` is `{ "total", "byStatus", "offersOut",
+"offersLimit|null" }` for viewers with `manageApplications` on an event taking
+applications ([Applications](ADMISSION.md)), and `null` otherwise.
+`EventPermissions` has `manageApplications` (OWNER/ADMIN or MANAGE_REGISTRATIONS)
+and `reviewApplications` (OWNER/ADMIN or REVIEW_APPLICATIONS), both only on
+events taking applications. A collaborator whose grants are only
+REVIEW_APPLICATIONS (with JUDGE or MENTOR) gets no organiser routes, like a judge.
+
+### Applications (organisers and reviewers)
+
+- `GET /orgs/:orgSlug/events/:eventId/applications/summary` (`manageApplications`)
+  → `{ "enabled", "mode", "counts": ApplicationCounts, "stages": [{ "position", "name", "status", "reached", "inReview" }], "waitlist": { "queued", "passedOver" }, "draftedDecisions" }`.
+  Read-only numbers; decisions, stages and assignment stay on the website.
+- Reviewers (REVIEW_APPLICATIONS or OWNER/ADMIN, behind the staff
+  authenticator; anyone else, or an event not taking applications, is `NOT_FOUND`):
+  - `GET .../applications/reviews` → `{ "reviews": [{ "assignmentId", "stageName", "stagePosition", "stageOpen", "label", "status", "reviewedCurrent" }] }`
+    (the caller's own assignments, open stages first; `label` is "Application n" on a blind stage).
+  - `GET .../applications/reviews/:assignmentId` → `{ "assignmentId", "stageName", "stageOpen", "blind", "criteria", "guidance", "teamName|null", "people": [{ "name", "email|null", "isLeader", "answers": [{ "label", "value" }] }], "reviewed|null", "canReview" }`.
+    A blind stage has no names, emails, phone or email answers, or team name.
+    Another reviewer's, a recused one, or one the caller may no longer review
+    (off the stage's panel, a conflict of interest) is `NOT_FOUND`.
+  - `POST .../applications/reviews/:assignmentId` `{ "scores": { criterion: 1..5 }, "notes" }`
+    (Idempotency-Key) → `{ "assignmentId", "outcome": "SUBMITTED", "replaced": null }`.
+    Final once submitted; only while the stage is open.
+  - `POST .../applications/reviews/:assignmentId/recuse` (Idempotency-Key)
+    → `{ "assignmentId", "outcome": "RECUSED", "replaced" }`: a conflict of
+    interest is recorded and the least-loaded panel reviewer takes it.
+
+The guest list's approve/reject/promote/re-accept, the Teams view's
+approve/reject/promote and the order payment link refuse an application with
+`ADMISSION_MANAGED` (409).
 
 ### Guests
 

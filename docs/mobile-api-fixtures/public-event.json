@@ -36,6 +36,7 @@
     },
     "registration": {
       "requiresApproval": false,
+      "takesApplications": false,
       "fields": [
         {
           "id": "clfield000000000000000001",
