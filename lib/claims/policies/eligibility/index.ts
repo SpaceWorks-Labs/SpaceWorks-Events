@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ReimbursementEligibility, RsvpStatus, type Prisma } from "@prisma/client";
+import { admissionStage } from "./admissionStage";
 import { judgingRoundEntry } from "./judgingRound";
 import { mentoringRound } from "./mentoringRound";
 import { confirmedParticipant, crewMember } from "./registration";
@@ -10,8 +11,8 @@ export type { Claimant, EligibilityTerms, Evaluation } from "./types";
 
 /**
  * Who a reimbursement policy is for (docs/FINANCE.md "Reimbursement
- * policies"): one resolver per eligibility kind. A new kind (an admission
- * stage) adds its enum value, its stage column and CHECK, and one entry here;
+ * policies"): one resolver per eligibility kind. A new kind adds its enum
+ * value, its stage column and CHECK, and one entry here (as ADMISSION_STAGE did);
  * the Record type makes a missing resolver a compile error.
  */
 export const ELIGIBILITY_RESOLVERS: Record<ReimbursementEligibility, EligibilityResolver> = {
@@ -19,6 +20,7 @@ export const ELIGIBILITY_RESOLVERS: Record<ReimbursementEligibility, Eligibility
   [ReimbursementEligibility.CREW]: crewMember,
   [ReimbursementEligibility.JUDGING_ROUND_ENTRY]: judgingRoundEntry,
   [ReimbursementEligibility.MENTORING_ROUND]: mentoringRound,
+  [ReimbursementEligibility.ADMISSION_STAGE]: admissionStage,
 };
 
 /** The stage column a kind uses, so a policy form sets exactly that one. */

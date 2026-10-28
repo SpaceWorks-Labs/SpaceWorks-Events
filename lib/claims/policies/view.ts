@@ -19,14 +19,14 @@ export async function listPolicies(client: Prisma.TransactionClient, eventId: st
   const policies = await client.reimbursementPolicy.findMany({
     where: { eventId },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    include: { judgingRound: { select: { name: true } }, mentoringRound: { select: { label: true } }, _count: { select: { claims: true } } },
+    include: { judgingRound: { select: { name: true } }, mentoringRound: { select: { label: true } }, admissionStage: { select: { name: true } }, _count: { select: { claims: true } } },
   });
   const usage = policies.length
     ? await client.expenseClaim.groupBy({ by: ["policyId", "status"], where: { policyId: { in: policies.map((policy) => policy.id) }, status: { in: COUNTED } }, _sum: { amountMinor: true, approvedMinor: true } })
     : [];
-  return policies.map(({ judgingRound, mentoringRound, _count, ...policy }) => ({
+  return policies.map(({ judgingRound, mentoringRound, admissionStage, _count, ...policy }) => ({
     ...policy,
-    stageName: judgingRound?.name ?? mentoringRound?.label ?? null,
+    stageName: judgingRound?.name ?? mentoringRound?.label ?? admissionStage?.name ?? null,
     claimCount: _count.claims,
     budgetUsed: sumCounted(usage.filter((row) => row.policyId === policy.id).map((row) => ({ status: row.status, amountMinor: row._sum.amountMinor ?? BigInt(0), approvedMinor: row._sum.approvedMinor }))),
   }));
@@ -40,13 +40,18 @@ export function whoLabel(policy: { eligibility: string; stageName: string | null
   return policy.crewKinds?.length ? `${label}: ${policy.crewKinds.map((kind) => CREW_KIND_LABELS[kind]).join(", ")}` : label;
 }
 
-/** The rounds a policy form can pick: judging rounds that take advanced projects, and mentoring rounds not skipped. */
+/** What a policy form can pick: judging rounds that take advanced projects, mentoring rounds not skipped, and admission stages while applications are on. */
 export async function policyStageOptions(client: Prisma.TransactionClient, eventId: string) {
-  const [judging, mentoring] = await Promise.all([
+  const [judging, mentoring, admission] = await Promise.all([
     client.judgingRound.findMany({ where: { eventId, entrySource: JudgingRoundEntrySource.ADVANCED }, orderBy: { position: "asc" }, select: { id: true, name: true } }),
     client.mentoringRound.findMany({ where: { eventId, status: { not: MentoringRoundStatus.SKIPPED } }, orderBy: { position: "asc" }, select: { id: true, label: true } }),
+    client.admissionStage.findMany({ where: { eventId, event: { admissionEnabled: true } }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true } }),
   ]);
-  return { judgingRounds: judging.map((round) => ({ id: round.id, name: round.name })), mentoringRounds: mentoring.map((round) => ({ id: round.id, name: round.label })) };
+  return {
+    judgingRounds: judging.map((round) => ({ id: round.id, name: round.name })),
+    mentoringRounds: mentoring.map((round) => ({ id: round.id, name: round.label })),
+    admissionStages: admission.map((stage) => ({ id: stage.id, name: `Stage ${stage.position}: ${stage.name}` })),
+  };
 }
 
 /** Policies for the Finance tab: display values plus the edit form's inputs. */
@@ -72,6 +77,8 @@ export function policyAdminRows(policies: ListedPolicy[], currency: string, time
       eligibility: policy.eligibility as string,
       judgingRoundId: policy.judgingRoundId ?? "",
       mentoringRoundId: policy.mentoringRoundId ?? "",
+      admissionStageId: policy.admissionStageId ?? "",
+      requireAccepted: policy.requireAccepted,
       requireFinalistsPublished: policy.requireFinalistsPublished,
       crewKinds: [...policy.crewKinds] as string[],
       cap: minorToDecimalString(policy.capPerPersonMinor, currency),
@@ -96,7 +103,7 @@ export async function availablePolicies(client: Prisma.TransactionClient, claima
   const policies = await client.reimbursementPolicy.findMany({
     where: { eventId: claimant.eventId, active: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    include: { judgingRound: { select: { name: true } }, mentoringRound: { select: { label: true } } },
+    include: { judgingRound: { select: { name: true } }, mentoringRound: { select: { label: true } }, admissionStage: { select: { name: true } } },
   });
   const open = [];
   for (const policy of policies) {
@@ -104,7 +111,7 @@ export async function availablePolicies(client: Prisma.TransactionClient, claima
     if (!(await evaluateEligibility(client, claimant, policy)).eligible) continue;
     const usage = await policyUsage(client, policy.id, claimant.rsvpId);
     const left = remaining({ capPerPerson: policy.capPerPersonMinor, personUsed: usage.personUsed, budget: policy.budgetMinor, budgetUsed: usage.budgetUsed });
-    open.push({ policy: { ...policy, stageName: policy.judgingRound?.name ?? policy.mentoringRound?.label ?? null }, left: left.left });
+    open.push({ policy: { ...policy, stageName: policy.judgingRound?.name ?? policy.mentoringRound?.label ?? policy.admissionStage?.name ?? null }, left: left.left });
   }
   return open;
 }

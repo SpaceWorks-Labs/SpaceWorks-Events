@@ -21,6 +21,8 @@ const termsSchema = z.object({
   requireFinalistsPublished: z.boolean(),
   attendanceRequired: z.boolean(),
   crewKinds: z.array(z.nativeEnum(CrewKind)).default([]),
+  admissionStageId: z.string().nullable().default(null),
+  requireAccepted: z.boolean().default(false),
   capPerPersonMinor: z.string().regex(/^\d+$/),
   categories: z.array(z.nativeEnum(ExpenseCategory)),
   claimOpensAt: z.string().nullable(),
@@ -33,7 +35,7 @@ export type FrozenTerms = z.infer<typeof termsSchema>;
 export type EligibilityCheck = z.infer<typeof check>;
 export type EligibilitySnapshot = z.infer<typeof snapshotSchema>;
 
-export function freezeTerms(policy: Pick<ReimbursementPolicy, "id" | "name" | "eligibility" | "judgingRoundId" | "mentoringRoundId" | "requireFinalistsPublished" | "attendanceRequired" | "crewKinds" | "capPerPersonMinor" | "categories" | "claimOpensAt" | "claimClosesAt">): FrozenTerms {
+export function freezeTerms(policy: Pick<ReimbursementPolicy, "id" | "name" | "eligibility" | "judgingRoundId" | "mentoringRoundId" | "requireFinalistsPublished" | "attendanceRequired" | "crewKinds" | "admissionStageId" | "requireAccepted" | "capPerPersonMinor" | "categories" | "claimOpensAt" | "claimClosesAt">): FrozenTerms {
   return {
     policyId: policy.id,
     name: policy.name,
@@ -43,6 +45,8 @@ export function freezeTerms(policy: Pick<ReimbursementPolicy, "id" | "name" | "e
     requireFinalistsPublished: policy.requireFinalistsPublished,
     attendanceRequired: policy.attendanceRequired,
     crewKinds: [...policy.crewKinds],
+    admissionStageId: policy.admissionStageId,
+    requireAccepted: policy.requireAccepted,
     capPerPersonMinor: policy.capPerPersonMinor.toString(),
     categories: [...policy.categories],
     claimOpensAt: policy.claimOpensAt?.toISOString() ?? null,
@@ -51,7 +55,7 @@ export function freezeTerms(policy: Pick<ReimbursementPolicy, "id" | "name" | "e
 }
 
 export function eligibilityTerms(terms: FrozenTerms): EligibilityTerms {
-  return { eligibility: terms.eligibility, judgingRoundId: terms.judgingRoundId, mentoringRoundId: terms.mentoringRoundId, requireFinalistsPublished: terms.requireFinalistsPublished, attendanceRequired: terms.attendanceRequired, crewKinds: terms.crewKinds };
+  return { eligibility: terms.eligibility, judgingRoundId: terms.judgingRoundId, mentoringRoundId: terms.mentoringRoundId, requireFinalistsPublished: terms.requireFinalistsPublished, attendanceRequired: terms.attendanceRequired, crewKinds: terms.crewKinds, admissionStageId: terms.admissionStageId, requireAccepted: terms.requireAccepted };
 }
 
 export function recordCheck(evaluation: Evaluation, at = new Date()): EligibilityCheck {

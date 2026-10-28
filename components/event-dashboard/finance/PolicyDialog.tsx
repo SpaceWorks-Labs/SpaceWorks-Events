@@ -17,13 +17,15 @@ import { useSave, type FinanceScope } from "./shared";
 export type PolicyOptions = {
   judgingRounds: Array<{ id: string; name: string; }>;
   mentoringRounds: Array<{ id: string; name: string; }>;
+  /** Admission stages; empty unless the event takes applications. */
+  admissionStages: Array<{ id: string; name: string; }>;
   categories: Array<{ value: string; label: string; }>;
 };
 
 type PolicyInput = PolicyAdminRow["input"];
 
 const EMPTY: PolicyInput = {
-  policyId: "", name: "", eligibility: "CONFIRMED_PARTICIPANT", judgingRoundId: "", mentoringRoundId: "", requireFinalistsPublished: false, crewKinds: [],
+  policyId: "", name: "", eligibility: "CONFIRMED_PARTICIPANT", judgingRoundId: "", mentoringRoundId: "", admissionStageId: "", requireAccepted: false, requireFinalistsPublished: false, crewKinds: [],
   cap: "", categories: ["TRAVEL", "ACCOMMODATION"], claimOpensAt: "", claimClosesAt: "", attendanceRequired: false, budget: "", active: true, notifyWhenAvailable: false,
 };
 
@@ -32,8 +34,10 @@ export function PolicyDialog({ scope, initial, options, currency, onClose }: { s
   const { pending, error, save } = useSave();
   const set = <K extends keyof PolicyInput>(key: K, value: PolicyInput[K]) => setForm((current) => ({ ...current, [key]: value }));
   const stage = ELIGIBILITY_STAGE[form.eligibility];
-  const rounds = stage === "judging" ? options.judgingRounds : stage === "mentoring" ? options.mentoringRounds : [];
-  const roundKey = stage === "judging" ? "judgingRoundId" : "mentoringRoundId";
+  const rounds = stage === "judging" ? options.judgingRounds : stage === "mentoring" ? options.mentoringRounds : stage === "admission" ? options.admissionStages : [];
+  const roundKey = stage === "judging" ? "judgingRoundId" : stage === "mentoring" ? "mentoringRoundId" : "admissionStageId";
+  // Applicant policies only while the event takes applications (or for an existing one).
+  const kinds = Object.entries(ELIGIBILITY_LABELS).filter(([value]) => value !== "ADMISSION_STAGE" || options.admissionStages.length > 0 || form.eligibility === value);
   const toggleCategory = (value: string, on: boolean) => set("categories", on ? [...form.categories, value] : form.categories.filter((category) => category !== value));
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -42,7 +46,7 @@ export function PolicyDialog({ scope, initial, options, currency, onClose }: { s
         <DialogBody className="pb-6">
           <form className="flex flex-col gap-4" onSubmit={(event) => {
             event.preventDefault();
-            const input = { ...form, crewKinds: form.eligibility === "CREW" ? form.crewKinds : [], judgingRoundId: stage === "judging" ? form.judgingRoundId : "", mentoringRoundId: stage === "mentoring" ? form.mentoringRoundId : "" };
+            const input = { ...form, crewKinds: form.eligibility === "CREW" ? form.crewKinds : [], judgingRoundId: stage === "judging" ? form.judgingRoundId : "", mentoringRoundId: stage === "mentoring" ? form.mentoringRoundId : "", admissionStageId: stage === "admission" ? form.admissionStageId : "" };
             save(() => saveReimbursementPolicyAction(scope, input), initial ? "Policy saved." : "Policy added.", onClose);
           }}>
             {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
@@ -51,16 +55,19 @@ export function PolicyDialog({ scope, initial, options, currency, onClose }: { s
             </Field>
             <Field label="Who can claim">
               <Dropdown value={form.eligibility} onChange={(event) => set("eligibility", event.target.value)}>
-                {Object.entries(ELIGIBILITY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {kinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </Dropdown>
             </Field>
             {stage ? (
-              <Field label={stage === "judging" ? "Judging round" : "Mentoring round"} helperText={rounds.length === 0 ? (stage === "judging" ? "Add a judging round that takes advanced projects first." : "Add a mentoring round on the Mentor Desk first.") : undefined}>
+              <Field label={stage === "judging" ? "Judging round" : stage === "mentoring" ? "Mentoring round" : "Admission stage"} helperText={rounds.length === 0 ? (stage === "judging" ? "Add a judging round that takes advanced projects first." : stage === "mentoring" ? "Add a mentoring round on the Mentor Desk first." : "Turn on applications and add a stage first.") : undefined}>
                 <Dropdown value={form[roundKey]} onChange={(event) => set(roundKey, event.target.value)} required>
-                  <option value="">Choose a round</option>
+                  <option value="">{stage === "admission" ? "Choose a stage" : "Choose a round"}</option>
                   {rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}
                 </Dropdown>
               </Field>
+            ) : null}
+            {stage === "admission" ? (
+              <CheckboxField checked={form.requireAccepted} onCheckedChange={(checked) => set("requireAccepted", checked === true)} label="Only accepted applications" description="Otherwise anyone whose application reached the stage and is still in review, offered, waitlisted or accepted." />
             ) : null}
             {stage === "judging" ? (
               <CheckboxField checked={form.requireFinalistsPublished} onCheckedChange={(checked) => set("requireFinalistsPublished", checked === true)} label="Only once this round's finalists are published" />

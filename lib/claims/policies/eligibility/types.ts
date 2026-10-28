@@ -19,6 +19,9 @@ export type EligibilityTerms = {
   attendanceRequired: boolean;
   /** CREW only: these crew kinds; empty is every crew member. */
   crewKinds: CrewKind[];
+  admissionStageId: string | null;
+  /** ADMISSION_STAGE only: the application must also be accepted. */
+  requireAccepted: boolean;
 };
 
 /** Plain facts kept in the snapshot: ids, statuses and flags, never names or contact details. */
@@ -35,7 +38,7 @@ export type EligibilityClient = Prisma.TransactionClient;
  */
 export type EligibilityResolver = {
   /** The policy column holding this kind's stage id (the CHECK's column), or null. */
-  stage: "judgingRoundId" | "mentoringRoundId" | null;
+  stage: "judgingRoundId" | "mentoringRoundId" | "admissionStageId" | null;
   /** Whether this registration qualifies now, with the facts behind it. */
   evaluate(client: EligibilityClient, claimant: Claimant, terms: EligibilityTerms): Promise<Evaluation>;
   /** Registrations that qualify now, as a filter on the event's confirmed registrations. */

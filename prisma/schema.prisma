@@ -3061,6 +3061,10 @@ enum ReimbursementEligibility {
   /// Participants whose team took part in `mentoringRoundId` (a submitted,
   /// non-away Mentor Desk check-in).
   MENTORING_ROUND
+  /// Participants whose application (their team's, or their own when solo)
+  /// reached `admissionStageId` and is still in play (in review, offered,
+  /// waitlisted or accepted), or only accepted with `requireAccepted`.
+  ADMISSION_STAGE
 }
 
 /// A per-stage reimbursement policy of one event: who may claim, the most
@@ -3081,6 +3085,9 @@ model ReimbursementPolicy {
   requireFinalistsPublished Boolean                  @default(false)
   /// CREW only: limit to these crew kinds (docs/VOLUNTEERS.md); empty is every crew member.
   crewKinds                 CrewKind[]               @default([])
+  admissionStageId          String?
+  /// ADMISSION_STAGE only: the application must also be accepted.
+  requireAccepted           Boolean                  @default(false)
   capPerPersonMinor         BigInt
   /// At least one.
   categories                ExpenseCategory[]
@@ -3102,12 +3109,14 @@ model ReimbursementPolicy {
   event          Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
   judgingRound   JudgingRound?         @relation(fields: [judgingRoundId], references: [id], onDelete: NoAction)
   mentoringRound MentoringRound?       @relation(fields: [mentoringRoundId], references: [id], onDelete: NoAction)
+  admissionStage AdmissionStage?       @relation(fields: [admissionStageId], references: [id], onDelete: NoAction)
   claims         ExpenseClaim[]
   notices        ReimbursementNotice[]
 
   @@index([eventId, active])
   @@index([judgingRoundId])
   @@index([mentoringRoundId])
+  @@index([admissionStageId])
 }
 
 /// "A reimbursement is available to you" was queued for this registration
@@ -3879,6 +3888,7 @@ model AdmissionStage {
   reviews     AdmissionReview[]
   runs        AdmissionAssignmentRun[]
   decisions   AdmissionDecision[]
+  reimbursementPolicies ReimbursementPolicy[]
 
   @@unique([eventId, position])
 }

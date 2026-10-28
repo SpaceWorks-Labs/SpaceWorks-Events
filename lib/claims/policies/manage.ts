@@ -27,6 +27,8 @@ const saveSchema = z.object({
   eligibility: z.nativeEnum(ReimbursementEligibility),
   judgingRoundId: optionalId,
   mentoringRoundId: optionalId,
+  admissionStageId: optionalId,
+  requireAccepted: z.boolean().default(false),
   requireFinalistsPublished: z.boolean().default(false),
   crewKinds: z.array(z.nativeEnum(CrewKind)).max(4).default([]),
   cap: z.string().trim().min(1, "Enter the most each person gets back.").max(20),
@@ -46,7 +48,7 @@ async function lockedEvent(tx: Prisma.TransactionClient, ctx: PolicyAdminContext
   return tx.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: { id: true, currency: true, organisationId: true, timezone: true } });
 }
 
-type Stage = { judgingRoundId: string | null; mentoringRoundId: string | null };
+type Stage = { judgingRoundId: string | null; mentoringRoundId: string | null; admissionStageId: string | null };
 
 /** The stage the kind needs, checked against the event; an error sentence when it doesn't fit. */
 async function stageFor(tx: Prisma.TransactionClient, eventId: string, data: SaveInput): Promise<Stage | string> {
@@ -55,15 +57,20 @@ async function stageFor(tx: Prisma.TransactionClient, eventId: string, data: Sav
     const round = data.judgingRoundId ? await tx.judgingRound.findFirst({ where: { id: data.judgingRoundId, eventId }, select: { id: true, entrySource: true } }) : null;
     if (!round) return "Choose the judging round.";
     if (round.entrySource !== JudgingRoundEntrySource.ADVANCED) return "Choose a round that takes advanced projects (finalists).";
-    return { judgingRoundId: round.id, mentoringRoundId: null };
+    return { judgingRoundId: round.id, mentoringRoundId: null, admissionStageId: null };
   }
   if (column === "mentoringRoundId") {
     const round = data.mentoringRoundId ? await tx.mentoringRound.findFirst({ where: { id: data.mentoringRoundId, eventId }, select: { id: true, status: true } }) : null;
     if (!round) return "Choose the mentoring round.";
     if (round.status === MentoringRoundStatus.SKIPPED) return "That mentoring round was skipped.";
-    return { judgingRoundId: null, mentoringRoundId: round.id };
+    return { judgingRoundId: null, mentoringRoundId: round.id, admissionStageId: null };
   }
-  return { judgingRoundId: null, mentoringRoundId: null };
+  if (column === "admissionStageId") {
+    const stage = data.admissionStageId ? await tx.admissionStage.findFirst({ where: { id: data.admissionStageId, eventId, event: { admissionEnabled: true } }, select: { id: true } }) : null;
+    if (!stage) return "Choose an admission stage of this event (applications must be on).";
+    return { judgingRoundId: null, mentoringRoundId: null, admissionStageId: stage.id };
+  }
+  return { judgingRoundId: null, mentoringRoundId: null, admissionStageId: null };
 }
 
 type Window = { claimOpensAt: Date | null; claimClosesAt: Date | null };
@@ -98,6 +105,7 @@ export async function savePolicy(ctx: PolicyAdminContext, input: unknown): Promi
       name: data.name, eligibility: data.eligibility, ...stage, capPerPersonMinor: cap, budgetMinor: budget, categories: [...new Set(data.categories)], ...window,
       requireFinalistsPublished: data.eligibility === ReimbursementEligibility.JUDGING_ROUND_ENTRY && data.requireFinalistsPublished,
       crewKinds: data.eligibility === ReimbursementEligibility.CREW ? [...new Set(data.crewKinds)] : [],
+      requireAccepted: data.eligibility === ReimbursementEligibility.ADMISSION_STAGE && data.requireAccepted,
       attendanceRequired: data.attendanceRequired, active: data.active, notifyWhenAvailable: data.notifyWhenAvailable,
     };
     let policyId = data.policyId;
@@ -105,10 +113,10 @@ export async function savePolicy(ctx: PolicyAdminContext, input: unknown): Promi
       if ((await tx.reimbursementPolicy.count({ where: { eventId: event.id } })) >= MAX_POLICIES_PER_EVENT) return fail(`An event can have up to ${MAX_POLICIES_PER_EVENT} reimbursement policies.`);
       policyId = (await tx.reimbursementPolicy.create({ data: { eventId: event.id, ...values }, select: { id: true } })).id;
     } else {
-      const current = await tx.reimbursementPolicy.findFirst({ where: { id: policyId, eventId: event.id }, select: { eligibility: true, judgingRoundId: true, mentoringRoundId: true, crewKinds: true, _count: { select: { claims: true } } } });
+      const current = await tx.reimbursementPolicy.findFirst({ where: { id: policyId, eventId: event.id }, select: { eligibility: true, judgingRoundId: true, mentoringRoundId: true, admissionStageId: true, crewKinds: true, _count: { select: { claims: true } } } });
       if (!current) return fail("Policy not found.");
       const sameKinds = [...current.crewKinds].sort().join() === [...values.crewKinds].sort().join();
-      const whoChanged = current.eligibility !== values.eligibility || current.judgingRoundId !== values.judgingRoundId || current.mentoringRoundId !== values.mentoringRoundId || !sameKinds;
+      const whoChanged = current.eligibility !== values.eligibility || current.judgingRoundId !== values.judgingRoundId || current.mentoringRoundId !== values.mentoringRoundId || current.admissionStageId !== values.admissionStageId || !sameKinds;
       if (whoChanged && current._count.claims > 0) return fail("Who a policy is for is fixed once claims are filed under it. Close it and add a new policy instead.");
       await tx.reimbursementPolicy.update({ where: { id: policyId }, data: values });
     }

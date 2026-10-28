@@ -3656,7 +3656,7 @@ components:
             properties:
               id: { type: string }
               name: { type: string }
-              eligibility: { type: string, enum: [CONFIRMED_PARTICIPANT, CREW, JUDGING_ROUND_ENTRY, MENTORING_ROUND] }
+              eligibility: { type: string, enum: [CONFIRMED_PARTICIPANT, CREW, JUDGING_ROUND_ENTRY, MENTORING_ROUND, ADMISSION_STAGE] }
               who: { type: string }
               cap: { type: string }
               categories: { type: array, items: { type: string } }

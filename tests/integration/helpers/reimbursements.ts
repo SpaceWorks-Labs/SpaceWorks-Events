@@ -58,9 +58,9 @@ export async function person(event: Event, options: { teamId?: string; crew?: bo
   } });
 }
 
-export async function team(event: Event) {
+export async function team(event: Event, status: RsvpStatus = RsvpStatus.CONFIRMED) {
   sequence += 1;
-  return prisma.team.create({ data: { eventId: event.id, name: `Team ${sequence}`, nameKey: `team ${sequence}`, status: RsvpStatus.CONFIRMED, joinToken: `join-${ctx.suffix}-${sequence}`, manageTokenHash: `${ctx.suffix}${sequence}`.padEnd(64, "0").slice(0, 64) } });
+  return prisma.team.create({ data: { eventId: event.id, name: `Team ${sequence}`, nameKey: `team ${sequence}`, status, joinToken: `join-${ctx.suffix}-${sequence}`, manageTokenHash: `${ctx.suffix}${sequence}`.padEnd(64, "0").slice(0, 64) } });
 }
 
 export async function submission(event: Event, entrant: { teamId?: string; rsvpId?: string }, status: SubmissionStatus = SubmissionStatus.SUBMITTED) {
