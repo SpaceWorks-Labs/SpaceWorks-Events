@@ -5,7 +5,7 @@ export type EventClientDto = Omit<Event,
   "checkInStationPinHash" | "checkInStationPinEncrypted" | "checkInStationSecretVersion"
   // Judging settings have their own DTOs (lib/core/judging.ts).
   | "submissionsEnabled" | "submissionsOpenAt" | "submissionsCloseAt" | "judgingStatus" | "judgesSeeAll"
-  | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization"
+  | "projectGalleryPublic" | "resultsPublishedAt" | "resultsAnnouncedAt" | "reviewsPerProject" | "scoreNormalization" | "currentJudgingRoundId"
   | "emailEntrantsOnResults" | "emailSubmissionReceipts"
   // The entry fee is a BigInt and lives with the judging settings too.
   | "submissionFeeMinor" | "submissionFeeRefundOnDisqualify"
@@ -15,6 +15,10 @@ export type EventClientDto = Omit<Event,
   | "ticketDesignId"
   // Volunteer shifts have their own view (lib/eventDashboard/volunteerShifts.ts).
   | "volunteerShiftsEnabled" | "contributorCertificateTemplate"
+  // The mobile sign-up close snapshot only matters to lib/core/registrationWindow.ts.
+  | "registrationManuallyClosedAt" | "registrationCutoffBeforeManualClose" | "registrationLeadBeforeManualClose"
+  // Mentor Desk settings have their own view (lib/core/mentorDesk/).
+  | "mentorDeskEnabled" | "mentorHelpClaimedEmail" | "mentorsGetCrewTicket"
 >;
 
 /** Copies only the DTO fields, so a full Event record never reaches the browser. */

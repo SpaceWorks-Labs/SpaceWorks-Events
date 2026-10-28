@@ -8,7 +8,7 @@ import { Field, Input, PasswordInput } from "@/components/ui/field";
 import { saveInstanceServiceSettings, sendSettingsTestEmail } from "@/app/actions/instance-settings";
 import { backupInputToIso } from "@/lib/backupTime";
 
-type Values = { emailFrom: string; smtpService: string; smtpHost: string; smtpPort: string; smtpSecure: boolean; smtpUser: string; smtpAllowUnauthenticated: boolean; googleClientId: string; backupProvider: string; backupLastSuccessAt: string; backupRetentionDays: string; hasSmtpPassword: boolean; hasGoogleClientSecret: boolean };
+type Values = { emailFrom: string; smtpService: string; smtpHost: string; smtpPort: string; smtpSecure: boolean; smtpUser: string; smtpAllowUnauthenticated: boolean; googleClientId: string; googleMobileClientIds: string; backupProvider: string; backupLastSuccessAt: string; backupRetentionDays: string; hasSmtpPassword: boolean; hasGoogleClientSecret: boolean };
 type TextKey = { [K in keyof Values]: Values[K] extends string ? K : never }[keyof Values];
 type Status = { tone: "success" | "danger"; text: string } | null;
 
@@ -39,7 +39,7 @@ export function InstanceServiceSettingsForm({ initial, fallback }: { initial: Va
       const result = await saveInstanceServiceSettings({
         emailFrom: values.emailFrom, smtpService: values.smtpService, smtpHost: values.smtpHost,
         smtpPort: values.smtpPort || undefined, smtpSecure: values.smtpSecure, smtpUser: values.smtpUser,
-        smtpAllowUnauthenticated: values.smtpAllowUnauthenticated, googleClientId: values.googleClientId,
+        smtpAllowUnauthenticated: values.smtpAllowUnauthenticated, googleClientId: values.googleClientId, googleMobileClientIds: values.googleMobileClientIds,
         backupProvider: values.backupProvider, backupLastSuccessAt: backupInputToIso(values.backupLastSuccessAt),
         backupRetentionDays: values.backupRetentionDays || undefined,
         smtpPassword: smtpPassword || undefined, googleClientSecret: googleClientSecret || undefined,
@@ -104,6 +104,7 @@ export function InstanceServiceSettingsForm({ initial, fallback }: { initial: Va
         <SettingsRow title="Google SSO" description={`Register the callback URL shown in the deployment documentation with Google. ${fallback.googleNote}`}>
           <div className="flex flex-col gap-4">
             {field("googleClientId", "OAuth client ID")}
+            {field("googleMobileClientIds", "Mobile app client IDs", "text", "The Android and iOS OAuth client IDs of the Space Works app, separated by commas. Not secret.")}
             <Field
               label={values.hasGoogleClientSecret ? "OAuth client secret (leave blank to keep current)" : "OAuth client secret"}
               error={values.hasGoogleClientSecret && unreadable.google ? "Saved but unreadable with this instance's MFA_ENCRYPTION_KEY. Re-enter the secret." : undefined}

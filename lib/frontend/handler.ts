@@ -7,6 +7,7 @@ import { frontendOrigin } from "./config";
 import { isFrontendPeer } from "./peer";
 import { collectInvalidations } from "./revalidation";
 import { backendActions, viewReaders } from "./registry";
+import { secretFields } from "./secretFields";
 
 const PRIVATE_HEADERS = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" };
 const stringValue = z.string().max(2048);
@@ -16,12 +17,6 @@ const viewInput = z.array(z.object({
   params: params.optional(), searchParams: query.optional(),
   ctx: z.object({ organisation: z.object({ slug: z.string().min(1).max(128) }).strict(), event: z.object({ id: z.string().min(1).max(128) }).strict() }).strict().optional(),
 }).strict()).max(1);
-const secretFields = new Set([
-  "passwordHash", "mfaSecretEncrypted", "recoveryCodeHashes", "checkInStationPinHash",
-  "checkInStationPinEncrypted", "checkInStationSecretVersion", "secretHash", "tokenHash",
-  "smtpPasswordEncrypted", "googleClientSecretEncrypted", "opsWebhookUrlEncrypted", "access_token", "refresh_token", "id_token", "sessionToken",
-  "razorpayKeySecretEncrypted", "razorpayWebhookSecretEncrypted", "stripeSecretKeyEncrypted", "stripeWebhookSecretEncrypted",
-]);
 
 /** Final defence: a view reader must use safe selects/DTOs before crossing hosts. */
 export function assertSafeView(value: unknown, depth = 0): void {

@@ -1,0 +1,2986 @@
+openapi: 3.1.0
+info:
+  title: Space Works Events Mobile API
+  version: "1.0.0"
+  summary: User-authenticated REST API for the Space Works mobile apps (Android and iOS).
+  description: |
+    Machine-readable contract for `/api/mobile/v1`. The prose guide is
+    `docs/MOBILE_API.md`. Response payloads are validated on the server by the
+    strict Zod schemas in `lib/mobile/schemas.ts`; `tests/unit/mobile-api-contract.test.ts`
+    checks the fixtures in `docs/mobile-api-fixtures/` against both this file
+    and those schemas, and checks that every path here has a route handler.
+
+    Every response is JSON with `Cache-Control: no-store`. Success:
+    `{ "ok": true, "data": ... }`. Failure: `ErrorEnvelope`.
+
+    The app calls the API host directly (the backend in a split
+    installation). Organiser routes (`/orgs/...`) need the staff authenticator
+    check on the app session: `STAFF_MFA_REQUIRED` until a code is confirmed
+    (sign in with `totp`, or `POST /auth/mfa`), `STAFF_MFA_ENROLMENT_REQUIRED`
+    while the account has none (set one up on the website).
+servers:
+  - url: "{baseUrl}"
+    variables:
+      baseUrl:
+        default: https://api.events.example
+        description: The installation's API origin (the backend host in a split installation).
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Me
+  - name: Public
+  - name: Organiser
+  - name: Teams
+  - name: Judging
+  - name: Check-in
+  - name: Emails
+  - name: Day-of
+  - name: Reused web endpoints
+  - name: App links
+  - name: Orders
+  - name: Claims
+  - name: Payments
+  - name: Finance
+
+paths:
+  /api/mobile/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password, deviceId]
+              properties:
+                email: { type: string, maxLength: 254 }
+                password: { type: string, maxLength: 128 }
+                totp: { type: string, maxLength: 32, description: Authenticator code or recovery code. }
+                emailCode: { type: string, maxLength: 12, description: The six-digit code emailed after `EMAIL_CODE_REQUIRED`. }
+                deviceId: { $ref: "#/components/schemas/DeviceId" }
+                deviceName: { type: string, maxLength: 120 }
+                platform: { $ref: "#/components/schemas/Platform" }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { description: "`UNAUTHENTICATED` (wrong email or password), or, only after a correct password, `MFA_REQUIRED` or `EMAIL_CODE_REQUIRED` (a new install or recent failures: a code was emailed).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "403": { description: "`EMAIL_VERIFICATION_REQUIRED`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/auth/google:
+    post:
+      tags: [Auth]
+      summary: Exchange a Google ID token for a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idToken, deviceId]
+              properties:
+                idToken: { type: string, maxLength: 8192 }
+                deviceId: { $ref: "#/components/schemas/DeviceId" }
+                deviceName: { type: string, maxLength: 120 }
+                platform: { $ref: "#/components/schemas/Platform" }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { description: Token failed verification., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "403": { description: Google sign-in not configured, account creation disabled, or linking refused., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token
+      description: |
+        Returns new access and refresh tokens. Replaying the previous refresh
+        token within 30 seconds of a rotation (a lost response) is a plain 401;
+        later replays revoke the session. The refresh token works only with the
+        `deviceId` that signed in; from any other install it revokes the session.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refreshToken, deviceId]
+              properties:
+                refreshToken: { type: string }
+                deviceId: { $ref: "#/components/schemas/DeviceId" }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current mobile session
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "401": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/auth/logout-all:
+    post:
+      tags: [Auth]
+      summary: Sign out everywhere (web and mobile)
+      description: Needs a sign-in in the last 10 minutes; otherwise 401 `REAUTH_REQUIRED` (sign in again, then retry).
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/auth/mfa:
+    post:
+      tags: [Auth]
+      summary: Confirm an authenticator code on this app session (staff)
+      description: Staff access then works for 12 hours, as after /verify-mfa on the website. Setting an authenticator up stays on the website.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [code], properties: { code: { type: string, minLength: 6, maxLength: 32, description: Authenticator or recovery code. } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MfaVerifiedResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { description: "`STAFF_MFA_ENROLMENT_REQUIRED`: the account has no authenticator.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/auth/config:
+    get:
+      tags: [Auth]
+      summary: Public instance configuration for the sign-in screen
+      security: []
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AuthConfigResponse" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me:
+    get:
+      tags: [Me]
+      summary: The signed-in user, organisations and event collaborations
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MeResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Me]
+      summary: Update the display name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/registrations:
+    get:
+      tags: [Me]
+      summary: The caller's own registrations and certificates
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationsResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/registrations/{rsvpId}/cancel:
+    post:
+      tags: [Me]
+      summary: Cancel one of the caller's own RSVPs
+      description: A ticket with money collected answers 409 `PAID_ORDER`; cancel its order instead (POST /me/orders/{orderId}/cancel) under the refund policy. A paid request is withdrawn and a held order released.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/registrations/{rsvpId}/team:
+    get:
+      tags: [Me]
+      summary: The team of one of the caller's own registrations (names only)
+      description: |
+        `{ "team": null }` for a solo registration. Anyone else's RSVP is
+        `NOT_FOUND`. Members are shown as first name and last initial; never
+        emails, answers, tickets or team links.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyTeamResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/discover:
+    get:
+      tags: [Public]
+      summary: Upcoming publicly listed events
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EventListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/search:
+    get:
+      tags: [Public]
+      summary: Search publicly listed events (same rules as /api/search, max 48)
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EventListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/short/{code}:
+    get:
+      tags: [Public]
+      summary: Resolve an event short link
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string, minLength: 7, maxLength: 7 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ShortLinkResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/events/{orgSlug}/{eventSlug}:
+    get:
+      tags: [Public]
+      summary: Public event page as data
+      description: A bearer token, if sent, identifies the viewer (invite-only access, `myRsvp`). An invalid bearer is 401.
+      security: [{}, { bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventSlug" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PublicEventResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/events/{orgSlug}/{eventSlug}/feedback:
+    get:
+      tags: [Public]
+      summary: The open feedback form
+      security: [{}, { bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventSlug" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FeedbackFormResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/rsvp:
+    post:
+      tags: [Public]
+      summary: Register for an event (same body and rules as POST /api/rsvp)
+      description: |
+        Free registrations answer CONFIRMED, WAITLISTED or PENDING_APPROVAL. A
+        paid registration is never a ticket until paid: PENDING_PAYMENT with the
+        order id, the hosted checkout address (open it in the system browser)
+        and when the hold ends; poll GET /me/orders/{orderId}. A paid request on
+        an approval event answers PENDING_APPROVAL with its order id. Buying
+        tickets needs a bearer. `team` registers on a team event; without it the
+        registration is solo, which a teams-only event refuses (`TEAM_REQUIRED`).
+      security: [{}, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orgSlug]
+              properties:
+                orgSlug: { type: string }
+                eventSlug: { type: string }
+                eventInstanceId: { type: string }
+                name: { type: string, description: Required for guests; optional for signed-in users who already have a name. }
+                guestEmail: { type: string, format: email, description: Guests only. }
+                answers: { type: object, additionalProperties: true, description: "Keyed by registration field `key`." }
+                ticketTypeId: { type: string, description: Shorthand for one ticket of this type. }
+                items:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [ticketTypeId, quantity]
+                    properties:
+                      ticketTypeId: { type: string }
+                      quantity: { type: integer, minimum: 0, maximum: 20 }
+                      amountMinor: { type: [integer, "null"], description: Pay what you want, per ticket, in minor units. }
+                addOns: { type: array, items: { type: object, additionalProperties: false, required: [addOnId, quantity], properties: { addOnId: { type: string }, quantity: { type: integer } } } }
+                promoCode: { type: string, maxLength: 32 }
+                accessCode: { type: string, maxLength: 32 }
+                payAtDesk: { type: boolean, description: Reserve now and pay in person, where every chosen ticket allows it. }
+                attendees: { type: array, items: { type: object, additionalProperties: false, properties: { name: { type: string }, email: { type: string } } }, description: Details for the second and later tickets. }
+                team: { type: object, additionalProperties: true, description: "Team intent, as POST /api/rsvp: create a team, join with a join link, or solo." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RsvpResultResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { description: "`TEAM_REQUIRED` (a team event that registers teams only; register on the website) or `CONFLICT`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events:
+    get:
+      tags: [Organiser]
+      summary: Events the caller can work on in this organisation
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { name: filter, in: query, schema: { type: string, enum: [upcoming, past, all], default: upcoming } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrgEventsResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}:
+    get:
+      tags: [Organiser]
+      summary: Organiser event detail
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrgEventDetailResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests:
+    get:
+      tags: [Organiser]
+      summary: Guest list (organisation admins or CHECK_IN holders)
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { $ref: "#/components/parameters/eventId" }
+        - { name: status, in: query, schema: { type: string, enum: [ALL, CONFIRMED, WAITLISTED, PENDING_APPROVAL, REJECTED], default: ALL } }
+        - { name: checkedIn, in: query, schema: { type: string, enum: [any, "yes", "no"], default: any } }
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestListResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Organiser]
+      summary: Add a guest (organisation admins)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, email]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                answers: { type: object, additionalProperties: true }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/restore:
+    post:
+      tags: [Organiser]
+      summary: Undo a guest deletion within five minutes (404 unless the undo belongs to this event)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [undoId], properties: { undoId: { type: string } } }
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/{rsvpId}:
+    get:
+      tags: [Organiser]
+      summary: One guest with registration answers
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestDetailResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Organiser]
+      summary: Delete a guest (organisation admins); returns an undo id
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UndoResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/{rsvpId}/approve:
+    post:
+      tags: [Organiser]
+      summary: Approve a pending request (organisation admins)
+      description: A guest who belongs to a team is refused with `TEAM_MEMBER` (409); change the whole team with `…/teams/{teamId}/approve`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "`CONFLICT`, or `TEAM_MEMBER` for a guest in a team.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/{rsvpId}/reject:
+    post:
+      tags: [Organiser]
+      summary: Reject a pending or waitlisted guest (organisation admins)
+      description: A guest who belongs to a team is refused with `TEAM_MEMBER` (409); change the whole team with `…/teams/{teamId}/reject`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "`CONFLICT`, or `TEAM_MEMBER` for a guest in a team.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/{rsvpId}/promote:
+    post:
+      tags: [Organiser]
+      summary: Promote a waitlisted guest (organisation admins)
+      description: A guest who belongs to a team is refused with `TEAM_MEMBER` (409); change the whole team with `…/teams/{teamId}/promote`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "`CONFLICT`, or `TEAM_MEMBER` for a guest in a team.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/guests/{rsvpId}/reaccept:
+    post:
+      tags: [Organiser]
+      summary: Re-accept a declined guest (organisation admins); confirmed when there is room, otherwise waitlisted
+      description: A member of a declined team is refused with `TEAM_MEMBER` (409).
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GuestResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/teams:
+    get:
+      tags: [Teams]
+      summary: Teams view (organisation admins or the MANAGE_REGISTRATIONS grant)
+      description: |
+        The web Guests → Teams view: same permission (`canManageRegistrationsFor`;
+        a `CHECK_IN`- or `JUDGE`-only collaborator gets `FORBIDDEN`), query and
+        `search` rate-limit bucket. Oldest team first, keyset cursor. `q` matches
+        team names and members' names and emails (wildcards literal). `counts`
+        are per filter over the whole event.
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { $ref: "#/components/parameters/eventId" }
+        - { name: status, in: query, schema: { type: string, enum: [ALL, CONFIRMED, WAITLISTED, PENDING_APPROVAL, REJECTED, INCOMPLETE, LOOKING], default: ALL } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TeamListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/teams/{teamId}/approve:
+    post:
+      tags: [Teams]
+      summary: Approve a whole pending team (every member confirmed together)
+      description: Same permission (`canManageRegistrationsFor`), core (`transitionTeamStatus`), transaction, emails, webhooks, audit and `rsvp` rate limit as the dashboard. Returns the updated team.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TeamResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "`TEAM_INCOMPLETE` below the minimum team size, `CAPACITY_FULL` with no free unit, `CONFLICT` when not pending, the event is closed, or another organiser changed it.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/teams/{teamId}/reject:
+    post:
+      tags: [Teams]
+      summary: Decline a whole pending or waitlisted team
+      description: Same permission (`canManageRegistrationsFor`), core (`transitionTeamStatus`), transaction, emails, webhooks, audit and `rsvp` rate limit as the dashboard. Returns the updated team.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TeamResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "`CONFLICT` for any other status or a concurrent change.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/teams/{teamId}/promote:
+    post:
+      tags: [Teams]
+      summary: Give a waitlisted team a place (one unit)
+      description: Same permission (`canManageRegistrationsFor`), core (`transitionTeamStatus`), transaction, emails, webhooks, audit and `rsvp` rate limit as the dashboard. Returns the updated team.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/teamId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TeamResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "`CAPACITY_FULL` while the event is still full, `CONFLICT` when not waitlisted or changed concurrently.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/submissions:
+    get:
+      tags: [Judging]
+      summary: The judge's projects (25 per page, oldest submission first)
+      description: |
+        Judges only (organisation OWNER/ADMIN or the event `JUDGE` grant, as the
+        web judge workspace). Lists only projects this judge may score:
+        `SUBMITTED`, assigned unless judges see all, and never an entrant the
+        judge's own account belongs to (conflict of interest). `counts` cover
+        everything the judge may see, ignoring the search. `search` rate-limit
+        bucket. An organiser without the judging right gets `FORBIDDEN`; an
+        event without submissions switched on is `NOT_FOUND`.
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { $ref: "#/components/parameters/eventId" }
+        - { name: filter, in: query, schema: { type: string, enum: [all, todo, inProgress, reviewed], default: all } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Project title, team name, or a solo entrant's first name. }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeSubmissionListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/next:
+    get:
+      tags: [Judging]
+      summary: Score next project (picked on the server)
+      description: |
+        Among the projects this judge may score and has not submitted a review
+        for: one they started first, then the fewest submitted reviews, then the
+        oldest submission. `next` is null when nothing is left or judging is not
+        `OPEN`; `remaining` counts what is left including `next`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeNextResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/criteria:
+    get:
+      tags: [Judging]
+      summary: The rubric and the judging status
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgingCriteriaResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/submissions/{submissionId}:
+    get:
+      tags: [Judging]
+      summary: One project with this judge's own saved scores and comment
+      description: "`NOT_VISIBLE` (404) for a project this judge may not score (unassigned, conflict of interest, not submitted, or another event's); `NOT_FOUND` (404) when the event no longer takes submissions, as on every judging route."
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeSubmissionDetailResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/submissions/{submissionId}/scores:
+    put:
+      tags: [Judging]
+      summary: Save some or all scores (and optionally the comment) without submitting
+      description: |
+        Upserts this judge's score per criterion (whole numbers, 0..maxScore).
+        With `comment`, also saves the private comment as a draft. Refusals:
+        `JUDGING_CLOSED` (409, judging not open), `NOT_VISIBLE` (404),
+        `INVALID_REQUEST` (unknown criterion, out of range, duplicate criterion).
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scores]
+              properties:
+                scores: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/ScoreInput" } }
+                comment: { type: string, maxLength: 2000, description: Private comment (organisers only); saved as a draft. }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeScoresSavedResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/judging/submissions/{submissionId}/review:
+    post:
+      tags: [Judging]
+      summary: Submit this judge's review
+      description: |
+        Optional `scores` are saved first; the review is then submitted once
+        every criterion is scored. Without `comment`, the saved draft comment
+        is kept. Refusals: `JUDGING_CLOSED` (409), `INCOMPLETE_SCORES` (409,
+        a criterion is unscored or there is no rubric), `NOT_VISIBLE` (404).
+        Returns the project as `GET …/judging/submissions/{submissionId}`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/submissionId" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                scores: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/ScoreInput" } }
+                comment: { type: string, maxLength: 2000 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/JudgeSubmissionDetailResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in/preview:
+    post:
+      tags: [Check-in]
+      summary: Look up a ticket before checking in
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: Exactly one of `rawInput` or `rsvpId`.
+              properties:
+                rawInput: { type: string, maxLength: 2048, description: QR payload, ticket URL or typed code. }
+                rsvpId: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckInPreviewResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in:
+    post:
+      tags: [Check-in]
+      summary: Check a guest in
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: Exactly one of `rawInput` (source `mobile-scan`) or `rsvpId` (source `mobile-manual`).
+              properties:
+                rawInput: { type: string, maxLength: 2048 }
+                rsvpId: { type: string }
+                force: { type: boolean, default: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckInResultResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "`NEEDS_FORCE` (retry with `force: true`) or `CONFLICT`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in/undo:
+    post:
+      tags: [Check-in]
+      summary: Undo a check-in
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [rsvpId], properties: { rsvpId: { type: string } } }
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in/lookup:
+    get:
+      tags: [Check-in]
+      summary: Search guests at the door (max 12)
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { $ref: "#/components/parameters/eventId" }
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 200 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LookupResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in/stats:
+    get:
+      tags: [Check-in]
+      summary: Door counts and the ten latest check-ins
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckInStatsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in/roster:
+    get:
+      tags: [Check-in]
+      summary: Offline roster (includes ticket tokens; CHECK_IN only)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RosterResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in/sync:
+    post:
+      tags: [Check-in]
+      summary: Upload offline check-ins
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [checkIns]
+              properties:
+                checkIns:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [rsvpId, checkedInAt]
+                    properties:
+                      rsvpId: { type: string }
+                      checkedInAt: { type: string, format: date-time }
+                      force: { type: boolean, default: false }
+                      clientMutationId: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SyncResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/broadcasts/meta:
+    get:
+      tags: [Emails]
+      summary: Templates, designs, placeholders and history (organisation admins)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastsMetaResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/broadcasts/count:
+    post:
+      tags: [Emails]
+      summary: Count recipients for an audience
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastAudience" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastCountResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/broadcasts/preview:
+    post:
+      tags: [Emails]
+      summary: Server-rendered preview with example values
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastContent" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastPreviewResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/broadcasts/test:
+    post:
+      tags: [Emails]
+      summary: Send a test to the caller's own verified inbox
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastContent" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastTestResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/broadcasts:
+    post:
+      tags: [Emails]
+      summary: Queue a broadcast
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [statuses, subject, body]
+              properties:
+                statuses: { type: array, minItems: 1, maxItems: 4, items: { $ref: "#/components/schemas/RsvpStatus" } }
+                attendance: { $ref: "#/components/schemas/Attendance" }
+                subject: { type: string, minLength: 1, maxLength: 150 }
+                body: { type: string, minLength: 1, maxLength: 20000 }
+                design: { type: string, enum: [classic, minimal, accent, photo, letter], default: classic }
+      responses:
+        "201": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/BroadcastSendResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/schedule:
+    get:
+      tags: [Day-of]
+      summary: Organiser programme with speakers and live delays (any organiser of the event)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduleResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/schedule/sessions/{sessionId}/delay:
+    post:
+      tags: [Day-of]
+      summary: Set a session's live delay
+      parameters:
+        - { $ref: "#/components/parameters/orgSlug" }
+        - { $ref: "#/components/parameters/eventId" }
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [delayMinutes], properties: { delayMinutes: { type: integer, minimum: 0, maximum: 1440 } } }
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/feedback/state:
+    post:
+      tags: [Day-of]
+      summary: Open or close the feedback form (organisation admins)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [open], properties: { open: { type: boolean } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FeedbackStateResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/registration/state:
+    post:
+      tags: [Day-of]
+      summary: Close sign-ups now, or reopen them after a mobile close (organisation admins)
+      description: |
+        Closing stores the organiser's cutoff and sets `registrationClosesAt` to
+        min(now, event start). Reopening is allowed only while
+        `registrationManuallyClosed` is true and restores the stored cutoff
+        (which may itself have passed: then `registrationOpen` is false with a
+        reason); otherwise 409 `CONFLICT`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [open], properties: { open: { type: boolean } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationStateResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders:
+    get:
+      tags: [Orders]
+      summary: The caller's orders, newest first
+      parameters: [{ name: cursor, in: query, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrderListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: One of the caller's orders, as the order page shows it
+      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrderDetailResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders/{orderId}/checkout:
+    post:
+      tags: [Orders]
+      summary: Open the hosted payment page for a held order
+      description: Open `checkoutUrl` in the system browser, then poll the order; the provider's webhook confirms it.
+      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckoutResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders/{orderId}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel the whole order under its refund policy
+      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrderDetailResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders/{orderId}/refund-request:
+    post:
+      tags: [Orders]
+      summary: Ask the organisers for a refund outside the policy
+      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [reason], properties: { reason: { type: string, maxLength: 1000 } } }
+      responses:
+        "200": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/NullDataResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders/{orderId}/receipt:
+    get:
+      tags: [Orders]
+      summary: The receipt PDF once money was collected
+      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      responses:
+        "200": { description: The receipt PDF., content: { application/pdf: { schema: { type: string, format: binary } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders/{orderId}/transfer:
+    post:
+      tags: [Orders]
+      summary: Give one holder's ticket to someone else
+      parameters: [{ $ref: "#/components/parameters/orderId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [rsvpId, name, email], properties: { rsvpId: { type: string }, name: { type: string }, email: { type: string } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrderDetailResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/orders/{orderId}/tickets/{rsvpId}:
+    patch:
+      tags: [Orders]
+      summary: Name a ticket's holder and answer the registration questions
+      parameters: [{ $ref: "#/components/parameters/orderId" }, { $ref: "#/components/parameters/rsvpId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [name], properties: { name: { type: string }, email: { type: string }, answers: { type: object, additionalProperties: true } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrderDetailResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/registrations/{rsvpId}/claims:
+    get:
+      tags: [Claims]
+      summary: This registration's expense claims (null when the event takes none)
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantClaimsResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Claims]
+      summary: File an expense claim with receipt photos
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category, description, amount]
+              properties:
+                category: { type: string }
+                description: { type: string }
+                amount: { type: string, description: Major units, for example 250. }
+                receipts: { type: array, maxItems: 3, items: { type: string, format: binary } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantClaimsResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/registrations/{rsvpId}/claims/{claimId}/withdraw:
+    post:
+      tags: [Claims]
+      summary: Withdraw an undecided claim
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { $ref: "#/components/parameters/claimId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantClaimsResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/claims/{claimId}/receipts/{receiptId}:
+    get:
+      tags: [Claims]
+      summary: A receipt photo from one of the caller's own claims
+      parameters: [{ $ref: "#/components/parameters/claimId" }, { $ref: "#/components/parameters/receiptId" }]
+      responses:
+        "200": { description: The receipt photo (WebP)., content: { image/webp: { schema: { type: string, format: binary } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/submissions:
+    get:
+      tags: [Me]
+      summary: The caller's hackathon projects with their entry fee
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MySubmissionsResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/submissions/{eventId}/entry-fee/checkout:
+    post:
+      tags: [Me]
+      summary: Pay the project's entry fee
+      parameters: [{ $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckoutResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/me/prizes:
+    get:
+      tags: [Me]
+      summary: Prizes the caller's projects won (payout amount and date only)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyPrizesResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/series/{orgSlug}/i/{instanceId}:
+    get:
+      tags: [Public]
+      security: [{}, { bearerAuth: [] }]
+      summary: A series date with its tickets, passes and next dates
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/instanceId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SeriesDateResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/promo/check:
+    post:
+      tags: [Public]
+      security: [{}, { bearerAuth: [] }]
+      summary: Check a promo code to preview the discount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [orgSlug, code], properties: { orgSlug: { type: string }, eventSlug: { type: string }, eventInstanceId: { type: string }, code: { type: string, maxLength: 32 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PromoCheckResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/public/access-code/unlock:
+    post:
+      tags: [Public]
+      security: [{}, { bearerAuth: [] }]
+      summary: The tickets an access code unlocks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [orgSlug, code], properties: { orgSlug: { type: string }, eventSlug: { type: string }, eventInstanceId: { type: string }, code: { type: string, maxLength: 32 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AccessCodeResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/orders/{orderId}:
+    get:
+      tags: [Payments]
+      summary: An order of this event (MANAGE_REGISTRATIONS)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrganiserOrderResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/orders/{orderId}/settle:
+    post:
+      tags: [Payments]
+      summary: Settle at the desk (collected in person, or complimentary)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [mode], properties: { mode: { type: string, enum: [offline, waive] }, method: { type: string, enum: [CASH, UPI, BANK_TRANSFER, CARD_TERMINAL, OTHER] }, reference: { type: string, maxLength: 120 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrganiserOrderResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/orders/{orderId}/payment-link:
+    post:
+      tags: [Payments]
+      summary: Email the buyer a fresh payment link
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrganiserOrderResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/orders/{orderId}/refund:
+    post:
+      tags: [Payments]
+      summary: Refund the order through its provider
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/orderId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [reason], properties: { amount: { type: string, maxLength: 20, description: Blank refunds everything still refundable. }, reason: { type: string, maxLength: 500 }, cancelTickets: { type: boolean } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrganiserOrderResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in-lists:
+    get:
+      tags: [Check-in]
+      summary: The event's custom check-in lists
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CheckInListsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in-lists/{listId}/check-in:
+    post:
+      tags: [Check-in]
+      summary: Check a guest into a list
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/listId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: { rawInput: { type: string, maxLength: 2048 }, rsvpId: { type: string }, force: { type: boolean } }, description: "Send exactly one of rawInput or rsvpId." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ListCheckInResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/check-in-lists/{listId}/undo:
+    post:
+      tags: [Check-in]
+      summary: Take a guest back out of a list
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/listId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [rsvpId], properties: { rsvpId: { type: string } } }
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/claims/mine:
+    get:
+      tags: [Finance]
+      summary: The caller's own expense claims on this event
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/StaffClaimsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/claims:
+    get:
+      tags: [Finance]
+      summary: Every claim and refund request on the event (owners and admins)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminClaimsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Finance]
+      summary: File an expense claim with receipt photos
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category, description, amount, payeeName, payeeEmail]
+              properties:
+                category: { type: string }
+                description: { type: string }
+                amount: { type: string, description: Major units, for example 250. }
+                payeeName: { type: string }
+                payeeEmail: { type: string }
+                receipts: { type: array, maxItems: 3, items: { type: string, format: binary } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/StaffClaimsResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/claims/{claimId}/withdraw:
+    post:
+      tags: [Finance]
+      summary: Withdraw one of the caller's undecided claims
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/StaffClaimsResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/claims/{claimId}/approve:
+    post:
+      tags: [Finance]
+      summary: Approve a claim
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: { amount: { type: string, maxLength: 20 }, note: { type: string, maxLength: 500 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminClaimsResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/claims/{claimId}/reject:
+    post:
+      tags: [Finance]
+      summary: Decline a claim
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/claimId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: { note: { type: string, maxLength: 500 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminClaimsResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/finance/refund-requests/{requestId}/decide:
+    post:
+      tags: [Finance]
+      summary: Approve (refunding) or decline a refund request
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { $ref: "#/components/parameters/requestId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [decision], properties: { decision: { type: string, enum: [approve, decline] }, amount: { type: string, maxLength: 20 }, cancelTickets: { type: boolean }, note: { type: string, maxLength: 500 } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AdminClaimsResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/crew:
+    get:
+      tags: [Organiser]
+      summary: The event crew with check-in and the food summary (MANAGE_REGISTRATIONS)
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CrewListResponse" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Organiser]
+      summary: Add a crew member and email their free crew ticket
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [name, email], properties: { name: { type: string, maxLength: 200 }, email: { type: string, maxLength: 320 }, role: { type: string, maxLength: 80 }, foodPreference: { type: string, maxLength: 80 } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CrewListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/crew/{memberId}:
+    delete:
+      tags: [Organiser]
+      summary: Remove a crew member and their crew ticket
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: memberId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { $ref: "#/components/responses/NullData" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/ticket/{token}/status:
+    get:
+      tags: [Reused web endpoints]
+      summary: Live ticket check-in state (per-IP rate limited)
+      security: []
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK (not enveloped)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [checkedIn, checkedInAt]
+                properties:
+                  checkedIn: { type: boolean }
+                  checkedInAt: { type: [string, "null"], format: date-time }
+        "404": { description: Unknown or malformed token (empty body). }
+        "429": { description: Rate limited. }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/ticket/{token}/events:
+    get:
+      tags: [Reused web endpoints]
+      summary: Server-sent events stream of the ticket's check-in state
+      security: []
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: "`text/event-stream` of `{ checkedIn, checkedInAt }` messages.", content: { text/event-stream: { schema: { type: string } } } }
+        "404": { description: Unknown or malformed token. }
+        "429": { description: Rate limited. }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/feedback:
+    post:
+      tags: [Reused web endpoints]
+      summary: Submit feedback (not enveloped like the mobile API)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [orgSlug, eventSlug]
+              properties:
+                orgSlug: { type: string }
+                eventSlug: { type: string }
+                email: { type: string, format: email, description: Required when certificates are enabled. }
+                answers: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { const: true }
+                  data: { type: object, properties: { certificateToken: { type: [string, "null"] } } }
+        "400": { description: "`{ ok: false, error: string }`." }
+        "413": { description: Body over 128 KiB. }
+        "429": { description: Rate limited. }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/feedback/certificate/{token}:
+    get:
+      tags: [Reused web endpoints]
+      summary: Certificate JPEG
+      security: []
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: JPEG image., content: { image/jpeg: { schema: { type: string, format: binary } } } }
+        "404": { description: Unknown token. }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/check-in/station:
+    post:
+      tags: [Reused web endpoints]
+      summary: Venue check-in station (cookie-based station proof; keep a per-station cookie jar)
+      security: []
+      description: See `app/api/check-in/station/route.ts`. Not part of the bearer-authenticated mobile API.
+      responses:
+        "200": { description: Station operation result. }
+        "401": { description: Missing or invalid station proof. }
+        "429": { description: Rate limited. }
+        default: { $ref: "#/components/responses/Error" }
+
+  /.well-known/assetlinks.json:
+    get:
+      tags: [App links]
+      summary: Android Digital Asset Links (package from ANDROID_APP_PACKAGE_NAME at runtime)
+      security: []
+      responses:
+        "200": { description: "Statement list; `[]` when `ANDROID_APP_SHA256_FINGERPRINTS` is unset.", content: { application/json: { schema: { type: array } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+  /.well-known/apple-app-site-association:
+    get:
+      tags: [App links]
+      summary: Apple App Site Association (APPLE_APP_IDS at runtime)
+      security: []
+      responses:
+        "200": { description: "Claims `/ticket/*`, `/*/*/feedback` and `/*/*` after excluding application paths (see MOBILE_API.md); `{ applinks: { details: [] } }` when `APPLE_APP_IDS` is unset.", content: { application/json: { schema: { type: object } } } }
+        default: { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "Access token from a `Session` (prefix `swa_`, 15 minutes). Refresh once on 401, then sign out."
+
+  parameters:
+    orgSlug: { name: orgSlug, in: path, required: true, schema: { type: string } }
+    eventSlug: { name: eventSlug, in: path, required: true, schema: { type: string } }
+    eventId: { name: eventId, in: path, required: true, schema: { type: string } }
+    rsvpId: { name: rsvpId, in: path, required: true, schema: { type: string } }
+    teamId: { name: teamId, in: path, required: true, schema: { type: string } }
+    submissionId: { name: submissionId, in: path, required: true, schema: { type: string } }
+    orderId: { name: orderId, in: path, required: true, schema: { type: string } }
+    claimId: { name: claimId, in: path, required: true, schema: { type: string } }
+    receiptId: { name: receiptId, in: path, required: true, schema: { type: string } }
+    listId: { name: listId, in: path, required: true, schema: { type: string } }
+    requestId: { name: requestId, in: path, required: true, schema: { type: string } }
+    instanceId: { name: instanceId, in: path, required: true, schema: { type: string } }
+
+  responses:
+    Error:
+      description: >-
+        Error envelope (docs/MOBILE_API.md). Any status an operation does not
+        list, such as 400 `INVALID_REQUEST`, 401 `UNAUTHENTICATED`, 404
+        `NOT_FOUND` or 429 `RATE_LIMITED`, uses this envelope; so does an
+        unknown path under /api/mobile/v1.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    NullData:
+      description: OK
+      content:
+        application/json:
+          schema: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { type: "null" } } }
+    Session:
+      description: OK
+      content: { application/json: { schema: { $ref: "#/components/schemas/SessionResponse" } } }
+
+  schemas:
+    Platform: { type: string, enum: [android, ios] }
+    RsvpStatus: { type: string, enum: [CONFIRMED, WAITLISTED, PENDING_APPROVAL, REJECTED, PENDING_PAYMENT], description: "PENDING_PAYMENT: a paid place held while the buyer pays; never a ticket until paid." }
+    DeviceId: { type: string, pattern: "^[a-f0-9]{32,64}$", description: "The app install's own random id, kept for the life of the install. Only its SHA-256 is stored." }
+    EventStatus: { type: string, enum: [DRAFT, PUBLISHED, HIDDEN, CANCELLED] }
+    PrivacyType: { type: string, enum: [PUBLIC, HIDDEN_LINK, APPROVAL_REQUIRED, INVITE_ONLY] }
+    MembershipRole: { type: string, enum: [OWNER, ADMIN, MEMBER] }
+    EventPermission: { type: string, enum: [EDIT_DETAILS, MANAGE_REGISTRATIONS, MANAGE_INVITATIONS, CHECK_IN, PUBLISH_AND_SCHEDULE, JUDGE] }
+    FieldType: { type: string, enum: [TEXT, TEXTAREA, EMAIL, PHONE, SELECT, MULTI_SELECT, RADIO, CHECKBOX, NUMBER, DATE] }
+    Attendance: { type: string, enum: [ANY, CHECKED_IN, NOT_CHECKED_IN], default: ANY }
+    RegistrationMode: { type: string, enum: [INDIVIDUAL, TEAM], description: "TEAM: capacity counts teams plus solo registrants (\"teams & solo places\")." }
+    JudgingStatus: { type: string, enum: [NOT_STARTED, OPEN, CLOSED] }
+    ReviewStatus: { type: string, enum: [NONE, DRAFT, SUBMITTED], description: "SUBMITTED once submitted; DRAFT once any score or comment is saved." }
+    DateTime: { type: string, format: date-time }
+    NullableDateTime: { type: [string, "null"], format: date-time }
+    NullableUrl: { type: [string, "null"], format: uri }
+
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, error]
+      properties:
+        ok: { const: false }
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: { type: string, enum: [INVALID_REQUEST, UNAUTHENTICATED, MFA_REQUIRED, EMAIL_VERIFICATION_REQUIRED, FORBIDDEN, NOT_FOUND, CONFLICT, NEEDS_FORCE, RATE_LIMITED, TEAM_REQUIRED, TEAM_MEMBER, TEAM_INCOMPLETE, CAPACITY_FULL, JUDGING_CLOSED, INCOMPLETE_SCORES, NOT_VISIBLE, INTERNAL_ERROR, STAFF_MFA_REQUIRED, STAFF_MFA_ENROLMENT_REQUIRED, EMAIL_CODE_REQUIRED, TOO_MANY_ATTEMPTS, REAUTH_REQUIRED, PAID_ORDER, REGISTRATION_CLOSED, PAYMENT_UNAVAILABLE, PAYLOAD_TOO_LARGE] }
+            message: { type: string, description: UI-safe text. }
+            fieldErrors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, imageUrl, emailVerified, mfaEnabled]
+      properties:
+        id: { type: string }
+        name: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        imageUrl: { $ref: "#/components/schemas/NullableUrl" }
+        emailVerified: { type: boolean }
+        mfaEnabled: { type: boolean }
+
+    Session:
+      type: object
+      additionalProperties: false
+      required: [accessToken, accessTokenExpiresAt, refreshToken, refreshTokenExpiresAt, user]
+      properties:
+        accessToken: { type: string }
+        accessTokenExpiresAt: { $ref: "#/components/schemas/DateTime" }
+        refreshToken: { type: string }
+        refreshTokenExpiresAt: { $ref: "#/components/schemas/DateTime" }
+        user: { $ref: "#/components/schemas/User" }
+
+    AuthConfig:
+      type: object
+      additionalProperties: false
+      required: [instanceName, googleSignIn, signupEnabled, paidEventsEnabled, baseUrl]
+      properties:
+        instanceName: { type: string }
+        googleSignIn:
+          type: object
+          additionalProperties: false
+          required: [enabled, webClientId]
+          properties:
+            enabled: { type: boolean }
+            webClientId: { type: [string, "null"] }
+        signupEnabled: { type: boolean }
+        paidEventsEnabled: { type: boolean, description: Paid tickets are switched on for this installation. }
+        baseUrl: { type: string, format: uri }
+
+    OrgSummary:
+      type: object
+      additionalProperties: false
+      required: [id, slug, name, logoUrl, role]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        logoUrl: { $ref: "#/components/schemas/NullableUrl" }
+        role: { $ref: "#/components/schemas/MembershipRole" }
+
+    Collaboration:
+      type: object
+      additionalProperties: false
+      required: [organisation, eventId, eventTitle, permissions]
+      properties:
+        organisation: { type: object, additionalProperties: false, required: [slug, name], properties: { slug: { type: string }, name: { type: string } } }
+        eventId: { type: string }
+        eventTitle: { type: string }
+        permissions: { type: array, items: { $ref: "#/components/schemas/EventPermission" } }
+
+    JudgingEvent:
+      type: object
+      additionalProperties: false
+      description: An event the caller judges through a JUDGE grant, once it takes submissions. Organisation admins use `myPermissions.judge` on the org event list.
+      required: [organisation, eventId, eventTitle, startDateTime, endDateTime, timezone, judgingStatus]
+      properties:
+        organisation: { type: object, additionalProperties: false, required: [slug, name], properties: { slug: { type: string }, name: { type: string } } }
+        eventId: { type: string }
+        eventTitle: { type: string }
+        startDateTime: { $ref: "#/components/schemas/DateTime" }
+        endDateTime: { $ref: "#/components/schemas/DateTime" }
+        timezone: { type: string }
+        judgingStatus: { $ref: "#/components/schemas/JudgingStatus" }
+
+    Me:
+      type: object
+      additionalProperties: false
+      required: [user, organisations, collaborations, judging, staffMfa]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        organisations: { type: array, items: { $ref: "#/components/schemas/OrgSummary" } }
+        collaborations: { type: array, items: { $ref: "#/components/schemas/Collaboration" } }
+        judging: { type: array, items: { $ref: "#/components/schemas/JudgingEvent" } }
+        staffMfa: { type: string, enum: [ok, verify, enrol], description: "The staff authenticator rule for this app session: verify (POST /auth/mfa) or enrol (on the website). Attendees are always ok." }
+
+    EventSummary:
+      description: Closed form of EventSummaryFields (no other properties).
+      allOf: [{ $ref: "#/components/schemas/EventSummaryFields" }]
+      unevaluatedProperties: false
+
+    EventSummaryFields:
+      description: The EventSummary properties, open so that allOf compositions can extend them; each composition closes itself with unevaluatedProperties false.
+      type: object
+      required: [id, slug, title, coverImageUrl, startDateTime, endDateTime, timezone, location, mapLinkUrl, isOnline, accentColor, status, registrationMode, organisation]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        coverImageUrl: { $ref: "#/components/schemas/NullableUrl" }
+        startDateTime: { $ref: "#/components/schemas/DateTime" }
+        endDateTime: { $ref: "#/components/schemas/DateTime" }
+        timezone: { type: string, description: IANA time zone. }
+        location: { type: string }
+        mapLinkUrl: { type: [string, "null"] }
+        isOnline: { type: boolean }
+        accentColor: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/EventStatus" }
+        registrationMode: { $ref: "#/components/schemas/RegistrationMode" }
+        organisation:
+          type: object
+          additionalProperties: false
+          required: [slug, name, logoUrl]
+          properties:
+            slug: { type: string }
+            name: { type: string }
+            logoUrl: { $ref: "#/components/schemas/NullableUrl" }
+
+    EventList:
+      type: object
+      additionalProperties: false
+      required: [events, nextCursor]
+      properties:
+        events: { type: array, items: { $ref: "#/components/schemas/EventSummary" } }
+        nextCursor: { type: [string, "null"] }
+
+    Registration:
+      type: object
+      additionalProperties: false
+      required: [rsvpId, status, checkedInAt, registeredAt, canCancel, ticketToken, orderId, event, instanceId]
+      properties:
+        rsvpId: { type: string }
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+        checkedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+        registeredAt: { $ref: "#/components/schemas/DateTime" }
+        canCancel: { type: boolean }
+        ticketToken: { type: [string, "null"], description: Only for CONFIRMED registrations. }
+        orderId: { type: [string, "null"], description: "The paid order this registration belongs to (GET /me/orders/{orderId})." }
+        isCrew: { const: true, description: The caller's free crew ticket; present only when true. }
+        event: { $ref: "#/components/schemas/EventSummary" }
+        instanceId: { type: [string, "null"], description: Set for a recurring-series occurrence; `event` then describes the series. }
+        team: { $ref: "#/components/schemas/MyTeam" }
+
+    MyTeam:
+      type: object
+      additionalProperties: false
+      description: The caller's own team (present only for a registration in a team). Names only.
+      required: [id, name, role, size, maxSize, members]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [LEADER, MEMBER], description: The caller's role. }
+        size: { type: integer }
+        maxSize: { type: [integer, "null"] }
+        members:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [displayName, isLeader]
+            properties:
+              displayName: { type: string, description: First name and last initial. }
+              isLeader: { type: boolean }
+
+    MyTeamResult:
+      type: object
+      additionalProperties: false
+      required: [team, order]
+      properties:
+        team:
+          oneOf:
+            - { $ref: "#/components/schemas/MyTeam" }
+            - { type: "null" }
+        order:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [orderId, status, holdExpiresAt]
+          description: The caller's order for a paid team place, if any.
+          properties:
+            orderId: { type: string }
+            status: { $ref: "#/components/schemas/OrderStatus" }
+            holdExpiresAt: { $ref: "#/components/schemas/NullableDateTime" }
+
+    Registrations:
+      type: object
+      additionalProperties: false
+      required: [upcoming, past, certificates]
+      properties:
+        upcoming: { type: array, items: { $ref: "#/components/schemas/Registration" } }
+        past: { type: array, items: { $ref: "#/components/schemas/Registration" } }
+        certificates:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [eventTitle, organisationName, issuedAt, certificateUrl]
+            properties:
+              eventTitle: { type: string }
+              organisationName: { type: string }
+              issuedAt: { $ref: "#/components/schemas/DateTime" }
+              certificateUrl: { type: string, format: uri }
+
+    ShortLink:
+      type: object
+      additionalProperties: false
+      required: [orgSlug, eventSlug]
+      properties:
+        orgSlug: { type: string }
+        eventSlug: { type: string }
+
+    RegistrationField:
+      type: object
+      additionalProperties: false
+      required: [id, key, label, type, required, helpText, placeholder, options, settings, showIf]
+      properties:
+        id: { type: string }
+        key: { type: string }
+        label: { type: string }
+        type: { $ref: "#/components/schemas/FieldType" }
+        required: { type: boolean }
+        helpText: { type: [string, "null"] }
+        placeholder: { type: [string, "null"] }
+        options: { type: array, items: { type: string } }
+        settings:
+          type: object
+          additionalProperties: false
+          properties:
+            minLength: { type: integer }
+            maxLength: { type: integer }
+            min: { type: number }
+            max: { type: number }
+            minDate: { type: string, description: YYYY-MM-DD }
+            maxDate: { type: string, description: YYYY-MM-DD }
+            maxSelections: { type: integer }
+            allowOther: { type: boolean }
+        showIf:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [fieldKey, values]
+          description: Show only when the earlier field `fieldKey` has one of `values` (CHECKBOX answers are "Yes"/"No").
+          properties:
+            fieldKey: { type: string }
+            values: { type: array, items: { type: string } }
+
+    PublicEvent:
+      type: object
+      additionalProperties: false
+      required: [event, registration, schedule, speakers, feedbackOpen, ticketing]
+      properties:
+        event:
+          unevaluatedProperties: false
+          allOf:
+            - { $ref: "#/components/schemas/EventSummaryFields" }
+            - type: object
+              required: [description, tags, capacity, showRegistrationCount, confirmedCount, privacyType, registrationOpen, registrationFull, registrationClosedReason, onlineUrl]
+              properties:
+                description: { type: string }
+                tags: { type: array, items: { type: string } }
+                capacity: { type: [integer, "null"] }
+                showRegistrationCount: { type: boolean }
+                confirmedCount: { type: [integer, "null"], description: Null when the organiser hides counts. }
+                privacyType: { $ref: "#/components/schemas/PrivacyType" }
+                registrationOpen: { type: boolean }
+                registrationFull: { type: boolean }
+                registrationClosedReason: { type: [string, "null"] }
+                onlineUrl: { type: [string, "null"], description: Always null; no separate joining URL is stored. }
+        registration:
+          type: object
+          additionalProperties: false
+          required: [requiresApproval, fields, myRsvp]
+          properties:
+            requiresApproval: { type: boolean }
+            fields: { type: array, items: { $ref: "#/components/schemas/RegistrationField" } }
+            myRsvp:
+              type: [object, "null"]
+              additionalProperties: false
+              required: [rsvpId, status, ticketToken]
+              properties:
+                rsvpId: { type: string }
+                status: { $ref: "#/components/schemas/RsvpStatus" }
+                ticketToken: { type: [string, "null"] }
+        schedule:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [trackName, sessions]
+            properties:
+              trackName: { type: [string, "null"] }
+              sessions:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [id, title, startDateTime, endDateTime, delayMinutes, room, speakers]
+                  properties:
+                    id: { type: string }
+                    title: { type: string }
+                    startDateTime: { $ref: "#/components/schemas/DateTime" }
+                    endDateTime: { $ref: "#/components/schemas/DateTime" }
+                    delayMinutes: { type: integer, description: Minutes this session is running late; start/end already include it. }
+                    room: { type: [string, "null"] }
+                    speakers: { type: array, items: { type: string } }
+        speakers:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, title, photoUrl]
+            properties:
+              name: { type: string }
+              title: { type: [string, "null"] }
+              photoUrl: { $ref: "#/components/schemas/NullableUrl" }
+        feedbackOpen: { type: boolean }
+        ticketing:
+          oneOf:
+            - { $ref: "#/components/schemas/Ticketing" }
+            - { type: "null" }
+
+    RsvpResult:
+      oneOf:
+        - { $ref: "#/components/schemas/FreeRsvpResult" }
+        - { $ref: "#/components/schemas/PaidRsvpResult" }
+
+    FreeRsvpResult:
+      type: object
+      additionalProperties: false
+      required: [rsvpId, status, ticketToken]
+      properties:
+        rsvpId: { type: string }
+        status: { type: string, enum: [CONFIRMED, WAITLISTED, PENDING_APPROVAL] }
+        ticketToken: { type: [string, "null"] }
+
+    PaidRsvpResult:
+      type: object
+      additionalProperties: false
+      required: [rsvpId, status, ticketToken, orderId, checkoutUrl, holdExpiresAt]
+      properties:
+        rsvpId: { type: [string, "null"] }
+        status: { type: string, enum: [PENDING_PAYMENT, PENDING_APPROVAL] }
+        ticketToken: { type: "null" }
+        orderId: { type: string }
+        checkoutUrl: { $ref: "#/components/schemas/NullableUrl" }
+        holdExpiresAt: { $ref: "#/components/schemas/NullableDateTime" }
+
+    FeedbackForm:
+      type: object
+      additionalProperties: false
+      required: [title, intro, thankYouMessage, open, certificatesEnabled, fields]
+      properties:
+        title: { type: string }
+        intro: { type: [string, "null"] }
+        thankYouMessage: { type: string }
+        open: { const: true }
+        certificatesEnabled: { type: boolean }
+        fields: { type: array, items: { $ref: "#/components/schemas/RegistrationField" } }
+
+    EventPermissions:
+      type: object
+      additionalProperties: false
+      required: [checkIn, manageRegistrations, sendEmails, schedule, manageFeedback, manageRegistrationWindow, judge, checkInToLists, manageOrders, manageCrew, fileClaims, manageFinance]
+      properties:
+        checkIn: { type: boolean }
+        manageRegistrations: { type: boolean }
+        sendEmails: { type: boolean }
+        schedule: { type: boolean }
+        manageFeedback: { type: boolean }
+        manageRegistrationWindow: { type: boolean }
+        judge: { type: boolean, description: Can open the judging workspace (OWNER/ADMIN or the JUDGE grant) on an event with submissions switched on. }
+        checkInToLists: { type: boolean, description: Custom check-in lists (CHECK_IN). }
+        manageOrders: { type: boolean, description: Paid orders, desk settlement, payment links and refunds (MANAGE_REGISTRATIONS). }
+        manageCrew: { type: boolean, description: The event crew and their free crew tickets (MANAGE_REGISTRATIONS). }
+        fileClaims: { type: boolean, description: File and withdraw own expense claims (anyone on the event dashboard). }
+        manageFinance: { type: boolean, description: Decide claims and refund requests (organisation OWNER/ADMIN). }
+
+    EventCounts:
+      type: object
+      additionalProperties: false
+      required: [confirmed, waitlisted, pending, pendingPayment, crew, checkedIn, capacity, capacityUsed]
+      properties:
+        confirmed: { type: integer }
+        waitlisted: { type: integer }
+        pending: { type: integer }
+        pendingPayment: { type: integer, description: Paid places held while the buyer pays; they count against capacity. }
+        crew: { type: integer, description: Crew tickets (docs/CREW.md); counted in confirmed, never against capacity. }
+        checkedIn: { type: integer }
+        capacity: { type: [integer, "null"] }
+        capacityUsed:
+          type: integer
+          description: >-
+            What capacity is compared with. Equals confirmed on individual
+            events; on team events it counts confirmed teams plus confirmed
+            solo registrants, while confirmed stays a count of people.
+
+    OrgEvents:
+      type: object
+      additionalProperties: false
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            unevaluatedProperties: false
+            allOf:
+              - { $ref: "#/components/schemas/EventSummaryFields" }
+              - type: object
+                required: [counts, myPermissions]
+                properties:
+                  counts:
+                    oneOf:
+                      - { $ref: "#/components/schemas/EventCounts" }
+                      - { type: "null" }
+                  myPermissions: { $ref: "#/components/schemas/EventPermissions" }
+
+    OrgEventDetail:
+      type: object
+      additionalProperties: false
+      required: [event, counts, myPermissions]
+      properties:
+        event:
+          unevaluatedProperties: false
+          allOf:
+            - { $ref: "#/components/schemas/EventSummaryFields" }
+            - type: object
+              required: [privacyType, registrationOpen, registrationClosesAt, registrationClosedReason, registrationManuallyClosed, feedbackOpen, eventUrl, shortUrl]
+              properties:
+                privacyType: { $ref: "#/components/schemas/PrivacyType" }
+                registrationOpen: { type: boolean }
+                registrationClosesAt: { $ref: "#/components/schemas/NullableDateTime" }
+                registrationClosedReason: { type: [string, "null"] }
+                registrationManuallyClosed: { type: boolean, description: Sign-ups were closed from a mobile app and can be reopened there. }
+                feedbackOpen: { type: boolean }
+                eventUrl: { type: string, format: uri }
+                shortUrl: { $ref: "#/components/schemas/NullableUrl" }
+        counts:
+          oneOf:
+            - { $ref: "#/components/schemas/EventCounts" }
+            - { type: "null" }
+        myPermissions: { $ref: "#/components/schemas/EventPermissions" }
+
+    Guest:
+      description: Closed form of GuestFields (no other properties).
+      allOf: [{ $ref: "#/components/schemas/GuestFields" }]
+      unevaluatedProperties: false
+
+    GuestFields:
+      description: The Guest properties, open so that allOf compositions can extend them; each composition closes itself with unevaluatedProperties false.
+      type: object
+      required: [rsvpId, displayName, email, status, checkedInAt, registeredAt, isGuest]
+      properties:
+        rsvpId: { type: string }
+        displayName: { type: string }
+        email: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+        checkedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+        registeredAt: { $ref: "#/components/schemas/DateTime" }
+        isGuest: { type: boolean, description: True when the registration has no account. }
+        teamName: { type: string, description: TEAM events only; absent for solo registrants. }
+        orderId: { type: string, description: The paid order this guest's ticket belongs to. }
+        isCrew: { const: true, description: A free crew ticket; present only when true. }
+        paymentOutcome: { type: string, enum: [LINK_SENT, REFUNDED], description: "Only in answers to approve, promote, reaccept and reject: a paid place was offered (the ticket confirms once paid) or a paid order refunded." }
+
+    Detail:
+      type: object
+      additionalProperties: false
+      required: [label, value]
+      properties:
+        label: { type: string }
+        value: { type: string }
+
+    GuestList:
+      type: object
+      additionalProperties: false
+      required: [guests, nextCursor]
+      properties:
+        guests: { type: array, items: { $ref: "#/components/schemas/Guest" } }
+        nextCursor: { type: [string, "null"] }
+
+    GuestDetail:
+      unevaluatedProperties: false
+      allOf:
+        - { $ref: "#/components/schemas/GuestFields" }
+        - type: object
+          required: [answers]
+          properties:
+            answers: { type: array, items: { $ref: "#/components/schemas/Detail" } }
+
+    Undo:
+      type: object
+      additionalProperties: false
+      required: [undoId]
+      properties:
+        undoId: { type: string }
+
+    CheckInResult:
+      description: Closed form of CheckInResultFields (no other properties).
+      allOf: [{ $ref: "#/components/schemas/CheckInResultFields" }]
+      unevaluatedProperties: false
+
+    CheckInResultFields:
+      description: The CheckInResult properties, open so that allOf compositions can extend them; each composition closes itself with unevaluatedProperties false.
+      type: object
+      required: [rsvpId, displayName, email, status, alreadyCheckedIn, checkedInAt, checkInDetails, registrationDetails]
+      properties:
+        rsvpId: { type: string }
+        displayName: { type: string }
+        email: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+        alreadyCheckedIn: { type: boolean }
+        checkedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+        checkInDetails: { type: array, items: { $ref: "#/components/schemas/Detail" } }
+        registrationDetails: { type: array, items: { $ref: "#/components/schemas/Detail" } }
+        teamName: { type: string, description: TEAM events only; absent for solo registrants. }
+
+    CheckInPreview:
+      unevaluatedProperties: false
+      allOf:
+        - { $ref: "#/components/schemas/CheckInResultFields" }
+        - type: object
+          required: [gate, payment]
+          properties:
+            payment:
+              oneOf:
+                - { $ref: "#/components/schemas/PaymentInfo" }
+                - { type: "null" }
+            gate:
+              oneOf:
+                - { type: object, additionalProperties: false, required: [ok], properties: { ok: { const: true } } }
+                - type: object
+                  additionalProperties: false
+                  required: [ok, reason, needsForce]
+                  properties:
+                    ok: { const: false }
+                    reason: { type: string }
+                    needsForce: { type: boolean }
+                    blocked: { type: boolean }
+
+    Lookup:
+      type: object
+      additionalProperties: false
+      required: [rows]
+      properties:
+        rows: { type: array, items: { $ref: "#/components/schemas/Guest" } }
+
+    CheckInStats:
+      type: object
+      additionalProperties: false
+      required: [confirmed, checkedIn, recent]
+      properties:
+        confirmed: { type: integer }
+        checkedIn: { type: integer }
+        recent:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [rsvpId, displayName, checkedInAt]
+            properties:
+              rsvpId: { type: string }
+              displayName: { type: string }
+              checkedInAt: { $ref: "#/components/schemas/DateTime" }
+
+    RosterRow:
+      unevaluatedProperties: false
+      allOf:
+        - { $ref: "#/components/schemas/GuestFields" }
+        - type: object
+          required: [ticketToken, checkInDetails, registrationDetails]
+          properties:
+            ticketToken: { type: string, description: Bearer capability; never log or persist outside the encrypted offline store. }
+            checkInDetails: { type: array, items: { $ref: "#/components/schemas/Detail" } }
+            registrationDetails: { type: array, items: { $ref: "#/components/schemas/Detail" } }
+
+    Roster:
+      type: object
+      additionalProperties: false
+      required: [generatedAt, rows]
+      properties:
+        generatedAt: { $ref: "#/components/schemas/DateTime" }
+        rows: { type: array, items: { $ref: "#/components/schemas/RosterRow" } }
+
+    SyncResult:
+      type: object
+      additionalProperties: false
+      required: [syncedIds, alreadyCheckedInIds, failed]
+      properties:
+        syncedIds: { type: array, items: { type: string } }
+        alreadyCheckedInIds: { type: array, items: { type: string } }
+        failed:
+          type: array
+          items: { type: object, additionalProperties: false, required: [rsvpId, error], properties: { rsvpId: { type: string }, error: { type: string } } }
+
+    BroadcastAudience:
+      type: object
+      additionalProperties: false
+      required: [statuses]
+      properties:
+        statuses: { type: array, minItems: 1, maxItems: 4, items: { $ref: "#/components/schemas/RsvpStatus" } }
+        attendance: { $ref: "#/components/schemas/Attendance" }
+
+    BroadcastContent:
+      type: object
+      additionalProperties: false
+      required: [subject, body]
+      properties:
+        subject: { type: string, minLength: 1, maxLength: 150 }
+        body: { type: string, minLength: 1, maxLength: 20000, description: "Supported HTML subset: p, strong, em, h2, h3, ul, ol, li, blockquote, a, a.cta, br." }
+        design: { type: string, enum: [classic, minimal, accent, photo, letter], default: classic }
+
+    BroadcastsMeta:
+      type: object
+      additionalProperties: false
+      required: [templates, designs, placeholders, history]
+      properties:
+        templates:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, group, name, description, subject, bodyHtml, audience]
+            properties:
+              id: { type: string }
+              group: { type: string }
+              name: { type: string }
+              description: { type: string }
+              subject: { type: string }
+              bodyHtml: { type: string }
+              audience: { $ref: "#/components/schemas/StoredAudience" }
+        designs:
+          type: array
+          items: { type: object, additionalProperties: false, required: [id, label, description], properties: { id: { type: string }, label: { type: string }, description: { type: string } } }
+        placeholders: { type: array, items: { type: string } }
+        history:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, subject, design, audience, recipientCount, sentAt, bodyHtml]
+            properties:
+              id: { type: string }
+              subject: { type: string }
+              design: { type: string }
+              audience: { $ref: "#/components/schemas/StoredAudience" }
+              recipientCount: { type: integer }
+              sentAt: { $ref: "#/components/schemas/DateTime" }
+              bodyHtml: { type: string }
+
+    StoredAudience:
+      type: object
+      additionalProperties: false
+      required: [statuses, attendance]
+      properties:
+        statuses: { type: array, items: { $ref: "#/components/schemas/RsvpStatus" } }
+        attendance: { $ref: "#/components/schemas/Attendance" }
+
+    ScheduleSpeaker:
+      type: object
+      additionalProperties: false
+      required: [id, name, headline, organisation, photoUrl]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        headline: { type: [string, "null"] }
+        organisation: { type: [string, "null"] }
+        photoUrl: { type: [string, "null"], description: Absolute URL }
+
+    Schedule:
+      type: object
+      additionalProperties: false
+      required: [generatedAt, tracks]
+      properties:
+        generatedAt: { $ref: "#/components/schemas/DateTime" }
+        tracks:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, sessions]
+            properties:
+              id: { type: [string, "null"] }
+              name: { type: string }
+              sessions:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [id, title, type, visibility, startDateTime, endDateTime, delayMinutes, effectiveStartDateTime, effectiveEndDateTime, speakers]
+                  properties:
+                    id: { type: string }
+                    title: { type: string }
+                    type: { type: string, description: "Session type label, for example Talk or Workshop" }
+                    visibility: { type: string, enum: [DRAFT, PUBLISHED, HIDDEN] }
+                    startDateTime: { $ref: "#/components/schemas/DateTime" }
+                    endDateTime: { $ref: "#/components/schemas/DateTime" }
+                    delayMinutes: { type: integer, description: The session's stored live delay (what the delay control sets); planned times are unchanged. }
+                    effectiveStartDateTime: { $ref: "#/components/schemas/DateTime", description: "Planned start shifted by the delays of earlier sessions in the same track (as on the public page)" }
+                    effectiveEndDateTime: { $ref: "#/components/schemas/DateTime" }
+                    speakers: { type: array, items: { $ref: "#/components/schemas/ScheduleSpeaker" } }
+
+    # Success envelopes
+    OrganiserTeam:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, size, minSize, maxSize, incomplete, lookingForMembers, leaderDisplayName, members]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+        size: { type: integer }
+        minSize: { type: [integer, "null"] }
+        maxSize: { type: [integer, "null"] }
+        incomplete: { type: boolean, description: Below the minimum team size; cannot be approved. }
+        lookingForMembers: { type: boolean }
+        leaderDisplayName: { type: [string, "null"] }
+        members:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [rsvpId, displayName, isLeader, checkedIn]
+            properties:
+              rsvpId: { type: string, description: Use with the guest routes (detail, check-in). }
+              displayName: { type: string }
+              isLeader: { type: boolean }
+              checkedIn: { type: boolean }
+
+    TeamList:
+      type: object
+      additionalProperties: false
+      required: [teams, nextCursor, counts]
+      properties:
+        teams: { type: array, items: { $ref: "#/components/schemas/OrganiserTeam" } }
+        nextCursor: { type: [string, "null"] }
+        counts:
+          type: object
+          additionalProperties: false
+          required: [ALL, CONFIRMED, WAITLISTED, PENDING_APPROVAL, REJECTED, INCOMPLETE, LOOKING]
+          properties:
+            ALL: { type: integer }
+            CONFIRMED: { type: integer }
+            WAITLISTED: { type: integer }
+            PENDING_APPROVAL: { type: integer }
+            REJECTED: { type: integer }
+            INCOMPLETE: { type: integer }
+            LOOKING: { type: integer }
+
+    JudgingCriterion:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, weight, maxScore]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        weight: { type: integer, minimum: 1, maximum: 10 }
+        maxScore: { type: integer, minimum: 1, maximum: 10 }
+
+    ScoreInput:
+      type: object
+      additionalProperties: false
+      required: [criterionId, score]
+      properties:
+        criterionId: { type: string }
+        score: { type: integer, minimum: 0, description: "0..the criterion's maxScore." }
+
+    MyReview:
+      type: object
+      additionalProperties: false
+      required: [status, scoredCriteria]
+      properties:
+        status: { $ref: "#/components/schemas/ReviewStatus" }
+        scoredCriteria: { type: integer }
+
+    JudgeSubmission:
+      type: object
+      additionalProperties: false
+      description: Project content and display names only; never entrant emails, answers, ticket links, disqualification reasons or other judges' scores.
+      required: [id, title, summary, links, entrantName, myReview]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        summary: { type: string, description: Plain text. }
+        links:
+          type: object
+          additionalProperties: false
+          required: [repo, demo, video]
+          properties:
+            repo: { $ref: "#/components/schemas/NullableUrl" }
+            demo: { $ref: "#/components/schemas/NullableUrl" }
+            video: { $ref: "#/components/schemas/NullableUrl" }
+        entrantName: { type: string, description: Team name, or a solo entrant's first name and last initial. }
+        teamName: { type: string, description: Present only for a team entrant. }
+        myReview: { $ref: "#/components/schemas/MyReview" }
+
+    JudgeSubmissionList:
+      type: object
+      additionalProperties: false
+      required: [judgingStatus, submissions, nextCursor, counts]
+      properties:
+        judgingStatus: { $ref: "#/components/schemas/JudgingStatus" }
+        submissions: { type: array, items: { $ref: "#/components/schemas/JudgeSubmission" } }
+        nextCursor: { type: [string, "null"] }
+        counts:
+          type: object
+          additionalProperties: false
+          required: [all, todo, inProgress, reviewed]
+          properties:
+            all: { type: integer }
+            todo: { type: integer, description: No submitted review yet (includes inProgress). }
+            inProgress: { type: integer }
+            reviewed: { type: integer }
+
+    JudgingCriteria:
+      type: object
+      additionalProperties: false
+      required: [judgingStatus, criteria]
+      properties:
+        judgingStatus: { $ref: "#/components/schemas/JudgingStatus" }
+        criteria: { type: array, items: { $ref: "#/components/schemas/JudgingCriterion" } }
+
+    JudgeSubmissionDetail:
+      type: object
+      additionalProperties: false
+      required: [judgingStatus, criteria, submission, myScores, myComment, mySubmittedAt]
+      properties:
+        judgingStatus: { $ref: "#/components/schemas/JudgingStatus" }
+        criteria: { type: array, items: { $ref: "#/components/schemas/JudgingCriterion" } }
+        submission: { $ref: "#/components/schemas/JudgeSubmission" }
+        myScores:
+          type: array
+          items: { type: object, additionalProperties: false, required: [criterionId, score], properties: { criterionId: { type: string }, score: { type: integer } } }
+        myComment: { type: [string, "null"], description: This judge's own private comment. }
+        mySubmittedAt: { $ref: "#/components/schemas/NullableDateTime" }
+
+    JudgeNext:
+      type: object
+      additionalProperties: false
+      required: [next, remaining]
+      properties:
+        next:
+          oneOf:
+            - { $ref: "#/components/schemas/JudgeSubmissionDetail" }
+            - { type: "null" }
+        remaining: { type: integer }
+
+    JudgeScoresSaved:
+      type: object
+      additionalProperties: false
+      required: [scored, total, myReview]
+      properties:
+        scored: { type: integer }
+        total: { type: integer }
+        myReview: { $ref: "#/components/schemas/MyReview" }
+
+    SessionResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Session" } } }
+    AuthConfigResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/AuthConfig" } } }
+    MeResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Me" } } }
+    UserResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/User" } } }
+    RegistrationsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Registrations" } } }
+    EventListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/EventList" } } }
+    ShortLinkResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ShortLink" } } }
+    PublicEventResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/PublicEvent" } } }
+    FeedbackFormResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/FeedbackForm" } } }
+    RsvpResultResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/RsvpResult" } } }
+    OrgEventsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/OrgEvents" } } }
+    OrgEventDetailResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/OrgEventDetail" } } }
+    GuestListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/GuestList" } } }
+    GuestResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Guest" } } }
+    GuestDetailResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/GuestDetail" } } }
+    UndoResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Undo" } } }
+    CheckInResultResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CheckInResult" } } }
+    CheckInPreviewResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CheckInPreview" } } }
+    LookupResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Lookup" } } }
+    CheckInStatsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CheckInStats" } } }
+    RosterResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Roster" } } }
+    SyncResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/SyncResult" } } }
+    BroadcastsMetaResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/BroadcastsMeta" } } }
+    BroadcastCountResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { type: object, additionalProperties: false, required: [count], properties: { count: { type: integer } } } } }
+    BroadcastPreviewResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { type: object, additionalProperties: false, required: [subject, html, text], properties: { subject: { type: string }, html: { type: string }, text: { type: string } } } } }
+    BroadcastTestResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { type: object, additionalProperties: false, required: [to], properties: { to: { type: string } } } } }
+    BroadcastSendResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { type: object, additionalProperties: false, required: [broadcastId, recipientCount], properties: { broadcastId: { type: string }, recipientCount: { type: integer } } } } }
+    ScheduleResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Schedule" } } }
+    FeedbackStateResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { type: object, additionalProperties: false, required: [open], properties: { open: { type: boolean } } } } }
+    RegistrationState:
+      type: object
+      additionalProperties: false
+      required: [registrationOpen, registrationClosesAt, registrationClosedReason, registrationManuallyClosed]
+      properties:
+        registrationOpen: { type: boolean }
+        registrationClosesAt: { $ref: "#/components/schemas/NullableDateTime" }
+        registrationClosedReason: { type: [string, "null"], description: UI-safe reason when registration is closed. }
+        registrationManuallyClosed: { type: boolean }
+    RegistrationStateResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/RegistrationState" } } }
+    MyTeamResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MyTeamResult" } } }
+    TeamListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/TeamList" } } }
+    TeamResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/OrganiserTeam" } } }
+    JudgeSubmissionListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/JudgeSubmissionList" } } }
+    JudgingCriteriaResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/JudgingCriteria" } } }
+    JudgeSubmissionDetailResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/JudgeSubmissionDetail" } } }
+    JudgeNextResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/JudgeNext" } } }
+    JudgeScoresSavedResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/JudgeScoresSaved" } } }
+
+    OrderStatus: { type: string, enum: [REQUESTED, PENDING, CONFIRMED, EXPIRED, CANCELLED] }
+    Money: { type: string, description: Formatted for display, in the order's currency. }
+    MinorUnits: { type: string, pattern: "^-?[0-9]+$", description: An amount in minor units, as a decimal string. }
+    MfaVerified:
+      type: object
+      additionalProperties: false
+      required: [mfaVerifiedAt]
+      properties:
+        mfaVerifiedAt: { $ref: "#/components/schemas/DateTime" }
+    PublicTicket:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, priceMinor, currency, minPerOrder, maxPerOrder, sales, salesStartAt, salesEndAt, remaining, pass, passDates, flexible, suggestedMinor, maxPriceMinor, seatsPerTicket, feeMinor, visibility, payAtDesk]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        priceMinor: { type: integer, description: "FIXED: the price. FLEXIBLE: the least a buyer may pay." }
+        currency: { type: string }
+        minPerOrder: { type: integer }
+        maxPerOrder: { type: integer }
+        sales: { type: string }
+        salesStartAt: { $ref: "#/components/schemas/NullableDateTime" }
+        salesEndAt: { $ref: "#/components/schemas/NullableDateTime" }
+        remaining: { type: [integer, "null"] }
+        pass: { type: boolean }
+        passDates: { type: [integer, "null"] }
+        flexible: { type: boolean }
+        suggestedMinor: { type: [integer, "null"] }
+        maxPriceMinor: { type: [integer, "null"] }
+        seatsPerTicket: { type: integer }
+        feeMinor: { type: integer }
+        visibility: { type: string, enum: [PUBLIC, CODE, MEMBERS] }
+        payAtDesk: { type: boolean }
+    PublicAddOn:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, priceMinor, currency, maxPerOrder, remaining]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        priceMinor: { type: integer }
+        currency: { type: string }
+        maxPerOrder: { type: integer }
+        remaining: { type: [integer, "null"] }
+    Ticketing:
+      type: object
+      additionalProperties: false
+      required: [currency, tickets, addOns, promoCodes, accessCodes, sellsPaid, paidSalesOpen, refundPolicy]
+      properties:
+        currency: { type: string }
+        tickets: { type: array, items: { $ref: "#/components/schemas/PublicTicket" } }
+        addOns: { type: array, items: { $ref: "#/components/schemas/PublicAddOn" } }
+        promoCodes: { type: boolean }
+        accessCodes: { type: boolean }
+        sellsPaid: { type: boolean }
+        paidSalesOpen: { type: boolean, description: Paid tickets can be bought right now. }
+        refundPolicy: { type: [string, "null"] }
+    PromoCheck:
+      type: object
+      additionalProperties: false
+      required: [kind, appliesPer, percentOff, amountOffMinor, ticketTypeId, minQuantity, perOrderLimit]
+      properties:
+        kind: { type: string, enum: [PERCENT, FIXED] }
+        appliesPer: { type: string, enum: [TICKET, ORDER] }
+        percentOff: { type: [number, "null"] }
+        amountOffMinor: { type: [string, "null"] }
+        ticketTypeId: { type: [string, "null"] }
+        minQuantity: { type: integer }
+        perOrderLimit: { type: [integer, "null"] }
+    AccessCodeTickets:
+      type: object
+      additionalProperties: false
+      required: [tickets]
+      properties:
+        tickets: { type: array, items: { $ref: "#/components/schemas/PublicTicket" } }
+    SeriesDate:
+      type: object
+      additionalProperties: false
+      required: [instanceId, startDateTime, endDateTime, capacity, spotsLeft, cancelled]
+      properties:
+        instanceId: { type: string }
+        startDateTime: { $ref: "#/components/schemas/DateTime" }
+        endDateTime: { $ref: "#/components/schemas/DateTime" }
+        capacity: { type: [integer, "null"] }
+        spotsLeft: { type: [integer, "null"] }
+        cancelled: { type: boolean }
+    SeriesDateDetail:
+      type: object
+      additionalProperties: false
+      required: [series, date, registrationOpen, paidRequest, myRsvp, ticketing, upcomingDates]
+      properties:
+        series:
+          type: object
+          additionalProperties: false
+          required: [slug, title, description, timezone, requiresApproval]
+          properties:
+            slug: { type: string }
+            title: { type: string }
+            description: { type: string }
+            timezone: { type: string }
+            requiresApproval: { type: boolean }
+        date: { $ref: "#/components/schemas/SeriesDate" }
+        registrationOpen: { type: boolean }
+        paidRequest: { type: [string, "null"], enum: [approval, waitlist, null] }
+        myRsvp:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [rsvpId, status, ticketToken]
+          properties:
+            rsvpId: { type: string }
+            status: { $ref: "#/components/schemas/RsvpStatus" }
+            ticketToken: { type: [string, "null"] }
+        ticketing:
+          oneOf:
+            - { $ref: "#/components/schemas/Ticketing" }
+            - { type: "null" }
+        upcomingDates: { type: array, items: { $ref: "#/components/schemas/SeriesDate" } }
+    OrderSummary:
+      type: object
+      additionalProperties: false
+      required: [id, reference, status, total, totalMinor, currency, createdAt, holdExpiresAt, ticketCount, event]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        total: { $ref: "#/components/schemas/Money" }
+        totalMinor: { $ref: "#/components/schemas/MinorUnits" }
+        currency: { type: string }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        holdExpiresAt: { $ref: "#/components/schemas/NullableDateTime" }
+        ticketCount: { type: integer }
+        event:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [title, organisation, startDateTime]
+          properties:
+            title: { type: string }
+            organisation: { type: string }
+            startDateTime: { $ref: "#/components/schemas/NullableDateTime" }
+    OrderList:
+      type: object
+      additionalProperties: false
+      required: [orders, nextCursor]
+      properties:
+        orders: { type: array, items: { $ref: "#/components/schemas/OrderSummary" } }
+        nextCursor: { type: [string, "null"] }
+    OrderTicket:
+      type: object
+      additionalProperties: false
+      required: [rsvpId, label, name, email, account, needsDetails, status, checkedIn, ticketToken, transferUntil]
+      properties:
+        rsvpId: { type: string }
+        label: { type: string }
+        name: { type: string }
+        email: { type: string }
+        account: { type: boolean }
+        needsDetails: { type: boolean }
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+        checkedIn: { type: boolean }
+        ticketToken: { type: [string, "null"], description: Only for a CONFIRMED ticket. }
+        transferUntil: { $ref: "#/components/schemas/NullableDateTime" }
+    OrderDetail:
+      type: object
+      additionalProperties: false
+      required: [id, reference, status, testMode, holdActive, holdExpiresAt, canPay, receiptAvailable, total, subtotal, discount, refunded, refundPolicy, cancellation, canRequestRefund, refundRequest, free, pass, event, lines, tickets]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        testMode: { type: boolean }
+        holdActive: { type: boolean }
+        holdExpiresAt: { $ref: "#/components/schemas/NullableDateTime" }
+        canPay: { type: boolean }
+        receiptAvailable: { type: boolean }
+        total: { $ref: "#/components/schemas/Money" }
+        subtotal: { $ref: "#/components/schemas/Money" }
+        discount: { type: [string, "null"] }
+        refunded: { type: [object, "null"], additionalProperties: false, required: [amount, pending], properties: { amount: { type: string }, pending: { type: boolean } } }
+        refundPolicy: { type: [string, "null"] }
+        cancellation: { type: [object, "null"], additionalProperties: false, required: [refund, team], properties: { refund: { type: [string, "null"] }, team: { type: [string, "null"] } }, description: What cancelling now returns; null when the buyer can't cancel. }
+        canRequestRefund: { type: boolean }
+        refundRequest: { type: [object, "null"], additionalProperties: false, required: [status, note, approved], properties: { status: { type: string }, note: { type: [string, "null"] }, approved: { type: [string, "null"] } } }
+        free: { type: boolean }
+        pass: { type: boolean }
+        event: { type: [object, "null"], additionalProperties: false, required: [title, organisation, startDateTime, timezone], properties: { title: { type: string }, organisation: { type: string }, startDateTime: { $ref: "#/components/schemas/NullableDateTime" }, timezone: { type: string } } }
+        lines: { type: array, items: { type: object, additionalProperties: false, required: [id, label, amount], properties: { id: { type: string }, label: { type: string }, amount: { type: string } } } }
+        tickets: { type: array, items: { $ref: "#/components/schemas/OrderTicket" } }
+    Checkout:
+      type: object
+      additionalProperties: false
+      required: [checkoutUrl]
+      properties:
+        checkoutUrl: { type: string, format: uri }
+    Claim:
+      type: object
+      additionalProperties: false
+      required: [id, status, category, amount, approved, note]
+      properties:
+        id: { type: string }
+        status: { type: string }
+        category: { type: string }
+        amount: { type: string }
+        approved: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+    ParticipantClaims:
+      type: object
+      additionalProperties: false
+      required: [currency, cap, categories, claims]
+      properties:
+        currency: { type: string }
+        cap: { type: [string, "null"] }
+        categories: { type: array, items: { type: object, additionalProperties: false, required: [value, label], properties: { value: { type: string }, label: { type: string } } } }
+        claims: { type: array, items: { $ref: "#/components/schemas/Claim" } }
+    StaffClaim:
+      description: Closed form of StaffClaimFields (no other properties).
+      allOf: [{ $ref: "#/components/schemas/StaffClaimFields" }]
+      unevaluatedProperties: false
+    StaffClaimFields:
+      type: object
+      required: [id, status, category, amount, approved, note, description, createdAt, receiptIds]
+      properties:
+        id: { type: string }
+        status: { type: string }
+        category: { type: string }
+        amount: { type: string }
+        approved: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+        description: { type: string }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        receiptIds: { type: array, items: { type: string } }
+    StaffClaims:
+      type: object
+      additionalProperties: false
+      required: [currency, claims]
+      properties:
+        currency: { type: string }
+        claims: { type: array, items: { $ref: "#/components/schemas/StaffClaim" } }
+    AdminClaim:
+      unevaluatedProperties: false
+      allOf:
+        - { $ref: "#/components/schemas/StaffClaimFields" }
+        - type: object
+          required: [claimant, kind]
+          properties:
+            claimant: { type: string }
+            kind: { type: string }
+    AdminClaims:
+      type: object
+      additionalProperties: false
+      required: [currency, claims, refundRequests]
+      properties:
+        currency: { type: string }
+        claims: { type: array, items: { $ref: "#/components/schemas/AdminClaim" } }
+        refundRequests:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, orderId, reference, buyerName, reason, status, createdAt]
+            properties:
+              id: { type: string }
+              orderId: { type: string }
+              reference: { type: string }
+              buyerName: { type: string }
+              reason: { type: string }
+              status: { type: string }
+              createdAt: { $ref: "#/components/schemas/DateTime" }
+    MySubmission:
+      type: object
+      additionalProperties: false
+      required: [eventId, eventTitle, entrantName, isTeam, window, confirmed, declined, canEdit, submission, entryFee]
+      properties:
+        eventId: { type: string }
+        eventTitle: { type: string }
+        entrantName: { type: string }
+        isTeam: { type: boolean }
+        window: { type: object, additionalProperties: false, required: [opensAt, closesAt, isOpen], properties: { opensAt: { $ref: "#/components/schemas/NullableDateTime" }, closesAt: { $ref: "#/components/schemas/NullableDateTime" }, isOpen: { type: boolean } } }
+        confirmed: { type: boolean }
+        declined: { type: boolean }
+        canEdit: { type: boolean }
+        submission:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [title, summary, status, submittedAt, links]
+          properties:
+            title: { type: string }
+            summary: { type: string }
+            status: { type: string }
+            submittedAt: { $ref: "#/components/schemas/NullableDateTime" }
+            links: { type: object, additionalProperties: false, required: [repo, demo, video], properties: { repo: { $ref: "#/components/schemas/NullableUrl" }, demo: { $ref: "#/components/schemas/NullableUrl" }, video: { $ref: "#/components/schemas/NullableUrl" } } }
+        entryFee: { type: [object, "null"], additionalProperties: false, required: [amount, amountMinor, currency, paid], properties: { amount: { type: string }, amountMinor: { type: string }, currency: { type: string }, paid: { type: boolean } } }
+    MySubmissions:
+      type: object
+      additionalProperties: false
+      required: [submissions]
+      properties:
+        submissions: { type: array, items: { $ref: "#/components/schemas/MySubmission" } }
+    MyPrize:
+      type: object
+      additionalProperties: false
+      required: [eventTitle, awardName, place, projectTitle, prize, payouts]
+      properties:
+        eventTitle: { type: string }
+        awardName: { type: string }
+        place: { type: integer }
+        projectTitle: { type: string }
+        prize: { type: [string, "null"] }
+        payouts: { type: array, items: { type: object, additionalProperties: false, required: [amount, paidAt, reversed], properties: { amount: { type: string }, paidAt: { $ref: "#/components/schemas/DateTime" }, reversed: { type: boolean } } } }
+    MyPrizes:
+      type: object
+      additionalProperties: false
+      required: [prizes]
+      properties:
+        prizes: { type: array, items: { $ref: "#/components/schemas/MyPrize" } }
+    OrganiserOrder:
+      type: object
+      additionalProperties: false
+      required: [id, reference, status, buyerName, buyerEmail, total, paid, refunded, due, currency, createdAt, holdExpiresAt, payAtDesk, tickets]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        buyerName: { type: string }
+        buyerEmail: { type: string }
+        total: { type: string }
+        paid: { type: string }
+        refunded: { type: string }
+        due: { type: string }
+        currency: { type: string }
+        createdAt: { $ref: "#/components/schemas/DateTime" }
+        holdExpiresAt: { $ref: "#/components/schemas/NullableDateTime" }
+        payAtDesk: { type: boolean }
+        tickets: { type: array, items: { type: object, additionalProperties: false, required: [rsvpId, name, status, checkedIn], properties: { rsvpId: { type: string }, name: { type: string }, status: { $ref: "#/components/schemas/RsvpStatus" }, checkedIn: { type: boolean } } } }
+    PaymentInfo:
+      type: object
+      additionalProperties: false
+      required: [due, orderId, payAtDesk]
+      description: Money still owed on the guest's order, for settling at the desk.
+      properties:
+        due: { type: [string, "null"] }
+        orderId: { type: [string, "null"] }
+        payAtDesk: { type: boolean }
+    CheckInList:
+      type: object
+      additionalProperties: false
+      required: [id, name, requiresEntryCheckIn, checkedIn]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        requiresEntryCheckIn: { type: boolean }
+        checkedIn: { type: integer }
+    CheckInLists:
+      type: object
+      additionalProperties: false
+      required: [lists]
+      properties:
+        lists: { type: array, items: { $ref: "#/components/schemas/CheckInList" } }
+    ListCheckInResult:
+      type: object
+      additionalProperties: false
+      required: [listId, listName, rsvpId, displayName, email, status, alreadyCheckedIn, checkedInAt, entryCheckedInAt, message]
+      properties:
+        listId: { type: string }
+        listName: { type: string }
+        rsvpId: { type: string }
+        displayName: { type: string }
+        email: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/RsvpStatus" }
+        alreadyCheckedIn: { type: boolean }
+        checkedInAt: { $ref: "#/components/schemas/DateTime" }
+        entryCheckedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+        message: { type: string }
+    NullDataResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { type: "null" } } }
+    MfaVerifiedResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MfaVerified" } } }
+    OrderListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/OrderList" } } }
+    OrderDetailResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/OrderDetail" } } }
+    CheckoutResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/Checkout" } } }
+    SeriesDateResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/SeriesDateDetail" } } }
+    PromoCheckResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/PromoCheck" } } }
+    AccessCodeResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/AccessCodeTickets" } } }
+    StaffClaimsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/StaffClaims" } } }
+    AdminClaimsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/AdminClaims" } } }
+    MySubmissionsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MySubmissions" } } }
+    MyPrizesResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MyPrizes" } } }
+    OrganiserOrderResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/OrganiserOrder" } } }
+    CheckInListsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CheckInLists" } } }
+    ListCheckInResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ListCheckInResult" } } }
+    ParticipantClaimsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/ParticipantClaims" }, { type: "null" }] } } }
+    CrewMember:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, role, foodPreference, showOnPage, joinedViaLink, rsvpId, checkedInAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        foodPreference: { type: string }
+        showOnPage: { type: boolean }
+        joinedViaLink: { type: boolean }
+        rsvpId: { type: string }
+        checkedInAt: { $ref: "#/components/schemas/NullableDateTime" }
+    CrewList:
+      type: object
+      additionalProperties: false
+      required: [members, food]
+      properties:
+        members: { type: array, items: { $ref: "#/components/schemas/CrewMember" } }
+        food: { type: array, items: { type: object, additionalProperties: false, required: [label, count], properties: { label: { type: string }, count: { type: integer } } } }
+    CrewListResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CrewList" } } }

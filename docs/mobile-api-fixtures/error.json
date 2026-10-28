@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Invalid input.",
+    "fieldErrors": { "name": ["Name is required"] }
+  }
+}

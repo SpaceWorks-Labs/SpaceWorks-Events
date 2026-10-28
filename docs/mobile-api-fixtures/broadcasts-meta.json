@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "data": {
+    "templates": [
+      {
+        "id": "update",
+        "group": "Before the event",
+        "name": "General update",
+        "description": "A short note to everyone with a confirmed place.",
+        "subject": "Update about {{event}}",
+        "bodyHtml": "<p>Hello {{name}},</p><p>(Write your message here.)</p>",
+        "audience": { "statuses": ["CONFIRMED"], "attendance": "ANY" }
+      }
+    ],
+    "designs": [ { "id": "classic", "label": "Classic", "description": "Dark header with your organisation's name." } ],
+    "placeholders": ["{{name}}", "{{event}}", "{{eventDate}}", "{{location}}", "{{eventUrl}}", "{{ticketLink}}", "{{feedbackUrl}}", "{{scheduleUrl}}", "{{organisation}}"],
+    "history": [
+      { "id": "clbroadcast00000000000001", "subject": "Doors open at 6", "design": "classic", "audience": { "statuses": ["CONFIRMED", "WAITLISTED"], "attendance": "ANY" }, "recipientCount": 57, "sentAt": "2030-05-09T12:00:00.000Z", "bodyHtml": "<p>See you tomorrow!</p>" }
+    ]
+  }
+}

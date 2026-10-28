@@ -9,12 +9,12 @@ import { CheckboxField, Radio, RadioGroup } from "@/components/ui/choice";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Callout } from "@/components/ui/display";
 import { Field, Input } from "@/components/ui/field";
-import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
-import { REVIEWS_PER_PROJECT_MAX, REVIEWS_PER_PROJECT_MIN, type AutoAssignMode } from "@/lib/judgingProgress";
+import { REVIEWS_PER_PROJECT_MAX, REVIEWS_PER_PROJECT_MIN, type AutoAssignMode, type AutoAssignStrategy } from "@/lib/judgingProgress";
 import type { AutoAssignPreviewDto } from "@/lib/core/judgingOps";
 import type { EligibleJudgeDto } from "@/lib/core/judging";
 import type { JudgingScope } from "./JudgingPanelShared";
-import { AUTO_ASSIGN_MODE_COPY, autoAssignPreviewHeadline, SEE_ALL_SWITCH_WARNING } from "./judgingOpsCopy";
+import { AUTO_ASSIGN_MODE_COPY, AUTO_ASSIGN_STRATEGY_COPY } from "./judgingOpsCopy";
+import { AutoAssignPreview } from "./JudgingAutoAssignDialog/AutoAssignPreview";
 
 /**
  * Assign judges automatically (docs/HACKATHON.md): pick the judges per
@@ -22,7 +22,9 @@ import { AUTO_ASSIGN_MODE_COPY, autoAssignPreviewHeadline, SEE_ALL_SWITCH_WARNIN
  * are in by default; organisers only when ticked). Preview shows every
  * judge's load before and after and the projects that can't reach the
  * target; Apply re-plans on the server under the event lock and refuses if
- * anything changed since the preview.
+ * anything changed since the preview. "Random" draws a seed on the server,
+ * shown with the preview; "Re-roll" previews again with a new seed, and Apply
+ * uses the seed previewed (docs/HACKATHON.md "Rounds").
  */
 export function AutoAssignDialog({
   open,
@@ -64,6 +66,7 @@ function AutoAssignForm({
   const organisers = judges.filter((judge) => judge.kind === "admin");
   const [perProject, setPerProject] = useState(String(defaultPerProject));
   const [mode, setMode] = useState<AutoAssignMode>("keep");
+  const [strategy, setStrategy] = useState<AutoAssignStrategy>("balanced");
   const [pool, setPool] = useState<Set<string>>(() => new Set(invited.map((judge) => judge.userId)));
   const [preview, setPreview] = useState<AutoAssignPreviewDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +74,7 @@ function AutoAssignForm({
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
 
-  const options = () => ({ perProject: perProject.trim(), mode, judgeUserIds: [...pool] });
+  const options = () => ({ perProject: perProject.trim(), mode, strategy, judgeUserIds: [...pool] });
   const changed = () => {
     setPreview(null);
     setError(null);
@@ -86,7 +89,8 @@ function AutoAssignForm({
     changed();
   };
 
-  function runPreview() {
+  function runPreview(reroll = false) {
+    if (reroll) setPreview(null);
     setBusy("preview");
     setError(null);
     setFieldErrors(undefined);
@@ -111,7 +115,7 @@ function AutoAssignForm({
     setError(null);
     startTransition(async () => {
       try {
-        const res = await applyJudgeAutoAssignment({ ...scope, options: { ...options(), fingerprint: preview.fingerprint } });
+        const res = await applyJudgeAutoAssignment({ ...scope, options: { ...options(), fingerprint: preview.fingerprint, ...(preview.seed ? { seed: preview.seed } : {}) } });
         if (!res.ok || !res.data) {
           setError(res.ok ? "Couldn't apply the assignment. Try again." : res.error);
           setPreview(null);
@@ -170,6 +174,22 @@ function AutoAssignForm({
           </RadioGroup>
         </fieldset>
 
+        <fieldset className="flex flex-col gap-2.5">
+          <legend className="mb-2 text-label text-ink">How judges are picked</legend>
+          <RadioGroup
+            value={strategy}
+            onValueChange={(value) => {
+              setStrategy(value as AutoAssignStrategy);
+              changed();
+            }}
+            aria-label="How judges are picked"
+          >
+            {(["balanced", "random"] as const).map((value) => (
+              <Radio key={value} value={value} label={AUTO_ASSIGN_STRATEGY_COPY[value].label} description={AUTO_ASSIGN_STRATEGY_COPY[value].description} />
+            ))}
+          </RadioGroup>
+        </fieldset>
+
         <fieldset className="flex flex-col gap-2.5" aria-describedby={poolError ? "auto-assign-pool-error" : undefined}>
           <legend className="mb-2 text-label text-ink">Who judges</legend>
           {invited.length === 0 ? <p className="text-caption text-ink-muted">No invited judges yet. Tick organisers below, or invite judges from Settings.</p> : null}
@@ -209,63 +229,7 @@ function AutoAssignForm({
           </Callout>
         ) : null}
 
-        {preview ? (
-          <section aria-label="Preview" className="flex flex-col gap-3" data-testid="auto-assign-preview">
-            <p role="status" className="text-body-ui font-semibold text-ink">
-              {autoAssignPreviewHeadline(preview)}
-            </p>
-            {preview.judgesSeeAll ? <Callout tone="warning">{SEE_ALL_SWITCH_WARNING}</Callout> : null}
-            <Table label="Assignments per judge">
-              <THead>
-                <tr>
-                  <TH>Judge</TH>
-                  <TH className="text-right">Now</TH>
-                  <TH className="text-right">Change</TH>
-                  <TH className="text-right">After</TH>
-                </tr>
-              </THead>
-              <TBody>
-                {preview.judges.map((judge) => (
-                  <TR key={judge.userId}>
-                    <TD>
-                      <span className="block font-semibold">{judge.name}</span>
-                      <span className="block text-caption text-ink-muted">{judge.kind === "admin" ? "Organiser" : "Judge"}</span>
-                    </TD>
-                    <TD className="text-right tabular-nums">{judge.before}</TD>
-                    <TD className="whitespace-nowrap text-right tabular-nums">
-                      {judge.added ? `+${judge.added}` : ""}
-                      {judge.added && judge.removed ? " " : ""}
-                      {judge.removed ? `−${judge.removed}` : ""}
-                      {!judge.added && !judge.removed ? "—" : ""}
-                    </TD>
-                    <TD className="text-right font-semibold tabular-nums">{judge.after}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-            {preview.shortfallTotal > 0 ? (
-              <div className="flex flex-col gap-2">
-                <h3 className="text-label text-ink">Projects short of {preview.perProject} judges</h3>
-                <ul className="flex flex-col divide-y divide-line rounded-lg border border-line">
-                  {preview.shortfalls.map((row) => (
-                    <li key={row.submissionId} className="flex items-center justify-between gap-3 px-4 py-2.5 text-body-ui">
-                      <span className="min-w-0">
-                        <span className="block truncate font-semibold">{row.title}</span>
-                        <span className="block truncate text-caption text-ink-muted">{row.entrantName}</span>
-                      </span>
-                      <span className="shrink-0 text-caption tabular-nums text-ink-secondary">
-                        {row.assigned} of {preview.perProject}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {preview.shortfallTotal > preview.shortfalls.length ? (
-                  <p className="text-caption text-ink-muted">and {preview.shortfallTotal - preview.shortfalls.length} more.</p>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
-        ) : null}
+        {preview ? <AutoAssignPreview preview={preview} onReroll={preview.strategy === "random" ? () => runPreview(true) : undefined} busy={pending} /> : null}
       </DialogBody>
       <DialogFooter>
         <Button variant="secondary" onClick={onDone} disabled={pending}>
@@ -276,7 +240,7 @@ function AutoAssignForm({
             Apply assignment
           </Button>
         ) : (
-          <Button variant="primary" onClick={runPreview} loading={busy === "preview"} loadingLabel="Previewing…" disabled={pending}>
+          <Button variant="primary" onClick={() => runPreview()} loading={busy === "preview"} loadingLabel="Previewing…" disabled={pending}>
             Preview
           </Button>
         )}

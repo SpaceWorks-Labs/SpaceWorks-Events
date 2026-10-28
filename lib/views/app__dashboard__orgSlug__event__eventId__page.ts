@@ -13,7 +13,10 @@ export async function loadEventManageView({ params }: Props) {
   const { organisation, event, permissions } = ctx;
   // A JUDGE-only collaborator sees the judging workspace and nothing else:
   // no tabs, header stats, page link, or check-in (docs/HACKATHON.md).
-  if (permissions.isJudgeOnly) return { judgeOnly: true as const, organisation, event, permissions, ctx };
+  if (permissions.isJudgeOnly) return { judgeOnly: true as const, mentorOnly: false as const, organisation, event, permissions, ctx };
+  // A mentor-only collaborator (MENTOR, possibly with JUDGE) sees the mentor
+  // console (and the judging workspace for JUDGE) and nothing else (docs/MENTOR_DESK.md).
+  if (permissions.isMentorOnly) return { judgeOnly: false as const, mentorOnly: true as const, organisation, event, permissions, ctx };
   const teamMode = event.registrationMode === "TEAM";
   const [counts, capacityUsed] = permissions.canManageRegistrations
     ? await Promise.all([loadRsvpStatusCounts(event.id), loadCapacityUsed(event.id, event.registrationMode)])
@@ -47,5 +50,7 @@ export async function loadEventManageView({ params }: Props) {
   // eight tabs. Until then owners and admins turn submissions on in Settings.
   const showJudging = (permissions.canManageJudging || permissions.canJudge) && (await eventUsesJudging(ctx));
   const publicPath = `/${organisation.slug}/${event.slug}`;
-  return { judgeOnly: false as const, organisation, event, stats, permissions, ctx, publicPath, counts, showJudging };
+  // Mentors tab: once the Mentor Desk is on (Settings), for owners/admins and mentors.
+  const showMentors = event.mentorDeskEnabled && (permissions.canManageMentorDesk || permissions.canMentor);
+  return { judgeOnly: false as const, mentorOnly: false as const, organisation, event, stats, permissions, ctx, publicPath, counts, showJudging, showMentors };
 }

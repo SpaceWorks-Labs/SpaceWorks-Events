@@ -4,8 +4,15 @@ import type { RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { publishTicketCheckedIn } from "@/lib/ticketCheckInEvents";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { currentMobileActor } from "@/lib/requestActor";
 
-type CheckInSource = "online" | "offline-sync" | "venue-station";
+/** A mobile app's dashboard-style check-in records how the app reached it. */
+function recordedSource<T extends CheckInSource>(source: T): T | "mobile-scan" | "mobile-manual" {
+  const actor = currentMobileActor();
+  return source === "online" && actor?.checkInSource ? actor.checkInSource : source;
+}
+
+export type CheckInSource = "online" | "offline-sync" | "venue-station" | "mobile-scan" | "mobile-manual";
 
 export type CheckInCommitResult =
   | { state: "checked-in"; checkedInAt: Date }
@@ -44,7 +51,7 @@ export async function commitCheckInProjection(params: {
           rsvpId: params.rsvpId,
           actorUserId: params.actorUserId,
           action: "CHECKED_IN",
-          source: params.source,
+          source: recordedSource(params.source),
           occurredAt: params.checkedInAt,
         },
       });
@@ -65,7 +72,7 @@ export async function commitCheckInProjection(params: {
 export async function commitUndoCheckInProjection(params: {
   rsvpId: string;
   actorUserId: string | null;
-  source: "online" | "venue-station";
+  source: "online" | "venue-station" | "mobile-scan" | "mobile-manual";
 }) {
   const undone = await prisma.$transaction(async (tx) => {
     const changed = await tx.rSVP.updateMany({
@@ -78,7 +85,7 @@ export async function commitUndoCheckInProjection(params: {
         rsvpId: params.rsvpId,
         actorUserId: params.actorUserId,
         action: "CHECK_IN_UNDONE",
-        source: params.source,
+        source: recordedSource(params.source),
       },
     });
     return true;

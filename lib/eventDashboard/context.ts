@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getRequestOrigin } from "@/lib/publicUrl";
-import { isOrgAdmin, requireOrgDashboardAccess } from "@/lib/permissions";
+import { requireOrgDashboardAccess } from "@/lib/permissions";
 import { eventForView, type EventView } from "@/lib/frontend/eventView";
 import { canViewEventDashboard } from "@/lib/eventAccess";
 import { eventCapabilities, type EventCapabilities } from "@/lib/eventDashboard/capabilities";
@@ -53,10 +53,8 @@ export const loadEventDashboard = cache(async (orgSlug: string, eventId: string)
   if (!event) notFound();
   if (!access.membership && !(await canViewEventDashboard({ userId: access.userId, organisationId: organisation.id, eventId: event.id }))) notFound();
 
-  const isAdmin = Boolean(access.membership && isOrgAdmin(access.membership.role));
-  const grant = isAdmin
-    ? null
-    : await prisma.eventCollaborator.findFirst({ where: { eventId: event.id, userId: access.userId }, select: { permissions: true } });
+  // Read for owners and admins too: an admin may also hold a MENTOR grant (canMentor).
+  const grant = await prisma.eventCollaborator.findFirst({ where: { eventId: event.id, userId: access.userId }, select: { permissions: true } });
 
   return {
     organisation: { id: organisation.id, slug: organisation.slug, name: organisation.name },

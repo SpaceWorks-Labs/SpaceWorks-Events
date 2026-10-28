@@ -84,3 +84,30 @@ export async function sendResultsPublishedEmail(params: {
   }
   await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
 }
+
+/** A round's finalists are announced: the entrant's project advanced. Links to the public results page; never scores. */
+export async function sendFinalistsAnnouncedEmail(params: {
+  to: string;
+  eventTitle: string;
+  roundName: string;
+  /** Every finalist project of this person, in one email. */
+  projectTitles: string[];
+  resultsPath: string;
+  recipientName?: string;
+  messageId?: string;
+}): Promise<void> {
+  const { transporter, from } = await getEmailTransport();
+  const resultsUrl = `${getBaseUrl()}${params.resultsPath}`;
+  const salutation = greeting(params.recipientName);
+  const subject = `You're through to ${headerText(params.roundName)} · ${headerText(params.eventTitle)}`;
+  const html = emailLayout(escapeHtml(subject), `
+          <h2 style="${HEADING_STYLE}">You're a finalist</h2>
+          <p style="${BODY_STYLE}">${salutation.html}<br><br>${params.projectTitles.length === 1 ? "Your project" : "Your projects"} ${params.projectTitles.map((title) => `<strong>${escapeHtml(title)}</strong>`).join(", ")} ${params.projectTitles.length === 1 ? "has" : "have"} advanced to <strong>${escapeHtml(params.roundName)}</strong> of <strong>${escapeHtml(params.eventTitle)}</strong>. The organisers will share what happens next.</p>
+          ${emailButton(resultsUrl, "See the finalists")}`);
+  const text = `${subject}\n\n${salutation.text}\n\n${params.projectTitles.length === 1 ? "Your project" : "Your projects"} ${params.projectTitles.map((title) => `"${title}"`).join(", ")} ${params.projectTitles.length === 1 ? "has" : "have"} advanced to ${params.roundName} of "${params.eventTitle}". The organisers will share what happens next.\n\n${resultsUrl}\n\nBest regards,\nSpace Works Events`;
+  if (!transporter) {
+    console.log("[EMAIL MOCK] finalists announcement queued");
+    return;
+  }
+  await transporter.sendMail({ messageId: params.messageId, from, to: params.to, subject, text, html });
+}

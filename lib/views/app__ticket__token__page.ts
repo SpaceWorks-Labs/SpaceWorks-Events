@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { safeTimeZone } from "@/lib/timeZone";
 import { safeHttpUrl } from "@/lib/safeHttpUrl";
 import { type CalendarEvent } from "@/lib/calendarInvite";
@@ -117,6 +118,7 @@ export async function loadTicketView({ params, searchParams }: Props) {
           soloPolicy: true,
           status: true,
           submissionsEnabled: true,
+          mentorDeskEnabled: true,
           page: { select: { accentColor: true, isPublished: true } },
           organisation: { select: { slug: true, name: true } },
         },
@@ -225,10 +227,15 @@ export async function loadTicketView({ params, searchParams }: Props) {
   const viewerId = isCrew ? null : await ticketViewerId(rsvp);
   const teamSection = isCrew ? null : await loadTicketTeamSection(rsvp, isCheckedIn, viewerId);
   const submissionMode = isCrew ? null : ticketSubmissionMode(rsvp, viewerId);
+  // Mentor Desk (docs/MENTOR_DESK.md): help is raised from the signed-in account
+  // or the team page, never from this ticket link alone; crew tickets have no help card.
+  const mentorDesk = !isCrew && rsvp.event?.mentorDeskEnabled && rsvp.eventId && rsvp.status === "CONFIRMED"
+    ? { href: `/account/mentoring/${encodeURIComponent(rsvp.eventId)}`, signedIn: Boolean(rsvp.userId && (viewerId ?? (await auth())?.user?.id) === rsvp.userId), hasAccount: Boolean(rsvp.userId) }
+    : null;
   const claims = await loadTicketClaims(rsvp);
   // "My shifts" (docs/VOLUNTEERS.md): crew tickets of events with volunteer shifts on.
   const myShifts = isCrew ? await loadMyShifts(rsvp) : null;
   // A designed ticket (docs/TICKET_DESIGNER.md) is shown above the live check-in stub.
   const designedTicket = rsvp.status === "CONFIRMED" ? Boolean((await ticketDesignFor(rsvp.checkInToken))?.custom) : false;
-  return { isCrew, myShifts, designedTicket, claims, teamSection, submissionMode, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
+  return { isCrew, myShifts, designedTicket, claims, teamSection, submissionMode, mentorDesk, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
 }

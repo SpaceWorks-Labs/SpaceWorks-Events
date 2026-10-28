@@ -21,6 +21,7 @@ import { CHAT_MESSAGE_KIND } from "@/lib/chat/notify";
 import { EVENT_REMINDER_KIND, PermanentOutboxError, asCollaboratorInvitePayload, asEmailVerificationPayload, asEventInvitePayload, asEventReminderPayload, asOperatorNoticePayload, asPasswordResetPayload, asRsvpConfirmationPayload, asRsvpStatusPayload, asSignInCodePayload, containsCapability, isExpired, messageId, retryDelayMs } from "./payloads";
 import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
+import { deliverMentorMessage, isMentorMessageKind } from "./mentor";
 import { deliverCrewMessage, isCrewMessageKind } from "./crew";
 import { deliverVolunteerNotice, VOLUNTEER_NOTICE_KIND } from "./volunteer";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
@@ -207,11 +208,13 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || message.kind === VOLUNTEER_NOTICE_KIND) {
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind) || message.kind === VOLUNTEER_NOTICE_KIND) {
         const outcome = isTeamMessageKind(message.kind)
           ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
           : isCrewMessageKind(message.kind)
             ? await deliverCrewMessage(message.payload, stableMessageId)
+            : isMentorMessageKind(message.kind)
+              ? await deliverMentorMessage(message.kind, message.payload, stableMessageId)
             : message.kind === VOLUNTEER_NOTICE_KIND
               ? await deliverVolunteerNotice(message.payload, stableMessageId)
               : await deliverJudgingMessage(message.kind, message.payload, stableMessageId);

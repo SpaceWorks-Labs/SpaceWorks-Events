@@ -30,7 +30,11 @@ matter, like prize payouts and payment settings. Every step is audited.
 - **Staff** (organisation members and co-organisers, from the Finance tab)
   claim for themselves or on behalf of someone else, such as a speaker or a
   volunteer, by giving that person's name and email; the person being paid
-  back gets the emails.
+  back gets the emails. Any event co-organiser grant qualifies, including a
+  mentor-only `MENTOR` grant ([Mentor Desk](MENTOR_DESK.md)): the server
+  accepts their claim for that one event only (`canViewEventDashboard` on the
+  event), and they withdraw only their own claims. The mentor console does not
+  show the claim form yet; deciding and paying stays with owners and admins.
 - **Participants** claim from their ticket page (travel grants) when the
   event turns on *Let confirmed participants claim expenses*, only while
   their registration is confirmed, and up to the optional cap per person.
@@ -108,6 +112,15 @@ matter, like prize payouts and payment settings. Every step is audited.
   the organisation's side.
 - The PDF event report's Money section gains *Spending*: claims and prizes
   paid, approved but unpaid, the budget, and the net after spending.
+
+## In the mobile apps
+
+Participants file and withdraw claims from a registration with receipt photos
+and see their decisions; staff file and withdraw their own; owners and admins
+see every claim and refund request and approve, decline or decide them
+([Mobile API](MOBILE_API.md)). Payouts, the budget and participant-claim
+settings stay on the website. Decisions from the app are held to the event in
+the path.
 
 ## Tests
 

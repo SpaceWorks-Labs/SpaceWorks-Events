@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "data": {
+    "id": "clorder00000000000000003",
+    "reference": "SW-3H8N1",
+    "status": "CONFIRMED",
+    "buyerName": "Ada Lovelace",
+    "buyerEmail": "ada@example.test",
+    "total": "₹499.00",
+    "paid": "₹0.00",
+    "refunded": "₹0.00",
+    "due": "₹499.00",
+    "currency": "INR",
+    "createdAt": "2030-05-29T11:00:00.000Z",
+    "holdExpiresAt": null,
+    "payAtDesk": true,
+    "tickets": [
+      {
+        "rsvpId": "clrsvp00000000000000003",
+        "name": "Ada L.",
+        "status": "CONFIRMED",
+        "checkedIn": false
+      }
+    ]
+  }
+}

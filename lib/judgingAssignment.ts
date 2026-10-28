@@ -62,6 +62,13 @@ export type AutoAssignInput = {
   adoptStarted?: boolean;
   /** Whether an existing assignment's judge can still judge the event (counts towards the target). */
   canJudge: (judgeUserId: string) => boolean;
+  /**
+   * RANDOM runs: a seed (32 hex characters) that replaces the fixed tie hash
+   * with a seeded one. Load balance, conflicts and the target rule work
+   * exactly as for BALANCED runs; only which of the equally loaded judges
+   * (and equally constrained projects) comes first depends on the seed.
+   */
+  seed?: string | null;
 };
 
 /**
@@ -98,6 +105,11 @@ export function tieHash(value: string): number {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash >>> 0;
+}
+
+/** A seeded tie value for RANDOM runs: the first 32 bits of SHA-256(seed, value). Stable per seed. */
+export function seededTie(seed: string, value: string): number {
+  return createHash("sha256").update(seed).update("\u0000").update(value).digest().readUInt32BE(0);
 }
 
 /** A small binary min-heap with a caller-supplied ordering. */
@@ -154,9 +166,11 @@ export function planFingerprint(
   perProject: number,
   mode: AutoAssignMode,
   adopt: readonly AssignmentPair[] = [],
+  seed: string | null = null,
 ): string {
   const hash = createHash("sha256");
   hash.update(`${mode}:${perProject}\n`);
+  if (seed) hash.update(`seed:${seed}\n`);
   for (const pair of [...add].sort(comparePairs)) hash.update(`+${pair.judgeUserId}:${pair.submissionId}\n`);
   for (const pair of [...remove].sort(comparePairs)) hash.update(`-${pair.judgeUserId}:${pair.submissionId}\n`);
   for (const pair of [...adopt].sort(comparePairs)) hash.update(`=${pair.judgeUserId}:${pair.submissionId}\n`);
@@ -168,6 +182,8 @@ type Candidate = { judgeUserId: string; load: number; tie: number };
 /** Build the assignment plan. Pure and deterministic: the same input gives the same plan. */
 export function planAutoAssignment(input: AutoAssignInput): AutoAssignPlan {
   const perProject = Math.max(1, Math.floor(input.perProject));
+  const seed = input.seed ?? null;
+  const tie = seed ? (value: string) => seededTie(seed, value) : tieHash;
   const pool = [...new Set(input.poolJudgeIds)];
   const projects = [...new Set(input.projectIds)].sort();
   const projectSet = new Set(projects);
@@ -224,7 +240,7 @@ export function planAutoAssignment(input: AutoAssignInput): AutoAssignPlan {
     possible.set(projectId, pool.filter((judgeId) => !taken.has(judgeId) && !input.blocked.has(pairKey(judgeId, projectId))));
   }
   const order = projects
-    .map((id) => ({ id, room: possible.get(id)!.length + counted.get(id)!, tie: tieHash(id) }))
+    .map((id) => ({ id, room: possible.get(id)!.length + counted.get(id)!, tie: tie(id) }))
     .sort((a, b) => a.room - b.room || a.tie - b.tie || (a.id < b.id ? -1 : 1));
 
   let add: AssignmentPair[] = [];
@@ -236,7 +252,7 @@ export function planAutoAssignment(input: AutoAssignInput): AutoAssignPlan {
     if (need > 0) {
       const heap = new MinHeap<Candidate>((a, b) => a.load < b.load || (a.load === b.load && (a.tie < b.tie || (a.tie === b.tie && a.judgeUserId < b.judgeUserId))));
       for (const judgeUserId of possible.get(projectId)!) {
-        heap.push({ judgeUserId, load: load.get(judgeUserId)!, tie: tieHash(pairKey(judgeUserId, projectId)) });
+        heap.push({ judgeUserId, load: load.get(judgeUserId)!, tie: tie(pairKey(judgeUserId, projectId)) });
       }
       for (let picked = 0; picked < need && heap.size > 0; picked += 1) {
         const next = heap.pop()!;
@@ -273,5 +289,5 @@ export function planAutoAssignment(input: AutoAssignInput): AutoAssignPlan {
   add.sort(comparePairs);
   remove.sort(comparePairs);
   adopt.sort(comparePairs);
-  return { add, remove, adopt, loads, shortfalls, covered, fingerprint: planFingerprint(add, remove, perProject, input.mode, adopt) };
+  return { add, remove, adopt, loads, shortfalls, covered, fingerprint: planFingerprint(add, remove, perProject, input.mode, adopt, seed) };
 }

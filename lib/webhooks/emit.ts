@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { outsideRequestActor } from "@/lib/requestActor";
 import type { EventStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
@@ -66,7 +67,8 @@ export function newWebhookEventId() {
 /** Fire and forget. Safe to call from any commit point; never throws. */
 export function emitWebhookEvent(emission: WebhookEmission) {
   const pending = pendingEmits();
-  const task = enqueueWebhookEvent(emission)
+  // Queued in the background, never as the request's actor.
+  const task = outsideRequestActor(() => enqueueWebhookEvent(emission))
     .then(() => undefined)
     .catch(() => {
       // Category only: payload loading touches attendee names.

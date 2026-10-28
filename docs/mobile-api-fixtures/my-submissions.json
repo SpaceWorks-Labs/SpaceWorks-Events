@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "data": {
+    "submissions": [
+      {
+        "eventId": "clevent000000000000000003",
+        "eventTitle": "Design Hackathon",
+        "entrantName": "Byte Club",
+        "isTeam": true,
+        "window": {
+          "opensAt": "2030-06-01T09:00:00.000Z",
+          "closesAt": "2030-06-02T12:00:00.000Z",
+          "isOpen": true
+        },
+        "confirmed": true,
+        "declined": false,
+        "canEdit": true,
+        "submission": {
+          "title": "Bus Stop Buddy",
+          "summary": "Live arrivals on a cheap e-ink sign.",
+          "status": "DRAFT",
+          "submittedAt": null,
+          "links": {
+            "repo": "https://github.com/example/bus-stop-buddy",
+            "demo": null,
+            "video": null
+          }
+        },
+        "entryFee": {
+          "amount": "₹500.00",
+          "amountMinor": "50000",
+          "currency": "INR",
+          "paid": false
+        }
+      }
+    ]
+  }
+}

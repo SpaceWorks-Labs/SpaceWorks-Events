@@ -302,4 +302,4 @@ export async function sendEventBroadcast(params: {
 
 export { sendTeamCreatedEmail, sendTeamMemberAddedEmail } from "./team";
 export { sendCollaboratorInvitation, sendEventInvitation } from "./invitations";
-export { sendResultsPublishedEmail, sendSubmissionLinkEmail, sendSubmissionReceivedEmail } from "./judging";
+export { sendFinalistsAnnouncedEmail, sendResultsPublishedEmail, sendSubmissionLinkEmail, sendSubmissionReceivedEmail } from "./judging";

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { loadTeamManageView } from "@/lib/views/app__team__token__page";
 import { TeamPageView } from "@/components/team/TeamPageView";
 import { SubmissionSection } from "@/components/submission/SubmissionSection";
+import { GetHelpCard } from "@/components/mentor-desk/participant/GetHelpCard";
+import { MentorsCard } from "@/components/mentor-desk/participant/MentorsCard";
 
 type Props = {
   params: Promise<{ token: string }>;
@@ -19,6 +21,13 @@ export const metadata: Metadata = {
 };
 
 export default async function TeamManagePage({ params }: Props) {
-  const { data, teamRef, submission } = await loadTeamManageView({ params });
-  return <TeamPageView data={data} teamRef={teamRef} tokenPage submission={<SubmissionSection view={submission} submissionRef={{ manageToken: teamRef.manageToken }} />} />;
+  const { data, teamRef, submission, mentorDesk } = await loadTeamManageView({ params });
+  // The Mentor Desk (docs/MENTOR_DESK.md) sits with the submission: the same link proves the team.
+  const desk = mentorDesk ? (
+    <>
+      <GetHelpCard deskRef={{ manageToken: teamRef.manageToken }} view={mentorDesk} />
+      <MentorsCard deskRef={{ manageToken: teamRef.manageToken }} view={mentorDesk} />
+    </>
+  ) : null;
+  return <TeamPageView data={data} teamRef={teamRef} tokenPage submission={<><SubmissionSection view={submission} submissionRef={{ manageToken: teamRef.manageToken }} />{desk}</>} />;
 }

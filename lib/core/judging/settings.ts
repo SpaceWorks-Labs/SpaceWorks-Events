@@ -2,7 +2,7 @@ import "server-only";
 
 /** Organiser settings, the rubric (frozen once judging starts), and the Judging tab's setup read model. */
 
-import { JudgingStatus, Prisma, SubmissionStatus } from "@prisma/client";
+import { JudgingRoundStatus, JudgingStatus, Prisma, SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
@@ -25,6 +25,12 @@ import {
   RUBRIC_FROZEN,
   sameIdSet,
 } from "./shared";
+import { type JudgingRoundScope, resolveJudgingRound } from "./rounds/scope";
+import { ensureJudgingRound } from "./rounds/sync";
+
+/** Which round's rubric an edit is about: `roundId`, else the current round. */
+export type RubricRoundOption = { roundId?: string | null };
+const ROUND_NOT_FOUND = "Judging round not found.";
 
 // ---------------------------------------------------------------------------
 // Organiser: settings, rubric, awards, moderation
@@ -97,6 +103,8 @@ export async function updateJudgingSettings(ctx: JudgingOrganiserContext, input:
       },
       select: judgingEventSelect,
     });
+    // An event taking projects always has its first round (the visibility setting above mirrors onto the current round).
+    if (updated.submissionsEnabled) await ensureJudgingRound(tx, updated);
     const emailTogglesChanged = (["emailEntrantsOnResults", "emailSubmissionReceipts"] as const).filter((name) => event[name] !== updated[name]);
     await recordAuditEvent({
       client: tx,
@@ -118,56 +126,63 @@ export async function updateJudgingSettings(ctx: JudgingOrganiserContext, input:
   });
 }
 
-async function withRubricLock<T>(ctx: JudgingOrganiserContext, run: (tx: Prisma.TransactionClient, event: JudgingEvent) => Promise<JudgingResult<T>>): Promise<JudgingResult<T>> {
+/** Lock the event and resolve the round whose rubric changes; refused once that round has left DRAFT. */
+async function withRubricLock<T>(
+  ctx: JudgingOrganiserContext,
+  options: RubricRoundOption,
+  run: (tx: Prisma.TransactionClient, event: JudgingEvent, round: JudgingRoundScope & { id: string }) => Promise<JudgingResult<T>>,
+): Promise<JudgingResult<T>> {
   return prisma.$transaction(async (tx): Promise<JudgingResult<T>> => {
     const event = await lockEventForOrganiser(tx, ctx);
     if (!event) return fail(EVENT_NOT_FOUND);
-    if (event.judgingStatus !== JudgingStatus.NOT_STARTED) return fail(RUBRIC_FROZEN);
-    return run(tx, event);
+    const round = options.roundId ? await resolveJudgingRound(tx, event, options.roundId) : await ensureJudgingRound(tx, event);
+    if (!round?.id) return fail(ROUND_NOT_FOUND);
+    if (round.status !== JudgingRoundStatus.DRAFT) return fail(RUBRIC_FROZEN);
+    return run(tx, event, { ...round, id: round.id });
   });
 }
 
-export async function createJudgingCriterion(ctx: JudgingOrganiserContext, input: unknown): Promise<JudgingResult<{ id: string }>> {
+export async function createJudgingCriterion(ctx: JudgingOrganiserContext, input: unknown, options: RubricRoundOption = {}): Promise<JudgingResult<{ id: string }>> {
   const parsed = judgingCriterionSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
-  return withRubricLock(ctx, async (tx, event) => {
-    const existing = await tx.judgingCriterion.aggregate({ where: { eventId: event.id }, _count: { _all: true }, _max: { position: true } });
+  return withRubricLock(ctx, options, async (tx, event, round) => {
+    const existing = await tx.judgingCriterion.aggregate({ where: { eventId: event.id, roundId: round.id }, _count: { _all: true }, _max: { position: true } });
     if (existing._count._all >= JUDGING_CRITERIA_LIMIT) return fail(`A rubric can have up to ${JUDGING_CRITERIA_LIMIT} criteria.`);
     const created = await tx.judgingCriterion.create({
-      data: { eventId: event.id, ...parsed.data, position: (existing._max.position ?? -1) + 1 },
+      data: { eventId: event.id, roundId: round.id, ...parsed.data, position: (existing._max.position ?? -1) + 1 },
       select: { id: true },
     });
     return ok({ id: created.id });
   });
 }
 
-export async function updateJudgingCriterion(ctx: JudgingOrganiserContext, criterionId: string, input: unknown): Promise<JudgingResult> {
+export async function updateJudgingCriterion(ctx: JudgingOrganiserContext, criterionId: string, input: unknown, options: RubricRoundOption = {}): Promise<JudgingResult> {
   if (!isId(criterionId)) return fail("Criterion not found.");
   const parsed = judgingCriterionSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
-  return withRubricLock(ctx, async (tx, event) => {
-    const updated = await tx.judgingCriterion.updateMany({ where: { id: criterionId, eventId: event.id }, data: parsed.data });
+  return withRubricLock(ctx, options, async (tx, event, round) => {
+    const updated = await tx.judgingCriterion.updateMany({ where: { id: criterionId, eventId: event.id, roundId: round.id }, data: parsed.data });
     return updated.count === 1 ? okEmpty() : fail("Criterion not found.");
   });
 }
 
-export async function deleteJudgingCriterion(ctx: JudgingOrganiserContext, criterionId: string): Promise<JudgingResult> {
+export async function deleteJudgingCriterion(ctx: JudgingOrganiserContext, criterionId: string, options: RubricRoundOption = {}): Promise<JudgingResult> {
   if (!isId(criterionId)) return fail("Criterion not found.");
-  return withRubricLock(ctx, async (tx, event) => {
-    const deleted = await tx.judgingCriterion.deleteMany({ where: { id: criterionId, eventId: event.id } });
+  return withRubricLock(ctx, options, async (tx, event, round) => {
+    const deleted = await tx.judgingCriterion.deleteMany({ where: { id: criterionId, eventId: event.id, roundId: round.id } });
     return deleted.count === 1 ? okEmpty() : fail("Criterion not found.");
   });
 }
 
-/** Apply a full new order; `ids` must be exactly the event's criteria. */
-export async function reorderJudgingCriteria(ctx: JudgingOrganiserContext, ids: unknown): Promise<JudgingResult> {
+/** Apply a full new order; `ids` must be exactly the round's criteria. */
+export async function reorderJudgingCriteria(ctx: JudgingOrganiserContext, ids: unknown, options: RubricRoundOption = {}): Promise<JudgingResult> {
   const parsed = judgingReorderSchema.safeParse(ids);
   if (!parsed.success) return fail("Invalid order.");
-  return withRubricLock(ctx, async (tx, event) => {
-    const current = await tx.judgingCriterion.findMany({ where: { eventId: event.id }, select: { id: true } });
+  return withRubricLock(ctx, options, async (tx, event, round) => {
+    const current = await tx.judgingCriterion.findMany({ where: { eventId: event.id, roundId: round.id }, select: { id: true } });
     if (!sameIdSet(current.map((row) => row.id), parsed.data)) return fail(CHANGED);
     for (const [position, id] of parsed.data.entries()) {
-      await tx.judgingCriterion.updateMany({ where: { id, eventId: event.id }, data: { position } });
+      await tx.judgingCriterion.updateMany({ where: { id, eventId: event.id, roundId: round.id }, data: { position } });
     }
     return okEmpty();
   });
@@ -191,8 +206,9 @@ export type JudgingSetupDto = {
 export async function loadJudgingSetup(ctx: JudgingOrganiserContext): Promise<JudgingSetupDto | null> {
   const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: judgingEventSelect });
   if (!event) return null;
+  const round = await resolveJudgingRound(prisma, event);
   const [criteria, awards, grouped] = await Promise.all([
-    criteriaFor(prisma, event.id),
+    round ? criteriaFor(prisma, round) : [],
     prisma.eventAward.findMany({
       where: { eventId: event.id },
       orderBy: [{ position: "asc" }, { createdAt: "asc" }],

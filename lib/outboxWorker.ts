@@ -1,6 +1,7 @@
 import "server-only";
 
 import { alertOnBackupProblems } from "@/lib/backupAlerts";
+import { outsideRequestActor } from "@/lib/requestActor";
 import { deliverOutboxBatchWithCount } from "@/lib/outbox";
 import {
   BEAT_HEARTBEAT_KEY,
@@ -15,6 +16,7 @@ import { fillWaitlists } from "@/lib/payments/operations";
 import { sendEventReminders } from "@/lib/eventReminders";
 import { logOpsError } from "@/lib/opsAlerts";
 import { deliverWebhookBatch } from "@/lib/webhooks/delivery";
+import { expireHelpRequests } from "@/lib/core/mentorDesk/helpExpiry";
 
 /**
  * What this Node.js process does besides serving requests, from
@@ -58,6 +60,8 @@ export const SCHEDULED_JOBS: Job[] = [
   { name: "event-reminders", everyMs: 5 * 60_000, run: (now) => sendEventReminders(now) },
   // Organisation webhooks: due deliveries and retries (row claims make it safe on every replica).
   { name: "webhooks", everyMs: 15_000, run: () => deliverWebhookBatch() },
+  // Mentor Desk: lapsed help claims go back to the queue, past-deadline requests expire (SKIP LOCKED, idempotent).
+  { name: "help-queue-expiry", everyMs: 60_000, run: (now) => expireHelpRequests(now) },
   { name: "backup-alerts", everyMs: 5 * 60_000, run: () => alertOnBackupProblems() },
   { name: "retention", everyMs: 60 * 60_000, run: () => purgeExpiredOperationalData() },
 ];
@@ -199,6 +203,11 @@ function startBeatLoop() {
  * duplicate timers during dev HMR.
  */
 export function startOutboxWorker(role = processRole()) {
+  // Timers created here outlive the request that started them: never let them carry its actor.
+  return outsideRequestActor(() => startBackground(role));
+}
+
+function startBackground(role: ReturnType<typeof processRole>) {
   const runtime = backgroundState();
   if (runtime.__sweBackground?.started) return runtime.__sweBackground.role;
   const state: BackgroundState = { started: true, role, loops: [] };

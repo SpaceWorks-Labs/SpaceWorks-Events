@@ -1,11 +1,14 @@
 import "server-only";
 
+import type { EventPermission } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
 import { linkCrewAccount } from "@/lib/core/crew/shared";
+import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
 
 export type InviteAcceptance =
-  | { ok: true; href: string }
+  /** `mentorGrant`: the event grant before and after, for the post-commit Mentor Desk crew hook. */
+  | { ok: true; href: string; mentorGrant?: { eventId: string; userId: string; before: EventPermission[]; after: EventPermission[] } }
   | { ok: false; reason: "unavailable" | "wrong-account" };
 
 export async function acceptOrganisationInviteToken(token: string, userId: string): Promise<InviteAcceptance> {
@@ -50,12 +53,17 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
       data: { usedAt: now, usedByUserId: user.id },
     });
     if (claim.count !== 1) return { ok: false, reason: "unavailable" };
+    let mentorGrant: { eventId: string; userId: string; before: EventPermission[]; after: EventPermission[] } | undefined;
     if (invite.eventId) {
+      const before = await tx.eventCollaborator.findUnique({ where: { eventId_userId: { eventId: invite.eventId, userId: user.id } }, select: { permissions: true } });
       await tx.eventCollaborator.upsert({
         where: { eventId_userId: { eventId: invite.eventId, userId: user.id } },
         create: { eventId: invite.eventId, userId: user.id, permissions: invite.permissions },
         update: { permissions: invite.permissions },
       });
+      // A MENTOR grant gets its Mentor Desk profile (docs/MENTOR_DESK.md); it never creates an order.
+      await syncMentorGrantLocked(tx, invite.eventId, user.id, before?.permissions ?? [], invite.permissions, user.id);
+      mentorGrant = { eventId: invite.eventId, userId: user.id, before: before?.permissions ?? [], after: invite.permissions };
       // The invited email may also be on the event crew: link that crew record to this account (docs/VOLUNTEERS.md).
       await linkCrewAccount(tx, user.id, invite.email, invite.eventId);
     } else if (invite.eventSeriesId) {
@@ -71,6 +79,6 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
     if (!organisation) throw new Error("Collaborator invite target has no organisation.");
     await tx.auditEvent.create({ data: { action: "EVENT_COLLABORATOR_INVITE_ACCEPTED", actorUserId: user.id, organisationId: organisation.id, targetType: "EventCollaboratorInvite", targetId: invite.id } });
     const href = invite.eventId ? `/dashboard/${organisation.slug}/event/${invite.eventId}` : `/dashboard/${organisation.slug}/series/${invite.eventSeriesId}`;
-    return { ok: true, href };
+    return { ok: true, href, ...(mentorGrant ? { mentorGrant } : {}) };
   });
 }

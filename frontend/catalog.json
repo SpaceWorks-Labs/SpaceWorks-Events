@@ -16,6 +16,11 @@
       "id": "app__account__layout:loadAccountShell"
     },
     {
+      "module": "lib/views/app__account__mentoring__eventId__page",
+      "name": "loadAccountMentoringView",
+      "id": "app__account__mentoring__eventId__page:loadAccountMentoringView"
+    },
+    {
       "module": "lib/views/app__account__organisations__page",
       "name": "loadAccountOrganisationsView",
       "id": "app__account__organisations__page:loadAccountOrganisationsView"
@@ -446,6 +451,11 @@
       "id": "components__event-dashboard__judging__JudgeWorkspace:loadJudgeWorkspace"
     },
     {
+      "module": "lib/views/components__event-dashboard__mentors__MentorConsole",
+      "name": "loadMentorConsoleView",
+      "id": "components__event-dashboard__mentors__MentorConsole:loadMentorConsoleView"
+    },
+    {
       "module": "lib/views/components__event-dashboard__panels__AnalyticsPanel",
       "name": "loadAnalyticsPanel",
       "id": "components__event-dashboard__panels__AnalyticsPanel:loadAnalyticsPanel"
@@ -489,6 +499,11 @@
       "module": "lib/views/components__event-dashboard__panels__JudgingPanel",
       "name": "loadJudgingPanel",
       "id": "components__event-dashboard__panels__JudgingPanel:loadJudgingPanel"
+    },
+    {
+      "module": "lib/views/components__event-dashboard__panels__MentorsPanel",
+      "name": "loadMentorsPanel",
+      "id": "components__event-dashboard__panels__MentorsPanel:loadMentorsPanel"
     },
     {
       "module": "lib/views/components__event-dashboard__panels__OverviewPanel",
@@ -1303,6 +1318,76 @@
       "id": "judging-ops:loadJudgingProgressPage"
     },
     {
+      "module": "app/actions/judging-ops",
+      "name": "loadJudgingProgressRound",
+      "id": "judging-ops:loadJudgingProgressRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "addJudgingRound",
+      "id": "judging-rounds:addJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "editJudgingRound",
+      "id": "judging-rounds:editJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "removeJudgingRound",
+      "id": "judging-rounds:removeJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "reorderJudgingRoundsAction",
+      "id": "judging-rounds:reorderJudgingRoundsAction"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "saveJudgingRoundPanel",
+      "id": "judging-rounds:saveJudgingRoundPanel"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "changeJudgingRoundStatus",
+      "id": "judging-rounds:changeJudgingRoundStatus"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "finalizeRound",
+      "id": "judging-rounds:finalizeRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "unfinalizeRound",
+      "id": "judging-rounds:unfinalizeRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "previewRoundFinalists",
+      "id": "judging-rounds:previewRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "applyRoundFinalists",
+      "id": "judging-rounds:applyRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "publishRoundFinalists",
+      "id": "judging-rounds:publishRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "unpublishRoundFinalists",
+      "id": "judging-rounds:unpublishRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "loadRoundFinalistsList",
+      "id": "judging-rounds:loadRoundFinalistsList"
+    },
+    {
       "module": "app/actions/judging",
       "name": "loadJudgeSubmissionsPage",
       "id": "judging:loadJudgeSubmissionsPage"
@@ -1326,6 +1411,11 @@
       "module": "app/actions/judging",
       "name": "saveJudgeReviewAction",
       "id": "judging:saveJudgeReviewAction"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadJudgeWorkspaceRound",
+      "id": "judging:loadJudgeWorkspaceRound"
     },
     {
       "module": "app/actions/media",
@@ -1441,6 +1531,166 @@
       "module": "app/actions/membership",
       "name": "deleteOrganisation",
       "id": "membership:deleteOrganisation"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "mentorHelpCommand",
+      "id": "mentor-console:mentorHelpCommand"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "mentorRaiseHelp",
+      "id": "mentor-console:mentorRaiseHelp"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "mentorCommentOnHelp",
+      "id": "mentor-console:mentorCommentOnHelp"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "saveOwnMentorProfile",
+      "id": "mentor-console:saveOwnMentorProfile"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "declareMentorConflict",
+      "id": "mentor-console:declareMentorConflict"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "createOwnOfficeHourSlot",
+      "id": "mentor-console:createOwnOfficeHourSlot"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "rescheduleOwnOfficeHourSlot",
+      "id": "mentor-console:rescheduleOwnOfficeHourSlot"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "cancelOwnOfficeHourSlot",
+      "id": "mentor-console:cancelOwnOfficeHourSlot"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "mentorVisitCommand",
+      "id": "mentor-console:mentorVisitCommand"
+    },
+    {
+      "module": "app/actions/mentor-console",
+      "name": "nominateTeamAction",
+      "id": "mentor-console:nominateTeamAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "updateMentorDeskSettings",
+      "id": "mentor-desk:updateMentorDeskSettings"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "saveMentorProfileAsOrganiser",
+      "id": "mentor-desk:saveMentorProfileAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "saveHelpCategoryAction",
+      "id": "mentor-desk:saveHelpCategoryAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "setMentorConflictAsOrganiser",
+      "id": "mentor-desk:setMentorConflictAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "organiserHelpCommand",
+      "id": "mentor-desk:organiserHelpCommand"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "previewMentorAssignments",
+      "id": "mentor-desk:previewMentorAssignments"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "applyMentorAssignments",
+      "id": "mentor-desk:applyMentorAssignments"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "transitionMentorAssignment",
+      "id": "mentor-desk:transitionMentorAssignment"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "assignMentorManuallyAction",
+      "id": "mentor-desk:assignMentorManuallyAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "createOfficeHourSlotAsOrganiser",
+      "id": "mentor-desk:createOfficeHourSlotAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "rescheduleOfficeHourSlotAsOrganiser",
+      "id": "mentor-desk:rescheduleOfficeHourSlotAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "cancelOfficeHourSlotAsOrganiser",
+      "id": "mentor-desk:cancelOfficeHourSlotAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "cancelOfficeHourBookingAsOrganiser",
+      "id": "mentor-desk:cancelOfficeHourBookingAsOrganiser"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "saveMentoringRoundAction",
+      "id": "mentor-desk:saveMentoringRoundAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "setRoundMentorPoolAction",
+      "id": "mentor-desk:setRoundMentorPoolAction"
+    },
+    {
+      "module": "app/actions/mentor-desk",
+      "name": "transitionMentoringRoundAction",
+      "id": "mentor-desk:transitionMentoringRoundAction"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "raiseHelpRequest",
+      "id": "mentor-help:raiseHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "cancelHelpRequest",
+      "id": "mentor-help:cancelHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "commentOnHelpRequest",
+      "id": "mentor-help:commentOnHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "rateHelpRequest",
+      "id": "mentor-help:rateHelpRequest"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "bookOfficeHourAction",
+      "id": "mentor-help:bookOfficeHourAction"
+    },
+    {
+      "module": "app/actions/mentor-help",
+      "name": "cancelOfficeHourBookingAction",
+      "id": "mentor-help:cancelOfficeHourBookingAction"
     },
     {
       "module": "app/actions/mfa-step-up",

@@ -9,7 +9,7 @@ import type { ListView, Scope } from "./types";
 const SEARCH_DELAY_MS = 300;
 
 /** The judge's server-paged submission list: filter, search, pages and totals. */
-export function useJudgeSubmissionsList({ organisationSlug, eventId, initialPage }: Scope & { initialPage: JudgeSubmissionsPageDto }) {
+export function useJudgeSubmissionsList({ organisationSlug, eventId, roundId, initialPage }: Scope & { initialPage: JudgeSubmissionsPageDto }) {
   const [filter, setFilter] = useState<JudgeSubmissionFilter>("all");
   const [query, setQuery] = useState("");
   const [submissions, setSubmissions] = useState<JudgeSubmissionDto[]>(initialPage.submissions);
@@ -27,7 +27,7 @@ export function useJudgeSubmissionsList({ organisationSlug, eventId, initialPage
       const seq = ++listSeq.current;
       setLoadingList(cursor ? "more" : "replace");
       setListError(null);
-      const res = await loadJudgeSubmissionsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.filter, cursor });
+      const res = await loadJudgeSubmissionsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.filter, cursor, ...(roundId ? { roundId } : {}) });
       if (seq !== listSeq.current) return;
       setLoadingList(null);
       if (!res.ok || !res.data) {
@@ -40,7 +40,7 @@ export function useJudgeSubmissionsList({ organisationSlug, eventId, initialPage
       setCounts(page.counts);
       pagesLoaded.current = cursor ? pagesLoaded.current + 1 : 1;
     },
-    [organisationSlug, eventId],
+    [organisationSlug, eventId, roundId],
   );
 
   /** Re-read the first `pages` pages of a view in place (after a save). */
@@ -53,7 +53,7 @@ export function useJudgeSubmissionsList({ organisationSlug, eventId, initialPage
       let loaded = 0;
       let latestCounts: JudgeSubmissionCounts | null = null;
       do {
-        const res = await loadJudgeSubmissionsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.filter, cursor });
+        const res = await loadJudgeSubmissionsPage({ organisationSlug, eventId, query: view.query.trim(), filter: view.filter, cursor, ...(roundId ? { roundId } : {}) });
         if (seq !== listSeq.current) return;
         if (!res.ok || !res.data) {
           setListError(res.ok ? "Could not load submissions." : res.error);
@@ -69,7 +69,7 @@ export function useJudgeSubmissionsList({ organisationSlug, eventId, initialPage
       if (latestCounts) setCounts(latestCounts);
       pagesLoaded.current = loaded;
     },
-    [organisationSlug, eventId],
+    [organisationSlug, eventId, roundId],
   );
 
   // A filter or search fetches its first page (a search waits for typing to

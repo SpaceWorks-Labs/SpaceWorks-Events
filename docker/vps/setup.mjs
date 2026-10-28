@@ -66,6 +66,8 @@ if (frontendHost) write("frontend.env", envText({
   // Caddy on this VPS overwrites X-Real-IP; Netlify sets its own client-IP header.
   FRONTEND_TRUSTED_IP_HEADER: layout === "split" ? "x-real-ip" : "x-nf-client-connection-ip",
   NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: key(),
+  // Space Works mobile app links, served by the website (docs/MOBILE_API.md#app-links); fill in to claim links.
+  ANDROID_APP_PACKAGE_NAME: "", ANDROID_APP_SHA256_FINGERPRINTS: "", APPLE_APP_IDS: "",
 }));
 write("actions-key", actionsKey);
 write("postgres.env", envText({ POSTGRES_USER: "swevents", POSTGRES_DB: "swevents", POSTGRES_PASSWORD: adminPassword, POSTGRES_APP_PASSWORD: appPassword, POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256" }));
@@ -83,6 +85,10 @@ write("app.env", envText({
   S3_ENDPOINT: "https://storage:9000", S3_ACCESS_KEY_ID: "swevents-app", S3_SECRET_ACCESS_KEY: storageApp, S3_FORCE_PATH_STYLE: "1",
   EMAIL_FROM: `Space Works Events <events@${host}>`, SMTP_HOST: "CHANGE_ME", SMTP_PORT: "587",
   SMTP_SECURE: "false", SMTP_USER: "CHANGE_ME", SMTP_PASSWORD: "CHANGE_ME",
+  // Mobile app Google sign-in (API host); Super admin -> Settings overrides it.
+  GOOGLE_MOBILE_CLIENT_IDS: "",
+  // In the single layout this container also serves the website's app-link files.
+  ...(frontendHost ? {} : { ANDROID_APP_PACKAGE_NAME: "", ANDROID_APP_SHA256_FINGERPRINTS: "", APPLE_APP_IDS: "" }),
 }));
 write("redis.conf", `port 0\ntls-port 6379\ntls-cert-file /data/tls/public.crt\ntls-key-file /data/tls/private.key\ntls-ca-cert-file /tls/ca.crt\ntls-auth-clients no\nrequirepass ${redisPassword}\nappendonly yes\nmaxmemory-policy noeviction\n`);
 console.log("Configuration created without printing secrets. Edit app.env: EMAIL_FROM and SMTP_* must use your verified sending domain and authenticated relay. Back up /config securely; do not rerun setup for updates.");
