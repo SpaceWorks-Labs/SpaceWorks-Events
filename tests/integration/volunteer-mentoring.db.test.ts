@@ -19,8 +19,8 @@ import { staffFor, tearDownUsers, volunteer } from "./helpers/volunteers";
 
 const users: string[] = [];
 
-async function mentorOn(event: Event, label: string) {
-  const user = await prisma.user.create({ data: { name: `Mentor ${label}`, email: crewEmail(label) } });
+async function mentorOn(event: Event, label: string, verified = true) {
+  const user = await prisma.user.create({ data: { name: `Mentor ${label}`, email: crewEmail(label), emailVerified: verified ? new Date() : null } });
   users.push(user.id);
   await prisma.eventCollaborator.create({ data: { eventId: event.id, userId: user.id, permissions: [EventPermission.MENTOR] } });
   await prisma.mentorProfile.create({ data: { eventId: event.id, userId: user.id } });
@@ -74,10 +74,16 @@ describe.sequential("volunteer certificates and the Mentor Desk", () => {
     await expect(prisma.mentorProfile.findFirstOrThrow({ where: { eventId: event.id, userId: user.id } })).resolves.toMatchObject({ crewMemberId: place.id });
 
     // An existing crew place keeps its kind but is linked to the account.
-    const other = await mentorOn(event, "existing");
+    const other = await mentorOn(event, "existing", false);
     const { member } = await volunteer(event, { email: other.email, kind: "VOLUNTEER" });
     expect(member.userId).toBeNull();
+    await prisma.user.update({ where: { id: other.id }, data: { emailVerified: new Date() } });
     await syncMentorCrewAfterGrant({ eventId: event.id, userId: other.id, before: [], after: [EventPermission.MENTOR], actorUserId: crew.organiserId });
     await expect(prisma.eventCrewMember.findUniqueOrThrow({ where: { id: member.id } })).resolves.toMatchObject({ kind: "VOLUNTEER", userId: other.id });
+
+    // An unverified account is never linked: the link would open the crew ticket on mobile.
+    const unverified = await mentorOn(event, "unverified", false);
+    await syncMentorCrewAfterGrant({ eventId: event.id, userId: unverified.id, before: [], after: [EventPermission.MENTOR], actorUserId: crew.organiserId });
+    await expect(prisma.eventCrewMember.findFirstOrThrow({ where: { eventId: event.id, email: unverified.email! } })).resolves.toMatchObject({ kind: "MENTOR", userId: null });
   });
 });

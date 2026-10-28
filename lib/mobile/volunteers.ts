@@ -15,13 +15,22 @@ import type { MobileEventContext } from "@/lib/mobile/organiser";
  * roster as Guests → Crew → Shifts.
  */
 
-/** The caller's own confirmed crew ticket, or null (NOT_FOUND). */
+/**
+ * The caller's own confirmed crew ticket, or null (NOT_FOUND): a ticket on
+ * their account, or a crew record linked to their account whose email is
+ * still that account's verified email. The link opens nothing else.
+ */
 export async function ownCrewTicket(userId: string, rsvpId: string) {
   if (!rsvpId || rsvpId.length > 128) return null;
-  return prisma.rSVP.findFirst({
+  const rsvp = await prisma.rSVP.findFirst({
     where: { id: rsvpId, isCrew: true, status: RsvpStatus.CONFIRMED, OR: [{ userId }, { crewMember: { userId } }] },
-    select: { id: true, isCrew: true, status: true, checkInToken: true },
+    select: { id: true, isCrew: true, status: true, checkInToken: true, userId: true, crewMember: { select: { email: true, user: { select: { email: true, emailVerified: true } } } } },
   });
+  if (!rsvp) return null;
+  const linked = rsvp.crewMember?.user;
+  const verifiedLink = Boolean(linked?.emailVerified && linked.email?.trim().toLowerCase() === rsvp.crewMember?.email);
+  if (rsvp.userId !== userId && !verifiedLink) return null;
+  return { id: rsvp.id, isCrew: rsvp.isCrew, status: rsvp.status, checkInToken: rsvp.checkInToken };
 }
 
 /** The caller's shifts on that ticket; null when the event has no volunteer shifts on. */

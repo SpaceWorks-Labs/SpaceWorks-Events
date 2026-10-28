@@ -40,6 +40,17 @@ import {
 /** Returned instead of a reason when a link sign-up must not change anything; the caller answers as for a duplicate. */
 export const LINK_SIGNUP_IGNORED = "link-signup-ignored";
 const BOUGHT_A_TICKET = "This person bought a ticket. Cancel or refund their order first.";
+const VOLUNTEER_RECORD_EMAIL = "This crew member has verified hours or a certificate, so their email can't change. Remove them and add them again with the new address.";
+
+/** Verification history or a live contributor certificate (docs/VOLUNTEERS.md). */
+async function hasVolunteerRecord(tx: Prisma.TransactionClient, crewMemberId: string) {
+  const [entries, certificates] = await Promise.all([
+    tx.volunteerHoursEntry.count({ where: { hours: { signup: { crewMemberId } } } }),
+    tx.contributorCertificate.count({ where: { crewMemberId, revokedAt: null } }),
+  ]);
+  return entries + certificates > 0;
+}
+
 const ACCOUNT_CREW_EMAIL = "This crew ticket belongs to a signed-in account, so its email follows the account. Remove them from the crew and add the new address instead.";
 
 const organiserCrewSelect = {
@@ -180,17 +191,19 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
     return await prisma.$transaction(async (tx): Promise<CrewResult> => {
       // Under the Event row lock, like adding: a new address is checked against the event's registrations.
       if (!(await lockEventForCrew(tx, event.id))) return fail("Event not found.");
-      const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
+      const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, userId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
       if (!member) return fail("Crew member not found.");
       if (data.email !== member.email) {
+        // Verified hours and certificates belong to this person: a new address must not let anyone verify or certify their own work.
+        if (await hasVolunteerRecord(tx, member.id)) return fail(VOLUNTEER_RECORD_EMAIL);
         // An account-tied ticket belongs to that account: its link is never sent to another address.
         const accountEmail = member.rsvp.user?.email?.trim().toLowerCase();
         if (member.rsvp.userId && data.email !== accountEmail) return fail(ACCOUNT_CREW_EMAIL);
         if (await tx.eventCrewMember.findUnique({ where: { eventId_email: { eventId: event.id, email: data.email } }, select: { id: true } })) return fail(ALREADY_ON_CREW);
         if (await findRegistrationByEmail(tx, event.id, data.email, member.rsvpId)) return fail(ALREADY_REGISTERED);
       }
-      // A new email drops an account link that no longer matches; a verified account with the new email is linked instead.
-      const relink = data.email !== member.email ? { userId: member.rsvp.userId ?? (await verifiedAccountFor(tx, data.email)) } : {};
+      // The account link is sticky: a new email never unlinks it (docs/VOLUNTEERS.md), it can only gain one.
+      const relink = data.email !== member.email && !member.userId ? { userId: member.rsvp.userId ?? (await verifiedAccountFor(tx, data.email)) } : {};
       await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage, ...(kind ? { kind } : {}), ...relink } });
       // A new address gets the ticket too; the old one keeps working (same QR).
       if (data.email !== member.email) await enqueueCrewTicket(tx, { to: data.email, checkInToken: member.rsvp.checkInToken, organisationId: event.organisationId });

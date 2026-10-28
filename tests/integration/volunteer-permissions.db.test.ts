@@ -112,7 +112,7 @@ describe.sequential("volunteer shift permissions", () => {
     expect(joined).toMatchObject({ kind: "MENTOR", joinedViaLink: true, userId: null });
     // An edit that doesn't send a kind keeps it.
     await expect(updateCrewMemberAsOrganiser(ctxFor(event), joined.id, { name: "Mentor Person", email, role: "Workshops" })).resolves.toMatchObject({ ok: true });
-    const person = await prisma.user.create({ data: { name: "Mentor", email } });
+    const person = await prisma.user.create({ data: { name: "Mentor", email, emailVerified: new Date() } });
     users.push(person.id);
     const token = `invite-${crew.suffix}`;
     await prisma.eventCollaboratorInvite.create({ data: { eventId: event.id, email, permissions: [EventPermission.CHECK_IN], tokenHash: hashEventCollaboratorToken(token), expiresAt: new Date(Date.now() + 3_600_000), createdByUserId: crew.organiserId } });
