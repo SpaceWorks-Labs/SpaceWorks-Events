@@ -14,7 +14,8 @@ import { blockedPairs, inReviewAt } from "./coverage";
  * BALANCED or RANDOM, reproducible from the stored seed; preview writes
  * nothing; apply re-plans under the Event lock with the same seed and is
  * refused when the plan changed since the preview; re-roll is a preview
- * without a seed. Conflicts and recusals are never assigned. "keep" adds to
+ * without a seed. Conflicts, recusals and (on a fresh-eyes stage) earlier
+ * reviewers of an application are never assigned. "keep" adds to
  * the assignments there are; "replace" removes those not yet reviewed.
  * Applied runs are stored (AdmissionAssignmentRun) and audited.
  */
@@ -51,7 +52,7 @@ async function buildPlan(tx: Prisma.TransactionClient, ctx: AdmissionContext, in
   const apps = await tx.admissionApplication.findMany({ where: inReviewAt(ctx.eventId, stage.id), select: { id: true, rsvpId: true, teamId: true }, orderBy: { id: "asc" } });
   const assignments = await tx.admissionReviewAssignment.findMany({ where: { stageId: stage.id, applicationId: { in: apps.map((app) => app.id) } }, select: { id: true, applicationId: true, reviewerUserId: true, status: true } });
   const live = assignments.filter((row) => row.status !== AdmissionAssignmentStatus.RECUSED);
-  const blocked = await blockedPairs(tx, ctx.eventId, apps, [...new Set([...picked, ...live.map((row) => row.reviewerUserId)])]);
+  const blocked = await blockedPairs(tx, ctx.eventId, apps, [...new Set([...picked, ...live.map((row) => row.reviewerUserId)])], stage.id);
   for (const row of assignments) if (row.status === AdmissionAssignmentStatus.RECUSED) blocked.add(pairKey(row.reviewerUserId, row.applicationId));
   // Started: any assignment with a review (on any answers) is never removed.
   const reviewed = new Set((await tx.admissionReview.findMany({ where: { stageId: stage.id, assignmentId: { in: live.map((row) => row.id) } }, select: { assignmentId: true } })).map((row) => row.assignmentId));
@@ -139,7 +140,7 @@ export async function assignReviewer(ctx: AdmissionContext, params: { stageId: s
     if (!stage || !app) return fail("That application isn't in review in this stage.");
     const pool = stagePool(stage.panel.map((row) => row.userId), await eligibleReviewers(tx, ctx.organisationId, ctx.eventId));
     if (!pool.has(params.reviewerUserId)) return fail("That person isn't on this stage's reviewer panel.");
-    if ((await blockedPairs(tx, ctx.eventId, [app], [params.reviewerUserId])).size) return fail("That reviewer has a conflict with this application.");
+    if ((await blockedPairs(tx, ctx.eventId, [app], [params.reviewerUserId], stage.id)).size) return fail("That reviewer has a conflict with this application (or, on a fresh-eyes stage, reviewed it in an earlier stage).");
     const existing = await tx.admissionReviewAssignment.findUnique({ where: { stageId_applicationId_reviewerUserId: { stageId: stage.id, applicationId: app.id, reviewerUserId: params.reviewerUserId } }, select: { status: true } });
     if (existing?.status === AdmissionAssignmentStatus.RECUSED) return fail("That reviewer stepped back from this application.");
     if (!existing) await tx.admissionReviewAssignment.create({ data: { stageId: stage.id, applicationId: app.id, reviewerUserId: params.reviewerUserId } });

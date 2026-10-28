@@ -32,6 +32,7 @@ export const stageFields = z.object({
   name: z.string().trim().min(1).max(ADMISSION_STAGE_NAME_MAX),
   reviewsPerApplication: z.number().int().min(REVIEWS_PER_APPLICATION_MIN).max(REVIEWS_PER_APPLICATION_MAX),
   blindReview: z.boolean(),
+  freshEyes: z.boolean().optional(),
   criteria: z.array(z.string().trim().min(1).max(ADMISSION_CRITERION_MAX)).max(ADMISSION_CRITERIA_LIMIT).refine((list) => new Set(list.map((item) => item.toLowerCase())).size === list.length, "Each criterion once."),
   guidance: z.string().max(ADMISSION_GUIDANCE_MAX),
   opensAt: isoDate,

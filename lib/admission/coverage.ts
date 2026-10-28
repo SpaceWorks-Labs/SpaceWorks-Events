@@ -11,7 +11,9 @@ import { countedReviewers } from "./rules";
  * A reviewer never reviews an application they have a conflict with:
  * - their own application, or their team's (they are one of its people);
  * - any application, when they have applied to the event themselves;
- * - one they (or an organiser) declared a conflict with (AdmissionReviewConflict).
+ * - one they (or an organiser) declared a conflict with (AdmissionReviewConflict);
+ * - on a fresh-eyes stage (`AdmissionStage.freshEyes`), one they reviewed in
+ *   an earlier stage.
  *
  * A review counts towards its stage's target when it is on the current
  * answers, by someone in the stage's reviewer pool now, with no conflict.
@@ -34,16 +36,21 @@ export async function applicantUsers(tx: Prisma.TransactionClient, apps: readonl
   return users;
 }
 
-/** `pairKey(reviewer, application)` for every conflicted pair among these reviewers and applications. */
-export async function blockedPairs(tx: Prisma.TransactionClient, eventId: string, apps: readonly AppRef[], reviewerIds: readonly string[]): Promise<Set<string>> {
+/**
+ * `pairKey(reviewer, application)` for every conflicted pair among these
+ * reviewers and applications, in the stage `stageId` (whose fresh-eyes rule
+ * applies).
+ */
+export async function blockedPairs(tx: Prisma.TransactionClient, eventId: string, apps: readonly AppRef[], reviewerIds: readonly string[], stageId: string): Promise<Set<string>> {
   const blocked = new Set<string>();
   if (apps.length === 0 || reviewerIds.length === 0) return blocked;
   const reviewers = [...new Set(reviewerIds)];
-  const [users, declared, applied] = await Promise.all([
+  const [users, declared, applied, earlier] = await Promise.all([
     applicantUsers(tx, apps),
     tx.admissionReviewConflict.findMany({ where: { eventId, reviewerUserId: { in: reviewers }, applicationId: { in: apps.map((app) => app.id) } }, select: { reviewerUserId: true, applicationId: true } }),
     // Reviewers who applied to this event themselves (a live registration that isn't crew).
     tx.rSVP.findMany({ where: { eventId, userId: { in: reviewers }, isCrew: false, status: { not: RsvpStatus.REJECTED } }, select: { userId: true }, distinct: ["userId"] }),
+    earlierReviews(tx, eventId, stageId, apps, reviewers),
   ]);
   const applicants = new Set(applied.map((row) => row.userId!));
   for (const app of apps) {
@@ -51,7 +58,19 @@ export async function blockedPairs(tx: Prisma.TransactionClient, eventId: string
     for (const reviewer of reviewers) if (applicants.has(reviewer) || people.has(reviewer)) blocked.add(pairKey(reviewer, app.id));
   }
   for (const row of declared) blocked.add(pairKey(row.reviewerUserId, row.applicationId));
+  for (const row of earlier) blocked.add(pairKey(row.reviewerUserId!, row.applicationId));
   return blocked;
+}
+
+/** Fresh eyes: reviews these reviewers gave these applications in a stage before `stageId`, when that stage asks for fresh eyes. */
+async function earlierReviews(tx: Prisma.TransactionClient, eventId: string, stageId: string, apps: readonly AppRef[], reviewers: readonly string[]) {
+  const stage = await tx.admissionStage.findFirst({ where: { id: stageId, eventId }, select: { freshEyes: true, position: true } });
+  if (!stage?.freshEyes) return [];
+  return tx.admissionReview.findMany({
+    where: { applicationId: { in: apps.map((app) => app.id) }, reviewerUserId: { in: [...reviewers] }, stage: { eventId, position: { lt: stage.position } } },
+    select: { reviewerUserId: true, applicationId: true },
+    distinct: ["reviewerUserId", "applicationId"],
+  });
 }
 
 export type StageCoverage = { stageId: string; target: number; pool: Set<string>; blocked: Set<string>; counted: Map<string, number> };
@@ -64,7 +83,7 @@ export async function stageCoverage(tx: Prisma.TransactionClient, ctx: { organis
   // A review whose reviewer's account is gone no longer counts.
   const reviews = (await tx.admissionReview.findMany({ where: { stageId, applicationId: { in: apps.map((app) => app.id) }, reviewerUserId: { not: null } }, select: { applicationId: true, reviewerUserId: true, answersRevision: true } }))
     .map((review) => ({ ...review, reviewerUserId: review.reviewerUserId! }));
-  const blocked = await blockedPairs(tx, ctx.eventId, apps, [...new Set(reviews.map((review) => review.reviewerUserId))]);
+  const blocked = await blockedPairs(tx, ctx.eventId, apps, [...new Set(reviews.map((review) => review.reviewerUserId))], stageId);
   const counted = new Map<string, number>();
   for (const app of apps) {
     const mine = reviews.filter((review) => review.applicationId === app.id);

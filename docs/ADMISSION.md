@@ -125,8 +125,8 @@ changes when the applicant edits answers.
 ## Stages
 
 `AdmissionStage` (position, name, DRAFT/OPEN/CLOSED, reviewsPerApplication
-1..20, blindReview, up to 10 criteria scored 1..5, guidance, planned
-window). Every application enters stage 1 (`AdmissionStageEntry` source ALL);
+1..20, blindReview, freshEyes, up to 10 criteria scored 1..5, guidance,
+planned window). Every application enters stage 1 (`AdmissionStageEntry` source ALL);
 an ADVANCE decision enters the next stage (source ADVANCED, by whom, with an
 optional rank). Entries are append-only. Reviewers review only while a stage
 is OPEN. Stages are added at the end; only the last one, with no entries or
@@ -160,6 +160,13 @@ for its team. Per-stage reimbursements key off it.
   application when the reviewer applied to the event; declared conflicts
   (`AdmissionReviewConflict`). Recusing records a conflict and gives the
   application to the least-loaded panel reviewer left.
+- Fresh eyes (`AdmissionStage.freshEyes`, default off): on such a stage a
+  reviewer who reviewed an application in an earlier stage is blocked from
+  it like a conflict (`blockedPairs` in lib/admission/coverage.ts), so
+  BALANCED and RANDOM assignment, manual assign, the replacement after a
+  recusal, the review page and submitting all skip them, and a shortfall is
+  reported instead. It can change only while the stage is DRAFT with no
+  assignments or reviews (`updateStage`).
 - Reviews (`AdmissionReview`) are append-only, one per assignment and answers
   revision. A review counts towards the stage target when it is on the
   current answers, by someone in the stage's pool now, without a conflict.
@@ -256,7 +263,6 @@ WITHDRAWN, with the freed offer re-offered (`promoteWaitlisted`). The
 `rsvp_admission_crew_detached` trigger refuses a registration becoming crew
 while an application is still attached, so a crew ticket never accepts an
 offer or holds one.
-
 
 ## Old paths refused
 

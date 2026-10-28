@@ -29,3 +29,7 @@ ALTER TABLE "ReimbursementPolicy" ADD CONSTRAINT "ReimbursementPolicy_stage_shap
   AND ("eligibility" = 'ADMISSION_STAGE') = ("admissionStageId" IS NOT NULL)
   AND (NOT "requireFinalistsPublished" OR "eligibility" = 'JUDGING_ROUND_ENTRY')
 );
+
+-- * Fresh eyes per admission stage: nobody reviews an application in this
+--   stage that they reviewed in an earlier one (lib/admission/coverage.ts).
+ALTER TABLE "AdmissionStage" ADD COLUMN "freshEyes" BOOLEAN NOT NULL DEFAULT false;

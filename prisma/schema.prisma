@@ -3085,7 +3085,6 @@ model ReimbursementPolicy {
   /// CREW only: limit to these crew kinds (docs/VOLUNTEERS.md); empty is every crew member.
   crewKinds                 CrewKind[]               @default([])
   admissionStageId          String?
-
   capPerPersonMinor         BigInt
   /// At least one.
   categories                ExpenseCategory[]
@@ -3869,6 +3868,10 @@ model AdmissionStage {
   reviewsPerApplication Int                  @default(1)
   /// Reviewers don't see who applied (names, emails, phone numbers, team names).
   blindReview           Boolean              @default(false)
+  /// Fresh eyes: nobody reviews an application here that they reviewed in
+  /// an earlier stage (assignment, manual assign and reviewing all refuse
+  /// it). Fixed once the stage leaves DRAFT or has assignments or reviews.
+  freshEyes             Boolean              @default(false)
   /// What reviewers score, each 1..5; none means one overall score.
   criteria              String[]             @default([])
   /// Up to 2000 characters shown to reviewers.
