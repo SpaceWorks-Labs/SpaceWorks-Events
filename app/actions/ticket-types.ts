@@ -9,6 +9,7 @@ import { isValidPromoCode, promoCodeDigest, promoCodeHint } from "@/lib/payments
 import { isAtLeastAsGenerous, type RefundPolicySnapshot } from "@/lib/payments/refundPolicy";
 import { configuredProvider } from "@/lib/payments/settings";
 import { access, revalidateOwner, setOwnerCurrency } from "./ticket-types/access";
+import { perMemberRefusal, PER_MEMBER_PAID_REFUSAL } from "@/lib/admission/settings";
 import { addOnSchema, archiveAddOnSchema, archivePromoSchema, archiveSchema, promoSchema, refundPolicySchema, saveSchema, teamTicketModeSchema, transferSchema } from "./ticket-types/schemas";
 
 const MAX_TICKET_TYPES = 20;
@@ -66,6 +67,8 @@ export async function saveTicketType(input: unknown): Promise<ActionResult<{ id:
   // Anything that can take money needs paid events on and a connected account.
   if (priceMinor > ZERO || flexible || feeMinor > ZERO) {
     if (!(await isPaidEventsEnabled())) return { ok: false, error: "Paid tickets are turned off on this installation." };
+    // Applications (docs/ADMISSION.md): a team's paid place is paid once by its leader.
+    if ("eventId" in owner && (await prisma.event.count({ where: { id: owner.eventId, admissionEnabled: true, registrationMode: "TEAM", teamTicketMode: "PER_MEMBER" } })) > 0) return { ok: false, error: PER_MEMBER_PAID_REFUSAL };
     const provider = configuredProvider(settings);
     if (!provider) return { ok: false, error: "Connect a payment account in Settings → Payments before adding a paid ticket." };
     const minimum = providerMinimumMinor(provider, currency);
@@ -308,9 +311,11 @@ export async function saveTeamTicketMode(input: unknown): Promise<ActionResult> 
   const eventId = context.owner.eventId;
   const saved = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
-    const event = await tx.event.findUnique({ where: { id: eventId }, select: { registrationMode: true, teamTicketMode: true } });
+    const event = await tx.event.findUnique({ where: { id: eventId }, select: { registrationMode: true, teamTicketMode: true, admissionEnabled: true } });
     if (event?.registrationMode !== "TEAM") return "This event doesn't register teams.";
     if (event.teamTicketMode === parsed.data.mode) return null;
+    // Applications (docs/ADMISSION.md): paid team places are paid once by the leader for now.
+    if (event.admissionEnabled && parsed.data.mode === "PER_MEMBER" && (await perMemberRefusal(tx, { id: eventId, registrationMode: "TEAM", teamTicketMode: "PER_MEMBER" }))) return PER_MEMBER_PAID_REFUSAL;
     if (await tx.order.count({ where: { eventId, totalMinor: { gt: 0 } } }) > 0) return "Who pays can't change once tickets have been sold.";
     await tx.event.update({ where: { id: eventId }, data: { teamTicketMode: parsed.data.mode } });
     await recordAuditEvent({ action: "TEAM_TICKET_MODE_UPDATED", actorUserId: context.userId, organisationId: context.organisation.id, targetType: "Event", targetId: eventId, metadata: { mode: parsed.data.mode }, client: tx });

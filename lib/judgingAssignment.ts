@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { MinHeap, pairKey, planAssignments, plannerFingerprint, seededTie, tieHash, type PlannerPair } from "@/lib/assignmentPlanner";
 import { AUTO_ASSIGN_MODES, type AutoAssignMode } from "@/lib/judgingProgress";
 
 /*
@@ -36,6 +36,9 @@ import { AUTO_ASSIGN_MODES, type AutoAssignMode } from "@/lib/judgingProgress";
  * - Projects with the fewest possible judges go first, so a project with
  *   many conflicts isn't starved by easier ones. A project that can't reach
  *   the target is reported as a shortfall.
+ *
+ * The planner itself is shared with admission review (lib/assignmentPlanner.ts);
+ * this module maps judges and projects onto it, unchanged.
  */
 
 export { AUTO_ASSIGN_MODES, type AutoAssignMode };
@@ -93,72 +96,10 @@ export type AutoAssignPlan = {
   fingerprint: string;
 };
 
-export function pairKey(judgeUserId: string, submissionId: string): string {
-  return `${judgeUserId}\u0000${submissionId}`;
-}
+export { MinHeap, pairKey, seededTie, tieHash };
 
-/** 32-bit FNV-1a: a cheap, stable hash for tie-breaks (not a security boundary). */
-export function tieHash(value: string): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash >>> 0;
-}
-
-/** A seeded tie value for RANDOM runs: the first 32 bits of SHA-256(seed, value). Stable per seed. */
-export function seededTie(seed: string, value: string): number {
-  return createHash("sha256").update(seed).update("\u0000").update(value).digest().readUInt32BE(0);
-}
-
-/** A small binary min-heap with a caller-supplied ordering. */
-export class MinHeap<T> {
-  private readonly items: T[] = [];
-  constructor(private readonly less: (a: T, b: T) => boolean) {}
-
-  get size(): number {
-    return this.items.length;
-  }
-
-  push(item: T): void {
-    const items = this.items;
-    items.push(item);
-    let index = items.length - 1;
-    while (index > 0) {
-      const parent = (index - 1) >> 1;
-      if (!this.less(items[index]!, items[parent]!)) break;
-      [items[index], items[parent]] = [items[parent]!, items[index]!];
-      index = parent;
-    }
-  }
-
-  pop(): T | undefined {
-    const items = this.items;
-    if (items.length === 0) return undefined;
-    const top = items[0];
-    const last = items.pop()!;
-    if (items.length > 0) {
-      items[0] = last;
-      let index = 0;
-      for (;;) {
-        const left = index * 2 + 1;
-        const right = left + 1;
-        let smallest = index;
-        if (left < items.length && this.less(items[left]!, items[smallest]!)) smallest = left;
-        if (right < items.length && this.less(items[right]!, items[smallest]!)) smallest = right;
-        if (smallest === index) break;
-        [items[index], items[smallest]] = [items[smallest]!, items[index]!];
-        index = smallest;
-      }
-    }
-    return top;
-  }
-}
-
-function comparePairs(a: AssignmentPair, b: AssignmentPair) {
-  return a.submissionId < b.submissionId ? -1 : a.submissionId > b.submissionId ? 1 : a.judgeUserId < b.judgeUserId ? -1 : a.judgeUserId > b.judgeUserId ? 1 : 0;
-}
+const toPlanner = (pair: AssignmentPair): PlannerPair => ({ reviewerId: pair.judgeUserId, itemId: pair.submissionId });
+const fromPlanner = (pair: PlannerPair): AssignmentPair => ({ judgeUserId: pair.reviewerId, submissionId: pair.itemId });
 
 export function planFingerprint(
   add: readonly AssignmentPair[],
@@ -168,126 +109,31 @@ export function planFingerprint(
   adopt: readonly AssignmentPair[] = [],
   seed: string | null = null,
 ): string {
-  const hash = createHash("sha256");
-  hash.update(`${mode}:${perProject}\n`);
-  if (seed) hash.update(`seed:${seed}\n`);
-  for (const pair of [...add].sort(comparePairs)) hash.update(`+${pair.judgeUserId}:${pair.submissionId}\n`);
-  for (const pair of [...remove].sort(comparePairs)) hash.update(`-${pair.judgeUserId}:${pair.submissionId}\n`);
-  for (const pair of [...adopt].sort(comparePairs)) hash.update(`=${pair.judgeUserId}:${pair.submissionId}\n`);
-  return hash.digest("base64url").slice(0, 22);
+  return plannerFingerprint(add.map(toPlanner), remove.map(toPlanner), perProject, mode, adopt.map(toPlanner), seed);
 }
-
-type Candidate = { judgeUserId: string; load: number; tie: number };
 
 /** Build the assignment plan. Pure and deterministic: the same input gives the same plan. */
 export function planAutoAssignment(input: AutoAssignInput): AutoAssignPlan {
-  const perProject = Math.max(1, Math.floor(input.perProject));
-  const seed = input.seed ?? null;
-  const tie = seed ? (value: string) => seededTie(seed, value) : tieHash;
-  const pool = [...new Set(input.poolJudgeIds)];
-  const projects = [...new Set(input.projectIds)].sort();
-  const projectSet = new Set(projects);
-
-  const kept: AssignmentPair[] = [];
-  let remove: AssignmentPair[] = [];
-  for (const pair of input.existing) {
-    if (!projectSet.has(pair.submissionId)) continue;
-    if (input.mode === "replace" && !input.started.has(pairKey(pair.judgeUserId, pair.submissionId))) remove.push(pair);
-    else kept.push(pair);
-  }
-
-  const load = new Map<string, number>(pool.map((id) => [id, 0]));
-  const assignedTo = new Map<string, Set<string>>(projects.map((id) => [id, new Set<string>()]));
-  const counted = new Map<string, number>(projects.map((id) => [id, 0]));
-  for (const pair of kept) {
-    assignedTo.get(pair.submissionId)!.add(pair.judgeUserId);
-    if (load.has(pair.judgeUserId)) load.set(pair.judgeUserId, load.get(pair.judgeUserId)! + 1);
-    if (input.canJudge(pair.judgeUserId) && !input.blocked.has(pairKey(pair.judgeUserId, pair.submissionId))) {
-      counted.set(pair.submissionId, counted.get(pair.submissionId)! + 1);
-    }
-  }
-  const before = new Map<string, number>(pool.map((id) => [id, 0]));
-  for (const pair of input.existing) {
-    if (!projectSet.has(pair.submissionId) || !before.has(pair.judgeUserId)) continue;
-    before.set(pair.judgeUserId, before.get(pair.judgeUserId)! + 1);
-  }
-
-  // Work done without an assignment row (see the rules above).
-  const existingKeys = new Set(input.existing.filter((pair) => projectSet.has(pair.submissionId)).map((pair) => pairKey(pair.judgeUserId, pair.submissionId)));
-  const adopt: AssignmentPair[] = [];
-  for (const key of [...input.started].sort()) {
-    if (existingKeys.has(key) || input.blocked.has(key)) continue;
-    const [judgeUserId, submissionId] = key.split("\u0000") as [string, string];
-    if (!projectSet.has(submissionId) || !input.canJudge(judgeUserId)) continue;
-    if (input.adoptStarted) {
-      adopt.push({ judgeUserId, submissionId });
-      assignedTo.get(submissionId)!.add(judgeUserId);
-      counted.set(submissionId, counted.get(submissionId)! + 1);
-      if (load.has(judgeUserId)) {
-        load.set(judgeUserId, load.get(judgeUserId)! + 1);
-        before.set(judgeUserId, before.get(judgeUserId)! + 1);
-      }
-    } else if (input.submitted?.has(key)) {
-      assignedTo.get(submissionId)!.add(judgeUserId);
-      counted.set(submissionId, counted.get(submissionId)! + 1);
-    }
-  }
-
-  // Who could still take each project; the most constrained projects go first.
-  const possible = new Map<string, string[]>();
-  for (const projectId of projects) {
-    const taken = assignedTo.get(projectId)!;
-    possible.set(projectId, pool.filter((judgeId) => !taken.has(judgeId) && !input.blocked.has(pairKey(judgeId, projectId))));
-  }
-  const order = projects
-    .map((id) => ({ id, room: possible.get(id)!.length + counted.get(id)!, tie: tie(id) }))
-    .sort((a, b) => a.room - b.room || a.tie - b.tie || (a.id < b.id ? -1 : 1));
-
-  let add: AssignmentPair[] = [];
-  const shortfalls: ProjectShortfall[] = [];
-  let covered = 0;
-  for (const { id: projectId } of order) {
-    let have = counted.get(projectId)!;
-    const need = perProject - have;
-    if (need > 0) {
-      const heap = new MinHeap<Candidate>((a, b) => a.load < b.load || (a.load === b.load && (a.tie < b.tie || (a.tie === b.tie && a.judgeUserId < b.judgeUserId))));
-      for (const judgeUserId of possible.get(projectId)!) {
-        heap.push({ judgeUserId, load: load.get(judgeUserId)!, tie: tie(pairKey(judgeUserId, projectId)) });
-      }
-      for (let picked = 0; picked < need && heap.size > 0; picked += 1) {
-        const next = heap.pop()!;
-        add.push({ judgeUserId: next.judgeUserId, submissionId: projectId });
-        load.set(next.judgeUserId, load.get(next.judgeUserId)! + 1);
-        have += 1;
-      }
-    }
-    if (have >= perProject) covered += 1;
-    else shortfalls.push({ submissionId: projectId, assigned: have, missing: perProject - have, possible: possible.get(projectId)!.length + counted.get(projectId)! });
-  }
-
-  // Replace mode: an assignment removed and picked straight back is simply kept.
-  if (remove.length && add.length) {
-    const addKeys = new Set(add.map((pair) => pairKey(pair.judgeUserId, pair.submissionId)));
-    const removeKeys = new Set(remove.map((pair) => pairKey(pair.judgeUserId, pair.submissionId)));
-    const both = (pair: AssignmentPair) => addKeys.has(pairKey(pair.judgeUserId, pair.submissionId)) && removeKeys.has(pairKey(pair.judgeUserId, pair.submissionId));
-    add = add.filter((pair) => !both(pair));
-    remove = remove.filter((pair) => !both(pair));
-  }
-  const removedBy = new Map<string, number>();
-  for (const pair of remove) removedBy.set(pair.judgeUserId, (removedBy.get(pair.judgeUserId) ?? 0) + 1);
-
-  const added = new Map<string, number>();
-  for (const pair of add) added.set(pair.judgeUserId, (added.get(pair.judgeUserId) ?? 0) + 1);
-  const loads = pool.map((judgeUserId) => ({
-    judgeUserId,
-    before: before.get(judgeUserId)!,
-    added: added.get(judgeUserId) ?? 0,
-    removed: removedBy.get(judgeUserId) ?? 0,
-    after: load.get(judgeUserId)!,
-  }));
-  shortfalls.sort((a, b) => b.missing - a.missing || (a.submissionId < b.submissionId ? -1 : 1));
-  add.sort(comparePairs);
-  remove.sort(comparePairs);
-  adopt.sort(comparePairs);
-  return { add, remove, adopt, loads, shortfalls, covered, fingerprint: planFingerprint(add, remove, perProject, input.mode, adopt, seed) };
+  const plan = planAssignments({
+    itemIds: input.projectIds,
+    poolReviewerIds: input.poolJudgeIds,
+    perItem: input.perProject,
+    mode: input.mode,
+    existing: input.existing.map(toPlanner),
+    blocked: input.blocked,
+    started: input.started,
+    submitted: input.submitted,
+    adoptStarted: input.adoptStarted,
+    canReview: input.canJudge,
+    seed: input.seed,
+  });
+  return {
+    add: plan.add.map(fromPlanner),
+    remove: plan.remove.map(fromPlanner),
+    adopt: plan.adopt.map(fromPlanner),
+    loads: plan.loads.map((load) => ({ judgeUserId: load.reviewerId, before: load.before, added: load.added, removed: load.removed, after: load.after })),
+    shortfalls: plan.shortfalls.map((row) => ({ submissionId: row.itemId, assigned: row.assigned, missing: row.missing, possible: row.possible })),
+    covered: plan.covered,
+    fingerprint: plan.fingerprint,
+  };
 }

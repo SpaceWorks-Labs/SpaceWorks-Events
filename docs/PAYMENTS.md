@@ -137,3 +137,7 @@ the check-in preview shows what is owed.
   and last four digits) are stored.
 - Deleting an organisation, event or series is refused while people have paid
   for something still to come: cancel it instead, which refunds them.
+
+## Applications
+
+On events taking applications ([ADMISSION.md](ADMISSION.md)) a paid registration places a REQUESTED order and nothing is charged. An offer leaves the order REQUESTED; the applicant's **Accept and pay** holds the place for a day through the payment-link path (`offerInTransaction`; the PER_TEAM leader's order holds the team's unit), and the settled payment confirms it. A place is never confirmed unpaid (database guard `admission_status_guard`). A hold that ends unpaid puts the order back to REQUESTED while the offer's respond-by time lasts, then the offer expires and the order is CANCELLED; a decline, withdrawal or rejection cancels the unpaid order. A free ticket type on a paid event is free for that applicant. Orders are one seat each on these events, and PER_MEMBER paid team events can't take applications yet.

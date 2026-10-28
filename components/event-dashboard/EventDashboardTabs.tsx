@@ -19,6 +19,7 @@ export const EVENT_TABS = [
   { value: "page", label: "Event page" },
   { value: "emails", label: "Emails" },
   { value: "check-in", label: "Check-in" },
+  { value: "applications", label: "Applications" },
   { value: "judging", label: "Judging" },
   { value: "mentors", label: "Mentors" },
   { value: "feedback", label: "Feedback" },

@@ -17,6 +17,8 @@ import { SettingsPanel } from "@/components/event-dashboard/panels/SettingsPanel
 import { JudgingPanel } from "@/components/event-dashboard/panels/JudgingPanel";
 import { FinancePanel } from "@/components/event-dashboard/panels/FinancePanel";
 import { JudgeWorkspace } from "@/components/event-dashboard/judging/JudgeWorkspace";
+import { ApplicationsPanel } from "@/components/event-dashboard/panels/ApplicationsPanel";
+import { ReviewWorkspace } from "@/components/event-dashboard/admission/ReviewWorkspace";
 import { MentorsPanel } from "@/components/event-dashboard/panels/MentorsPanel";
 import { MentorConsole } from "@/components/event-dashboard/mentors/MentorConsole";
 
@@ -36,12 +38,13 @@ export default async function EventManagePage({ params }: Props) {
           back={{ href: `/dashboard/${organisation.slug}`, label: "All events" }}
           event={{ title: event.title, status: event.status, privacyType: event.privacyType, startDateTime: event.startDateTime, endDateTime: event.endDateTime, timezone: event.timezone, accentColor: event.page?.accentColor }}
         />
-        {view.mentorOnly ? <MentorConsole ctx={ctx} /> : null}
-        {view.judgeOnly || ctx.permissions.canJudge ? <JudgeWorkspace ctx={ctx} /> : null}
+        {ctx.permissions.canMentor ? <MentorConsole ctx={ctx} /> : null}
+        {ctx.permissions.canJudge ? <JudgeWorkspace ctx={ctx} /> : null}
+        {ctx.permissions.canReviewApplications && event.admissionEnabled ? <ReviewWorkspace ctx={ctx} /> : null}
       </div>
     );
   }
-  const { organisation, event, stats, permissions, ctx, publicPath, counts, showJudging, showMentors } = view;
+  const { organisation, event, stats, permissions, ctx, publicPath, counts, showJudging, showMentors, showApplications } = view;
   return (
     <div className="flex flex-col gap-6">
       <EventManageHeader
@@ -82,7 +85,7 @@ export default async function EventManagePage({ params }: Props) {
 
       <EventDashboardTabs
         badges={{ guests: counts?.pendingApproval ?? 0 }}
-        hidden={[...(showJudging ? [] : ["judging" as const]), ...(showMentors ? [] : ["mentors" as const])]}
+        hidden={[...(showJudging ? [] : ["judging" as const]), ...(showMentors ? [] : ["mentors" as const]), ...(showApplications ? [] : ["applications" as const])]}
         panels={{
           overview: <OverviewPanel ctx={ctx} />,
           guests: <GuestsPanel ctx={ctx} />,
@@ -90,6 +93,7 @@ export default async function EventManagePage({ params }: Props) {
           emails: <EmailsPanel ctx={ctx} />,
           "check-in": <CheckInPanel ctx={ctx} />,
           judging: showJudging ? <JudgingPanel ctx={ctx} /> : null,
+          applications: showApplications ? <ApplicationsPanel ctx={ctx} /> : null,
           mentors: showMentors ? <MentorsPanel ctx={ctx} /> : null,
           feedback: <FeedbackPanel ctx={ctx} />,
           analytics: <AnalyticsPanel ctx={ctx} />,

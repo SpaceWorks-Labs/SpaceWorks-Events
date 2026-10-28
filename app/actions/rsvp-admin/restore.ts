@@ -12,6 +12,8 @@ import { restoreListCheckIns, revalidateRsvpPaths, snapshotSchema, teamForRestor
 import { isTeamDeletionSnapshot, restoreTeamDeletionSnapshot } from "@/lib/core/teams";
 import { restoreSubmissionSnapshotTx } from "@/lib/core/submissionLifecycle";
 
+const ADMISSION_NO_RESTORE = "This event takes applications: a removed application stays withdrawn and can't be restored.";
+
 /** Restore only a short-lived snapshot created by this server for this organiser. */
 export async function restoreRsvp(input: unknown): Promise<ActionResult> {
   const session = await auth();
@@ -33,6 +35,8 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
   });
   if (!undo) return { ok: false, error: "This undo has expired or is unavailable." };
   if (isTeamDeletionSnapshot(undo.payload)) {
+    const teamEventId = (undo.payload as { eventId?: unknown }).eventId;
+    if (typeof teamEventId === "string" && (await prisma.event.count({ where: { id: teamEventId, admissionEnabled: true } }))) return { ok: false, error: ADMISSION_NO_RESTORE };
     const restoredTeam = await restoreTeamDeletionSnapshot(undo, org.id);
     if (!restoredTeam.ok || !restoredTeam.data) return restoredTeam.ok ? { ok: false, error: "Could not restore the team." } : restoredTeam;
     revalidateRsvpPaths(org.slug, { eventId: restoredTeam.data.eventId, eventInstanceId: null, eventSlug: restoredTeam.data.eventSlug });
@@ -51,6 +55,8 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
     ? await prisma.event.findFirst({ where: { id: snapshot.data.eventId, organisationId: org.id }, select: { id: true, slug: true } })
     : await prisma.eventInstance.findFirst({ where: { id: snapshot.data.eventInstanceId!, series: { organisationId: org.id } }, select: { id: true } });
   if (!targetExists) return { ok: false, error: "The original event no longer exists." };
+  // Applications (docs/ADMISSION.md): a removed applicant's application is kept as withdrawn and isn't restored.
+  if (snapshot.data.eventId && (await prisma.event.count({ where: { id: snapshot.data.eventId, admissionEnabled: true } }))) return { ok: false, error: ADMISSION_NO_RESTORE };
 
   let restoredId: string;
   let refusal = "This RSVP cannot be restored because the event is now at capacity.";

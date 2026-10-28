@@ -24,6 +24,7 @@ import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
 import { ATTENDANCE_CHECK_KIND, deliverAttendanceCheck } from "./attendance";
 import { deliverMentorMessage, isMentorMessageKind } from "./mentor";
 import { deliverCrewMessage, isCrewMessageKind } from "./crew";
+import { ADMISSION_NOTICE_KIND, deliverAdmissionNotice } from "./admission";
 import { deliverVolunteerNotice, VOLUNTEER_NOTICE_KIND } from "./volunteer";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
@@ -78,7 +79,7 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           continue;
         }
         const ticketPdf = payload.status === RsvpStatus.CONFIRMED ? await designedTicketAttachment(payload.checkInToken) : undefined;
-        await sendRSVPConfirmation({ ...payload, recipientName: attendeeName(rsvp), calendarEvent: calendarEvent(rsvp), messageId: stableMessageId, ticketPdf });
+        await sendRSVPConfirmation({ ...payload, recipientName: attendeeName(rsvp), calendarEvent: calendarEvent(rsvp), messageId: stableMessageId, ticketPdf, application: Boolean(rsvp.event?.admissionEnabled) });
       } else if (message.kind === "rsvp-status") {
         const payload = asRsvpStatusPayload(message.payload);
         if (!payload) throw new PermanentOutboxError();
@@ -218,8 +219,10 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           if (outcome === "expired") failed += 1;
           continue;
         }
-      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind) || message.kind === VOLUNTEER_NOTICE_KIND) {
-        const outcome = isTeamMessageKind(message.kind)
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind) || message.kind === VOLUNTEER_NOTICE_KIND || message.kind === ADMISSION_NOTICE_KIND) {
+        const outcome = message.kind === ADMISSION_NOTICE_KIND
+          ? await deliverAdmissionNotice(message.payload, stableMessageId)
+          : isTeamMessageKind(message.kind)
           ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
           : isCrewMessageKind(message.kind)
             ? await deliverCrewMessage(message.payload, stableMessageId)

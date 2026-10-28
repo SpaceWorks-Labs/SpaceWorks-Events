@@ -3,6 +3,7 @@ import { teamNameKey, type TeamRegistrationIntent } from "@/lib/validators";
 import { countConfirmedUnits, teamPlacesTaken } from "@/lib/teamUnits";
 import { generateTeamManageToken, generateTeamToken } from "@/lib/teamToken";
 import { decideRsvpStatus } from "./reserve";
+import { admissionJoinRefusal } from "@/lib/admission/registration";
 
 export const LEADER_STILL_PAYING = "This team's leader is still paying for it. Try the link again in a few minutes.";
 
@@ -61,6 +62,8 @@ export async function placeTeamRegistration(tx: Prisma.TransactionClient, params
   if (!joined) throw new TeamRegistrationError("This team link is no longer valid. Ask your team leader for a new one.");
   if (joined.status === RsvpStatus.REJECTED) throw new TeamRegistrationError("This team can no longer be joined.");
   if (joined.status === RsvpStatus.PENDING_PAYMENT) throw new TeamRegistrationError(LEADER_STILL_PAYING);
+  const closed = await admissionJoinRefusal(tx, { teamId: joined.id });
+  if (closed) throw new TeamRegistrationError(closed);
   const size = await teamPlacesTaken(tx, joined.id);
   if (settings.teamMaxSize == null || size >= settings.teamMaxSize) throw new TeamRegistrationError("This team is already full.");
   // Joining never changes capacity: the member takes the team's status.

@@ -79,8 +79,10 @@ super admin are exempt. The permission helpers underneath fail closed too.
   only), `TOO_MANY_ATTEMPTS` (429, sign-in blocked for the address or account),
   `REAUTH_REQUIRED` (401, sign in again before signing out everywhere),
   `PAID_ORDER` (409, money was taken: use the order's refund rules),
-  `REGISTRATION_CLOSED` (409) and `PAYMENT_UNAVAILABLE` (503, the payment
-  provider can't be reached).
+  `REGISTRATION_CLOSED` (409), `PAYMENT_UNAVAILABLE` (503, the payment
+  provider can't be reached) and `ADMISSION_MANAGED` (409, the registration,
+  team or order is an application: decide it through Applications,
+  docs/ADMISSION.md).
 - Team and judging refusals carry their own codes so the app can react
   without parsing messages:
   - `TEAM_MEMBER` (409): an individual approve, reject, promote or re-accept

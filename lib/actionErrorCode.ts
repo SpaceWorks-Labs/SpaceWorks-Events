@@ -18,4 +18,6 @@ export type ActionErrorCode =
   /** Submitting a review before every criterion is scored (or with no rubric). */
   | "INCOMPLETE_SCORES"
   /** A submission this judge may not score (not submitted, unassigned, conflict of interest, another event's). */
-  | "NOT_VISIBLE";
+  | "NOT_VISIBLE"
+  /** An application's registration, team or order (docs/ADMISSION.md): decided and paid only through the Applications flow. */
+  | "ADMISSION_MANAGED";

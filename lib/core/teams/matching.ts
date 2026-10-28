@@ -1,4 +1,5 @@
 import "server-only";
+import { admissionJoinRefusal } from "@/lib/admission/registration";
 
 import {
   EventStatus,
@@ -212,6 +213,8 @@ async function moveSoloRsvpIntoTeamTx(
   if (team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");
   if (team.status === RsvpStatus.PENDING_PAYMENT) return fail(LEADER_STILL_PAYING);
   if (rsvp.status === RsvpStatus.PENDING_PAYMENT) return fail("Finish paying for your ticket first.");
+  const closed = await admissionJoinRefusal(tx, { teamId: team.id, rsvpId: rsvp.id });
+  if (closed) return fail(closed);
   if (rsvp.checkedInAt && team.status !== RsvpStatus.CONFIRMED) {
     return fail("This registration has already checked in, so it can only join a team that has a place.");
   }

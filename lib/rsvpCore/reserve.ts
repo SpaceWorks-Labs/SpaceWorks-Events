@@ -10,6 +10,7 @@ import { lockSeriesDates } from "@/lib/payments/targets";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import { RsvpTargetClosedError } from "./shared";
+import { admissionRegistrationRefusal } from "@/lib/admission/registration";
 import { placeTeamRegistration, TeamRegistrationError, type TeamEventSettings } from "./team";
 
 export function decideRsvpStatus(params: {
@@ -66,6 +67,9 @@ export async function reserveRsvp(params: {
       if (current.registrationMode === RegistrationMode.TEAM) teamEvent = current;
       // A crew member already holds a free crew ticket (docs/CREW.md); a second registration would take a place.
       if (await hasCrewEmail(tx, params.target.eventId, [params.notification.to])) throw new TeamRegistrationError(CREW_EMAIL_REFUSED);
+      // Applications (docs/ADMISSION.md): one per person per event.
+      const applied = await admissionRegistrationRefusal(tx, params.target.eventId, params.data.attendeeKey);
+      if (applied) throw new TeamRegistrationError(applied);
     } else {
       // The series row, then the date: the same order every series path locks in.
       const date = await tx.eventInstance.findUnique({ where: { id: params.target.eventInstanceId }, select: { eventSeriesId: true } });

@@ -33,6 +33,7 @@ export type MobileErrorCode =
   | "REAUTH_REQUIRED"
   | "PAID_ORDER"
   | "REGISTRATION_CLOSED"
+  | "ADMISSION_MANAGED"
   | "PAYMENT_UNAVAILABLE"
   | "PAYLOAD_TOO_LARGE"
   | "IDEMPOTENCY_STALE";
@@ -62,6 +63,7 @@ export const MOBILE_ERROR_STATUS: Record<MobileErrorCode, number> = {
   REAUTH_REQUIRED: 401,
   PAID_ORDER: 409,
   REGISTRATION_CLOSED: 409,
+  ADMISSION_MANAGED: 409,
   PAYMENT_UNAVAILABLE: 503,
   PAYLOAD_TOO_LARGE: 413,
   IDEMPOTENCY_STALE: 409,
@@ -92,6 +94,7 @@ const DEFAULT_MESSAGES: Record<MobileErrorCode, string> = {
   REAUTH_REQUIRED: "Sign in again to do that.",
   PAID_ORDER: "This ticket was paid for. Cancel it from its order, under the refund policy.",
   REGISTRATION_CLOSED: "Registration is closed.",
+  ADMISSION_MANAGED: "This is an application: decide it from the Applications tab.",
   PAYMENT_UNAVAILABLE: "Payments can't be taken right now. Try again in a moment.",
   PAYLOAD_TOO_LARGE: "Request is too large.",
   IDEMPOTENCY_STALE: "An earlier try of this change never finished. Refresh to check whether it happened, then try again if it did not.",
@@ -128,7 +131,7 @@ export const unauthenticated = () => mobileError("UNAUTHENTICATED");
 export const notFound = () => mobileError("NOT_FOUND");
 
 /** Core refusal codes passed through unchanged (ActionErrorCode, JudgingRefusalCode). */
-const PASS_THROUGH_CODES = ["TEAM_REQUIRED", "TEAM_MEMBER", "TEAM_INCOMPLETE", "CAPACITY_FULL", "JUDGING_CLOSED", "INCOMPLETE_SCORES", "NOT_VISIBLE", "PAID_ORDER", "REGISTRATION_CLOSED"] as const;
+const PASS_THROUGH_CODES = ["TEAM_REQUIRED", "TEAM_MEMBER", "TEAM_INCOMPLETE", "CAPACITY_FULL", "JUDGING_CLOSED", "INCOMPLETE_SCORES", "NOT_VISIBLE", "PAID_ORDER", "REGISTRATION_CLOSED", "ADMISSION_MANAGED"] as const;
 type PassThroughCode = (typeof PASS_THROUGH_CODES)[number];
 
 type FailedActionResult = { ok: false; error: string; fieldErrors?: Record<string, string[]>; needsForce?: boolean; reauthRequired?: boolean; code?: string };

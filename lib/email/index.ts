@@ -53,6 +53,8 @@ export async function sendRSVPConfirmation(params: {
   recipientName?: string;
   /** Names the team for a registration on a TEAM event. */
   teamName?: string;
+  /** The event takes applications (docs/ADMISSION.md): a pending registration is an application in review. */
+  application?: boolean;
   /** The designed ticket as a PDF (docs/TICKET_DESIGNER.md), for confirmed registrations. */
   ticketPdf?: { filename: string; content: Buffer };
 }): Promise<void> {
@@ -81,6 +83,9 @@ export async function sendRSVPConfirmation(params: {
   if (params.status === "WAITLISTED") {
     statusText = "Waitlisted";
     statusMessage = "The event is currently at capacity, so you've been placed on the waitlist. We will notify you if a spot opens up!";
+  } else if (params.status === "PENDING_APPROVAL" && params.application) {
+    statusText = "Application received";
+    statusMessage = "Your application is in. The organisers review every application and will email you with a decision. Nothing is charged now.";
   } else if (params.status === "PENDING_APPROVAL") {
     statusText = "Pending Approval";
     statusMessage = "Your RSVP is pending organizer approval. We will let you know once it's reviewed.";

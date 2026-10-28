@@ -28,6 +28,7 @@ function teamEvent() {
     submissionFeeMinor: BigInt(500), submissionFeeRefundOnDisqualify: false,
     budgetMinor: BigInt(100000), participantClaimsEnabled: true, participantClaimCapMinor: null, crewClaimsEnabled: false, volunteerShiftsEnabled: false, contributorCertificateTemplate: null, attendanceCheckReleaseOnDecline: true,
     mentorDeskEnabled: false, mentorHelpClaimedEmail: false, mentorsGetCrewTicket: false,
+    admissionEnabled: false, admissionMode: "MANUAL", admissionRsvpDays: 7, admissionOfferCapacity: null, emailApplicantsOnStageAdvance: false,
     ticketDesignId: "design_1", shortCode: "AB12CD3",
     checkInStationPinHash: "bcrypt-secret", checkInStationPinEncrypted: "encrypted-secret",
     checkInStationSecretVersion: 7, createdAt: new Date("2034-01-01T00:00:00Z"),

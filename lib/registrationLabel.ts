@@ -10,9 +10,11 @@
 export type RegistrationLabelTeam = { soloPolicy: string };
 
 export function registrationActionLabel(
-  state: { full: boolean; approvalRequired: boolean },
+  state: { full: boolean; approvalRequired: boolean; applications?: boolean },
   team: RegistrationLabelTeam | null,
 ): string {
+  // Applications (docs/ADMISSION.md): everyone applies; places are offered after review.
+  if (state.applications) return team?.soloPolicy === "TEAMS_ONLY" ? "Apply as a team" : "Apply";
   if (team) {
     const teamsOnly = team.soloPolicy === "TEAMS_ONLY";
     if (state.full) return teamsOnly ? "Join the waitlist with your team" : "Join the waitlist";

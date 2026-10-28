@@ -1,4 +1,4 @@
-import { EventStatus, RsvpStatus } from "@prisma/client";
+import { AdmissionStatus, EventStatus, RsvpStatus } from "@prisma/client";
 import { z } from "zod";
 
 /**
@@ -62,6 +62,20 @@ const feedbackData = z.object({
   event: webhookEventRefSchema,
   feedback: z.object({ id: z.string(), submittedAt: isoDate }).strict(),
 }).strict();
+/** Applications (docs/ADMISSION.md): ids, status and stage only; never answers, scores or reviewers. */
+export const webhookApplicationSchema = z.object({
+  id: z.string(),
+  /** The solo registration, or the team leader's. */
+  registrationId: z.string().nullable(),
+  teamId: z.string().nullable(),
+  status: z.nativeEnum(AdmissionStatus),
+  stage: z.object({ id: z.string(), position: z.number().int(), name: z.string() }).strict().nullable(),
+}).strict();
+const applicationStatusData = z.object({
+  event: webhookEventRefSchema,
+  application: webhookApplicationSchema,
+  previousStatus: z.nativeEnum(AdmissionStatus).nullable(),
+}).strict();
 const pingData = z.object({ endpointId: z.string(), message: z.string() }).strict();
 
 export const webhookDataSchemas = {
@@ -72,6 +86,7 @@ export const webhookDataSchemas = {
   "event.published": eventStatusData,
   "event.cancelled": eventStatusData,
   "feedback.submitted": feedbackData,
+  "application.status_changed": applicationStatusData,
   ping: pingData,
 } as const;
 
