@@ -9,7 +9,7 @@ import { recordAuditEvent } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
-import { cancelOrderAsBuyer, PaymentOperationError } from "@/lib/payments/operations";
+import { AdmissionManagedError, cancelOrderAsBuyer, PaymentOperationError } from "@/lib/payments/operations";
 import { validateAndNormalizeAnswers } from "@/lib/rsvpCore";
 import { isValidAttendeeName } from "@/lib/validators";
 import { ORDER_SUBJECT_SELECT, orderSubject } from "@/lib/payments/targets";
@@ -136,7 +136,7 @@ export async function transferOrderTicket(input: unknown): Promise<ActionResult>
   try {
     await transferTicket(parsed.data);
   } catch (error) {
-    if (error instanceof PaymentOperationError) return { ok: false, error: error.message };
+    if (error instanceof PaymentOperationError) return { ok: false, error: error.message, ...(error instanceof AdmissionManagedError ? { code: error.code } : {}) };
     if (typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "P2002") {
       return { ok: false, error: "That person already has a ticket for this event." };
     }

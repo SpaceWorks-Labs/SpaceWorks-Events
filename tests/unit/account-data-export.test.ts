@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
 vi.mock("@/lib/rateLimit", () => ({ checkRateLimitById: mocks.rateLimit }));
+vi.mock("@/lib/admission/accountExport", () => ({ loadAccountApplications: async () => [] }));
 vi.mock("@/lib/db", () => ({ prisma: {
   user: { findUnique: mocks.user },
   account: { findMany: mocks.accounts },

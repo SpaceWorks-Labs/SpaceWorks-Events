@@ -3,6 +3,7 @@ import "server-only";
 import { AdmissionAssignmentStatus, AdmissionStatus, Prisma, RegistrationFieldType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { validateAndNormalizeAnswers } from "@/lib/rsvpCore/answers";
+import { admissionKeyHash } from "./registration";
 import { AdmissionError, CHANGED, lockAdmissionEvent, unitMembers } from "./state";
 
 /*
@@ -58,7 +59,7 @@ export async function applicationPeople(client: Prisma.TransactionClient, app: {
 
 /** The applicant's own edit of their answers, by ticket token. */
 export async function editApplicationAnswers(token: string, input: Record<string, unknown>): Promise<{ ok: true } | { ok: false; error: string }> {
-  const rsvp = await prisma.rSVP.findUnique({ where: { checkInToken: token }, select: { id: true, eventId: true, teamId: true, isCrew: true } });
+  const rsvp = await prisma.rSVP.findUnique({ where: { checkInToken: token }, select: { id: true, eventId: true, teamId: true, isCrew: true, attendeeKey: true } });
   if (!rsvp?.eventId || rsvp.isCrew) return { ok: false, error: "This ticket has no application." };
   const form = await prisma.eventRegistrationForm.findUnique({ where: { eventId: rsvp.eventId }, select: { fields: { select: { id: true, key: true, label: true, type: true, required: true, options: true, settings: true } } } });
   if (!form || form.fields.length === 0) return { ok: false, error: "This event asks no questions." };
@@ -72,7 +73,7 @@ export async function editApplicationAnswers(token: string, input: Record<string
       if (app.status !== AdmissionStatus.IN_REVIEW || app.answersLockedAt) return { ok: false as const, error: "Your answers can't change any more: a decision has been made." };
       const previous = await tx.rsvpAnswer.findMany({ where: { rsvpId: rsvp.id }, select: answerSelect });
       await tx.admissionAnswerRevision.create({
-        data: { applicationId: app.id, rsvpId: rsvp.id, answersRevision: app.answersRevision, answers: previous.map((row) => ({ fieldId: row.fieldId, label: row.field.label, value: answerText(row) })) as Prisma.InputJsonValue },
+        data: { applicationId: app.id, rsvpId: rsvp.id, personKey: admissionKeyHash(rsvp.attendeeKey), answersRevision: app.answersRevision, answers: previous.map((row) => ({ fieldId: row.fieldId, label: row.field.label, value: answerText(row) })) as Prisma.InputJsonValue },
       });
       await tx.rsvpAnswer.deleteMany({ where: { rsvpId: rsvp.id } });
       if (validated.rows.length) await tx.rsvpAnswer.createMany({ data: validated.rows.map((row) => ({ ...row, rsvpId: rsvp.id })) });

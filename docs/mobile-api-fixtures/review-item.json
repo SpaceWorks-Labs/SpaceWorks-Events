@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "data": {
+    "assignmentId": "classign00000000000000001",
+    "stageName": "Review",
+    "stageOpen": true,
+    "blind": true,
+    "criteria": [
+      "Motivation",
+      "Experience"
+    ],
+    "guidance": "Score what they wrote, not who they are.",
+    "teamName": null,
+    "people": [
+      {
+        "name": "Applicant 1",
+        "email": null,
+        "isLeader": false,
+        "answers": [
+          {
+            "label": "What do you hope to build?",
+            "value": "A tool to share bikes between neighbours."
+          }
+        ]
+      }
+    ],
+    "reviewed": null,
+    "canReview": true
+  }
+}

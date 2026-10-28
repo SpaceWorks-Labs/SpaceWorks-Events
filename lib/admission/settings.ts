@@ -22,6 +22,7 @@ export { PER_MEMBER_PAID_REFUSAL };
  *   Paying per member is not supported with applications yet.
  */
 
+export const REENABLE_REFUSAL = "This event took applications before, and they're kept. To take applications again, create a new event.";
 export const HAS_REGISTRATIONS_REFUSAL = "Applications can only be turned on or off before anyone has registered.";
 
 export type AdmissionSettingsInput = { mode: AdmissionMode; rsvpDays: number; offerCapacity: number | null; emailOnStageAdvance: boolean };
@@ -56,6 +57,8 @@ export async function setAdmissionEnabled(ctx: AdmissionContext, enabled: boolea
     if (event.admissionEnabled === enabled) return { ok: true };
     if ((await tx.rSVP.count({ where: { eventId: event.id, isCrew: false } })) > 0) return { ok: false, error: HAS_REGISTRATIONS_REFUSAL };
     if (enabled) {
+      // Withdrawn applications keep their history (and their people) for good: a new round of applications is a new event.
+      if ((await tx.admissionApplication.count({ where: { eventId: event.id } })) > 0) return { ok: false, error: REENABLE_REFUSAL };
       const refusal = await perMemberRefusal(tx, event);
       if (refusal) return { ok: false, error: refusal };
       await tx.event.update({ where: { id: event.id }, data: { admissionEnabled: true, privacyType: EventPrivacyType.APPROVAL_REQUIRED } });

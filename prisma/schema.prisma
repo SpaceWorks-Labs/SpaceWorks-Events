@@ -3923,8 +3923,10 @@ model AdmissionApplication {
   answersLockedAt     DateTime?
   version             Int             @default(1)
   /// Who applied, kept when the registration or team is gone: the solo
-  /// registrant's or team's name (up to 200 characters), and the attendee key
-  /// of everyone ever in it (one application per person per event).
+  /// registrant's or team's name (up to 200 characters; scrubbed when the
+  /// account is deleted), and one-way hashes ('h:' + SHA-256 hex) of every key
+  /// of everyone ever in it: attendee keys and 'guest:<email>' (one
+  /// application per person per event).
   subjectName         String          @default("")
   applicantKeys       String[]        @default([])
   createdAt           DateTime        @default(now())
@@ -4132,6 +4134,10 @@ model AdmissionAnswerRevision {
   rsvpId          String?
   /// The revision these answers belonged to.
   answersRevision Int
+  /// Whose answers these are, kept when the registration goes: a hashed
+  /// person key ('h:' + SHA-256 hex of the attendee key; CHECK), for the
+  /// account export and account deletion.
+  personKey       String?
   /// [{ fieldId, label, value }] as they were.
   answers         Json
   createdAt       DateTime @default(now())
@@ -4158,6 +4164,6 @@ model AdmissionStatusEvent {
 
   application AdmissionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
-  @@index([emittedAt, createdAt])
+  /// Plus a partial index on createdAt WHERE emittedAt IS NULL (migration SQL): what is still to send.
   @@index([applicationId, createdAt])
 }

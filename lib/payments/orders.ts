@@ -148,7 +148,7 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
 
   // Applications (docs/ADMISSION.md): one per person, and an ended hold is no fresh start.
   if ("eventId" in params.target) {
-    const applied = await admissionRegistrationRefusal(tx, params.target.eventId, params.buyer.attendeeKey);
+    const applied = await admissionRegistrationRefusal(tx, params.target.eventId, params.buyer.attendeeKey, [params.buyer.email]);
     if (applied) throw new OrderError(applied);
   }
   // An unpaid hold that has ended no longer blocks these people from registering again.

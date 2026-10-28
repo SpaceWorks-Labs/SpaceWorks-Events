@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "data": {
+    "enabled": true,
+    "mode": "MANUAL",
+    "counts": {
+      "total": 42,
+      "byStatus": {
+        "IN_REVIEW": 20,
+        "OFFERED": 6,
+        "WAITLISTED": 4,
+        "ACCEPTED": 8,
+        "REJECTED": 2,
+        "DECLINED": 1,
+        "EXPIRED": 0,
+        "WITHDRAWN": 1
+      },
+      "offersOut": 14,
+      "offersLimit": 30
+    },
+    "stages": [
+      {
+        "position": 1,
+        "name": "Review",
+        "status": "CLOSED",
+        "reached": 42,
+        "inReview": 5
+      },
+      {
+        "position": 2,
+        "name": "Shortlist",
+        "status": "OPEN",
+        "reached": 18,
+        "inReview": 15
+      }
+    ],
+    "waitlist": {
+      "queued": 4,
+      "passedOver": 1
+    },
+    "draftedDecisions": 3
+  }
+}

@@ -16,7 +16,11 @@ export type TicketApplicationView = {
   status: AdmissionStatus;
   statusLabel: string;
   stageName: string | null;
+  stagePosition: number | null;
+  /** Formatted in the event's time zone, for the ticket page. */
   respondBy: string | null;
+  /** The same deadline as an ISO instant, for API clients. */
+  respondByAt: string | null;
   teamName: string | null;
   /** Solo applicant or team leader: answers the offer and withdraws. */
   canAnswer: boolean;
@@ -31,7 +35,7 @@ export async function loadTicketApplication(rsvp: { id: string; eventId: string 
   if (!rsvp.eventId || rsvp.isCrew) return null;
   const app = await prisma.admissionApplication.findFirst({
     where: rsvp.teamId ? { teamId: rsvp.teamId } : { rsvpId: rsvp.id },
-    select: { id: true, rsvpId: true, teamId: true, status: true, respondBy: true, answersLockedAt: true, currentStage: { select: { name: true } }, team: { select: { name: true, leaderRsvpId: true } }, event: { select: { timezone: true } } },
+    select: { id: true, rsvpId: true, teamId: true, status: true, respondBy: true, answersLockedAt: true, currentStage: { select: { name: true, position: true } }, team: { select: { name: true, leaderRsvpId: true } }, event: { select: { timezone: true } } },
   });
   if (!app) return null;
   const canAnswer = !app.teamId || app.team?.leaderRsvpId === rsvp.id;
@@ -42,7 +46,9 @@ export async function loadTicketApplication(rsvp: { id: string; eventId: string 
     status: app.status,
     statusLabel: STATUS_LABELS[app.status],
     stageName: app.status === AdmissionStatus.IN_REVIEW ? app.currentStage?.name ?? null : null,
+    stagePosition: app.status === AdmissionStatus.IN_REVIEW ? app.currentStage?.position ?? null : null,
     respondBy: app.status === AdmissionStatus.OFFERED && app.respondBy ? formatDayTime(app.respondBy, app.event.timezone) : null,
+    respondByAt: app.status === AdmissionStatus.OFFERED && app.respondBy ? app.respondBy.toISOString() : null,
     teamName: app.team?.name ?? null,
     canAnswer,
     paid: isPaid(await unitOrder(prisma, app)),

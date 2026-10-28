@@ -54,6 +54,7 @@ export async function cancelRegistrationByToken(
           slug: true,
           title: true,
           privacyType: true,
+          admissionEnabled: true,
           organisation: { select: { id: true, slug: true } },
         },
       },
@@ -123,7 +124,10 @@ export async function cancelRegistrationByToken(
     if (to) {
       const what = current.status === "WAITLISTED" ? "left the waitlist for" : current.status === "PENDING_APPROVAL" ? "withdrawn your request to join" : "cancelled your place at";
       await notifyChat(tx, organisationId, "cancellation", `${current.guestName?.trim() || "A guest"} cancelled their place at ${title}.`);
-      await noticeEach(tx, [to], { organisationId, subject: noticeSubject("Cancelled", title), lines: [`You've ${what} ${title}. Your ticket no longer works.`, "Changed your mind? Register again from the event page if places are still open."] });
+      await noticeEach(tx, [to], { organisationId, subject: noticeSubject("Cancelled", title), lines: [`You've ${what} ${title}. Your ticket no longer works.`, rsvp.event?.admissionEnabled
+        // Applications (docs/ADMISSION.md): each person applies once, and a withdrawn application stays closed.
+        ? "Your application is now withdrawn. Each person applies once, so it can't be reopened."
+        : "Changed your mind? Register again from the event page if places are still open."] });
     }
     // TEAM events (docs/TEAMS.md): the freed thing is a unit. A member frees
     // nothing unless they were the last one (the empty team is deleted); a

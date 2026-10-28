@@ -6,7 +6,7 @@ import { RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueOperatorNotice, enqueueRsvpConfirmation } from "@/lib/outbox";
-import { PaymentOperationError } from "./operations";
+import { AdmissionManagedError, PaymentOperationError } from "./operations";
 import { lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
 
 const HOUR = 3_600_000;
@@ -45,6 +45,8 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     },
   });
   if (!order || order.status !== "CONFIRMED") throw new PaymentOperationError("Only confirmed tickets can be transferred.");
+  // Applications (docs/ADMISSION.md): a place was offered to this person after review, so it can't pass to someone else.
+  if (order.eventId && (await prisma.event.count({ where: { id: order.eventId, admissionEnabled: true } }))) throw new AdmissionManagedError("This place was offered to you after your application was reviewed, so it can't be transferred.");
   const settings = order.event ?? order.series;
   const subject = orderSubject(order);
 

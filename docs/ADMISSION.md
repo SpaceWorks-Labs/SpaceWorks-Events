@@ -65,9 +65,34 @@ team gets a solo application.
   a full refund, an organiser removing a guest or deleting a team, an ended
   hold replaced by a new order, attendance "No"), **withdraws and detaches**
   its application (`admission_withdraw_on_delete`, FKs SET NULL). The
-  application keeps `subjectName` and `applicantKeys` (every attendee key
-  ever in it), and its reviews, decisions, stage entries and answer
-  revisions stay. Undo-restore of a removed applicant is refused.
+  application keeps `subjectName` and `applicantKeys`, and its reviews,
+  decisions, stage entries and answer revisions stay. Undo-restore of a
+  removed applicant is refused, and so is a ticket transfer
+  (`ADMISSION_MANAGED`): the place was offered to that person after review.
+- `applicantKeys` hold only one-way hashes (`'h:'` + SHA-256 hex) of every key
+  of everyone ever in the application: the attendee key, and the account's
+  verified email and any guest email, each as `guest:<lower-cased email>`. So
+  registering once as a guest and once with an account with that email is
+  one person. Answer revisions keep a hashed `personKey` the same way.
+- **Leaving a team**: a member keeps a pending place only while the team's
+  application is in review and no other application holds them; they then
+  apply on their own (their keys move from the team's application to a new
+  solo one). Leaving a decided team, or a team deleted around its members,
+  declines the place (REJECTED) and opens nothing. Only an untouched solo
+  application (never reviewed, decided, edited or otherwise changed) moves
+  into a team; any other is refused with a message.
+- **Applications can't be turned on again** once an event had them (they and
+  their people are kept): a new round of applications is a new event.
+- **Privacy.** The personal data export (`/api/exports/account`) includes
+  the account's applications: event, status, stage, dates and its own
+  earlier answers, never reviews, scores or reviewers. Deleting an account
+  (any path, a database trigger) empties the snapshot name of its
+  applications and redacts its answer revisions to their questions; the
+  hashed keys stay, so the person still can't apply twice. Otherwise
+  applications stay until their event is deleted.
+- Sent `AdmissionStatusEvent` rows are purged after 30 days (retention job);
+  a partial index covers only the rows still to send. A row whose webhook
+  couldn't be queued is released for the next pass (at least once).
 - Reviews, answer revisions, stage entries, released (and cancelled)
   decisions and applications are deleted only with their event; an update
   may only clear a user link (an account deleted). A reviewer's deleted

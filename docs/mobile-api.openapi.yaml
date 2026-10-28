@@ -45,6 +45,7 @@ tags:
   - name: Mentor Desk
   - name: Mentor console
   - name: Volunteers
+  - name: Applications
 
 paths:
   /api/mobile/v1/auth/login:
@@ -2180,6 +2181,156 @@ paths:
         "200": { description: "Claims `/ticket/*`, `/*/*/feedback` and `/*/*` after excluding application paths (see MOBILE_API.md); `{ applinks: { details: [] } }` when `APPLE_APP_IDS` is unset.", content: { application/json: { schema: { type: object } } } }
         default: { $ref: "#/components/responses/Error" }
 
+  /api/mobile/v1/me/registrations/{rsvpId}/application:
+    get:
+      tags: [Applications]
+      summary: The caller's own application
+      description: |
+        Applications (docs/ADMISSION.md) for one of the caller's own
+        registrations, through the app session (the ticket token is never
+        needed or returned): status, stage, the offer's answer-by time, the
+        actions allowed now, payment state, and the caller's answers while
+        still editable. `{ "application": null }` when the registration isn't
+        an application; anyone else's registration is `NOT_FOUND`.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyApplicationResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/mobile/v1/me/registrations/{rsvpId}/application/respond:
+    post:
+      tags: [Applications]
+      summary: Accept, decline or withdraw
+      description: |
+        The same rules as the ticket page: the team leader answers for a team;
+        accept and decline only while offered (before its answer-by time);
+        withdraw while in review, waitlisted or offered. A free place is
+        confirmed at once. A paid place is never confirmed unpaid: it is held
+        while it is paid and `checkoutUrl` opens the hosted payment page; poll
+        GET .../application until it is accepted.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [response], properties: { response: { type: string, enum: [accept, decline, withdraw] } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationRespondResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/mobile/v1/me/registrations/{rsvpId}/application/answers:
+    put:
+      tags: [Applications]
+      summary: Edit the caller's answers
+      description: |
+        While the application is in review and before the first released
+        decision, with the registration form's validation. The replaced
+        answers are kept and reviews of them stop counting.
+      parameters: [{ $ref: "#/components/parameters/rsvpId" }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [answers], properties: { answers: { type: object, description: "By field key, as when registering." } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyApplicationResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/applications/summary:
+    get:
+      tags: [Applications]
+      summary: Application counts (read-only)
+      description: |
+        Counts by status and by stage, offers out against the limit, the
+        waitlist and drafted decisions. OWNER/ADMIN or MANAGE_REGISTRATIONS
+        (`myPermissions.manageApplications`), as the Applications tab.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationsSummaryResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/applications/reviews:
+    get:
+      tags: [Applications]
+      summary: The caller's review assignments
+      description: |
+        Reviewers only (REVIEW_APPLICATIONS or OWNER/ADMIN), behind the staff
+        authenticator; anyone else, or an event not taking applications, is
+        `NOT_FOUND`. Open stages first.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewQueueResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/applications/reviews/{assignmentId}:
+    get:
+      tags: [Applications]
+      summary: One assigned application
+      description: |
+        As the stage allows: a blind stage has no names, email addresses,
+        phone numbers or team name. Another reviewer's assignment, a recused
+        one, or one the caller may no longer review (off the panel, a
+        conflict) is `NOT_FOUND`.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: assignmentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewItemResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Applications]
+      summary: Submit the review
+      description: Every criterion (or "overall") scored 1 to 5, and notes for the organisers. Final once submitted; only while the stage is open.
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: assignmentId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scores, notes]
+              properties:
+                scores: { type: object, additionalProperties: { type: integer, minimum: 1, maximum: 5 } }
+                notes: { type: string, maxLength: 2000 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/mobile/v1/orgs/{orgSlug}/events/{eventId}/applications/reviews/{assignmentId}/recuse:
+    post:
+      tags: [Applications]
+      summary: Step back (a conflict of interest)
+      description: Only before reviewing. Recorded; the least-loaded reviewer left on the stage's panel takes it (`replaced`).
+      parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: assignmentId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewWriteResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2520,9 +2671,10 @@ components:
         registration:
           type: object
           additionalProperties: false
-          required: [requiresApproval, fields, myRsvp]
+          required: [requiresApproval, takesApplications, fields, myRsvp]
           properties:
             requiresApproval: { type: boolean }
+            takesApplications: { type: boolean, description: "Applications (docs/ADMISSION.md): registering means applying; show Apply." }
             fields: { type: array, items: { $ref: "#/components/schemas/RegistrationField" } }
             myRsvp:
               type: [object, "null"]
@@ -2611,7 +2763,7 @@ components:
     EventPermissions:
       type: object
       additionalProperties: false
-      required: [checkIn, manageRegistrations, sendEmails, schedule, manageFeedback, manageRegistrationWindow, judge, checkInToLists, manageOrders, manageCrew, fileClaims, manageFinance]
+      required: [checkIn, manageRegistrations, sendEmails, schedule, manageFeedback, manageRegistrationWindow, judge, checkInToLists, manageOrders, manageCrew, fileClaims, manageFinance, manageApplications, reviewApplications]
       properties:
         checkIn: { type: boolean }
         manageRegistrations: { type: boolean }
@@ -2625,11 +2777,13 @@ components:
         manageCrew: { type: boolean, description: The event crew and their free crew tickets (MANAGE_REGISTRATIONS). }
         fileClaims: { type: boolean, description: File and withdraw own expense claims (anyone on the event dashboard). }
         manageFinance: { type: boolean, description: Decide claims and refund requests (organisation OWNER/ADMIN). }
+        manageApplications: { type: boolean, description: "Applications (docs/ADMISSION.md), on an event taking them: the summary (OWNER/ADMIN or MANAGE_REGISTRATIONS)." }
+        reviewApplications: { type: boolean, description: "Applications: the review workspace (OWNER/ADMIN or REVIEW_APPLICATIONS)." }
 
     EventCounts:
       type: object
       additionalProperties: false
-      required: [confirmed, waitlisted, pending, pendingPayment, crew, checkedIn, capacity, capacityUsed, attendance]
+      required: [confirmed, waitlisted, pending, pendingPayment, crew, checkedIn, capacity, capacityUsed, attendance, applications]
       properties:
         confirmed: { type: integer }
         waitlisted: { type: integer }
@@ -2652,6 +2806,168 @@ components:
           oneOf:
             - { type: "null" }
             - { $ref: "#/components/schemas/AttendanceCounts" }
+        applications:
+          description: Applications (docs/ADMISSION.md). Only for viewers with manageApplications, on an event taking applications; null otherwise.
+          oneOf:
+            - { type: "null" }
+            - { $ref: "#/components/schemas/ApplicationCounts" }
+
+    AdmissionStatus: { type: string, enum: [IN_REVIEW, OFFERED, WAITLISTED, ACCEPTED, REJECTED, DECLINED, EXPIRED, WITHDRAWN] }
+
+    MyApplication:
+      type: object
+      additionalProperties: false
+      required: [status, statusLabel, stage, respondBy, teamName, isLeader, actions, paid, paying, answers]
+      properties:
+        status: { $ref: "#/components/schemas/AdmissionStatus" }
+        statusLabel: { type: string }
+        stage:
+          oneOf:
+            - { type: "null" }
+            - { type: object, additionalProperties: false, required: [name, position], properties: { name: { type: string }, position: { type: integer } } }
+        respondBy: { type: [string, "null"], format: date-time, description: While offered, answer by then. }
+        teamName: { type: [string, "null"] }
+        isLeader: { type: boolean, description: Solo applicant or team leader; answers the offer and withdraws. }
+        actions: { type: array, items: { type: string, enum: [accept, decline, withdraw] } }
+        paid: { type: boolean, description: Accepting costs money; the place is confirmed only once paid. }
+        paying: { type: boolean, description: A payment hold for this place is live. }
+        answers:
+          type: [array, "null"]
+          description: The caller's answers while editable; null otherwise.
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, label, type, required, options, value, values]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              type: { type: string, enum: [TEXT, TEXTAREA, EMAIL, PHONE, SELECT, MULTI_SELECT, RADIO, CHECKBOX, NUMBER, DATE] }
+              required: { type: boolean }
+              options: { type: array, items: { type: string } }
+              value: { type: string }
+              values: { type: array, items: { type: string } }
+
+    MyApplicationResult:
+      type: object
+      additionalProperties: false
+      required: [application]
+      properties:
+        application:
+          oneOf:
+            - { type: "null" }
+            - { $ref: "#/components/schemas/MyApplication" }
+
+    ApplicationRespond:
+      type: object
+      additionalProperties: false
+      required: [status, paying, checkoutUrl]
+      properties:
+        status: { $ref: "#/components/schemas/AdmissionStatus" }
+        paying: { type: boolean }
+        checkoutUrl: { type: [string, "null"], format: uri, description: A paid acceptance's hosted payment page. }
+
+    ReviewQueueItem:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, stageName, stagePosition, stageOpen, label, status, reviewedCurrent]
+      properties:
+        assignmentId: { type: string }
+        stageName: { type: string }
+        stagePosition: { type: integer }
+        stageOpen: { type: boolean }
+        label: { type: string, description: The applicant or team name; "Application n" on a blind stage. }
+        status: { type: string, enum: [ASSIGNED, SUBMITTED, RECUSED] }
+        reviewedCurrent: { type: boolean }
+
+    ReviewQueue:
+      type: object
+      additionalProperties: false
+      required: [reviews]
+      properties:
+        reviews: { type: array, items: { $ref: "#/components/schemas/ReviewQueueItem" } }
+
+    ReviewItem:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, stageName, stageOpen, blind, criteria, guidance, teamName, people, reviewed, canReview]
+      properties:
+        assignmentId: { type: string }
+        stageName: { type: string }
+        stageOpen: { type: boolean }
+        blind: { type: boolean }
+        criteria: { type: array, items: { type: string } }
+        guidance: { type: string }
+        teamName: { type: [string, "null"] }
+        people:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, email, isLeader, answers]
+            properties:
+              name: { type: string }
+              email: { type: [string, "null"], description: Null on a blind stage. }
+              isLeader: { type: boolean }
+              answers: { type: array, items: { type: object, additionalProperties: false, required: [label, value], properties: { label: { type: string }, value: { type: string } } } }
+        reviewed:
+          oneOf:
+            - { type: "null" }
+            - { type: object, additionalProperties: false, required: [scores, notes], properties: { scores: { type: object, additionalProperties: { type: integer } }, notes: { type: string } } }
+        canReview: { type: boolean }
+
+    ReviewWrite:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, outcome, replaced]
+      properties:
+        assignmentId: { type: string }
+        outcome: { type: string, enum: [SUBMITTED, RECUSED] }
+        replaced: { type: [boolean, "null"] }
+
+    ApplicationCounts:
+      type: object
+      additionalProperties: false
+      required: [total, byStatus, offersOut, offersLimit]
+      properties:
+        total: { type: integer }
+        byStatus:
+          type: object
+          additionalProperties: false
+          required: [IN_REVIEW, OFFERED, WAITLISTED, ACCEPTED, REJECTED, DECLINED, EXPIRED, WITHDRAWN]
+          properties:
+            IN_REVIEW: { type: integer }
+            OFFERED: { type: integer }
+            WAITLISTED: { type: integer }
+            ACCEPTED: { type: integer }
+            REJECTED: { type: integer }
+            DECLINED: { type: integer }
+            EXPIRED: { type: integer }
+            WITHDRAWN: { type: integer }
+        offersOut: { type: integer, description: Offered plus accepted. }
+        offersLimit: { type: [integer, "null"], description: The offer capacity, else the event capacity, else none. }
+
+    ApplicationsSummary:
+      type: object
+      additionalProperties: false
+      required: [enabled, mode, counts, stages, waitlist, draftedDecisions]
+      properties:
+        enabled: { type: boolean }
+        mode: { type: string, enum: [MANUAL, AUTO] }
+        counts: { $ref: "#/components/schemas/ApplicationCounts" }
+        stages:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [position, name, status, reached, inReview]
+            properties:
+              position: { type: integer }
+              name: { type: string }
+              status: { type: string, enum: [DRAFT, OPEN, CLOSED] }
+              reached: { type: integer }
+              inReview: { type: integer }
+        waitlist: { type: object, additionalProperties: false, required: [queued, passedOver], properties: { queued: { type: integer }, passedOver: { type: integer } } }
+        draftedDecisions: { type: integer }
 
     AttendanceCounts:
       type: object
@@ -3209,6 +3525,12 @@ components:
         registrationClosedReason: { type: [string, "null"], description: UI-safe reason when registration is closed. }
         registrationManuallyClosed: { type: boolean }
     RegistrationStateResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/RegistrationState" } } }
+    MyApplicationResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MyApplicationResult" } } }
+    ApplicationRespondResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ApplicationRespond" } } }
+    ReviewQueueResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ReviewQueue" } } }
+    ReviewItemResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ReviewItem" } } }
+    ReviewWriteResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ReviewWrite" } } }
+    ApplicationsSummaryResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ApplicationsSummary" } } }
     MyAttendanceResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/MyAttendanceResult" } } }
     AttendanceReplyResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/AttendanceReply" } } }
     AttendanceLinkResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/AttendanceLink" } } }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { loadAttendanceCounts } from "@/lib/mobile/attendance";
+import { loadApplicationCounts } from "@/lib/mobile/admissionCounts";
 import { RsvpStatus, type Membership, type Prisma } from "@prisma/client";
 import { decodeCursor, encodeCursor } from "@/lib/api/v1/pagination";
 import { getRegistrationDetails } from "@/lib/checkInDetails";
@@ -49,7 +50,7 @@ export async function resolveEventContext(userId: string, orgSlug: string, event
   if (!eventId || eventId.length > 128) return null;
   const access = await resolveOrgAccess(userId, orgSlug);
   if (!access) return null;
-  const event = await prisma.event.findFirst({ where: { id: eventId, organisationId: access.organisation.id }, select: { id: true, slug: true, submissionsEnabled: true } });
+  const event = await prisma.event.findFirst({ where: { id: eventId, organisationId: access.organisation.id }, select: { id: true, slug: true, submissionsEnabled: true, admissionEnabled: true } });
   if (!event) return null;
   const isAdmin = Boolean(access.membership && isOrgAdmin(access.membership.role));
   const grant = isAdmin
@@ -63,12 +64,12 @@ export async function resolveEventContext(userId: string, orgSlug: string, event
     organisation: access.organisation,
     membership: access.membership,
     event: { id: event.id, slug: event.slug },
-    permissions: eventPermissionsFor(access.membership?.role ?? null, grant?.permissions ?? [], { submissionsEnabled: event.submissionsEnabled }),
+    permissions: eventPermissionsFor(access.membership?.role ?? null, grant?.permissions ?? [], { submissionsEnabled: event.submissionsEnabled, admissionEnabled: event.admissionEnabled }),
   };
 }
 
-async function loadCounts(eventIds: string[]): Promise<Map<string, Omit<EventCountsDto, "capacity" | "attendance">>> {
-  const result = new Map<string, Omit<EventCountsDto, "capacity" | "attendance">>();
+async function loadCounts(eventIds: string[]): Promise<Map<string, Omit<EventCountsDto, "capacity" | "attendance" | "applications">>> {
+  const result = new Map<string, Omit<EventCountsDto, "capacity" | "attendance" | "applications">>();
   if (eventIds.length === 0) return result;
   const now = new Date();
   const [byStatus, checkedIn, teamed, teams, held, crew] = await Promise.all([
@@ -133,23 +134,24 @@ export async function listOrgEvents(userId: string, orgSlug: string, filter: "up
       // Members see every organisation event, collaborators only their own.
       ...(access.membership ? {} : { id: { in: visibleGrantEventIds } }),
     },
-    select: { ...eventSummarySelect, capacity: true, submissionsEnabled: true },
+    select: { ...eventSummarySelect, capacity: true, submissionsEnabled: true, admissionEnabled: true },
     orderBy: filter === "upcoming" ? [{ startDateTime: "asc" }, { id: "asc" }] : [{ startDateTime: "desc" }, { id: "desc" }],
     take: ORG_EVENTS_LIMIT,
   });
-  const permissionsByEvent = new Map(events.map((event) => [event.id, eventPermissionsFor(access.membership?.role ?? null, grantByEvent.get(event.id) ?? [], { submissionsEnabled: event.submissionsEnabled })]));
+  const permissionsByEvent = new Map(events.map((event) => [event.id, eventPermissionsFor(access.membership?.role ?? null, grantByEvent.get(event.id) ?? [], { submissionsEnabled: event.submissionsEnabled, admissionEnabled: event.admissionEnabled })]));
   const counted = events.filter((event) => canSeeGuests(permissionsByEvent.get(event.id)!));
-  const [counts, attendance] = await Promise.all([
+  const [counts, attendance, applications] = await Promise.all([
     loadCounts(counted.map((event) => event.id)),
     // Attendance replies follow the Overview rule: only viewers who may email guests.
     loadAttendanceCounts(counted.filter((event) => permissionsByEvent.get(event.id)!.sendEmails).map((event) => event.id)),
+    loadApplicationCounts(counted.filter((event) => permissionsByEvent.get(event.id)!.manageApplications).map((event) => event.id)),
   ]);
   return orgEventsDtoSchema.parse({
     events: events.map((event) => {
       const eventCounts = counts.get(event.id);
       return {
         ...toEventSummary(event, baseUrl),
-        counts: eventCounts ? { ...eventCounts, capacity: event.capacity, attendance: attendance.get(event.id) ?? null } : null,
+        counts: eventCounts ? { ...eventCounts, capacity: event.capacity, attendance: attendance.get(event.id) ?? null, applications: applications.get(event.id) ?? null } : null,
         myPermissions: permissionsByEvent.get(event.id)!,
       };
     }),
@@ -172,6 +174,7 @@ export async function loadOrgEventDetail(ctx: MobileEventContext, baseUrl: strin
   });
   const counts = canSeeGuests(ctx.permissions) ? (await loadCounts([event.id])).get(event.id) : undefined;
   const attendance = counts && ctx.permissions.sendEmails ? (await loadAttendanceCounts([event.id])).get(event.id) ?? null : null;
+  const applications = counts && ctx.permissions.manageApplications ? (await loadApplicationCounts([event.id])).get(event.id) ?? null : null;
   const window = registrationWindowState(event);
   return orgEventDetailDtoSchema.parse({
     event: {
@@ -185,7 +188,7 @@ export async function loadOrgEventDetail(ctx: MobileEventContext, baseUrl: strin
       eventUrl: `${baseUrl}/${event.organisation.slug}/${event.slug}`,
       shortUrl: event.shortCode ? `${baseUrl}/${event.shortCode}` : null,
     },
-    counts: counts ? { ...counts, capacity: event.capacity, attendance } : null,
+    counts: counts ? { ...counts, capacity: event.capacity, attendance, applications } : null,
     myPermissions: ctx.permissions,
   });
 }

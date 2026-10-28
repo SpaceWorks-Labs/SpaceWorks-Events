@@ -111,6 +111,8 @@ export const publicEventDtoSchema = z.object({
   }).strict(),
   registration: z.object({
     requiresApproval: z.boolean(),
+    /** Applications (docs/ADMISSION.md): registering means applying; show "Apply". */
+    takesApplications: z.boolean(),
     fields: z.array(registrationFieldSchema),
     myRsvp: z.object({ rsvpId: z.string(), status: rsvpStatusSchema, ticketToken: z.string().nullable() }).strict().nullable(),
   }).strict(),

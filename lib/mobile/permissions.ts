@@ -13,7 +13,7 @@ import type { EventPermissionsDto } from "@/lib/mobile/schemas";
 export function eventPermissionsFor(
   role: MembershipRole | null,
   grant: readonly EventPermission[],
-  options: { submissionsEnabled?: boolean } = {},
+  options: { submissionsEnabled?: boolean; admissionEnabled?: boolean } = {},
 ): EventPermissionsDto {
   const can = eventCapabilities(role, grant);
   return {
@@ -33,16 +33,20 @@ export function eventPermissionsFor(
     // Anyone on the event dashboard files their own claims (docs/FINANCE.md).
     fileClaims: role !== null || hasOrganiserGrant(grant),
     manageFinance: can.isAdmin,
+    // Applications (docs/ADMISSION.md): the same rules as the Applications tab, on events taking them.
+    manageApplications: Boolean(options.admissionEnabled) && can.canManageApplications,
+    reviewApplications: Boolean(options.admissionEnabled) && can.canReviewApplications,
   };
 }
 
 /**
- * Whether a grant opens the organiser surfaces. JUDGE and MENTOR are isolated
- * (lib/eventDashboard/capabilities.ts): they open only the judging workspace
- * and the mentor console.
+ * Whether a grant opens the organiser surfaces. JUDGE, MENTOR and
+ * REVIEW_APPLICATIONS are isolated (lib/eventDashboard/capabilities.ts): they
+ * open only the judging workspace, the mentor console and the review
+ * workspace (lib/mobile/admission.ts resolves reviewers separately).
  */
 export function hasOrganiserGrant(grant: readonly EventPermission[]): boolean {
-  return grant.some((permission) => permission !== "JUDGE" && permission !== "MENTOR");
+  return grant.some((permission) => permission !== "JUDGE" && permission !== "MENTOR" && permission !== "REVIEW_APPLICATIONS");
 }
 
 /** Guests and counts are visible to registration managers and to the check-in desk (which already sees the roster). */

@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "data": {
+    "status": "OFFERED",
+    "paying": true,
+    "checkoutUrl": "https://checkout.example.test/pay/abc123"
+  }
+}

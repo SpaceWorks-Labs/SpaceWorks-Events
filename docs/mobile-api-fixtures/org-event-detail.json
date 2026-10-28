@@ -43,6 +43,21 @@
         "notComing": 4,
         "noReply": 6,
         "notAsked": 2
+      },
+      "applications": {
+        "total": 42,
+        "byStatus": {
+          "IN_REVIEW": 20,
+          "OFFERED": 6,
+          "WAITLISTED": 4,
+          "ACCEPTED": 8,
+          "REJECTED": 2,
+          "DECLINED": 1,
+          "EXPIRED": 0,
+          "WITHDRAWN": 1
+        },
+        "offersOut": 14,
+        "offersLimit": 30
       }
     },
     "myPermissions": {
@@ -57,7 +72,9 @@
       "manageOrders": true,
       "manageCrew": true,
       "fileClaims": true,
-      "manageFinance": true
+      "manageFinance": true,
+      "manageApplications": true,
+      "reviewApplications": false
     }
   }
 }
