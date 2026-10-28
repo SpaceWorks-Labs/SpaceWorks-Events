@@ -11,4 +11,5 @@ export { EVENT_REMINDER_KIND, type EventReminderPayload, type OperatorNoticePayl
 export { asTeamCreatedPayload, asTeamMemberAddedPayload, enqueueTeamCreated, enqueueTeamMemberAdded, type TeamCreatedPayload, type TeamMemberAddedPayload } from "./outbox/team";
 export { asFinalistsAnnouncedPayload, FINALISTS_ANNOUNCED_KIND, type FinalistsAnnouncedPayload } from "./outbox/finalists";
 export { asCrewTicketPayload, CREW_TICKET_KIND, enqueueCrewTicket, type CrewTicketPayload } from "./outbox/crew";
+export { asReimbursementAvailablePayload, REIMBURSEMENT_AVAILABLE_KIND, type ReimbursementAvailablePayload } from "./outbox/reimbursement";
 export { asResultsPublishedPayload, asSubmissionLinkPayload, asSubmissionReceivedPayload, enqueueResultsPublished, enqueueSubmissionLink, enqueueSubmissionReceived, type ResultsPublishedPayload, type SubmissionLinkPayload, type SubmissionReceivedPayload } from "./outbox/judging";

@@ -23,6 +23,7 @@ import { deliverTeamMessage, isTeamMessageKind } from "./team";
 import { deliverJudgingMessage, isJudgingMessageKind } from "./judging";
 import { deliverMentorMessage, isMentorMessageKind } from "./mentor";
 import { deliverCrewMessage, isCrewMessageKind } from "./crew";
+import { deliverReimbursementAvailable, REIMBURSEMENT_AVAILABLE_KIND } from "./reimbursement";
 import { attendeeName, calendarEvent, getCurrentRsvp, messageOrganisation } from "./context";
 import { deliverEventBroadcast, deliverEventBroadcastTest } from "./broadcast";
 import { dueOutboxMessages } from "./due";
@@ -207,8 +208,10 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
-      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind)) {
-        const outcome = isTeamMessageKind(message.kind)
+      } else if (isTeamMessageKind(message.kind) || isJudgingMessageKind(message.kind) || isCrewMessageKind(message.kind) || isMentorMessageKind(message.kind) || message.kind === REIMBURSEMENT_AVAILABLE_KIND) {
+        const outcome = message.kind === REIMBURSEMENT_AVAILABLE_KIND
+          ? await deliverReimbursementAvailable(message.payload, stableMessageId)
+          : isTeamMessageKind(message.kind)
           ? await deliverTeamMessage(message.kind, message.payload, stableMessageId)
           : isCrewMessageKind(message.kind)
             ? await deliverCrewMessage(message.payload, stableMessageId)

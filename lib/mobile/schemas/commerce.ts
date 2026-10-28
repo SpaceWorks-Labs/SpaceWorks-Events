@@ -173,6 +173,8 @@ export const claimSchema = z.object({
   amount: money,
   approved: money.nullable(),
   note: z.string().nullable(),
+  /** The reimbursement policy it was filed under, or null. */
+  policy: z.string().nullable(),
 }).strict();
 
 export const participantClaimsDtoSchema = z.object({

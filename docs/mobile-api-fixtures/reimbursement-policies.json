@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "data": {
+    "currency": "INR",
+    "policies": [
+      {
+        "id": "clpolicy000000000000001",
+        "name": "Finalist travel",
+        "eligibility": "JUDGING_ROUND_ENTRY",
+        "who": "Projects in a judging round: Finals",
+        "cap": "₹5,000.00",
+        "categories": [
+          "TRAVEL",
+          "ACCOMMODATION"
+        ],
+        "budget": "₹50,000.00",
+        "used": "₹12,500.00",
+        "budgetLeft": "₹37,500.00",
+        "claimOpensAt": null,
+        "claimClosesAt": "2030-06-15T18:30:00.000Z",
+        "window": "open",
+        "attendanceRequired": true,
+        "active": true,
+        "claims": 4
+      }
+    ]
+  }
+}

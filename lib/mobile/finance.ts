@@ -3,7 +3,10 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { CATEGORY_LABELS } from "@/lib/claims/shared";
 import { formatMoney } from "@/lib/payments/money";
-import { adminClaimsDtoSchema, checkInListsDtoSchema } from "@/lib/mobile/schemas";
+import { financeCurrency } from "@/lib/claims/shared";
+import { listPolicies, whoLabel } from "@/lib/claims/policies/view";
+import { windowState } from "@/lib/claims/policies/math";
+import { adminClaimsDtoSchema, checkInListsDtoSchema, reimbursementPoliciesDtoSchema } from "@/lib/mobile/schemas";
 
 /*
  * Organiser reads for event finance and check-in lists in the mobile apps.
@@ -24,7 +27,7 @@ export async function loadEventClaims(eventId: string) {
       take: CLAIMS_LIMIT,
       select: {
         id: true, kind: true, status: true, category: true, description: true, amountMinor: true, approvedMinor: true, currency: true,
-        decisionNote: true, createdAt: true, payeeName: true, receipts: { select: { id: true } },
+        decisionNote: true, createdAt: true, payeeName: true, receipts: { select: { id: true } }, policy: { select: { name: true } },
       },
     }),
     prisma.refundRequest.findMany({
@@ -45,6 +48,7 @@ export async function loadEventClaims(eventId: string) {
       amount: formatMoney(claim.amountMinor, claim.currency),
       approved: claim.approvedMinor != null ? formatMoney(claim.approvedMinor, claim.currency) : null,
       note: claim.decisionNote || null,
+      policy: claim.policy?.name ?? null,
       description: claim.description,
       createdAt: claim.createdAt.toISOString(),
       receiptIds: claim.receipts.map((receipt) => receipt.id),
@@ -57,6 +61,34 @@ export async function loadEventClaims(eventId: string) {
       reason: request.reason,
       status: request.status,
       createdAt: request.createdAt.toISOString(),
+    })),
+  });
+}
+
+/** The event's reimbursement policies with what each has used (organisation owners and admins). */
+export async function loadEventPolicies(eventId: string) {
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { currency: true, organisationId: true } });
+  const currency = await financeCurrency(prisma, event);
+  const money = (value: bigint) => formatMoney(value, currency);
+  const now = new Date();
+  return reimbursementPoliciesDtoSchema.parse({
+    currency,
+    policies: (await listPolicies(prisma, eventId)).map((policy) => ({
+      id: policy.id,
+      name: policy.name,
+      eligibility: policy.eligibility,
+      who: whoLabel(policy),
+      cap: money(policy.capPerPersonMinor),
+      categories: [...policy.categories],
+      budget: policy.budgetMinor != null ? money(policy.budgetMinor) : null,
+      used: money(policy.budgetUsed),
+      budgetLeft: policy.budgetMinor != null ? money(policy.budgetMinor > policy.budgetUsed ? policy.budgetMinor - policy.budgetUsed : BigInt(0)) : null,
+      claimOpensAt: policy.claimOpensAt?.toISOString() ?? null,
+      claimClosesAt: policy.claimClosesAt?.toISOString() ?? null,
+      window: windowState(policy, now),
+      attendanceRequired: policy.attendanceRequired,
+      active: policy.active,
+      claims: policy.claimCount,
     })),
   });
 }
