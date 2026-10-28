@@ -117,13 +117,13 @@ export function teamsApprovalTests() {
     await page.goto(`/dashboard/${orgSlug}`);
     await page.getByRole("button", { name: "New event" }).first().click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Create Event: Basics" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "New event: the basics" })).toBeVisible();
     await dialog.getByRole("textbox", { name: /^Title/ }).fill(`Too Small ${suffix}`);
     await dialog.getByRole("textbox", { name: "About the event" }).fill("Checks the team size message.");
     await dialog.getByRole("button", { name: "Next" }).click();
-    await expect(dialog.getByRole("heading", { name: "Create Event: Schedule" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "New event: when it happens" })).toBeVisible();
     await dialog.getByRole("button", { name: "Next" }).click();
-    await expect(dialog.getByRole("heading", { name: "Create Event: Location" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "New event: where and how people sign up" })).toBeVisible();
     await dialog.getByRole("textbox", { name: /^Location/ }).fill("Community Hall, 1 Test Street");
     await dialog.getByRole("switch", { name: /^Team registration/ }).click();
     const largest = dialog.getByRole("spinbutton", { name: "Largest team" });

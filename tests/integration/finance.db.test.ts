@@ -3,6 +3,8 @@ import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
+// Receipts use the database store: CI names an S3 bucket but has no credentials.
+vi.stubEnv("S3_BUCKET", "");
 
 import { prisma } from "@/lib/db";
 import { approveClaim, recordClaimPayout, rejectClaim, reverseClaimPayout } from "@/lib/claims/decide";

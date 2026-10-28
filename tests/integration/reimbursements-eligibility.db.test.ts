@@ -2,6 +2,8 @@ import { SubmissionStatus } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
+// Delivery is checked up to the send; no SMTP server runs in CI.
+vi.mock("@/lib/email/reimbursement", () => ({ sendReimbursementAvailableEmail: vi.fn() }));
 
 import { prisma } from "@/lib/db";
 import { approveClaim } from "@/lib/claims/decide";
