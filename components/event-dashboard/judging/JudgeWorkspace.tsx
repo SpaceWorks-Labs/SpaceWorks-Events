@@ -2,7 +2,7 @@ import type { EventDashboardContext } from "@/lib/eventDashboard/context";
 import { loadJudgeWorkspace } from "@/lib/views/components__event-dashboard__judging__JudgeWorkspace";
 import { EmptyState } from "@/components/ui/display";
 import { NoPermission } from "@/components/event-dashboard/panels/shared";
-import { JudgeWorkspaceClient } from "./JudgeWorkspaceClient";
+import { JudgeWorkspaceRounds } from "./JudgeWorkspaceRounds";
 
 /**
  * The judge workspace (docs/HACKATHON.md): the submissions this person may
@@ -29,14 +29,7 @@ export async function JudgeWorkspace({ ctx }: { ctx: EventDashboardContext }) {
       </EmptyState>
     );
   }
-  return (
-    <JudgeWorkspaceClient
-      organisationSlug={workspace.organisationSlug}
-      eventId={workspace.eventId}
-      audience={ctx.permissions.canManageJudging ? "organiser" : "judge"}
-      judgingStatus={workspace.judgingStatus}
-      criteria={workspace.criteria}
-      initialPage={{ submissions: workspace.submissions, nextCursor: workspace.nextCursor, counts: workspace.counts }}
-    />
-  );
+  const { state: _state, organisationSlug, eventId, ...dto } = workspace;
+  void _state;
+  return <JudgeWorkspaceRounds organisationSlug={organisationSlug} eventId={eventId} audience={ctx.permissions.canManageJudging ? "organiser" : "judge"} workspace={dto} />;
 }

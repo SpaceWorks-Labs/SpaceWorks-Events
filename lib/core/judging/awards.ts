@@ -2,7 +2,7 @@ import "server-only";
 
 /** Organiser awards: create, edit, delete, reorder, and pick or remove winners. */
 
-import { SubmissionStatus } from "@prisma/client";
+import { JudgingRoundEntrySource, SubmissionStatus } from "@prisma/client";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { awardWinnerSchema, EVENT_AWARDS_LIMIT, eventAwardSchema, judgingReorderSchema, removeAwardWinnerSchema } from "@/lib/validators";
 import { CHANGED, fail, invalid, isId, type JudgingResult, NOT_FOUND, ok, okEmpty, sameIdSet, withOrganiserLock } from "./shared";
@@ -55,6 +55,8 @@ export async function reorderEventAwards(ctx: JudgingOrganiserContext, ids: unkn
 /**
  * Put a SUBMITTED project in a place of an award. Replaces whoever held that
  * place, and moves the project if it already held another place in this award.
+ * Awards come from the final judging round: when that round judges advanced
+ * finalists (docs/HACKATHON.md "Rounds"), only its finalists can win.
  */
 export async function setAwardWinner(ctx: JudgingOrganiserContext, input: unknown): Promise<JudgingResult> {
   const parsed = awardWinnerSchema.safeParse(input);
@@ -65,6 +67,11 @@ export async function setAwardWinner(ctx: JudgingOrganiserContext, input: unknow
     const submission = await tx.submission.findFirst({ where: { id: parsed.data.submissionId, eventId: event.id }, select: { id: true, status: true } });
     if (!submission) return fail(NOT_FOUND);
     if (submission.status !== SubmissionStatus.SUBMITTED) return fail("Only submitted projects can win an award.");
+    const finalRound = await tx.judgingRound.findFirst({ where: { eventId: event.id }, orderBy: { position: "desc" }, select: { id: true, position: true, entrySource: true } });
+    if (finalRound && finalRound.position > 1 && finalRound.entrySource === JudgingRoundEntrySource.ADVANCED) {
+      const finalist = await tx.judgingRoundEntry.findFirst({ where: { roundId: finalRound.id, submissionId: submission.id }, select: { id: true } });
+      if (!finalist) return fail("Only projects in the final round can win an award.");
+    }
     await tx.eventAwardWinner.deleteMany({ where: { awardId: award.id, OR: [{ place: parsed.data.place }, { submissionId: submission.id }] } });
     await tx.eventAwardWinner.create({ data: { awardId: award.id, submissionId: submission.id, place: parsed.data.place } });
     return okEmpty();

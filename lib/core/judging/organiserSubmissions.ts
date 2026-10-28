@@ -10,7 +10,8 @@ import { decodeTimeCursor, encodeTimeCursor } from "@/lib/keysetCursor";
 import { ORGANISER_SUBMISSIONS_PAGE_SIZE, organiserSubmissionsQuerySchema } from "@/lib/judgingOrganiserPaging";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { organiserSubmissionDto, type OrganiserSubmissionDto } from "@/lib/judgingDto";
-import { isId, JUDGING_EXPORT_BATCH_SIZE, projectSelect } from "./shared";
+import { isId, JUDGING_EXPORT_BATCH_SIZE, judgingEventSelect, projectSelect } from "./shared";
+import { resolveJudgingRound } from "./rounds/scope";
 
 // ---------------------------------------------------------------------------
 // Organiser read models
@@ -23,8 +24,8 @@ export type OrganiserSubmissionsPage = { submissions: OrganiserSubmissionDto[]; 
  * paging on `createdAt, id`), with status, organiser-only reason, and
  * assigned judges. The status filter and the search (project title, or the
  * entrant's name: the team name, else the registrant's name) run in SQL,
- * within this event of this organisation only. Per-status totals come from
- * `loadJudgingSetup().counts`.
+ * within this event of this organisation only. Assigned judges are the
+ * current round's. Per-status totals come from `loadJudgingSetup().counts`.
  */
 export async function listSubmissionsForOrganiser(
   ctx: JudgingOrganiserContext,
@@ -38,8 +39,10 @@ export async function listSubmissionsForOrganiser(
   const parsed = organiserSubmissionsQuerySchema.safeParse(input);
   if (!parsed.success) return empty;
   const { query, status, cursor } = parsed.data;
-  const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: { id: true } });
+  const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: judgingEventSelect });
   if (!event) return empty;
+  const round = await resolveJudgingRound(prisma, event);
+  if (!round) return empty;
 
   const conditions: Prisma.Sql[] = [Prisma.sql`s."eventId" = ${event.id}`];
   if (status !== "all") conditions.push(Prisma.sql`s."status" = ${status}::"SubmissionStatus"`);
@@ -75,7 +78,7 @@ export async function listSubmissionsForOrganiser(
       submittedAt: true,
       updatedAt: true,
       disqualifiedReason: true,
-      assignments: { select: { judgeUserId: true }, orderBy: [{ createdAt: "asc" }, { judgeUserId: "asc" }] },
+      assignments: { where: { roundId: round.id }, select: { judgeUserId: true }, orderBy: [{ createdAt: "asc" }, { judgeUserId: "asc" }] },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
@@ -93,14 +96,18 @@ export type OrganiserReviewDto = {
   scores: Array<{ criterionId: string; score: number }>;
 };
 
-/** Judges' reviews of one submission, with private comments. Organisers only. */
-export async function loadSubmissionReviewsForOrganiser(ctx: JudgingOrganiserContext, submissionId: string): Promise<OrganiserReviewDto[] | null> {
+/** Judges' reviews of one submission in one round (the current round unless `options.roundId`), with private comments. Organisers only. */
+export async function loadSubmissionReviewsForOrganiser(ctx: JudgingOrganiserContext, submissionId: string, options: { roundId?: string | null } = {}): Promise<OrganiserReviewDto[] | null> {
   if (!isId(submissionId)) return null;
+  const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: judgingEventSelect });
+  if (!event) return null;
+  const round = await resolveJudgingRound(prisma, event, options.roundId);
+  if (!round) return null;
   const submission = await prisma.submission.findFirst({
     where: { id: submissionId, eventId: ctx.eventId, event: { organisationId: ctx.organisationId } },
     select: {
-      reviews: { select: { judgeUserId: true, comment: true, submittedAt: true, judge: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
-      scores: { select: { judgeUserId: true, criterionId: true, score: true } },
+      reviews: { where: { roundId: round.id }, select: { judgeUserId: true, comment: true, submittedAt: true, judge: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+      scores: { where: { criterion: { roundId: round.id } }, select: { judgeUserId: true, criterionId: true, score: true } },
     },
   });
   if (!submission) return null;

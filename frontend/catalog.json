@@ -1338,6 +1338,76 @@
       "id": "judging-ops:loadJudgingProgressPage"
     },
     {
+      "module": "app/actions/judging-ops",
+      "name": "loadJudgingProgressRound",
+      "id": "judging-ops:loadJudgingProgressRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "addJudgingRound",
+      "id": "judging-rounds:addJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "editJudgingRound",
+      "id": "judging-rounds:editJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "removeJudgingRound",
+      "id": "judging-rounds:removeJudgingRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "reorderJudgingRoundsAction",
+      "id": "judging-rounds:reorderJudgingRoundsAction"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "saveJudgingRoundPanel",
+      "id": "judging-rounds:saveJudgingRoundPanel"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "changeJudgingRoundStatus",
+      "id": "judging-rounds:changeJudgingRoundStatus"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "finalizeRound",
+      "id": "judging-rounds:finalizeRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "unfinalizeRound",
+      "id": "judging-rounds:unfinalizeRound"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "previewRoundFinalists",
+      "id": "judging-rounds:previewRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "applyRoundFinalists",
+      "id": "judging-rounds:applyRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "publishRoundFinalists",
+      "id": "judging-rounds:publishRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "unpublishRoundFinalists",
+      "id": "judging-rounds:unpublishRoundFinalists"
+    },
+    {
+      "module": "app/actions/judging-rounds",
+      "name": "loadRoundFinalistsList",
+      "id": "judging-rounds:loadRoundFinalistsList"
+    },
+    {
       "module": "app/actions/judging",
       "name": "loadJudgeSubmissionsPage",
       "id": "judging:loadJudgeSubmissionsPage"
@@ -1361,6 +1431,11 @@
       "module": "app/actions/judging",
       "name": "saveJudgeReviewAction",
       "id": "judging:saveJudgeReviewAction"
+    },
+    {
+      "module": "app/actions/judging",
+      "name": "loadJudgeWorkspaceRound",
+      "id": "judging:loadJudgeWorkspaceRound"
     },
     {
       "module": "app/actions/media",

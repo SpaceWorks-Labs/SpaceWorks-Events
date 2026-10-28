@@ -3,6 +3,7 @@ import "server-only";
 import { OutboxStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { RESULTS_PUBLISHED_KIND } from "./judging";
+import { FINALISTS_ANNOUNCED_KIND } from "./finalists";
 import { EVENT_REMINDER_KIND } from "./payloads";
 
 /**
@@ -14,7 +15,7 @@ import { EVENT_REMINDER_KIND } from "./payloads";
  * an organiser to the whole event). Operator notices stay urgent: sign-in alerts and password notices use
  * that kind.
  */
-export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND, EVENT_REMINDER_KIND, "attendance-check"];
+export const BULK_OUTBOX_KINDS: readonly string[] = ["event-broadcast", "event-invite", RESULTS_PUBLISHED_KIND, FINALISTS_ANNOUNCED_KIND, EVENT_REMINDER_KIND, "attendance-check"];
 
 /** Due messages, oldest first: transactional kinds before bulk ones. */
 export async function dueOutboxMessages(take: number) {

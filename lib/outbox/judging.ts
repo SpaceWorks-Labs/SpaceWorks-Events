@@ -8,6 +8,7 @@ import { sendResultsPublishedEmail, sendSubmissionLinkEmail, sendSubmissionRecei
 import { hashSubmissionLinkToken, isSubmissionTokenShape, resultsPath, submissionLinkPath } from "@/lib/submissionToken";
 import type { OutboxClient } from "./enqueue";
 import { isBoundedString, isEmail } from "./payloads";
+import { deliverFinalistsAnnounced, FINALISTS_ANNOUNCED_KIND, finalistsMessageOrganisation } from "./finalists";
 
 export const SUBMISSION_RECEIVED_KIND = "submission-received";
 export const SUBMISSION_LINK_KIND = "submission-link";
@@ -64,7 +65,7 @@ export function asResultsPublishedPayload(value: Prisma.JsonValue): ResultsPubli
 }
 
 export function isJudgingMessageKind(kind: string) {
-  return kind === SUBMISSION_RECEIVED_KIND || kind === SUBMISSION_LINK_KIND || kind === RESULTS_PUBLISHED_KIND;
+  return kind === SUBMISSION_RECEIVED_KIND || kind === SUBMISSION_LINK_KIND || kind === RESULTS_PUBLISHED_KIND || kind === FINALISTS_ANNOUNCED_KIND;
 }
 
 /** The organisation a hackathon message is sent as. */
@@ -75,6 +76,7 @@ export async function judgingMessageOrganisation(kind: string, payload: Record<s
   if (kind === SUBMISSION_LINK_KIND && typeof payload.rsvpId === "string") {
     return (await prisma.rSVP.findUnique({ where: { id: payload.rsvpId }, select: { event: { select: { organisationId: true } } } }))?.event?.organisationId ?? null;
   }
+  if (kind === FINALISTS_ANNOUNCED_KIND) return finalistsMessageOrganisation(payload);
   if (kind === RESULTS_PUBLISHED_KIND && typeof payload.eventId === "string") {
     return (await prisma.event.findUnique({ where: { id: payload.eventId }, select: { organisationId: true } }))?.organisationId ?? null;
   }
@@ -86,6 +88,7 @@ export async function judgingMessageOrganisation(kind: string, payload: Record<s
  * not be retried; null is an invalid payload, which the worker treats as permanent.
  */
 export async function deliverJudgingMessage(kind: string, value: Prisma.JsonValue, messageId: string): Promise<"sent" | "dropped" | null> {
+  if (kind === FINALISTS_ANNOUNCED_KIND) return deliverFinalistsAnnounced(value, messageId);
   if (kind === SUBMISSION_RECEIVED_KIND) {
     const payload = asSubmissionReceivedPayload(value);
     if (!payload) return null;

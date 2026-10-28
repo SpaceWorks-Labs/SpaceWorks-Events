@@ -2,12 +2,19 @@ import "server-only";
 
 /** Judges: eligibility, conflicts of interest, the eligible list, and manual assignment. */
 
-import { EventPermission, Prisma } from "@prisma/client";
+import { EventPermission, JudgingRoundEntrySource, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isOrgAdmin } from "@/lib/permissions";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { judgeAssignmentSchema } from "@/lib/validators";
-import { fail, type JudgingResult, NOT_FOUND, okEmpty, withOrganiserLock } from "./shared";
+import { fail, type JudgingEvent, type JudgingResult, NOT_FOUND, okEmpty, withOrganiserLock } from "./shared";
+import { type JudgingRoundScope, onRoundPanel, resolveJudgingRound } from "./rounds/scope";
+import { ensureJudgingRound } from "./rounds/sync";
+import { freshEyesBlockedPairs } from "./rounds/freshEyes";
+import { pairKey } from "@/lib/judgingAssignment";
+import { recordManualAssignment } from "@/lib/core/judgingOps/assignmentRun";
+
+export const ROUND_NOT_FOUND = "Judging round not found.";
 
 // ---------------------------------------------------------------------------
 // Judges: eligibility, assignment, conflict of interest
@@ -24,7 +31,13 @@ export async function isEligibleJudge(tx: Prisma.TransactionClient, organisation
 
 export type ConflictKeys = { rsvpIds: Set<string>; teamIds: Set<string> };
 
-/** Registrations the judge's own account owns on this event: those entrants are off limits. */
+/**
+ * Conflicts of interest, per judge: the registrations (and their teams) the
+ * judge's own account owns on this event; those entrants are off limits in
+ * every round. This is the one place conflicts are decided: every visibility,
+ * scoring, assignment, progress and results path asks it, so a new conflict
+ * source (a judge who mentored a team, say) is added here only.
+ */
 export async function conflictKeysFor(tx: Prisma.TransactionClient, eventId: string, userIds: string[]): Promise<Map<string, ConflictKeys>> {
   const result = new Map<string, ConflictKeys>(userIds.map((id) => [id, { rsvpIds: new Set<string>(), teamIds: new Set<string>() }]));
   if (userIds.length === 0) return result;
@@ -68,29 +81,64 @@ export async function listEligibleJudges(ctx: JudgingOrganiserContext): Promise<
   return [...seen.values()];
 }
 
-/** Assign one submission to one judge. Refused for ineligible judges and conflicts of interest. */
-export async function assignJudge(ctx: JudgingOrganiserContext, input: unknown): Promise<JudgingResult> {
+/**
+ * Everyone who can judge one round, for organiser views: the event's judges
+ * (see listEligibleJudges), narrowed to the round's panel when it has one.
+ */
+export async function listRoundJudges(ctx: JudgingOrganiserContext, round: Pick<JudgingRoundScope, "panelUserIds">): Promise<EligibleJudgeDto[]> {
+  const judges = await listEligibleJudges(ctx);
+  return round.panelUserIds ? judges.filter((judge) => onRoundPanel(round, judge.userId)) : judges;
+}
+
+/** An eligible judge for the event who is also on this round's panel (when it has one). */
+export async function isRoundJudge(tx: Prisma.TransactionClient, round: Pick<JudgingRoundScope, "eventId" | "panelUserIds">, organisationId: string, userId: string): Promise<boolean> {
+  return onRoundPanel(round, userId) && isEligibleJudge(tx, organisationId, round.eventId, userId);
+}
+
+/** The round an organiser's assignment change is about: `roundId`, else the current round (created when the event has none). */
+async function assignmentRound(tx: Prisma.TransactionClient, event: JudgingEvent, roundId: string | undefined): Promise<JudgingRoundScope | null> {
+  return roundId ? resolveJudgingRound(tx, event, roundId) : ensureJudgingRound(tx, event);
+}
+
+/**
+ * Assign one submission to one judge in a round (the current one unless
+ * `options.roundId`). Refused for ineligible judges, judges off the round's
+ * panel, projects outside an ADVANCED round, and conflicts of interest.
+ */
+export async function assignJudge(ctx: JudgingOrganiserContext, input: unknown, options: { roundId?: string } = {}): Promise<JudgingResult> {
   const parsed = judgeAssignmentSchema.safeParse(input);
   if (!parsed.success) return fail("Invalid input.");
   return withOrganiserLock(ctx, async (tx, event) => {
+    const round = await assignmentRound(tx, event, options.roundId);
+    if (!round?.id) return fail(ROUND_NOT_FOUND);
     const submission = await tx.submission.findFirst({ where: { id: parsed.data.submissionId, eventId: event.id }, select: { id: true, teamId: true, rsvpId: true } });
     if (!submission) return fail(NOT_FOUND);
-    if (!(await isEligibleJudge(tx, event.organisationId, event.id, parsed.data.judgeUserId))) return fail("This person is not a judge for this event.");
+    if (round.entrySource === JudgingRoundEntrySource.ADVANCED && !(await tx.judgingRoundEntry.findFirst({ where: { roundId: round.id, submissionId: submission.id }, select: { id: true } }))) {
+      return fail("This project isn't in this round.");
+    }
+    if (!(await isRoundJudge(tx, round, event.organisationId, parsed.data.judgeUserId))) return fail("This person is not a judge for this event.");
     const conflicts = await conflictKeysFor(tx, event.id, [parsed.data.judgeUserId]);
     if (hasConflictOfInterest(submission, conflicts.get(parsed.data.judgeUserId))) return fail("This judge is registered on this entry, so they can't judge it.");
-    await tx.judgeAssignment.createMany({
-      data: [{ eventId: event.id, judgeUserId: parsed.data.judgeUserId, submissionId: submission.id }],
+    if ((await freshEyesBlockedPairs(tx, round)).has(pairKey(parsed.data.judgeUserId, submission.id))) {
+      return fail("This judge reviewed this project in an earlier round, and this round uses fresh eyes.");
+    }
+    const created = await tx.judgeAssignment.createMany({
+      data: [{ eventId: event.id, roundId: round.id, judgeUserId: parsed.data.judgeUserId, submissionId: submission.id }],
       skipDuplicates: true,
     });
+    if (created.count > 0) await recordManualAssignment(tx, ctx, { action: "JUDGE_ASSIGNED", roundId: round.id, roundPosition: round.position, judgeUserId: parsed.data.judgeUserId, submissionId: submission.id });
     return okEmpty();
   });
 }
 
-export async function unassignJudge(ctx: JudgingOrganiserContext, input: unknown): Promise<JudgingResult> {
+export async function unassignJudge(ctx: JudgingOrganiserContext, input: unknown, options: { roundId?: string } = {}): Promise<JudgingResult> {
   const parsed = judgeAssignmentSchema.safeParse(input);
   if (!parsed.success) return fail("Invalid input.");
   return withOrganiserLock(ctx, async (tx, event) => {
-    await tx.judgeAssignment.deleteMany({ where: { eventId: event.id, judgeUserId: parsed.data.judgeUserId, submissionId: parsed.data.submissionId } });
+    const round = options.roundId ? await resolveJudgingRound(tx, event, options.roundId) : await resolveJudgingRound(tx, event);
+    if (!round?.id) return round ? okEmpty() : fail(ROUND_NOT_FOUND);
+    const removed = await tx.judgeAssignment.deleteMany({ where: { eventId: event.id, roundId: round.id, judgeUserId: parsed.data.judgeUserId, submissionId: parsed.data.submissionId } });
+    if (removed.count > 0) await recordManualAssignment(tx, ctx, { action: "JUDGE_UNASSIGNED", roundId: round.id, roundPosition: round.position, judgeUserId: parsed.data.judgeUserId, submissionId: parsed.data.submissionId });
     return okEmpty();
   });
 }

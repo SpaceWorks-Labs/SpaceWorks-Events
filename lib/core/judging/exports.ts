@@ -29,8 +29,10 @@ export type JudgingResultsExportView = {
   query?: string;
   /** The Results score chip. */
   scored?: ResultsScoreFilter;
-  /** The score method the table shows; the event's saved one when omitted. */
+  /** The score method the table shows; the round's saved one when omitted. */
   method?: ScoreNormalization;
+  /** The round the table shows; the current round when omitted. */
+  roundId?: string | null;
 };
 
 /**
@@ -48,7 +50,7 @@ export async function planJudgingResultsExport(
 ): Promise<(CsvExportPlan & { rows: number; method: ScoreNormalization }) | null> {
   const event = await prisma.event.findFirst({ where: { id: ctx.eventId, organisationId: ctx.organisationId }, select: { id: true, timezone: true } });
   if (!event) return null;
-  const results = await loadJudgingResults(ctx, { method: view.method });
+  const results = await loadJudgingResults(ctx, { method: view.method, roundId: view.roundId });
   if (!results) return null;
   const query = view.query?.trim() ?? "";
   const scored = view.scored ?? "all";
@@ -67,9 +69,9 @@ export async function planJudgingResultsExport(
       // for this batch only), with the event and organisation re-checked.
       const scoped = { submissionId: { in: ids }, submission: { eventId: event!.id, event: { organisationId: ctx.organisationId } } };
       const [scores, reviews] = await Promise.all([
-        prisma.judgeScore.findMany({ where: scoped, select: { submissionId: true, judgeUserId: true, criterionId: true, score: true } }),
+        prisma.judgeScore.findMany({ where: { ...scoped, criterion: { roundId: results!.roundId } }, select: { submissionId: true, judgeUserId: true, criterionId: true, score: true } }),
         prisma.judgeReview.findMany({
-          where: scoped,
+          where: { ...scoped, roundId: results!.roundId },
           select: { submissionId: true, judgeUserId: true, submittedAt: true, judge: { select: { name: true } } },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         }),

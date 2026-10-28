@@ -20,7 +20,23 @@ const EMPTY: Draft = { id: null, name: "", description: "", weight: "1", maxScor
  * the server refuses every rubric write afterwards, so the controls here are
  * disabled to match.
  */
-export function JudgingPanelRubric({ scope, criteria, frozen, limits }: { scope: JudgingScope; criteria: JudgingDashboardCriterion[]; frozen: boolean; limits: JudgingLimits }) {
+export function JudgingPanelRubric({
+  scope,
+  criteria,
+  frozen,
+  limits,
+  roundId = null,
+  frozenNote = "The rubric is locked because judging has started.",
+}: {
+  scope: JudgingScope;
+  criteria: JudgingDashboardCriterion[];
+  frozen: boolean;
+  limits: JudgingLimits;
+  /** The judging round whose rubric this is (docs/HACKATHON.md "Rounds"); null for the current round. */
+  roundId?: string | null;
+  frozenNote?: string;
+}) {
+  const actionScope = roundId ? { ...scope, roundId } : scope;
   const { run, busy, pending } = useJudgingAction();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [errors, setErrors] = useState<Record<string, string[]> | undefined>();
@@ -38,7 +54,7 @@ export function JudgingPanelRubric({ scope, criteria, frozen, limits }: { scope:
     const criterion = { name: draft.name, description: draft.description, weight: draft.weight, maxScore: draft.maxScore };
     run(
       "save",
-      () => (draft.id ? editJudgingCriterion({ ...scope, criterionId: draft.id, criterion }) : addJudgingCriterion({ ...scope, criterion })),
+      () => (draft.id ? editJudgingCriterion({ ...actionScope, criterionId: draft.id, criterion }) : addJudgingCriterion({ ...actionScope, criterion })),
       draft.id ? "Criterion updated." : "Criterion added.",
       (result) => {
         if (result.ok) setDraft(null);
@@ -52,7 +68,7 @@ export function JudgingPanelRubric({ scope, criteria, frozen, limits }: { scope:
     const target = index + offset;
     if (target < 0 || target >= ids.length) return;
     [ids[index], ids[target]] = [ids[target]!, ids[index]!];
-    run(`move-${criteria[index]!.id}`, () => reorderJudgingCriteria({ ...scope, ids }), null);
+    run(`move-${criteria[index]!.id}`, () => reorderJudgingCriteria({ ...actionScope, ids }), null);
   }
 
   return (
@@ -68,7 +84,7 @@ export function JudgingPanelRubric({ scope, criteria, frozen, limits }: { scope:
           )
         }
       />
-      {frozen ? <Callout tone="info" className="mb-4">The rubric is locked because judging has started.</Callout> : null}
+      {frozen ? <Callout tone="info" className="mb-4">{frozenNote}</Callout> : null}
       {criteria.length === 0 ? (
         <EmptyState title="No criteria yet">Add criteria such as Impact, Technical execution and Design before you open judging.</EmptyState>
       ) : (
@@ -152,7 +168,7 @@ export function JudgingPanelRubric({ scope, criteria, frozen, limits }: { scope:
         message={`"${deleting?.name ?? ""}" will be removed from the rubric.`}
         confirmLabel="Delete criterion"
         loading={busy === "delete"}
-        onConfirm={() => deleting && run("delete", () => removeJudgingCriterion({ ...scope, criterionId: deleting.id }), "Criterion deleted.", () => setDeleting(null))}
+        onConfirm={() => deleting && run("delete", () => removeJudgingCriterion({ ...actionScope, criterionId: deleting.id }), "Criterion deleted.", () => setDeleting(null))}
         onCancel={() => setDeleting(null)}
       />
     </Card>
