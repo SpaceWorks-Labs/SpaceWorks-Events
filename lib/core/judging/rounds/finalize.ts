@@ -17,12 +17,13 @@ import { JudgingRoundStatus, SubmissionStatus } from "@prisma/client";
 import { recordAuditEvent } from "@/lib/audit";
 import type { JudgingOrganiserContext } from "@/lib/judgingAccess";
 import { effectiveReviewTarget } from "@/lib/judgingProgress";
+import { FINALIZE_REASON_MAX_LENGTH } from "@/lib/validators/judgingRounds";
 import { fail, isId, type JudgingResult, ok, okEmpty, withOrganiserLock } from "../shared";
 import { loadJudgingResults } from "../results";
 import { resolveJudgingRound } from "./scope";
 
 const ROUND_NOT_FOUND = "Judging round not found.";
-export const FINALIZE_REASON_MAX_LENGTH = 500;
+export { FINALIZE_REASON_MAX_LENGTH };
 
 export type RoundCoverageDto = { projects: number; target: number; short: number };
 

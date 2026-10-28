@@ -5,6 +5,8 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 
 export const JUDGING_ROUND_NAME_MAX_LENGTH = 80;
+/** A finalise exception reason; the frontend reads it, so it lives here, away from the database cores. */
+export const FINALIZE_REASON_MAX_LENGTH = 500;
 /** Rounds per event: a qualifier, semi-finals and a final leave plenty of room. */
 export const JUDGING_ROUNDS_LIMIT = 10;
 /** Finalists advanced in one go (and the size of a hand-picked list). */
