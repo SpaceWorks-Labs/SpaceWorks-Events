@@ -36,7 +36,20 @@ export type CheckInCommitResult =
  */
 const notAccepted = { status: { not: AdmissionStatus.ACCEPTED } } satisfies Prisma.AdmissionApplicationWhereInput;
 /** A registration whose own (solo) or team's admission application isn't ACCEPTED. */
-export const unacceptedApplicant = { OR: [{ admissionApplication: { is: notAccepted } }, { team: { is: { admissionApplication: { is: notAccepted } } } }] } satisfies Prisma.RSVPWhereInput;
+const unacceptedApplicant = { OR: [{ admissionApplication: { is: notAccepted } }, { team: { is: { admissionApplication: { is: notAccepted } } } }] } satisfies Prisma.RSVPWhereInput;
+
+/** The registration's own and its team's application status, for `isUnacceptedApplicant`. */
+export const applicationStatusSelect = {
+  admissionApplication: { select: { status: true } },
+  team: { select: { admissionApplication: { select: { status: true } } } },
+} as const satisfies Prisma.RSVPSelect;
+
+type ApplicationStatusRow = { admissionApplication?: { status: AdmissionStatus } | null; team?: { admissionApplication?: { status: AdmissionStatus } | null } | null };
+
+export function isUnacceptedApplicant(row: ApplicationStatusRow): boolean {
+  const status = row.admissionApplication?.status ?? row.team?.admissionApplication?.status;
+  return status != null && status !== AdmissionStatus.ACCEPTED;
+}
 
 export async function commitCheckInProjection(params: {
   rsvpId: string;
@@ -65,11 +78,10 @@ export async function commitCheckInProjection(params: {
       });
       return { state: "checked-in", checkedInAt: params.checkedInAt };
     }
-    const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { checkedInAt: true, status: true } });
+    const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { checkedInAt: true, status: true, ...applicationStatusSelect } });
     if (!current) return { state: "missing" };
     if (current.checkedInAt) return { state: "already-checked-in", checkedInAt: current.checkedInAt };
-    const applicant = current.status !== "CONFIRMED" && (await tx.rSVP.count({ where: { id: params.rsvpId, ...unacceptedApplicant } })) > 0;
-    return { state: "ineligible", status: current.status, applicant };
+    return { state: "ineligible", status: current.status, applicant: current.status !== "CONFIRMED" && isUnacceptedApplicant(current) };
   });
   if (result.state === "checked-in") {
     publishTicketCheckedIn({ rsvpId: params.rsvpId, checkedInAt: result.checkedInAt });

@@ -129,7 +129,11 @@ describe("organiserCrewSchema", () => {
       role: "",
       bio: "",
       showOnPage: true,
+      withdrawApplication: false,
     });
+    // Withdrawing an applicant's open application is an explicit, boolean confirmation.
+    expect(organiserCrewSchema.parse({ ...base, withdrawApplication: true }).withdrawApplication).toBe(true);
+    expect(organiserCrewSchema.safeParse({ ...base, withdrawApplication: "yes" }).success).toBe(false);
     // The crew kind is display only and must be a known kind.
     expect(organiserCrewSchema.parse({ ...base, kind: "MENTOR" }).kind).toBe("MENTOR");
     expect(organiserCrewSchema.safeParse({ ...base, kind: "OWNER" }).success).toBe(false);

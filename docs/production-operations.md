@@ -137,6 +137,7 @@ How to read the lock notes. Prisma runs each migration in one transaction withou
 | `20261118030000_reimbursement_crew_kinds` | `ReimbursementPolicy.crewKinds` (empty means every crew member) with a CHECK | Safe |
 | `20261118040000_reimbursement_admission_kind` | Adds `ADMISSION_STAGE` to `ReimbursementEligibility`, alone in its migration | Safe (the type arrives in the same release) |
 | `20261118050000_reimbursement_admission_stage` | `ReimbursementPolicy.admissionStageId` (`NO ACTION` foreign key to `AdmissionStage`) and `requireAccepted` (default `false`); the stage-shape CHECK and stage trigger are replaced to cover admission stages | Safe |
+| `20261119030000_admission_audit_fixes` | `rsvp_admission_crew_detached` trigger (`BEFORE UPDATE OF "isCrew" ON "RSVP"`, a brief SHARE ROW EXCLUSIVE lock, no scan): a registration becomes crew only once its application is detached; drops `ReimbursementPolicy.requireAccepted` (ADMISSION_STAGE policies always need an accepted application) and re-adds the stage-shape CHECK without it (a scan of the small `ReimbursementPolicy` table); `AdmissionStage.freshEyes` (default `false`) | Safe from 0.10.0: `requireAccepted` arrived in the same release, so no released build reads it |
 
 The release that adds `/help` also reserves that organisation address: `npm run db:verify` fails if an organisation already uses it (see [Reserved organisation addresses](#reserved-organisation-addresses)). Rename it before upgrading.
 
