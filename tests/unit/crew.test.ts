@@ -129,7 +129,12 @@ describe("organiserCrewSchema", () => {
       role: "",
       bio: "",
       showOnPage: true,
+      kind: "VOLUNTEER",
     });
+    // The crew kind is display only and must be a known kind.
+    expect(organiserCrewSchema.parse({ ...base, kind: "MENTOR" }).kind).toBe("MENTOR");
+    expect(organiserCrewSchema.safeParse({ ...base, kind: "OWNER" }).success).toBe(false);
+    expect(crewProfileSchema.safeParse({ ...base, kind: "ORGANISER" }).success).toBe(false);
     expect(organiserCrewSchema.parse({ ...base, showOnPage: false }).showOnPage).toBe(false);
     expect(organiserCrewSchema.safeParse({ ...base, showOnPage: "yes" }).success).toBe(false);
     expect(organiserCrewSchema.safeParse({ ...base, linkedinUrl: "javascript:alert(1)" }).success).toBe(false);

@@ -3,7 +3,7 @@ import "server-only";
 import { RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { verifiedMinutes } from "./hours";
-import { placesLeft } from "./math";
+import { canCheckInAt, placesLeft } from "./math";
 import { crewTicketLive, type VolunteerSelf } from "./shared";
 
 /*
@@ -30,6 +30,8 @@ export async function resolveVolunteerSelf(ticketToken: unknown, sessionUserId: 
 export type MyShift = {
   id: string; title: string; zone: string; task: string; startsAt: string; endsAt: string; signupDeadline: string;
   graceMinutes: number; requiresApproval: boolean; open: boolean; placesLeft: number | null;
+  /** Whether check-in is open now (the grace period before the start until the end), as of page load. */
+  checkInOpen: boolean;
   signup: null | { id: string; status: string; attendance: string; checkedInAt: string | null; checkedOutAt: string | null; minutes: number | null; hoursState: string | null };
 };
 
@@ -61,6 +63,7 @@ export async function loadMyShifts(rsvp: { id: string; isCrew: boolean; status: 
       startsAt: shift.startsAt.toISOString(), endsAt: shift.endsAt.toISOString(), signupDeadline: shift.signupDeadline.toISOString(),
       graceMinutes: shift.graceMinutes, requiresApproval: shift.requiresApproval,
       open: !shift.closed && now < shift.signupDeadline && now < shift.startsAt,
+      checkInOpen: canCheckInAt(shift, now),
       placesLeft: placesLeft(shift.capacity, shift._count.signups),
       signup: mine
         ? { id: mine.id, status: mine.status, attendance: mine.attendance, checkedInAt: mine.checkedInAt?.toISOString() ?? null, checkedOutAt: mine.checkedOutAt?.toISOString() ?? null, minutes: mine.hours?.minutes ?? null, hoursState: mine.hours?.state ?? null }

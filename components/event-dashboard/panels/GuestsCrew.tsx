@@ -8,7 +8,9 @@ import { showCrewSection } from "@/app/actions/event-website";
 import { ConfirmationDialog } from "@/components/feedback/ConfirmationDialog";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { Button, IconButton } from "@/components/ui/button";
-import { Switch } from "@/components/ui/choice";
+import { FilterChip, Switch } from "@/components/ui/choice";
+import { CREW_KINDS, CREW_KIND_LABELS } from "@/lib/crewKind";
+import type { CrewKind } from "@prisma/client";
 import { Avatar, Callout, Card, CardHeader, Chip, EmptyState } from "@/components/ui/display";
 import { CrewJoinLinkCard } from "@/components/event-dashboard/crew/CrewJoinLinkCard";
 import { CrewMemberDialog } from "@/components/event-dashboard/crew/CrewMemberDialog";
@@ -30,6 +32,8 @@ export function GuestsCrew({ organisationSlug, eventId, origin, crew }: { organi
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editing, setEditing] = useState<OrganiserCrewMember | "new" | null>(null);
   const [removing, setRemoving] = useState<OrganiserCrewMember | null>(null);
+  // Filter by crew kind (display only, docs/VOLUNTEERS.md).
+  const [kindFilter, setKindFilter] = useState<CrewKind | null>(null);
   const scope = { organisationSlug, eventId };
   const { members, food } = crew;
   const joinUrl = crew.joinPath ? `${origin}${crew.joinPath}` : null;
@@ -90,18 +94,30 @@ export function GuestsCrew({ organisationSlug, eventId, origin, crew }: { organi
         </Callout>
       ) : null}
 
+      {members.length > 0 ? (
+        <div role="group" aria-label="Filter crew by kind" className="flex flex-wrap gap-1.5">
+          <FilterChip selected={kindFilter == null} onClick={() => setKindFilter(null)}>All</FilterChip>
+          {CREW_KINDS.filter((kind) => members.some((member) => member.kind === kind)).map((kind) => (
+            <FilterChip key={kind} selected={kindFilter === kind} onClick={() => setKindFilter(kindFilter === kind ? null : kind)}>
+              {CREW_KIND_LABELS[kind]} {members.filter((member) => member.kind === kind).length}
+            </FilterChip>
+          ))}
+        </div>
+      ) : null}
+
       {members.length === 0 ? (
         <EmptyState mood="sleepy" title="No crew yet.">
           Add the people running the event. They get a ticket for check-in, and you can show them on the event page.
         </EmptyState>
       ) : (
         <ul aria-label="Crew members" aria-busy={pending || undefined} className="flex flex-col gap-2.5">
-          {members.map((member, index) => (
+          {members.filter((member) => kindFilter == null || member.kind === kindFilter).map((member, index, shown) => (
             <CrewRow
               key={member.id}
               member={member}
-              first={index === 0}
-              last={index === members.length - 1}
+              // Reordering works on the whole list, so it is off while a kind filter hides members.
+              first={kindFilter != null || index === 0}
+              last={kindFilter != null || index === shown.length - 1}
               busy={pending && busyId === member.id}
               disabled={pending}
               onToggleShown={(shown) =>
@@ -134,7 +150,7 @@ export function GuestsCrew({ organisationSlug, eventId, origin, crew }: { organi
             </ul>
           ) : null}
         </Card>
-        <CrewJoinLinkCard organisationSlug={organisationSlug} eventId={eventId} joinUrl={joinUrl} />
+        <CrewJoinLinkCard organisationSlug={organisationSlug} eventId={eventId} joinUrl={joinUrl} kind={crew.joinKind} />
       </div>
 
       <p className="text-caption text-ink-muted">
@@ -219,6 +235,7 @@ function CrewRow({
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
+        <Chip size="sm" tone="neutral">{CREW_KIND_LABELS[member.kind]}</Chip>
         <Chip size="sm" tone={checkedIn ? "success" : "outline"}>{checkedIn ? "Checked in" : "Not checked in"}</Chip>
         {member.joinedViaLink && !member.showOnPage ? <Chip size="sm" tone="accent">Joined via link</Chip> : null}
       </div>

@@ -11,6 +11,7 @@ import { refreshOrderFromProvider } from "@/lib/payments/checkout";
 import { isActiveHold } from "@/lib/payments/holds";
 import { loadTicketTeamSection, ticketSubmissionMode, ticketViewerId } from "@/lib/teamTicketSection";
 import { loadTicketClaims } from "@/lib/claims/ticketView";
+import { loadMyShifts } from "@/lib/volunteer/ticketView";
 import { ticketDesignFor } from "@/lib/ticketDesign/resolve";
 import { formatMoney } from "@/lib/payments/money";
 type Props = {
@@ -225,7 +226,9 @@ export async function loadTicketView({ params, searchParams }: Props) {
   const teamSection = isCrew ? null : await loadTicketTeamSection(rsvp, isCheckedIn, viewerId);
   const submissionMode = isCrew ? null : ticketSubmissionMode(rsvp, viewerId);
   const claims = await loadTicketClaims(rsvp);
+  // "My shifts" (docs/VOLUNTEERS.md): crew tickets of events with volunteer shifts on.
+  const myShifts = isCrew ? await loadMyShifts(rsvp) : null;
   // A designed ticket (docs/TICKET_DESIGNER.md) is shown above the live check-in stub.
   const designedTicket = rsvp.status === "CONFIRMED" ? Boolean((await ticketDesignFor(rsvp.checkInToken))?.custom) : false;
-  return { isCrew, designedTicket, claims, teamSection, submissionMode, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
+  return { isCrew, myShifts, designedTicket, claims, teamSection, submissionMode, inTeam: Boolean(rsvp.teamId), rsvp: { checkInToken: rsvp.checkInToken, checkedInAt: rsvp.checkedInAt, status: rsvp.status }, orgName, orgSlug, eventSlug, title, start, timeZone, location, mapHref, accent, calendarEvent, status, isCheckedIn, confirmed, name, eventPageHref, safeToken, payment: paymentView, hold, returningFromCheckout, otherDates };
 }

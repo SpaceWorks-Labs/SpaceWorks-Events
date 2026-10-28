@@ -6,6 +6,7 @@ import { loadEventInvitesFirstPage } from "@/lib/eventDashboard/invites";
 import { loadEventTeams } from "@/lib/eventDashboard/teams";
 import { loadSavedViewsForDashboard } from "@/lib/eventDashboard/savedViews";
 import { loadEventCrew } from "@/lib/eventDashboard/crew";
+import { loadVolunteerShifts } from "@/lib/eventDashboard/volunteerShifts";
 import { DEFAULT_CURRENCY } from "@/lib/payments/money";
 
 export async function loadGuestsPanel({ ctx }: { ctx: EventDashboardContext; }) {
@@ -14,7 +15,7 @@ export async function loadGuestsPanel({ ctx }: { ctx: EventDashboardContext; }) 
   const teamMode = event.registrationMode === "TEAM";
   const teamsAllowed = teamMode && permissions.canManageRegistrations;
   // Every list here is paged on the server; only first pages load with the panel.
-  const [attendees, fields, invites, ticketTypes, teamsPage, savedViews, crew] = await Promise.all([
+  const [attendees, fields, invites, ticketTypes, teamsPage, savedViews, crew, shifts] = await Promise.all([
     permissions.canManageRegistrations ? loadAttendeesFirstPage(ctx) : Promise.resolve(null),
     loadRegistrationFields(event.id),
     permissions.canManageInvitations ? loadEventInvitesFirstPage(event.id, organisation.id) : Promise.resolve(null),
@@ -25,10 +26,12 @@ export async function loadGuestsPanel({ ctx }: { ctx: EventDashboardContext; }) 
     loadSavedViewsForDashboard(ctx),
     // Guests → Crew (docs/CREW.md): the guest-list rule.
     permissions.canManageCrew ? loadEventCrew(ctx) : Promise.resolve(null),
+    // Guests → Crew → Shifts (docs/VOLUNTEERS.md): the same rule.
+    permissions.canManageCrew ? loadVolunteerShifts(ctx) : Promise.resolve(null),
   ]);
   const currency = event.currency ?? DEFAULT_CURRENCY;
   return {
-    permissions, organisation, event, attendees, fields, invites, teamMode, teamsPage, savedViews, crew, origin: ctx.origin,
+    permissions, organisation, event, attendees, fields, invites, teamMode, teamsPage, savedViews, crew, shifts, origin: ctx.origin, now: ctx.now.toISOString(),
     ticketTypes: ticketTypes.map((type) => ({ id: type.id, name: type.name, priceMinor: Number(type.priceMinor), currency })),
   };
 }

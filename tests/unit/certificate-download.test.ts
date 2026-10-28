@@ -21,7 +21,7 @@ describe("certificate downloads", () => {
     const result = await GET(new Request("https://example.test"), { params: Promise.resolve({ token }) });
     expect(mocks.render).toHaveBeenCalledWith(
       { version: 2, backgroundKey: template.backgroundKey, elements: [expect.objectContaining({ id: "name", text: "{{name}}" })] },
-      { name: "Alex", event: "Launch", eventDate: "14 Oct 2026", organisation: "Community", issueDate: "15 Oct 2026" },
+      { name: "Alex", event: "Launch", eventDate: "14 Oct 2026", organisation: "Community", issueDate: "15 Oct 2026", role: "", hours: "" },
       "org_1",
     );
     expect(result.headers.get("Content-Type")).toBe("image/jpeg");
