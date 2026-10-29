@@ -16,7 +16,7 @@ import { isActionRateLimited } from "@/lib/actionRateLimit";
 import type { ActionResult } from "./org";
 import { lockCollaborator, requireNoMentoringInProgress, syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
 import { DeskError } from "@/lib/core/mentorDesk/shared";
-import { syncMentorCrewAfterGrant } from "@/lib/core/mentorDesk/crewLink";
+import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -99,18 +99,19 @@ export async function revokeEventCollaborator(input: unknown): Promise<ActionRes
       : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
   };
   // A revoked MENTOR grant ends its assignments and claims (docs/MENTOR_DESK.md).
-  // The row is locked first, so a mentor command in flight finishes before the cleanup (or sees the grant gone).
+  // The Event and then the row are locked first (lockCollaborator), so a mentor command in flight finishes before the cleanup (or sees the grant gone).
   const outcome = await mentorGrantChange(() => prisma.$transaction(async (tx) => {
     const existing = await lockCollaborator(tx, where);
+    let webhook: WebhookEmission | null = null;
     if (existing?.eventId) {
       if (existing.permissions.includes(EventPermission.MENTOR)) await requireNoMentoringInProgress(tx, existing.eventId, existing.userId);
-      await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, [], session.user!.id!);
+      webhook = await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, [], session.user!.id!);
     }
-    return { deleted: await tx.eventCollaborator.deleteMany({ where }), existing };
+    return { deleted: await tx.eventCollaborator.deleteMany({ where }), webhook };
   }));
   if (!outcome.ok) return outcome;
-  const { deleted, existing } = outcome.data;
-  if (deleted.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: [], actorUserId: session.user.id });
+  const { deleted, webhook } = outcome.data;
+  if (webhook) emitWebhookEvent(webhook);
   if (!deleted.count) return { ok: false, error: "Collaborator not found." };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_REVOKED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId });
   if (parsed.data.eventId) revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}`);
@@ -132,16 +133,17 @@ export async function updateEventCollaboratorPermissions(input: unknown): Promis
   };
   const outcome = await mentorGrantChange(() => prisma.$transaction(async (tx) => {
     const existing = await lockCollaborator(tx, where);
+    let webhook: WebhookEmission | null = null;
     if (existing?.eventId) {
       if (existing.permissions.includes(EventPermission.MENTOR) && !parsed.data.permissions.includes(EventPermission.MENTOR)) await requireNoMentoringInProgress(tx, existing.eventId, existing.userId);
-      await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, parsed.data.permissions, session.user!.id!);
+      webhook = await syncMentorGrantLocked(tx, existing.eventId, existing.userId, existing.permissions, parsed.data.permissions, session.user!.id!);
     }
-    return { updated: await tx.eventCollaborator.updateMany({ where, data: { permissions: parsed.data.permissions } }), existing };
+    return { updated: await tx.eventCollaborator.updateMany({ where, data: { permissions: parsed.data.permissions } }), webhook };
   }));
   if (!outcome.ok) return outcome;
-  const { updated, existing } = outcome.data;
-  if (updated.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: parsed.data.permissions, actorUserId: session.user.id });
+  const { updated, webhook } = outcome.data;
   if (!updated.count) return { ok: false, error: "Collaborator not found." };
+  if (webhook) emitWebhookEvent(webhook);
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_PERMISSIONS_UPDATED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId, metadata: { permissions: parsed.data.permissions.join(",") } });
   if (parsed.data.eventId) revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}`);
   revalidatePath("/dashboard");

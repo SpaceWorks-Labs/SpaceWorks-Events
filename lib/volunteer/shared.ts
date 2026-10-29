@@ -1,7 +1,8 @@
 import "server-only";
 
-import { Prisma, RsvpStatus } from "@prisma/client";
+import { OfficeHourBookingStatus, Prisma, RsvpStatus } from "@prisma/client";
 import { z } from "zod";
+import { crewPersonIds } from "@/lib/personLock";
 import { MAX_GRACE_MINUTES, MAX_SHIFT_MINUTES } from "./math";
 
 /*
@@ -27,6 +28,8 @@ export const NOT_FOUND = "Shift not found.";
 export const SIGNUP_NOT_FOUND = "Sign-up not found.";
 export const SHIFTS_OFF = "Volunteer shifts are not open for this event.";
 export const SECOND_PERSON = "Another organiser must verify your hours.";
+export const BOOKED_OFFICE_HOUR = "This volunteer has a booked office hour at the same time.";
+export const PEOPLE_CHANGED = "The crew changed while this was saved. Try again.";
 
 const MINUTE = 60_000;
 const isoDate = z.string().datetime({ offset: true }).transform((value) => new Date(value));
@@ -61,7 +64,8 @@ export async function lockShift(tx: Prisma.TransactionClient, eventId: string, s
 
 /**
  * Locks one crew member (the per-person lock for overlapping duties, one
- * active check-in, hours and certificates). Always taken after the shift lock.
+ * active check-in, hours and certificates). Always taken after the shift lock,
+ * and after the person lock where a path takes one (lib/personLock.ts).
  */
 export async function lockCrewMember(tx: Prisma.TransactionClient, eventId: string, crewMemberId: string) {
   await tx.$queryRaw`SELECT "id" FROM "EventCrewMember" WHERE "id" = ${crewMemberId} AND "eventId" = ${eventId} FOR UPDATE`;
@@ -108,6 +112,22 @@ export async function hasApprovedShiftBetween(tx: Prisma.TransactionClient, even
     select: { id: true },
   });
   return Boolean(clash);
+}
+
+/**
+ * Whether the person behind a crew place (either link, lib/personLock.ts) has
+ * a booked office hour as a mentor overlapping the shift: a booked office hour
+ * and an approved shift never overlap (docs/MENTOR_DESK.md). Decided under
+ * the person lock, which booking and rescheduling take too.
+ */
+export async function hasBookedOfficeHourBetween(tx: Prisma.TransactionClient, eventId: string, crewMemberId: string, shift: { startsAt: Date; endsAt: Date }) {
+  const people = await crewPersonIds(tx, eventId, [crewMemberId]);
+  if (people.length === 0) return false;
+  const booked = await tx.officeHourSlot.findFirst({
+    where: { eventId, mentorUserId: { in: people }, cancelledAt: null, startsAt: { lt: shift.endsAt }, endsAt: { gt: shift.startsAt }, bookings: { some: { status: OfficeHourBookingStatus.BOOKED } } },
+    select: { id: true },
+  });
+  return Boolean(booked);
 }
 
 export function approvedCount(tx: Prisma.TransactionClient, shiftId: string) {

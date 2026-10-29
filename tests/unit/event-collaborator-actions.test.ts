@@ -27,7 +27,6 @@ vi.mock("@/lib/db", () => {
   return { prisma };
 });
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/core/mentorDesk/crewLink", () => ({ syncMentorCrewAfterGrant: vi.fn() }));
 
 import { cancelEventCollaboratorInvite, revokeEventCollaborator, updateEventCollaboratorPermissions } from "@/app/actions/event-collaborators";
 

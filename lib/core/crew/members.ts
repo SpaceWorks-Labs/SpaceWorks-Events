@@ -4,14 +4,16 @@ import { CrewKind, Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { notifyChatAbout } from "@/lib/chat/notify";
 import { enqueueCrewTicket } from "@/lib/outbox/crew";
-import { enqueueOperatorNotice } from "@/lib/outbox/enqueue";
 import { AdmissionError } from "@/lib/admission/state";
 import { promoteWaitlisted } from "@/lib/admission/promotion";
 import { fillFromWaitlist } from "@/lib/payments/operations";
 import { isOrganisationUploadUrl } from "@/lib/uploadUrl";
-import { rsvpWebhookSnapshot, rsvpWebhookSnapshotSelect } from "@/lib/teamUnits";
 import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
 import { detachApplicationForCrew } from "./application";
+import { DeskError } from "@/lib/core/mentorDesk/shared";
+import { lockCrewLinkPersons, requireCrewLinkAvailable } from "./identity";
+import { lockCrewRows } from "./removal";
+export { removeCrewMember } from "./removal";
 import {
   ALREADY_ON_CREW,
   ALREADY_REGISTERED,
@@ -98,16 +100,19 @@ type AddOutcome = { id: string; rsvpId: string; webhook: WebhookEmission | null;
  * sign-ups never convert. An applicant's application is detached first
  * (./application.ts): a closed one as it is, an open one withdrawn only with
  * `withdrawApplication` (the organiser confirmed).
+ * An optional transaction client lets the Mentor Desk commit the grant,
+ * ticket, queued email and ownership together; that caller rolls back refusals.
  */
 export async function addCrewMemberTx(
   event: EventForCrew,
   profile: CrewProfileInput,
   options: { showOnPage: boolean; joinedViaLink: boolean; kind?: CrewKind; withdrawApplication?: boolean },
+  client?: Prisma.TransactionClient,
 ): Promise<CrewResult<AddOutcome>> {
   const data = cleanProfile(profile);
   if (data.photoUrl && !isOrganisationUploadUrl(data.photoUrl, event.organisationId, CREW_PHOTO_CATEGORY)) return fail("Choose an uploaded crew photo.");
   try {
-    return await prisma.$transaction(async (tx): Promise<CrewResult<AddOutcome>> => {
+    const add = async (tx: Prisma.TransactionClient): Promise<CrewResult<AddOutcome>> => {
       const locked = await lockEventForCrew(tx, event.id);
       if (!locked) return fail("Event not found.");
       if ((await tx.eventCrewMember.count({ where: { eventId: event.id } })) >= MAX_CREW_MEMBERS) return fail(`An event can have up to ${MAX_CREW_MEMBERS} crew members.`);
@@ -158,7 +163,8 @@ export async function addCrewMemberTx(
       await enqueueCrewTicket(tx, { to: data.email, checkInToken: rsvp.checkInToken, organisationId: locked.organisationId });
       if (options.joinedViaLink) await notifyChatAbout(tx, { eventId: event.id }, "registration", (title) => `${data.name} joined the crew for ${title}.`);
       return { ok: true, data: { id: member.id, rsvpId: rsvp.id, webhook, freedPlace: existing?.status === RsvpStatus.CONFIRMED, withdrewApplication } };
-    });
+    };
+    return await (client ? add(client) : prisma.$transaction(add));
   } catch (error) {
     if (isUniqueViolation(error)) return fail(uniqueViolationModel(error) === "EventCrewMember" ? ALREADY_ON_CREW : ALREADY_REGISTERED);
     if (error instanceof AdmissionError) return fail(error.message);
@@ -205,6 +211,10 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
     return await prisma.$transaction(async (tx): Promise<CrewResult> => {
       // Under the Event row lock, like adding: a new address is checked against the event's registrations.
       if (!(await lockEventForCrew(tx, event.id))) return fail("Event not found.");
+      const identity = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { userId: true, rsvp: { select: { userId: true } } } });
+      const account = identity?.userId ?? identity?.rsvp.userId ?? await verifiedAccountFor(tx, data.email);
+      await lockCrewLinkPersons(tx, event.id, [memberId], account ? [account] : []);
+      if (!(await lockCrewRows(tx, event.id, memberId))) return fail("Crew member not found.");
       const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, userId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
       if (!member) return fail("Crew member not found.");
       if (data.email !== member.email) {
@@ -217,7 +227,8 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
         if (await findRegistrationByEmail(tx, event.id, data.email, member.rsvpId)) return fail(ALREADY_REGISTERED);
       }
       // The account link is sticky: a new email never unlinks it (docs/VOLUNTEERS.md), it can only gain one.
-      const relink = data.email !== member.email && !member.userId ? { userId: member.rsvp.userId ?? (await verifiedAccountFor(tx, data.email)) } : {};
+      const relink = data.email !== member.email && !member.userId ? { userId: account } : {};
+      if (relink.userId) await requireCrewLinkAvailable(tx, event.id, member.id, relink.userId);
       await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage, ...(kind ? { kind } : {}), ...relink } });
       // A new address gets the ticket too; the old one keeps working (same QR).
       if (data.email !== member.email) await enqueueCrewTicket(tx, { to: data.email, checkInToken: member.rsvp.checkInToken, organisationId: event.organisationId });
@@ -228,6 +239,7 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
       return { ok: true, data: undefined };
     });
   } catch (error) {
+    if (error instanceof DeskError) return fail(error.message);
     if (isUniqueViolation(error)) return fail(uniqueViolationModel(error) === "EventCrewMember" ? ALREADY_ON_CREW : ALREADY_REGISTERED);
     throw error;
   }
@@ -239,38 +251,12 @@ export async function setCrewMemberVisibility(ctx: OrganiserCrewContext, memberI
   return updated.count === 1 ? { ok: true, data: undefined } : fail("Crew member not found.");
 }
 
-/**
- * Removing a crew member deletes their free crew ticket (and its check-in)
- * with them. An account-tied ticket was that person's own registration before
- * it became crew, so they are told it is gone.
- */
-export async function removeCrewMember(ctx: OrganiserCrewContext, memberId: string): Promise<CrewResult<{ name: string }>> {
-  const member = await prisma.eventCrewMember.findFirst({
-    where: { id: memberId, eventId: ctx.eventId, event: { organisationId: ctx.organisationId } },
-    select: { name: true, email: true, event: { select: { title: true } }, rsvp: { select: rsvpWebhookSnapshotSelect } },
-  });
-  if (!member) return fail("Crew member not found.");
-  const removed = await prisma.$transaction(async (tx) => {
-    // The crew row cascades from the RSVP. Crew tickets never have an order, so nothing is refunded.
-    const deleted = await tx.rSVP.deleteMany({ where: { id: member.rsvp.id, eventId: ctx.eventId, isCrew: true, orderId: null } });
-    if (deleted.count === 1 && member.rsvp.userId) {
-      await enqueueOperatorNotice(tx, {
-        to: member.email,
-        organisationId: ctx.organisationId,
-        subject: `You're no longer on the crew for ${member.event.title.slice(0, 150)}`,
-        lines: [`The organisers removed you from the crew for ${member.event.title}, so your crew ticket no longer works.`, "If you still want to attend, register again on the event page, or contact the organisers."],
-      });
-    }
-    return deleted.count;
-  });
-  // Lost a race with another removal: nothing was deleted here.
-  if (removed !== 1) return fail("Crew member not found.");
-  emitWebhookEvent({ type: "registration.status_changed", rsvpId: member.rsvp.id, status: "CANCELLED", previousStatus: RsvpStatus.CONFIRMED, snapshot: rsvpWebhookSnapshot(member.rsvp) });
-  return { ok: true, data: { name: member.name } };
-}
-
 export async function moveCrewMember(ctx: OrganiserCrewContext, memberId: string, direction: -1 | 1): Promise<CrewResult> {
   return prisma.$transaction(async (tx): Promise<CrewResult> => {
+    const event = await lockEventForCrew(tx, ctx.eventId);
+    if (event?.organisationId !== ctx.organisationId) return fail("Crew member not found.");
+    // Updates below follow display order; acquire the complete set in id order first, like shift edits.
+    await tx.$queryRaw`SELECT c."id" FROM "EventCrewMember" c JOIN "Event" e ON e."id" = c."eventId" WHERE c."eventId" = ${ctx.eventId} AND e."organisationId" = ${ctx.organisationId} ORDER BY c."id" FOR UPDATE OF c`;
     const rows = await tx.eventCrewMember.findMany({
       where: { eventId: ctx.eventId, event: { organisationId: ctx.organisationId } },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

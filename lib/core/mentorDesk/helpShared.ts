@@ -89,7 +89,8 @@ export async function releaseLocked(tx: Prisma.TransactionClient, row: HelpRow, 
 /**
  * Before a mentor takes a claim: refuse while they hold another live one
  * (mentor_busy), and release their lapsed ones under the row lock so the
- * one-claim-per-mentor index never sees a stale claim.
+ * one-claim-per-mentor index never sees a stale claim. It locks requests
+ * other than the caller's, so callers hold the Event lock (helpCommands.ts).
  */
 export async function clearMentorClaims(tx: Prisma.TransactionClient, eventId: string, mentorUserId: string, exceptId: string, eventEnd: Date, now: Date) {
   const held = await tx.helpRequest.findMany({ where: { eventId, claimedByUserId: mentorUserId, status: HelpRequestStatus.CLAIMED, id: { not: exceptId } }, select: { id: true } });
