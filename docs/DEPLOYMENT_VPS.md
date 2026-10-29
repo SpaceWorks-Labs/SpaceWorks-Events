@@ -354,10 +354,21 @@ Run the one-liner again and choose **1) Update to the latest release** (or pass
 6. points `current` at the new release and keeps the three newest releases and
    their images.
 
+A release runs only against a database whose every recorded migration (applied,
+or started and failed, in `_prisma_migrations`) is in its own `prisma/migrations`.
+Before step 3 the updater refuses a release that lacks one, changing nothing; an
+automatic deploy makes the same check in the installed `vps-deploy.sh` before the
+requested release's own updater runs, so an older release is never installed
+over newer migrations.
+
 If any step after the backup fails, it restores the previous `compose.env` and
-starts the previous release's retained images. **Migrations that already ran are
-not reversed**; review migrations before updating, and restore the pre-update
-backup if an older release cannot run on the newer schema. For automation, unpack
+starts the previous release's retained images, provided that release has every
+migration now recorded. **Migrations that already ran are not reversed.** If the
+update applied (or started) a migration the previous release lacks, the updater
+stops the app, worker and scheduler instead, prints the restore command, and
+exits with an error: either fix the problem and run the update again, or restore
+the backup taken at the start of the update with the previous release's
+`scripts/vps-restore.sh`, which starts that release on the database as it was. For automation, unpack
 the new release with its commit in a `.release` file (and, for a published
 release, its version in `.release-version`) and run
 `sudo bash <new release>/scripts/update-vps.sh --yes`; it is copied into

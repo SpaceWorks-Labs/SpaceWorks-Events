@@ -3,7 +3,12 @@
 # and volumes. The curl installer runs it as root from the staged new release.
 # It backs up the database and configuration first, downloads the release's
 # images (or builds them for a source install) and migrates. If the new release does not come up healthy it returns to the
-# previous release's images; database migrations are never reversed.
+# previous release's images; database migrations are never reversed. A release
+# runs only against a database whose every recorded migration it contains
+# (scripts/vps-lib.sh applied_migrations): this release is refused before
+# anything changes if it lacks one, and when the update has applied migrations
+# the previous release lacks, the app, worker and scheduler are stopped instead
+# of restarting it, and the backup restore is printed.
 #   --yes  skip the confirmation (automation)
 set -euo pipefail
 set +x
@@ -57,7 +62,7 @@ marker="$SWE_DIR/releases/$revision/.release-version" saved_marker=untouched
 if [[ $managed = 1 && -d "$SWE_DIR/releases/$revision" ]]; then
   saved_marker=$(cat "$marker" 2>/dev/null || echo none)
 fi
-phase=preparing
+phase=preparing migrating=0 applied_before=''
 restore_previous() {
   local status=$?
   [[ $status != 0 ]] || return 0
@@ -70,6 +75,26 @@ restore_previous() {
   [[ $phase = deploying ]] || exit "$status"
   warn "The update failed; returning to ${previous_version:-the previous release}."
   mv -f "$compose_env.previous" "$compose_env"
+  if [[ $migrating = 1 ]]; then
+    # Read even though the migrator may have failed: a failed migration is recorded too.
+    local applied missing
+    if ! applied=$(applied_migrations); then
+      missing='(the database could not be read)'
+    elif [[ -n "$previous_dir" ]]; then
+      missing=$(missing_migrations "$previous_dir" <<< "$applied")
+    else
+      # No previous source to compare: only what this update recorded is known to be new.
+      missing=$(grep -vxF -f <(printf '%s\n' "$applied_before") <<< "$applied")
+    fi
+    if [[ -n "$missing" ]]; then
+      compose stop app worker beat
+      warn "${previous_version:-The previous release} cannot run against this database: it lacks migrations already recorded ($(paste -sd ' ' <<< "$missing")). The app, worker and scheduler were stopped instead of restarting it."
+      warn "To recover, fix the problem and run the update to $version again, or restore the database from before the update, which also starts the previous release:"
+      warn "  sudo bash ${previous_dir:-<the previous release>}/scripts/vps-restore.sh $(newest_backup)"
+      warn "That backup was taken at the start of this update (docs/DEPLOYMENT_VPS.md, Upgrades and rollback)."
+      exit "$status"
+    fi
+  fi
   if [[ -n "$previous_dir" && -f "$previous_dir/scripts/vps-compose.sh" ]]; then
     sh "$previous_dir/scripts/vps-compose.sh" up -d --wait --wait-timeout 300 --remove-orphans \
       || warn "The previous release did not start cleanly. Inspect it with: SWE_CONFIG_DIR=$SWE_CONFIG_DIR $previous_dir/scripts/vps-compose.sh ps"
@@ -83,6 +108,9 @@ trap restore_previous EXIT
 SWE_REPO_DIR=$source_dir
 [[ $managed = 0 ]] || SWE_REPO_DIR=$(promote_release "$source_dir" "$revision")
 cd "$SWE_REPO_DIR"
+applied_before=$(applied_migrations) || die "Could not read this database's migrations. Nothing was changed."
+missing=$(missing_migrations "$SWE_REPO_DIR" <<< "$applied_before")
+[[ -z "$missing" ]] || die "$version cannot run against this database: it lacks migrations already applied ($(paste -sd ' ' <<< "$missing")). Nothing was changed. An older release needs the backup from before those migrations restored (docs/DEPLOYMENT_VPS.md, Upgrades and rollback)."
 say 'Backing up the database and configuration.'
 bash "$SWE_REPO_DIR/scripts/vps-backup.sh" --no-objects
 phase=deploying
@@ -99,6 +127,7 @@ compose run --rm --no-deps ops node docker/vps/check.mjs preflight
 # An organisation on an address this release reserves stops the update here,
 # before anything is migrated, and the previous release keeps serving.
 compose run --rm --no-deps ops node scripts/check-reserved-slugs.mjs
+migrating=1
 compose run --rm migrator
 compose run --rm --no-deps ops node scripts/verify-production-schema.mjs
 compose up -d --wait --wait-timeout 300 --remove-orphans

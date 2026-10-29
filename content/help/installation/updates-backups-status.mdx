@@ -23,17 +23,20 @@ The updater stops straight away if you're already on the latest release. Otherwi
 3. recreates the services, waits for them to be healthy and runs its checks;
 4. keeps the three newest releases so it can go back.
 
-It keeps every setting and secret; an update never generates new ones. **If any step after the backup fails, it puts back the previous release automatically.**
+It keeps every setting and secret; an update never generates new ones. **If any step after the backup fails, it puts back the previous release automatically**, as long as that release can run on the database as it now is.
 
 <Callout kind="warning">
 
-Database migrations that already ran aren't reversed by the rollback. If an older release can't run on the newer database, restore the backup the updater took just before.
+Database migrations that already ran aren't reversed by the rollback. A release can only run on a database whose migrations it all knows, so:
+
+- an update to a release that is older than the database's migrations is refused before anything changes;
+- if a failed update has already applied a migration the previous release doesn't know, the updater doesn't start that release. It stops the app, worker and scheduler, and shows the command to restore the backup it took just before. Either fix the problem and run the update again, or run that command, which puts the database back as it was and starts the previous release.
 
 </Callout>
 
 ### Automatic deploys
 
-If you answered yes to automatic deploys, or added them later with **7) Automatic deploys**, a GitHub Actions runner on the server installs each new published release by itself. It runs the same steps as a manual update: a backup, the new images, migrations, health checks, and the previous release restored if the new one is unhealthy. Nothing connects in from GitHub; the runner checks outwards. It runs under its own account with no Docker access, and only installs published releases from the main branch.
+If you answered yes to automatic deploys, or added them later with **7) Automatic deploys**, a GitHub Actions runner on the server installs each new published release by itself. It runs the same steps as a manual update: a backup, the new images, migrations, health checks, and the previous release restored if the new one is unhealthy. A release that is older than the database's migrations is refused, and the running release is left as it is. Nothing connects in from GitHub; the runner checks outwards. It runs under its own account with no Docker access, and only installs published releases from the main branch.
 
 ## Backups
 
