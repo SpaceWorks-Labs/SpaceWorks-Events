@@ -953,7 +953,11 @@ Events judge in rounds ([Hackathon judging](HACKATHON.md) "Rounds"). Every
 judging read above takes an optional `?roundId=` and otherwise shows the
 current round (the one judges score now). Scores and reviews are written to
 the current round only: a `?roundId=` naming any other round answers
-`JUDGING_CLOSED`.
+`JUDGING_CLOSED`. A scoring write pins one round at its start (the
+`?roundId=`, else the current round) and every write and read of that request
+uses it; the round is compared again under the Event lock, so if an organiser
+switches rounds mid-request the request answers `JUDGING_CLOSED` and nothing
+is written to the new round.
 
 - `GET …/judging/rounds` → `{ "rounds": [JudgeRound], "currentRoundId", "onPanel" }`:
   the rounds this judge may open (rounds that have opened, and the current
