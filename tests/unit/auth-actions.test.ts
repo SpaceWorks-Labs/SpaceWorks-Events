@@ -45,14 +45,29 @@ describe("password account creation", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("does not mislabel a retried account creation as rate-limited", async () => {
-    mocks.userFind.mockResolvedValue({ id: "new_user", passwordHash: "hash" });
+  it("spends the limit first and answers a limited attempt like any other, creating nothing", async () => {
     mocks.rateLimit.mockResolvedValue(true);
-
     await expect(signUpWithPassword({ name: "Person", email: "person@example.test", password: "new-password" }))
       .resolves.toEqual({ ok: true, data: { email: "person@example.test" } });
-    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.rateLimit).toHaveBeenCalledWith("signup", "person@example.test");
+    expect(mocks.hash).not.toHaveBeenCalled();
+    expect(mocks.userFind).not.toHaveBeenCalled();
     expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.issueVerification).not.toHaveBeenCalled();
+  });
+
+  it("gives the same answer for an existing, a new and a rate-limited address", async () => {
+    const attempt = () => signUpWithPassword({ name: "Person", email: "person@example.test", password: "new-password" });
+    mocks.userFind.mockResolvedValue({ id: "existing", passwordHash: "hash" });
+    const existing = await attempt();
+    mocks.userFind.mockResolvedValue(null);
+    const created = await attempt();
+    mocks.rateLimit.mockResolvedValue(true);
+    const limited = await attempt();
+    expect(existing).toEqual(created);
+    expect(limited).toEqual(created);
+    // The existing address spent its quota too.
+    expect(mocks.rateLimit).toHaveBeenCalledTimes(3);
   });
 
   it("never creates the super-admin account from sign-up, and answers as for anyone else", async () => {

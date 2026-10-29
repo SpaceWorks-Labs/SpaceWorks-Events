@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomBytes } from "node:crypto";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import { authAdapter } from "@/lib/authAdapter";
 import Google from "next-auth/providers/google";
@@ -13,7 +14,10 @@ import { getGoogleSsoSettings } from "@/lib/instanceSettings";
 import { logAuthError } from "@/lib/authLogger";
 import { actorSession } from "@/lib/actorSession";
 import { currentRequestActor } from "@/lib/requestActor";
+import { SESSION_COOKIE_NAME } from "@/lib/sessionSid";
 import type { Session } from "next-auth";
+
+type AuthMethod = Session["authMethod"];
 
 /**
  * This code is returned only after the supplied password is valid. It lets the
@@ -49,7 +53,7 @@ const nextAuth = NextAuth(async () => {
   // browsers. A versioned name retires that incompatible token cleanly rather
   // than asking Auth.js to decode it on every request.
   cookies: {
-    sessionToken: { name: "swe.session-token.v1" },
+    sessionToken: { name: SESSION_COOKIE_NAME },
   },
   trustHost: true,
   logger: {
@@ -102,7 +106,7 @@ const nextAuth = NextAuth(async () => {
       // Returning true lets Auth.js create or link the adapter user after this callback.
       return decision === "account_creation_disabled" ? "/login?error=account_creation_disabled" : true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       const userId = user?.id ?? token.sub;
       if (!userId) return null;
 
@@ -112,7 +116,7 @@ const nextAuth = NextAuth(async () => {
       });
       if (!currentUser) return null;
 
-      const sessionToken = token as typeof token & { authenticatedAt?: number; sessionVersion?: number; sessionRevoked?: boolean; mfaVerified?: boolean };
+      const sessionToken = token as typeof token & { authenticatedAt?: number; sessionVersion?: number; sessionRevoked?: boolean; mfaVerified?: boolean; sid?: string; authMethod?: AuthMethod };
       if (user) {
         // Bind credentials to the version checked with the password. A reset
         // racing token issuance must not mint a fresh session from old proof.
@@ -124,19 +128,28 @@ const nextAuth = NextAuth(async () => {
         sessionToken.sessionRevoked = false;
         // Set only by a password sign-in that included an authenticator code.
         sessionToken.mfaVerified = (user as typeof user & { mfaVerified?: boolean }).mfaVerified === true;
-      } else if (sessionToken.sessionRevoked || sessionToken.sessionVersion !== currentUser.sessionVersion) {
+        // How this sign-in happened; the super admin gate accepts only a password.
+        sessionToken.authMethod = account?.provider === "google" ? "google" : account?.provider === "credentials" ? "credentials" : undefined;
+        // This sign-in's id, fixed for the session's life: an MFA proof is
+        // bound to it (lib/mfaProof.ts), so a new sign-in needs a new proof.
+        // Read on the server only (lib/sessionSid.ts), never via the session.
+        sessionToken.sid = randomBytes(16).toString("base64url");
+      } else if (sessionToken.sessionRevoked || sessionToken.sessionVersion !== currentUser.sessionVersion || !sessionToken.sid) {
         // Auth.js clears the cookie and returns a genuinely anonymous session.
+        // A token from before sign-in ids existed is retired the same way.
         return null;
       }
       return token;
     },
     session({ session, token }) {
-      const sessionToken = token as typeof token & { authenticatedAt?: number; sessionRevoked?: boolean; mfaVerified?: boolean };
+      const sessionToken = token as typeof token & { authenticatedAt?: number; sessionRevoked?: boolean; mfaVerified?: boolean; authMethod?: AuthMethod };
       if (session.user && token.sub && !sessionToken.sessionRevoked) session.user.id = token.sub;
       if (sessionToken.sessionRevoked && session.user) session.user.id = "";
       (session as typeof session & { authenticatedAt?: number }).authenticatedAt =
         sessionToken.authenticatedAt;
       (session as typeof session & { mfaVerified?: boolean }).mfaVerified = sessionToken.mfaVerified === true;
+      // The sid stays in the token: this object is what /api/auth/session returns.
+      session.authMethod = sessionToken.authMethod;
       return session;
     },
   },

@@ -38,7 +38,7 @@ describe.sequential("fresh-eyes admission stages", () => {
     // Stage 1: r1 reviews Ada, r2 reviews Bo.
     for (const [reviewer, app] of [[people.r1, a], [people.r2, b]] as const) {
       const assignment = await prisma.admissionReviewAssignment.create({ data: { stageId: first.id, applicationId: app.application.id, reviewerUserId: reviewer } });
-      expect(await submitReview(await reviewerCtx(event.id, reviewer), assignment.id, { scores: { overall: 4 }, notes: "" })).toMatchObject({ ok: true });
+      expect(await submitReview(await reviewerCtx(event.id, reviewer), assignment.id, { answersRevision: 1, scores: { overall: 4 }, notes: "" })).toMatchObject({ ok: true });
     }
     const created = await createStage(ctx, { ...stageInput, freshEyes: true });
     if (!created.ok) throw new Error(created.error);
@@ -69,9 +69,9 @@ describe.sequential("fresh-eyes admission stages", () => {
     const stale = await prisma.admissionReviewAssignment.create({ data: { stageId: second, applicationId: a.application.id, reviewerUserId: people.r1 } });
     const r1 = await reviewerCtx(event.id, people.r1);
     expect(await loadReviewItem(r1, stale.id)).toBeNull();
-    expect(await submitReview(r1, stale.id, { scores: { overall: 5 }, notes: "" })).toMatchObject({ ok: false, error: expect.stringContaining("earlier stage") });
+    expect(await submitReview(r1, stale.id, { answersRevision: 1, scores: { overall: 5 }, notes: "" })).toMatchObject({ ok: false, error: expect.stringContaining("earlier stage") });
     const own = await prisma.admissionReviewAssignment.findFirstOrThrow({ where: { stageId: second, reviewerUserId: people.r1, applicationId: b.application.id } });
-    expect(await submitReview(r1, own.id, { scores: { overall: 5 }, notes: "" })).toMatchObject({ ok: true });
+    expect(await submitReview(r1, own.id, { answersRevision: 1, scores: { overall: 5 }, notes: "" })).toMatchObject({ ok: true });
   });
 
   it("lets the option change only while the stage is a draft with no assignments or reviews", async () => {

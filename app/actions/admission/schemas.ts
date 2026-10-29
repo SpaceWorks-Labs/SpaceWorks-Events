@@ -69,6 +69,7 @@ export const onBehalfSchema = eventScope.extend({ applicationId: id, response: z
 
 export const reviewSchema = eventScope.extend({
   assignmentId: id,
+  answersRevision: z.number().int().min(1),
   scores: z.record(z.string().max(ADMISSION_CRITERION_MAX), z.number()),
   notes: z.string().max(ADMISSION_NOTES_MAX),
 }).strict();

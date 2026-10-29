@@ -105,7 +105,7 @@ describe.sequential("applications through the mobile API", () => {
     // A reviewer isn't an organiser: no event routes, no summary.
     expect((await summary(get("/x", r1), at())).status).toBe(404);
 
-    const submitted = await json(await submitReview(keyed("/x", { scores: { overall: 4 }, notes: "Good" }, r1, nextKey()), at({ assignmentId: mineToReview.id })));
+    const submitted = await json(await submitReview(keyed("/x", { answersRevision: item.body.data.answersRevision, scores: { overall: 4 }, notes: "Good" }, r1, nextKey()), at({ assignmentId: mineToReview.id })));
     expect(submitted.body.data).toEqual({ assignmentId: mineToReview.id, outcome: "SUBMITTED", replaced: null });
     const b = await apply(event, "recused");
     const other = await prisma.admissionReviewAssignment.create({ data: { stageId: stage.id, applicationId: b.application.id, reviewerUserId: people.r1 } });

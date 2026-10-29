@@ -27,6 +27,8 @@ test.beforeAll(async () => {
       location: "Test venue",
       status: EventStatus.PUBLISHED,
       privacyType: EventPrivacyType.PUBLIC,
+      // Feedback follows the event page, which needs a released website.
+      page: { create: { isPublished: true } },
     },
   });
   const rsvp = await prisma.rSVP.create({

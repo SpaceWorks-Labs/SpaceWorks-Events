@@ -530,9 +530,12 @@ their orders by id, and anyone else's are `NOT_FOUND`.
 ### `GET /public/events/:orgSlug/:eventSlug/feedback`
 
 `{ "title", "intro": null, "thankYouMessage", "open": true, "certificatesEnabled", "fields": [RegistrationField] }`
-or `NOT_FOUND` unless the event is published and its form is open (as the web
-feedback page). Submit with the existing `POST /api/feedback`; its response
-contains the certificate token when one is issued.
+or `NOT_FOUND` unless the event is published, its form is open and the caller
+may open the event page (as the web feedback page): nothing while the website
+is unreleased, and an invite-only event's form only with the bearer of a
+signed-in invited guest. Submit with the existing `POST /api/feedback`, sending
+the same bearer for an invite-only event (a bearer that does not sign in gets
+`401`); its response contains the certificate token when one is issued.
 
 ### Existing web endpoints reused unchanged
 
@@ -605,14 +608,21 @@ REVIEW_APPLICATIONS (with JUDGE or MENTOR) gets no organiser routes, like a judg
 - Reviewers (REVIEW_APPLICATIONS or OWNER/ADMIN, behind the staff
   authenticator; anyone else, or an event not taking applications, is `NOT_FOUND`):
   - `GET .../applications/reviews` → `{ "reviews": [{ "assignmentId", "stageName", "stagePosition", "stageOpen", "label", "status", "reviewedCurrent" }] }`
-    (the caller's own assignments, open stages first; `label` is "Application n" on a blind stage).
-  - `GET .../applications/reviews/:assignmentId` → `{ "assignmentId", "stageName", "stageOpen", "blind", "criteria", "guidance", "teamName|null", "people": [{ "name", "email|null", "isLeader", "answers": [{ "label", "value" }] }], "reviewed|null", "canReview" }`.
+    (the caller's own assignments that they may still read, open stages first;
+    `label` is "Application n" on a blind stage). Assignments on a stage
+    whose panel no longer includes the caller, or with a conflict of interest,
+    are left out.
+  - `GET .../applications/reviews/:assignmentId` → `{ "assignmentId", "answersRevision", "stageName", "stageOpen", "blind", "criteria", "guidance", "teamName|null", "people": [{ "name", "email|null", "isLeader", "answers": [{ "label", "value" }] }], "reviewed|null", "canReview" }`.
     A blind stage has no names, emails, phone or email answers, or team name.
     Another reviewer's, a recused one, or one the caller may no longer review
     (off the stage's panel, a conflict of interest) is `NOT_FOUND`.
-  - `POST .../applications/reviews/:assignmentId` `{ "scores": { criterion: 1..5 }, "notes" }`
+  - `POST .../applications/reviews/:assignmentId` `{ "answersRevision", "scores": { criterion: 1..5 }, "notes" }`
     (Idempotency-Key) → `{ "assignmentId", "outcome": "SUBMITTED", "replaced": null }`.
-    Final once submitted; only while the stage is open.
+    Final once submitted; only while the stage is open. `answersRevision` is
+    the one `GET` returned: when the applicant has changed their answers since,
+    the review is refused with `CONFLICT` ("The answers changed. Reload to see
+    them."). Reload, then submit with a new Idempotency-Key: the refused
+    request's key is spent.
   - `POST .../applications/reviews/:assignmentId/recuse` (Idempotency-Key)
     → `{ "assignmentId", "outcome": "RECUSED", "replaced" }`: a conflict of
     interest is recorded and the least-loaded panel reviewer takes it.

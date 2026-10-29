@@ -3,11 +3,13 @@ import "server-only";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { prisma } from "@/lib/db";
 import { getGoogleSsoSettings, getMobileGoogleClientIds, isNewUserRegistrationEnabled } from "@/lib/instanceSettings";
+import { isSuperAdminEmail } from "@/lib/superAdminEmail";
 
 /*
  * Google sign-in policy shared by the web Auth.js callback and the mobile
- * ID-token exchange: verified email only, never link to an unverified
- * password account, and create new accounts only while the instance allows it.
+ * ID-token exchange: verified email only, never the super admin, never link
+ * to an unverified password account, and create new accounts only while the
+ * instance allows it.
  */
 
 export type GoogleSignInDecision = "allow" | "deny" | "account_creation_disabled";
@@ -20,6 +22,8 @@ export async function evaluateGoogleSignIn(params: {
   if (!params.emailVerified) return "deny";
   const email = params.email?.trim().toLowerCase();
   if (!email) return "deny";
+  // The super admin signs in with the server-set password only, never Google.
+  if (isSuperAdminEmail(email)) return "deny";
   const existing = await prisma.user.findUnique({
     where: { email }, select: { passwordHash: true, emailVerified: true },
   });
@@ -29,8 +33,11 @@ export async function evaluateGoogleSignIn(params: {
 
   const existingAccount = await prisma.account.findUnique({
     where: { provider_providerAccountId: { provider: "google", providerAccountId: params.providerAccountId } },
-    select: { id: true },
+    select: { id: true, user: { select: { email: true } } },
   });
+  // A Google account linked earlier signs in as its local user, whatever
+  // address Google now reports: refuse it when that user is the super admin.
+  if (existingAccount && isSuperAdminEmail(existingAccount.user.email)) return "deny";
   if (existingAccount || existing) return "allow";
 
   // A verified Google identity may create an account only while the

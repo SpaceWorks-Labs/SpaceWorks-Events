@@ -1,6 +1,6 @@
 import "server-only";
 
-import { EventPermission, EventPrivacyType, EventStatus } from "@prisma/client";
+import { EventPermission, EventPrivacyType, EventStatus, type Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { canAccessEvent } from "@/lib/eventAccess";
@@ -15,8 +15,12 @@ type Visibility = Target & {
   websiteReleased?: boolean;
 };
 
-/** Resolve page access from current database state; URL knowledge is not an invite. */
-export async function resolvePublicEventAccess(input: Visibility) {
+/**
+ * Resolve page access from current database state; URL knowledge is not an
+ * invite. Pass a transaction as `db` to read the viewer and the invitation in
+ * it, with `input` read there too (feedback submission, lib/feedback.ts).
+ */
+export async function resolvePublicEventAccess(input: Visibility, db: Prisma.TransactionClient = prisma) {
   const session = await auth();
   const userId = session?.user?.id;
   const eventTarget = input.eventId ? { eventId: input.eventId } : { eventSeriesId: input.eventSeriesId };
@@ -44,7 +48,7 @@ export async function resolvePublicEventAccess(input: Visibility) {
   }
 
   if (!userId) return { allowed: false, preview: false } as const;
-  const user = await prisma.user.findUnique({
+  const user = await db.user.findUnique({
     where: { id: userId },
     select: { email: true, emailVerified: true },
   });
@@ -52,12 +56,12 @@ export async function resolvePublicEventAccess(input: Visibility) {
   if (!email) return { allowed: false, preview: false } as const;
 
   const invited = typeof input.eventId === "string"
-    ? await prisma.eventInvite.findUnique({
+    ? await db.eventInvite.findUnique({
         where: { eventId_email: { eventId: input.eventId, email } },
         select: { id: true },
       })
     : input.eventSeriesId
-      ? await prisma.seriesInvite.findUnique({
+      ? await db.seriesInvite.findUnique({
           where: { eventSeriesId_email: { eventSeriesId: input.eventSeriesId, email } },
           select: { id: true },
         })

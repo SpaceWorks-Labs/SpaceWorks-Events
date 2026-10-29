@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ActionResult } from "@/app/actions/org";
 import { prisma } from "@/lib/db";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { resolvePublicEventAccess } from "@/lib/publicEventAccess";
 import {
   isValidInternationalPhone,
   normalizeInternationalPhone,
@@ -96,7 +97,11 @@ function validateAnswers(fields: Array<{ id: string; key: string; label: string;
   return { rows };
 }
 
-/** Submit repeatable anonymous feedback, optionally verifying an attendee for a certificate. */
+/**
+ * Submit repeatable anonymous feedback, optionally verifying an attendee for a
+ * certificate. Only for a published event whose page the sender may open: a
+ * released website, and for an invite-only event a signed-in invited guest.
+ */
 export async function submitFeedback(input: unknown): Promise<ActionResult<{ certificateToken: string | null }>> {
   const parsed = submissionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Complete the feedback form and try again." };
@@ -111,12 +116,21 @@ export async function submitFeedback(input: unknown): Promise<ActionResult<{ cer
     const result = await prisma.$transaction(async (tx): Promise<ActionResult<{ certificateToken: string | null }>> => {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "EventFeedbackForm" WHERE "id" = ${formId} FOR UPDATE`;
-      const currentEvent = await tx.event.findUnique({ where: { id: event.id }, select: { status: true } });
+      const currentEvent = await tx.event.findUnique({ where: { id: event.id }, select: { organisationId: true, status: true, privacyType: true, page: { select: { isPublished: true } } } });
       const form = await tx.eventFeedbackForm.findUnique({
         where: { id: formId },
         include: { fields: { orderBy: { sortOrder: "asc" } } },
       });
       if (currentEvent?.status !== EventStatus.PUBLISHED || !form?.isOpen) return { ok: false, error: "Feedback is not open for this event." };
+      // The event page's own rule (privacy, release, invitation), read in this transaction.
+      const access = await resolvePublicEventAccess({
+        organisationId: currentEvent.organisationId,
+        eventId: event.id,
+        status: currentEvent.status,
+        privacyType: currentEvent.privacyType,
+        websiteReleased: currentEvent.page?.isPublished ?? false,
+      }, tx);
+      if (!access.allowed) return { ok: false, error: "Feedback is not open for this event." };
       const normalized = validateAnswers(form.fields, parsed.data.answers);
       if ("error" in normalized) return { ok: false, error: normalized.error };
       let rsvpId: string | null = null;

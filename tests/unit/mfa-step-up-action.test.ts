@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   verify: vi.fn(),
   createProof: vi.fn(),
   cookieSet: vi.fn(),
+  sid: vi.fn(),
 }));
 
 vi.mock("@/lib/permissions", () => ({ requireAuth: mocks.requireAuth }));
@@ -27,6 +28,7 @@ vi.mock("@/lib/mfaProof", () => ({
   MFA_PROOF_MAX_AGE_SECONDS: 43200,
 }));
 vi.mock("next/headers", () => ({ cookies: vi.fn().mockResolvedValue({ set: mocks.cookieSet }) }));
+vi.mock("@/lib/sessionSid", () => ({ currentSessionSid: mocks.sid }));
 
 import { verifyStepUpMfa } from "@/app/actions/mfa-step-up";
 
@@ -43,6 +45,7 @@ beforeEach(() => {
   mocks.decrypt.mockReturnValue("SECRET");
   mocks.verify.mockReturnValue(true);
   mocks.createProof.mockReturnValue("signed-proof");
+  mocks.sid.mockResolvedValue("sid-a");
 });
 
 describe("MFA step-up action", () => {
@@ -65,5 +68,14 @@ describe("MFA step-up action", () => {
       path: "/",
     }));
     expect(mocks.auditCreate).toHaveBeenCalledOnce();
+    expect(mocks.sid).toHaveBeenCalledWith("admin_1");
+    expect(mocks.createProof).toHaveBeenCalledWith("admin_1", 4, "sid-a");
+  });
+
+  it("issues no proof for a session without a sign-in id, before spending the code", async () => {
+    mocks.sid.mockResolvedValue(null);
+    await expect(verifyStepUpMfa({ code: "123456" })).resolves.toMatchObject({ ok: false });
+    expect(mocks.verify).not.toHaveBeenCalled();
+    expect(mocks.cookieSet).not.toHaveBeenCalled();
   });
 });
