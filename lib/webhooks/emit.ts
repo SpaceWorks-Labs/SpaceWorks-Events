@@ -113,14 +113,14 @@ const instanceRefSelect = {
 
 type Built = { organisation: { id: string; slug: string }; data: unknown };
 
-async function loadTarget(target: { eventId: string | null; eventInstanceId: string | null }) {
+async function loadTarget(db: Prisma.TransactionClient, target: { eventId: string | null; eventInstanceId: string | null }) {
   if (target.eventId) {
-    const event = await prisma.event.findUnique({ where: { id: target.eventId }, select: eventRefSelect });
+    const event = await db.event.findUnique({ where: { id: target.eventId }, select: eventRefSelect });
     if (!event) return null;
     return { organisation: event.organisation, ref: webhookEventRef({ kind: "event", event }) };
   }
   if (target.eventInstanceId) {
-    const instance = await prisma.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: instanceRefSelect });
+    const instance = await db.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: instanceRefSelect });
     if (!instance) return null;
     const source: EventRefSource = { kind: "series_occurrence", instance, series: instance.series };
     return { organisation: instance.series.organisation, ref: webhookEventRef(source) };
@@ -140,24 +140,24 @@ const rsvpSelect = {
   user: { select: { name: true } },
 } as const;
 
-async function loadRegistration(rsvpId: string, snapshot?: RsvpWebhookSnapshot) {
+async function loadRegistration(db: Prisma.TransactionClient, rsvpId: string, snapshot?: RsvpWebhookSnapshot) {
   if (snapshot) {
     const [target, user] = await Promise.all([
-      loadTarget(snapshot),
-      snapshot.userId ? prisma.user.findUnique({ where: { id: snapshot.userId }, select: { name: true } }) : null,
+      loadTarget(db, snapshot),
+      snapshot.userId ? db.user.findUnique({ where: { id: snapshot.userId }, select: { name: true } }) : null,
     ]);
     return target ? { target, rsvp: { ...snapshot, user }, currentStatus: null } : null;
   }
-  const rsvp = await prisma.rSVP.findUnique({ where: { id: rsvpId }, select: rsvpSelect });
+  const rsvp = await db.rSVP.findUnique({ where: { id: rsvpId }, select: rsvpSelect });
   if (!rsvp) return null;
-  const target = await loadTarget(rsvp);
+  const target = await loadTarget(db, rsvp);
   return target ? { target, rsvp, currentStatus: rsvp.status } : null;
 }
 
-async function buildData(emission: WebhookEmission): Promise<Built | null> {
+async function buildData(db: Prisma.TransactionClient, emission: WebhookEmission): Promise<Built | null> {
   switch (emission.type) {
     case "registration.created": {
-      const loaded = await loadRegistration(emission.rsvpId);
+      const loaded = await loadRegistration(db, emission.rsvpId);
       if (!loaded?.currentStatus) return null;
       return {
         organisation: loaded.target.organisation,
@@ -165,7 +165,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
       };
     }
     case "registration.status_changed": {
-      const loaded = await loadRegistration(emission.rsvpId, emission.snapshot);
+      const loaded = await loadRegistration(db, emission.rsvpId, emission.snapshot);
       if (!loaded) return null;
       return {
         organisation: loaded.target.organisation,
@@ -179,7 +179,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
     }
     case "checkin.created":
     case "checkin.undone": {
-      const loaded = await loadRegistration(emission.rsvpId);
+      const loaded = await loadRegistration(db, emission.rsvpId);
       if (!loaded?.currentStatus) return null;
       const registration = webhookRegistration(loaded.rsvp, loaded.currentStatus);
       return {
@@ -191,7 +191,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
     }
     case "event.published":
     case "event.cancelled": {
-      const event = await prisma.event.findUnique({ where: { id: emission.eventId }, select: { ...eventRefSelect, status: true } });
+      const event = await db.event.findUnique({ where: { id: emission.eventId }, select: { ...eventRefSelect, status: true } });
       if (!event) return null;
       return {
         organisation: event.organisation,
@@ -199,7 +199,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
       };
     }
     case "application.status_changed": {
-      const application = await prisma.admissionApplication.findUnique({
+      const application = await db.admissionApplication.findUnique({
         where: { id: emission.applicationId },
         select: { id: true, eventId: true, rsvpId: true, teamId: true, team: { select: { leaderRsvpId: true } }, currentStage: { select: { id: true, position: true, name: true } }, event: { select: eventRefSelect } },
       });
@@ -207,7 +207,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
       // The stage recorded with the change, not wherever the application is now.
       const stage = emission.stageId === undefined
         ? application.currentStage
-        : emission.stageId ? await prisma.admissionStage.findFirst({ where: { id: emission.stageId, eventId: application.eventId }, select: { id: true, position: true, name: true } }) : null;
+        : emission.stageId ? await db.admissionStage.findFirst({ where: { id: emission.stageId, eventId: application.eventId }, select: { id: true, position: true, name: true } }) : null;
       return {
         organisation: application.event.organisation,
         data: {
@@ -225,7 +225,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
       };
     }
     case "feedback.submitted": {
-      const response = await prisma.eventFeedbackResponse.findUnique({
+      const response = await db.eventFeedbackResponse.findUnique({
         where: { id: emission.feedbackResponseId },
         select: { id: true, submittedAt: true, form: { select: { event: { select: eventRefSelect } } } },
       });
@@ -237,7 +237,7 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
       };
     }
     case "expense_claim.status_changed": {
-      const claim = await prisma.expenseClaim.findUnique({
+      const claim = await db.expenseClaim.findUnique({
         where: { id: emission.claimId },
         select: { id: true, kind: true, category: true, amountMinor: true, approvedMinor: true, currency: true, rsvpId: true, policyId: true, event: { select: eventRefSelect } },
       });
@@ -257,8 +257,8 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
 
 /**
  * Builds the payload and inserts one delivery row per subscribed, enabled
- * endpoint. With `client` the endpoints are read and the deliveries inserted
- * in the caller's transaction; a stable `eventId` makes a repeat a no-op (one
+ * endpoint. With `client` all payload and endpoint reads and delivery inserts
+ * use the caller's transaction; a stable `eventId` makes a repeat a no-op (one
  * delivery per endpoint and event id).
  */
 export async function enqueueWebhookEvent(emission: WebhookEmission, options: { client?: Prisma.TransactionClient; eventId?: string } = {}) {
@@ -267,7 +267,7 @@ export async function enqueueWebhookEvent(emission: WebhookEmission, options: { 
   // Most instances have few endpoints: skip loading a payload nobody subscribed to.
   const anySubscribed = await db.webhookEndpoint.findFirst({ where: { enabled: true, eventTypes: { has: type } }, select: { id: true } });
   if (!anySubscribed) return 0;
-  const built = await buildData(emission);
+  const built = await buildData(db, emission);
   if (!built) return 0;
   const endpoints = await db.webhookEndpoint.findMany({
     where: { organisationId: built.organisation.id, enabled: true, eventTypes: { has: type } },

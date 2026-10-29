@@ -330,6 +330,9 @@ The registration email says "Application received" on these events.
   settled payment, a deleted registration); after each commit and from the
   beat each row is locked, marked sent and its deliveries inserted in one
   transaction (`drainApplicationEvents`), with a stable event id per row.
+  Payload reads (including the application and recorded stage), endpoint
+  reads and delivery inserts all use that transaction's client, so draining
+  also works with `connection_limit=1`.
 - `GET /api/v1/events/:eventId/applications` (`applications:read`,
   `docs/API.md`): counts by status and stage and the offers out. Numbers only.
 
