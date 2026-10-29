@@ -1,5 +1,5 @@
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import net, { type AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const dns = vi.hoisted(() => ({ lookup: vi.fn() }));
@@ -30,6 +30,25 @@ async function receiver() {
   server.on("connection", () => { connections += 1; });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   return { port: (server.address() as AddressInfo).port, bodies, connections: () => connections, close: () => server.close() };
+}
+
+/**
+ * A raw TCP receiver that answers every request with `reply`, writing
+ * `drip` every 25 ms forever, and reports when the client's socket closes.
+ */
+async function stallingReceiver(reply: string, drip: string) {
+  let closed!: () => void;
+  const socketClosed = new Promise<void>((resolve) => { closed = resolve; });
+  const server = net.createServer((socket) => {
+    socket.once("data", () => {
+      socket.write(reply);
+      const timer = setInterval(() => socket.write(drip), 25);
+      socket.on("close", () => { clearInterval(timer); closed(); });
+    });
+    socket.on("error", () => {});
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { port: (server.address() as AddressInfo).port, socketClosed, close: () => server.close() };
 }
 
 describe("alert webhook address", () => {
@@ -83,6 +102,35 @@ describe("alert webhook delivery", () => {
     } finally {
       local.close();
     }
+  });
+
+  it("gives up at the deadline on a server that sends its headers a byte at a time, and closes the socket", async () => {
+    const slow = await stallingReceiver("HTTP/1.1 200 OK\r\n", "x");
+    try {
+      const started = Date.now();
+      await expect(postOpsWebhook(`http://127.0.0.1:${slow.port}/hooks/x`, "{}", 400)).resolves.toEqual({ error: "timeout" });
+      expect(Date.now() - started).toBeLessThan(2_000);
+      await slow.socketClosed;
+    } finally {
+      slow.close();
+    }
+  });
+
+  it("returns the status of a reply whose body never ends, and closes the socket without reading it", async () => {
+    const endless = await stallingReceiver("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n", "1\r\nx\r\n");
+    try {
+      await expect(postOpsWebhook(`http://127.0.0.1:${endless.port}/hooks/x`, "{}", 30_000)).resolves.toEqual({ status: 200 });
+      await endless.socketClosed;
+    } finally {
+      endless.close();
+    }
+  });
+
+  it("counts a DNS answer that never comes against the same deadline", async () => {
+    dns.lookup.mockReturnValue(new Promise(() => {}));
+    const started = Date.now();
+    await expect(postOpsWebhook("https://hooks.example.test/hooks/x", "{}", 300)).resolves.toEqual({ error: "timeout" });
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 
   it("reports a refused connection as unreachable", async () => {

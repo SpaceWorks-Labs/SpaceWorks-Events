@@ -7,7 +7,10 @@ vi.mock("@/lib/net/publicAddress", () => ({ resolvePublicAddresses: resolved.add
 import { describeChatTarget, parseChatConfig } from "@/lib/chat/config";
 import { ChatDeliveryError, sendChatMessage } from "@/lib/chat/send";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 const ok = () => new Response(null, { status: 200 });
 
@@ -83,6 +86,43 @@ describe("sending", () => {
       await expect(sendChatMessage("MATTERMOST", { url: `https://chat.example.test:${port}/hooks/abc` }, "x")).rejects.toBeInstanceOf(ChatDeliveryError);
       expect(connections).toHaveLength(1);
       expect(resolved.addresses).toHaveBeenCalledWith("chat.example.test");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("gives up on a Mattermost host whose DNS answer never comes, at the ten-second deadline", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    resolved.addresses.mockReturnValue(new Promise(() => {}));
+    const sending = sendChatMessage("MATTERMOST", { url: "https://chat.example.test/hooks/abc" }, "x");
+    const outcome = expect(sending).rejects.toMatchObject({ message: "The chat service did not answer in time.", permanent: false });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await outcome;
+  });
+
+  it("gives up on a Mattermost server that never completes the connection, closing the socket", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    let closed!: () => void;
+    let greeted!: () => void;
+    const socketClosed = new Promise<void>((resolve) => { closed = resolve; });
+    const handshakeStarted = new Promise<void>((resolve) => { greeted = resolve; });
+    // A plain TCP server that takes the TLS greeting and never answers it.
+    const server = net.createServer((socket) => {
+      socket.once("data", () => greeted());
+      socket.on("error", () => {});
+      socket.on("close", () => closed());
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as net.AddressInfo;
+    resolved.addresses.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+    try {
+      const sending = sendChatMessage("MATTERMOST", { url: `https://chat.example.test:${port}/hooks/abc` }, "x");
+      const outcome = expect(sending).rejects.toMatchObject({ message: "The chat service did not answer in time." });
+      await handshakeStarted;
+      await vi.advanceTimersByTimeAsync(10_000);
+      await outcome;
+      vi.useRealTimers();
+      await socketClosed;
     } finally {
       server.close();
     }
