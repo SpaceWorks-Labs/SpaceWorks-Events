@@ -255,27 +255,33 @@ async function buildData(emission: WebhookEmission): Promise<Built | null> {
   }
 }
 
-/** Builds the payload and inserts one delivery row per subscribed, enabled endpoint. */
-export async function enqueueWebhookEvent(emission: WebhookEmission) {
+/**
+ * Builds the payload and inserts one delivery row per subscribed, enabled
+ * endpoint. With `client` the endpoints are read and the deliveries inserted
+ * in the caller's transaction; a stable `eventId` makes a repeat a no-op (one
+ * delivery per endpoint and event id).
+ */
+export async function enqueueWebhookEvent(emission: WebhookEmission, options: { client?: Prisma.TransactionClient; eventId?: string } = {}) {
   const type: WebhookEventType = emission.type;
+  const db = options.client ?? prisma;
   // Most instances have few endpoints: skip loading a payload nobody subscribed to.
-  const anySubscribed = await prisma.webhookEndpoint.findFirst({ where: { enabled: true, eventTypes: { has: type } }, select: { id: true } });
+  const anySubscribed = await db.webhookEndpoint.findFirst({ where: { enabled: true, eventTypes: { has: type } }, select: { id: true } });
   if (!anySubscribed) return 0;
   const built = await buildData(emission);
   if (!built) return 0;
-  const endpoints = await prisma.webhookEndpoint.findMany({
+  const endpoints = await db.webhookEndpoint.findMany({
     where: { organisationId: built.organisation.id, enabled: true, eventTypes: { has: type } },
     select: { id: true },
   });
   if (endpoints.length === 0) return 0;
   const envelope = buildWebhookEnvelope({
-    id: newWebhookEventId(),
+    id: options.eventId ?? newWebhookEventId(),
     type,
     createdAt: new Date(),
     organisation: built.organisation,
     data: built.data,
   });
-  const result = await prisma.webhookDelivery.createMany({
+  const result = await db.webhookDelivery.createMany({
     data: endpoints.map((endpoint) => ({
       endpointId: endpoint.id,
       organisationId: built.organisation.id,

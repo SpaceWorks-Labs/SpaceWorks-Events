@@ -130,7 +130,7 @@ Example `registration.status_changed`:
 }
 ```
 
-`application.status_changed` carries ids, status and stage only, never answers, scores, reviews or reviewers:
+`application.status_changed` carries ids, status and stage only, never answers, scores, reviews or reviewers. Each recorded change has one event id, kept if queueing is retried, so it is queued once:
 
 ```json
 "data": {

@@ -91,8 +91,10 @@ team gets a solo application.
   hashed keys stay, so the person still can't apply twice. Otherwise
   applications stay until their event is deleted.
 - Sent `AdmissionStatusEvent` rows are purged after 30 days (retention job);
-  a partial index covers only the rows still to send. A row whose webhook
-  couldn't be queued is released for the next pass (at least once).
+  a partial index covers only the rows still to send. Each row is marked sent
+  in the same transaction that inserts its deliveries, so a row whose webhook
+  couldn't be queued (an error or a crash) stays for the next pass, and its
+  webhook event id is derived from the row, so it is never queued twice.
 - Reviews, answer revisions, stage entries, released (and cancelled)
   decisions and applications are deleted only with their event; an update
   may only clear a user link (an account deleted). A reviewer's deleted
@@ -322,7 +324,8 @@ The registration email says "Application received" on these events.
   scores, reviews or reviewers. A trigger records every status or stage
   change in `AdmissionStatusEvent`, whatever made it (a release, an answer, a
   settled payment, a deleted registration); after each commit and from the
-  beat those rows are claimed once each and sent (`drainApplicationEvents`).
+  beat each row is locked, marked sent and its deliveries inserted in one
+  transaction (`drainApplicationEvents`), with a stable event id per row.
 - `GET /api/v1/events/:eventId/applications` (`applications:read`,
   `docs/API.md`): counts by status and stage and the offers out. Numbers only.
 
