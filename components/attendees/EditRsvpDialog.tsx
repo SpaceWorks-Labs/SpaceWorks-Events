@@ -110,7 +110,7 @@ export function EditRsvpDialog(props: {
         <DialogHeader
           title={canTransfer ? "Edit registration or transfer ticket" : "View registration"}
           description={canTransfer
-            ? "Change the guest name and email to transfer this ticket. The ticket link, RSVP status, and check-in state stay unchanged."
+            ? "Change the guest name and email to transfer this ticket. A new email gets a new ticket link, and the previous holder's ticket, attendance and project links stop working. The RSVP status and check-in state stay unchanged."
             : "Signed-in attendee ownership cannot be transferred. Their ticket and check-in status remain unchanged."}
         />
         <DialogBody className="flex flex-col gap-4">
