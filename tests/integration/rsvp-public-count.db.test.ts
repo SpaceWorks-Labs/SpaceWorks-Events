@@ -13,6 +13,7 @@ import { submitRsvp } from "@/app/actions/rsvp";
 import { POST as postRsvp } from "@/app/api/rsvp/route";
 import { countConfirmedForEvent } from "@/lib/rsvpCapacity";
 import { countCrewTickets } from "@/lib/core/crew/public";
+import type { ActionResult } from "@/app/actions/org";
 import { paid, setUpPaidOrg, tearDownPaidOrg } from "./helpers/paidOrg";
 
 /*
@@ -24,6 +25,10 @@ import { paid, setUpPaidOrg, tearDownPaidOrg } from "./helpers/paidOrg";
 
 let counter = 0;
 let userId = "";
+function dataOf<T>(result: ActionResult<T>) {
+  if (!result.ok) throw new Error(result.error);
+  return result.data;
+}
 const email = (who: string) => `${who}-${paid.suffix}@example.test`;
 
 async function makeEvent(options: { show: boolean; capacity?: number | null; team?: boolean; price?: number }) {
@@ -74,13 +79,13 @@ describe("registration count in the registration response", () => {
     await seedOthers(event.id);
     const asGuest = await guest(event.slug, "hidden-guest");
     expect(asGuest.ok).toBe(true);
-    expect(asGuest.data).not.toHaveProperty("count");
+    expect(dataOf(asGuest)).not.toHaveProperty("count");
     const signedIn = await submitRsvpCore({ orgSlug: paid.orgSlug, eventSlug: event.slug, answers: {} }, { userId });
     expect(signedIn.ok).toBe(true);
-    expect(signedIn.data?.count).toBeUndefined();
+    expect(dataOf(signedIn)?.count).toBeUndefined();
     const action = await submitRsvp({ orgSlug: paid.orgSlug, eventSlug: event.slug, guestEmail: email("hidden-action"), name: "Count Guest", answers: {} });
     expect(action.ok).toBe(true);
-    expect(action.data?.count).toBeUndefined();
+    expect(dataOf(action)?.count).toBeUndefined();
     const response = await postRsvp(new Request("https://events.example.test/api/rsvp", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ orgSlug: paid.orgSlug, eventSlug: event.slug, guestEmail: email("hidden-route"), name: "Count Guest", answers: {} }),
@@ -96,12 +101,12 @@ describe("registration count in the registration response", () => {
     await seedOthers(event.id);
     const first = await guest(event.slug, "shown-first");
     expect(first).toMatchObject({ ok: true, data: { status: RsvpStatus.CONFIRMED, count: 2 } });
-    expect(first.data?.count).toBe(await pageCount(event.id));
+    expect(dataOf(first)?.count).toBe(await pageCount(event.id));
     const signedIn = await submitRsvpCore({ orgSlug: paid.orgSlug, eventSlug: event.slug, answers: {} }, { userId });
     expect(signedIn).toMatchObject({ ok: true, data: { status: RsvpStatus.CONFIRMED, count: 3 } });
     const waitlisted = await guest(event.slug, "shown-waitlisted");
     expect(waitlisted).toMatchObject({ ok: true, data: { status: RsvpStatus.WAITLISTED, count: 3 } });
-    expect(waitlisted.data?.count).toBe(await pageCount(event.id));
+    expect(dataOf(waitlisted)?.count).toBe(await pageCount(event.id));
   });
 
   it("counts team units on a TEAM event, as its page does", async () => {
@@ -114,7 +119,7 @@ describe("registration count in the registration response", () => {
     const member = await submitRsvpCore({ orgSlug: paid.orgSlug, eventSlug: event.slug, guestEmail: email("team-join"), name: "Team Member", answers: {} }, { userId: null, team: { mode: "join", joinToken: squad.joinToken } });
     // Joining a team takes no new place: "2 places taken", as on the page.
     expect(member).toMatchObject({ ok: true, data: { count: 2 } });
-    expect(member.data?.count).toBe(await pageCount(event.id, RegistrationMode.TEAM));
+    expect(dataOf(member)?.count).toBe(await pageCount(event.id, RegistrationMode.TEAM));
   });
 
   it("applies the same rule to a paid ticket order", async () => {
@@ -123,19 +128,19 @@ describe("registration count in the registration response", () => {
     const items = (ticketTypeId: string) => ({ items: [{ ticketTypeId, quantity: 1 }], attendees: [] });
     const hiddenOrder = await guest(hidden.event.slug, "paid-hidden", items(hidden.ticket!.id));
     expect(hiddenOrder.ok).toBe(true);
-    expect(hiddenOrder.data).not.toHaveProperty("count");
-    expect(hiddenOrder.data?.orderToken).toBeTruthy();
+    expect(dataOf(hiddenOrder)).not.toHaveProperty("count");
+    expect(dataOf(hiddenOrder)?.orderToken).toBeTruthy();
     const hiddenSignedIn = await submitRsvpCore({ orgSlug: paid.orgSlug, eventSlug: hidden.event.slug, answers: {}, ...items(hidden.ticket!.id) }, { userId });
     expect(hiddenSignedIn.ok).toBe(true);
-    expect(hiddenSignedIn.data?.count).toBeUndefined();
+    expect(dataOf(hiddenSignedIn)?.count).toBeUndefined();
 
     const shown = await makeEvent({ show: true, price: 49900 });
     await seedOthers(shown.event.id);
     const shownOrder = await guest(shown.event.slug, "paid-shown", items(shown.ticket!.id));
     expect(shownOrder.ok).toBe(true);
     // The held, unpaid ticket is not "going" yet: only the crew ticket is counted.
-    expect(shownOrder.data?.count).toBe(1);
-    expect(shownOrder.data?.count).toBe(await pageCount(shown.event.id));
+    expect(dataOf(shownOrder)?.count).toBe(1);
+    expect(dataOf(shownOrder)?.count).toBe(await pageCount(shown.event.id));
   });
 
   it("returns a series date's confirmed registrations, as its page does", async () => {
