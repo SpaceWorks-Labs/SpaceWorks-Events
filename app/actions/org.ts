@@ -4,6 +4,7 @@ import { revalidatePath as nextRevalidatePath } from "next/cache";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getMembership } from "@/lib/permissions";
 import {
   createOrganisationSchema,
   updateOrganisationSchema,
@@ -128,15 +129,8 @@ export async function updateOrganisation(
   });
   if (!org) return { ok: false, error: "Organisation not found." };
 
-  const membership = await prisma.membership.findUnique({
-    where: {
-      userId_organisationId: {
-        userId: session.user.id,
-        organisationId: org.id,
-      },
-    },
-    select: { role: true },
-  });
+  // The MFA-aware helper: staff powers wait for this session's authenticator check.
+  const membership = await getMembership(session.user.id, org.id);
 
   if (
     !membership ||

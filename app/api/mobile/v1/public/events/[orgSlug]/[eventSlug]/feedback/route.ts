@@ -12,4 +12,6 @@ export const GET = mobileRoute<{ orgSlug: string; eventSlug: string }>(
     const form = await loadPublicFeedbackForm(orgSlug.data, eventSlug.data);
     return form ? mobileOk(form) : notFound();
   },
+  // A signed-in invited guest may open an invite-only event's form.
+  { optionalAuth: true },
 );

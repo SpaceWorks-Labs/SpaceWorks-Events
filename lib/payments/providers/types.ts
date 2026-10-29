@@ -83,6 +83,12 @@ export interface PaymentGateway {
    * an unknown outcome checks this first so money is never returned twice.
    */
   findRefund(paymentId: string, reference: string): Promise<RefundResult | null>;
+  /**
+   * Where a refund the provider already accepted stands now, by its id, for
+   * maintenance when no webhook settled it. Throws PaymentsUnavailable when
+   * the answer is unknown (a timeout or an outage), which is never a failure.
+   */
+  getRefundStatus(paymentId: string, refundId: string): Promise<RefundState>;
   /** How a captured payment was made, for the receipt; null when the provider doesn't say. */
   getPaymentMethod(paymentId: string): Promise<PaymentMethodDetails | null>;
 }

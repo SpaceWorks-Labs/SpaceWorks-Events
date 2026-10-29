@@ -10,7 +10,8 @@ import { formatMoney } from "../money";
 import { asRefundPolicy, policyRefundMinor } from "../refundPolicy";
 import { createPendingRefund, submitPendingRefund } from "../refunds";
 import { seatTargetOf } from "../targets";
-import { releaseTeamPlacesForCancelledOrder, type CancelledRegistration } from "../teamOrders";
+import { lockOrderRegistrations, releaseTeamPlacesForCancelledOrder, type CancelledRegistration } from "../teamOrders";
+import { ANSWER_CHANGED, lockCurrentNo, type AttendanceNo } from "@/lib/attendanceGuard";
 import { COLLECTED, COMMITTED_REFUND, lockOrder, PaymentOperationError, ZERO } from "./shared";
 import { fillFromWaitlist } from "./waitlist";
 
@@ -26,16 +27,16 @@ function refundable(payments: Array<{ id: string; amountMinor: bigint; refunds: 
 
 /**
  * Lock an order's collected payments and record refunds of `wanted` (null:
- * everything left) across them, oldest first. Money paid in person is
- * recorded as returned in person; online refunds are PENDING rows sent to the
- * provider after commit.
+ * everything left, or `share` of it) across them, oldest first. Money paid in
+ * person is recorded as returned in person; online refunds are PENDING rows
+ * sent to the provider after commit. The caller holds the order lock.
  */
-async function recordRefundsTx(tx: Prisma.TransactionClient, payments: CollectedPayment[], params: { wanted: bigint | null; currency: string; reason: string; actorUserId: string | null; now: Date; }) {
+export async function recordRefundsTx(tx: Prisma.TransactionClient, payments: CollectedPayment[], params: { wanted: bigint | null; share?: { of: number; over: number; }; currency: string; reason: string; actorUserId: string | null; now: Date; }) {
   for (const payment of payments) await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${payment.id} FOR UPDATE`;
   const refunds = await tx.paymentRefund.findMany({ where: { paymentId: { in: payments.map((payment) => payment.id) } }, select: { paymentId: true, amountMinor: true, status: true } });
   const balances = refundable(payments.map((payment) => ({ ...payment, refunds: refunds.filter((refund) => refund.paymentId === payment.id) })));
   const available = balances.reduce((sum, balance) => sum + balance.remaining, ZERO);
-  const wanted = params.wanted ?? available;
+  const wanted = params.wanted ?? (params.share ? (available * BigInt(params.share.of)) / BigInt(params.share.over) : available);
   if (wanted < ZERO || wanted > available) throw new PaymentOperationError(`You can refund up to ${formatMoney(available, params.currency)} on this order.`);
   const onlineRefundIds: string[] = [];
   let left = wanted;
@@ -57,7 +58,7 @@ async function recordRefundsTx(tx: Prisma.TransactionClient, payments: Collected
   return { wanted, onlineRefundIds, refundedPaymentId };
 }
 
-const ORDER_FOR_REFUND = {
+export const ORDER_FOR_REFUND = {
   id: true, status: true, buyerEmail: true, currency: true, eventId: true, teamId: true, teamName: true, teamJoin: true,
   rsvps: { select: { id: true, checkedInAt: true, eventId: true, eventInstanceId: true, userId: true, guestName: true, createdAt: true, status: true } },
   payments: { where: { status: { in: COLLECTED } }, orderBy: { paidAt: "asc" }, select: { id: true, status: true, amountMinor: true } },
@@ -85,12 +86,21 @@ export async function refundOrder(params: {
   reason: string;
   cancelTickets: boolean;
   now?: Date;
+  /** An attendance "No" cancelling the order: only while that answer is still current. */
+  attendanceNo?: AttendanceNo;
 }) {
   const now = params.now ?? new Date();
   const webhooks: WebhookEmission[] = [];
   const outcome = await prisma.$transaction(async (tx) => {
     await lockOrder(tx, params.orderId);
-    const order = await tx.order.findFirst({ where: { id: params.orderId, organisationId: params.organisationId }, select: ORDER_FOR_REFUND });
+    const head = await tx.order.findFirst({ where: { id: params.orderId, organisationId: params.organisationId }, select: { id: true, eventId: true, teamId: true, teamName: true } });
+    if (!head) throw new PaymentOperationError("Only confirmed orders can be refunded or cancelled.");
+    // Then its payments, then its registrations by id (docs/PAYMENTS.md), before
+    // any check-in is read: a scan waits for this, or is seen below.
+    await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "orderId" = ${head.id} ORDER BY "id" FOR UPDATE`;
+    await lockOrderRegistrations(tx, head);
+    if (params.attendanceNo && !(await lockCurrentNo(tx, params.attendanceNo))) throw new PaymentOperationError(ANSWER_CHANGED);
+    const order = await tx.order.findFirst({ where: { id: head.id }, select: ORDER_FOR_REFUND });
     if (!order || order.status !== OrderStatus.CONFIRMED) throw new PaymentOperationError("Only confirmed orders can be refunded or cancelled.");
     if (params.amountMinor === ZERO && !params.cancelTickets) throw new PaymentOperationError("Enter an amount to refund.");
     if (params.cancelTickets && order.rsvps.some((rsvp) => rsvp.checkedInAt)) throw new PaymentOperationError("Someone on this order has checked in, so its tickets can't be cancelled.");
@@ -102,8 +112,10 @@ export async function refundOrder(params: {
       await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.CANCELLED } });
       // A reservation to be paid at the desk is no longer owed.
       await tx.payment.updateMany({ where: { orderId: order.id, status: PaymentStatus.PENDING }, data: { status: PaymentStatus.CANCELED } });
-      // The order, its lines, payments and refunds keep the record.
-      await tx.rSVP.deleteMany({ where: { orderId: order.id } });
+      // The order, its lines, payments and refunds keep the record. Nothing
+      // checked in is ever deleted: a mismatch rolls the whole cancellation back.
+      const deleted = await tx.rSVP.deleteMany({ where: { orderId: order.id, checkedInAt: null } });
+      if (deleted.count !== order.rsvps.length) throw new Error("The order changed while it was being cancelled.");
       webhooks.push(...[...order.rsvps, ...teamRemoved].map(cancelledWebhook));
     }
     if (refundedPaymentId) await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: refundedPaymentId, notice: "refunded" });
@@ -173,13 +185,13 @@ export async function buyerCancellation(orderId: string, now = new Date()) {
 }
 
 /** The buyer cancels their whole order within its refund policy. */
-export async function cancelOrderAsBuyer(params: { orderId: string; now?: Date; }) {
+export async function cancelOrderAsBuyer(params: { orderId: string; now?: Date; attendanceNo?: AttendanceNo; }) {
   const now = params.now ?? new Date();
   const order = await prisma.order.findUnique({ where: { id: params.orderId }, select: { organisationId: true, buyerUserId: true } });
   const terms = await buyerCancellation(params.orderId, now);
   if (!order || !terms) throw new PaymentOperationError("This order can't be cancelled online. Contact the organiser.");
   return refundOrder({
     orderId: params.orderId, organisationId: order.organisationId, actorUserId: order.buyerUserId,
-    amountMinor: terms.refundMinor, reason: "Cancelled by the buyer under the refund policy", cancelTickets: true, now,
+    amountMinor: terms.refundMinor, reason: "Cancelled by the buyer under the refund policy", cancelTickets: true, now, attendanceNo: params.attendanceNo,
   });
 }

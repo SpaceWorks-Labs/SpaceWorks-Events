@@ -213,8 +213,10 @@ data, and no chat notice is posted.
 - **Hours CSV** `/api/exports/events/:eventId/volunteer-hours`: one row per
   sign-up (name, kind, shift, zone, times, status, attendance, break,
   minutes, hours, state). Names only: no emails, tokens or adjustment
-  reasons. Cells are formula-neutralised (`lib/csv.ts`). Audited
-  `VOLUNTEER_HOURS_EXPORTED` with a row count.
+  reasons. Cells are formula-neutralised (`lib/csv.ts`). Every sign-up is
+  streamed in keyset pages (shift start, queue time, id), with no row
+  ceiling. Audited `VOLUNTEER_HOURS_EXPORTED` once the download ends, with
+  the rows sent and `complete` (false for a stopped or failed download).
 
 ## Permissions
 

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { EventPrivacyType, OrderStatus, PaymentStatus, RegistrationMode, RsvpStatus, type Prisma } from "@prisma/client";
+import { EventPrivacyType, EventStatus, OrderStatus, PaymentStatus, RegistrationMode, RsvpStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
@@ -9,6 +9,7 @@ import { enqueuePaymentEmail } from "../email";
 import { HOLD_EXTENSION_CAP_MS, PAYMENT_LINK_HOLD_MS } from "../holds";
 import { providerMinimumMinor } from "../money";
 import { hasFreeSeats, lockSeriesDates, ORDER_SUBJECT_SELECT, orderSubject, seatTargetOf, type SeatTarget } from "../targets";
+import { addOnsFit } from "../addOnStock";
 import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, onlineAccount, PaymentOperationError, subjectTitle, ZERO } from "./shared";
 
 /**
@@ -34,6 +35,8 @@ export async function offerInTransaction(tx: Prisma.TransactionClient, params: {
   if (!subject || !subject.open(params.now)) throw new PaymentOperationError("This event is no longer open for registration.");
   if (order.totalMinor < providerMinimumMinor(params.provider, order.currency)) throw new PaymentOperationError("This order is below the smallest payment the provider accepts.");
   if (!(await (params.hasRoom ? params.hasRoom(order.rsvps) : hasFreeSeats(tx, order.rsvps, params.now)))) throw new PaymentOperationError("There aren't enough free places for this order yet.");
+  // A request never counted toward extras' stock: it must fit before it is held.
+  if (!(await addOnsFit(tx, order.id, params.now))) throw new PaymentOperationError("Some extras on this order have sold out.");
   const holdExpiresAt = new Date(params.now.getTime() + PAYMENT_LINK_HOLD_MS);
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.PENDING, holdExpiresAt, holdCapAt: new Date(holdExpiresAt.getTime() + HOLD_EXTENSION_CAP_MS), testMode: params.testMode } });
   await tx.rSVP.updateMany({ where: { orderId: order.id }, data: { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt } });
@@ -142,9 +145,10 @@ export async function fillWaitlists(now = new Date()) {
     by: ["eventId", "eventInstanceId"],
     where: {
       status: RsvpStatus.WAITLISTED,
+      // Cancelled events, series and dates promote nobody (the promotion itself re-checks under its lock).
       OR: [
-        { event: { endDateTime: { gt: now }, privacyType: { not: EventPrivacyType.APPROVAL_REQUIRED } } },
-        { eventInstance: { endDateTime: { gt: now }, cancelledAt: null, series: { privacyType: { not: EventPrivacyType.APPROVAL_REQUIRED } } } },
+        { event: { endDateTime: { gt: now }, status: { not: EventStatus.CANCELLED }, privacyType: { not: EventPrivacyType.APPROVAL_REQUIRED } } },
+        { eventInstance: { endDateTime: { gt: now }, cancelledAt: null, series: { status: { not: EventStatus.CANCELLED }, privacyType: { not: EventPrivacyType.APPROVAL_REQUIRED } } } },
       ],
     },
     orderBy: [{ eventId: "asc" }, { eventInstanceId: "asc" }],
@@ -193,6 +197,7 @@ export async function sendPaymentLink(params: { orderId: string; organisationId:
     if (current.rsvps.length === 0) throw new PaymentOperationError("The buyer has registered again since this order expired.");
     if (current.totalMinor < providerMinimumMinor(account.provider, current.currency)) throw new PaymentOperationError("This order is below the smallest payment the provider accepts.");
     if (!(await hasFreeSeats(tx, current.rsvps, now))) throw new PaymentOperationError("Its places have gone since the hold ended.");
+    if (!(await addOnsFit(tx, order.id, now))) throw new PaymentOperationError("Some extras on this order have sold out since the hold ended.");
     const holdExpiresAt = new Date(now.getTime() + PAYMENT_LINK_HOLD_MS);
     await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.PENDING, holdExpiresAt, holdCapAt: new Date(holdExpiresAt.getTime() + HOLD_EXTENSION_CAP_MS), testMode: account.testMode } });
     await tx.rSVP.updateMany({ where: { orderId: order.id }, data: { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt } });

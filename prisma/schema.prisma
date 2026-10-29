@@ -553,7 +553,7 @@ model MobileIdempotencyKey {
   keyHash     String
   /// HMAC of the method, path and body; the same key on another path or with another body is refused.
   requestHash String
-  /// 0 while the first request is still running.
+  /// 0 while the first request is still running; 1 when it ran with an unknown outcome (a 5xx or an exception).
   status      Int      @default(0)
   body        Json?
   createdAt   DateTime @default(now())
@@ -1252,16 +1252,23 @@ model PaymentRefund {
   createdByUserId  String?
   /// When the provider was last asked; a retry first looks the refund up by our id.
   submittedAt      DateTime?
+  /// When maintenance last asked the provider about a refund it accepted but hasn't finished (docs/PAYMENTS.md).
+  lastCheckedAt    DateTime?
+  /// The FAILED refund this one retries. Unique, so each failed refund is retried once; the failed row never changes.
+  retryOfRefundId  String?             @unique
   settledAt        DateTime?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
-  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  payment   Payment        @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  createdBy User?          @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  retryOf   PaymentRefund? @relation("PaymentRefundRetry", fields: [retryOfRefundId], references: [id], onDelete: NoAction)
+  retry     PaymentRefund? @relation("PaymentRefundRetry")
 
   @@unique([paymentId, externalRefundId])
   @@index([paymentId, status])
   @@index([status, createdAt])
+  @@index([status, lastCheckedAt])
 }
 
 /// An append-only correction to an offline payment's method or reference.

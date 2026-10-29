@@ -8,6 +8,7 @@ import type { OrderTarget } from "@/lib/payments/targets";
 import { loadPaymentAccount } from "@/lib/payments/settings";
 import type { TeamRegistrationIntent } from "@/lib/validators";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
+import { publicCountField } from "@/lib/publicRegistrationCount";
 import { requestedItems, type AnswerRow, type OrderRequest } from "./shared";
 import { TeamRegistrationError, teamRegistrationFailure, isUniqueViolationOn } from "./team";
 
@@ -40,7 +41,7 @@ export async function submitTicketOrder(params: {
   setUserName?: string | null;
   /** TEAM events (docs/TEAMS.md): solo, create a team, or join one by paying for a ticket. */
   team?: TeamRegistrationIntent;
-}): Promise<ActionResult<{ count: number; status: RsvpStatus; ticketToken: string; orderToken: string; checkoutUrl: string | null; teamId: string | null }> & { code?: "TEAM_REQUIRED" }> {
+}): Promise<ActionResult<{ count?: number; status: RsvpStatus; ticketToken: string; orderToken: string; checkoutUrl: string | null; teamId: string | null }> & { code?: "TEAM_REQUIRED" }> {
   const items = requestedItems(params.request);
   if (items.length === 0) return { ok: false, error: "Choose a ticket." };
   try {
@@ -75,7 +76,7 @@ export async function submitTicketOrder(params: {
     return {
       ok: true,
       data: {
-        count: order.count,
+        ...publicCountField(order.count),
         status: order.status,
         ticketToken: order.buyerTicketToken,
         orderToken: order.accessToken,

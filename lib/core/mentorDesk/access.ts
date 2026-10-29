@@ -75,9 +75,14 @@ export type LiveMentor = { userId: string; skills: string[]; maxActiveTeams: num
  * window (profile edits, conflict declarations, nominations). The grant row
  * is read FOR SHARE, so a grant removal (which locks it FOR UPDATE before its
  * cleanup, ./grant.ts) waits for the command or the command sees it gone.
+ * `exclusive` reads it FOR UPDATE instead, serialising the mentor's schedule
+ * changes (office-hour slot creation and rescheduling check overlaps under
+ * it). It must be the transaction's first lock on the grant: a shared lock
+ * is never upgraded.
  */
-export async function liveMentor(tx: Prisma.TransactionClient, eventId: string, userId: string, options: { at?: Date; onShift?: boolean } = {}): Promise<LiveMentor> {
-  await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${eventId} AND "userId" = ${userId} FOR SHARE`;
+export async function liveMentor(tx: Prisma.TransactionClient, eventId: string, userId: string, options: { at?: Date; onShift?: boolean; exclusive?: boolean } = {}): Promise<LiveMentor> {
+  if (options.exclusive) await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${eventId} AND "userId" = ${userId} FOR UPDATE`;
+  else await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${eventId} AND "userId" = ${userId} FOR SHARE`;
   const [grant, profile] = await Promise.all([
     tx.eventCollaborator.findFirst({ where: { eventId, userId, permissions: { has: EventPermission.MENTOR } }, select: { id: true } }),
     tx.mentorProfile.findUnique({ where: { eventId_userId: { eventId, userId } }, select: { id: true, version: true, skills: true, maxActiveTeams: true, availability: true } }),

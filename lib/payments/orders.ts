@@ -15,10 +15,12 @@ import { DEFAULT_CURRENCY, formatMoney, providerMinimumMinor } from "./money";
 import { priceOrder, PricingError, type AddOnItem, type OrderItem } from "./pricing";
 import { isValidPromoCode, lockPromoCode, promoCodeDigest, PromoCodeError } from "./promo";
 import { lockSellable, passesTaken, type OrderTarget, type Slot } from "./targets";
+import { addOnsTaken } from "./addOnStock";
 import { ticketSalesState } from "./tickets";
 import { OrderError } from "./orderError";
 import { placeTeamOrderRegistration, planTeamOrder } from "./teamOrders";
 import type { TeamRegistrationIntent } from "@/lib/validators";
+import { publicRegistrationCount } from "@/lib/publicRegistrationCount";
 
 export { OrderError } from "./orderError";
 
@@ -191,8 +193,7 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   for (const line of priced.lines.filter((candidate) => candidate.kind === "ADD_ON")) {
     const addOn = addOnTypes.find((candidate) => candidate.id === line.addOnId)!;
     if (addOn.capacity == null) continue;
-    const sold = await tx.orderLine.aggregate({ _sum: { quantity: true }, where: { addOnId: addOn.id, order: { OR: [{ status: OrderStatus.CONFIRMED }, { status: OrderStatus.PENDING, holdExpiresAt: { gt: now } }] } } });
-    const left = addOn.capacity - (sold._sum.quantity ?? 0);
+    const left = addOn.capacity - await addOnsTaken(tx, addOn.id, now);
     if (line.quantity > left) throw new OrderError(left <= 0 ? `${addOn.name} is sold out.` : `Only ${left} ${addOn.name} left.`);
   }
   // A pass needs a place on every date it covers.
@@ -339,6 +340,6 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   else if (orderStatus === OrderStatus.CONFIRMED) {
     await notifyChat(tx, sellable.organisationId, "registration", `${params.buyer.name || "Someone"} booked ${rsvps.length} ${rsvps.length === 1 ? "ticket" : "tickets"} for ${sellable.slots[0]!.label}.`);
   }
-  const count = await tx.rSVP.count({ where: sellable.slots[0]!.target });
+  const count = await publicRegistrationCount(tx, sellable.slots[0]!.target);
   return { orderId: order.id, reference: order.reference, accessToken: order.accessToken, status, buyerRsvpId: rsvps[0]!.id, buyerTicketToken: rsvps[0]!.checkInToken, paymentId, count, teamId: placedTeam?.teamId ?? null, rsvpIds: rsvps.map((rsvp) => rsvp.id) };
 }

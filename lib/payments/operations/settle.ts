@@ -8,7 +8,8 @@ import { closeOpenAttempts } from "../checkout";
 import { enqueueOrderEmail, enqueuePaymentEmail } from "../email";
 import { isActiveHold } from "../holds";
 import { effectiveOfflineRecord } from "../offlineRecord";
-import { hasFreeSeats, ORDER_SUBJECT_SELECT } from "../targets";
+import { hasFreeSeats, ORDER_SUBJECT_SELECT, orderTargetCancelled } from "../targets";
+import { addOnsFit } from "../addOnStock";
 import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, PaymentOperationError, subjectTitle } from "./shared";
 import { heldStatusWebhooks } from "../settlement";
 import { placePaidTeamOrder } from "../teamOrders";
@@ -69,6 +70,8 @@ export async function settleOrderByHand(params: {
     const payment = order.payments[0];
     if (order.status !== OrderStatus.PENDING || !payment) throw new PaymentOperationError("Only orders waiting for payment can be settled by hand.");
     await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${payment.id} FOR UPDATE`;
+    // Never a ticket or a submitted project for a cancelled event, series or date.
+    if (await orderTargetCancelled(tx, order)) throw new PaymentOperationError("This event or date was cancelled, so this order can't be confirmed.");
     // A project entry fee (docs/HACKATHON.md) holds no places: record it and submit the project.
     if (order.submissionId && order.rsvps.length === 0) {
       await tx.paymentCheckoutAttempt.updateMany({ where: { paymentId: payment.id, status: CheckoutAttemptStatus.OPEN }, data: { status: CheckoutAttemptStatus.CANCELLED } });
@@ -80,6 +83,8 @@ export async function settleOrderByHand(params: {
     const held = order.rsvps.filter((rsvp) => rsvp.status === RsvpStatus.PENDING_PAYMENT);
     if (held.length === 0) throw new PaymentOperationError("This order has no tickets left to confirm.");
     const holdActive = held.every((rsvp) => isActiveHold(rsvp, now));
+    // An ended hold released its extras too: they come back only if still in stock.
+    if (!holdActive && !(await addOnsFit(tx, order.id, now))) throw new PaymentOperationError("The hold ended and some extras on this order have sold out since.");
     // TEAM events place the one registration in its team or unit (docs/TEAMS.md).
     const team = held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, now) : null;
     if (team === "gone" || (!team && !holdActive && !(await hasFreeSeats(tx, held, now)))) throw new PaymentOperationError("The hold ended and the places have gone.");

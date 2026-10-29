@@ -2,14 +2,18 @@ import { randomUUID } from "node:crypto";
 import { MembershipRole } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const session = vi.hoisted(() => ({ value: null as null | { user: { id: string; }; mfaVerified?: boolean; }, proof: undefined as string | undefined }));
+const session = vi.hoisted(() => ({ value: null as null | { user: { id: string; }; mfaVerified?: boolean; }, proof: undefined as string | undefined, token: undefined as string | undefined }));
 vi.mock("@/lib/auth", () => ({ auth: async () => session.value }));
-vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => (session.proof ? { value: session.proof } : undefined) }) }));
+vi.mock("next/headers", () => ({ cookies: async () => ({
+  get: () => (session.proof ? { value: session.proof } : undefined),
+  getAll: () => (session.token ? [{ name: "swe.session-token.v1", value: session.token }] : []),
+}) }));
 
 import { prisma } from "@/lib/db";
 import {
   accountUnderAttack, consumeSignInCode, deviceHash, isAddressBlocked, knownDevice, noteFailedSignIn, rememberSignIn, sendSignInCode,
 } from "@/lib/loginSecurity";
+import { encode } from "next-auth/jwt";
 import { createMfaProof } from "@/lib/mfaProof";
 import { getMembership } from "@/lib/permissions";
 import { staffMfaState } from "@/lib/staffMfa";
@@ -31,6 +35,7 @@ beforeAll(async () => {
 beforeEach(() => {
   session.value = null;
   session.proof = undefined;
+  session.token = undefined;
 });
 
 afterAll(async () => {
@@ -99,11 +104,23 @@ describe("staff authenticator rule", () => {
     session.value = { user: { id: users.member! }, mfaVerified: true };
     expect(await getMembership(users.member!, organisationId)).toMatchObject({ role: "ADMIN" });
 
-    // A Google sign-in confirms with a code afterwards: the proof cookie.
+    // A Google sign-in confirms with a code afterwards: the proof cookie,
+    // bound to this browser's sign-in id inside the session cookie.
     const { sessionVersion } = await prisma.user.findUniqueOrThrow({ where: { id: users.member! }, select: { sessionVersion: true } });
+    const sessionCookie = (sid: string) => encode({ token: { sub: users.member!, sid }, secret: "integration-auth-secret-with-at-least-32-characters", salt: "swe.session-token.v1" });
     session.value = { user: { id: users.member! } };
-    session.proof = createMfaProof(users.member!, sessionVersion);
+    session.token = await sessionCookie("sign-in-a");
+    session.proof = createMfaProof(users.member!, sessionVersion, "sign-in-a");
     expect(await staffMfaState(users.member!)).toBe("ok");
+    expect(await getMembership(users.member!, organisationId)).toMatchObject({ role: "ADMIN" });
+
+    // A new sign-in in the same browser leaves the old proof behind.
+    session.token = await sessionCookie("sign-in-b");
+    expect(await staffMfaState(users.member!)).toBe("verify");
+    expect(await getMembership(users.member!, organisationId)).toBeNull();
+    // So does a session cookie without a sign-in id (or none at all).
+    session.token = await encode({ token: { sub: users.member! }, secret: "integration-auth-secret-with-at-least-32-characters", salt: "swe.session-token.v1" });
+    expect(await staffMfaState(users.member!)).toBe("verify");
   });
 
   it("leaves attendees, other people's checks and the super admin alone", async () => {

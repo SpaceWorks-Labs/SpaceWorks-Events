@@ -102,7 +102,7 @@ export async function loadReview(ctx: AdmissionContext, assignmentId: string) {
   });
 }
 
-export async function submitMyReview(ctx: AdmissionContext, assignmentId: string, input: { scores: Record<string, unknown>; notes: string }) {
+export async function submitMyReview(ctx: AdmissionContext, assignmentId: string, input: { answersRevision: number; scores: Record<string, unknown>; notes: string }) {
   const result = await submitReview(ctx, assignmentId, input);
   return result.ok ? { ok: true as const, data: reviewWriteDtoSchema.parse({ assignmentId, outcome: "SUBMITTED", replaced: null }) } : result;
 }

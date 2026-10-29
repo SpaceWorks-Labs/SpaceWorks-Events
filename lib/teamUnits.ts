@@ -1,6 +1,6 @@
 import "server-only";
 
-import { EventPrivacyType, Prisma, RegistrationMode, RsvpStatus, TeamJoinRequestStatus } from "@prisma/client";
+import { EventPrivacyType, EventStatus, Prisma, RegistrationMode, RsvpStatus, TeamJoinRequestStatus } from "@prisma/client";
 import { enqueueRsvpStatusNotification, enqueueTeamCreated } from "@/lib/outbox";
 import { generateTeamManageToken } from "@/lib/teamToken";
 import { emitWebhookEvent, type RsvpWebhookSnapshot, type WebhookEmission } from "@/lib/webhooks/emit";
@@ -173,6 +173,8 @@ export async function promoteOldestWaitlistedUnit(
   | null
 > {
   if (event.privacyType === EventPrivacyType.APPROVAL_REQUIRED) return null;
+  // A cancelled event promotes nobody; every caller holds its Event lock, so this read is current.
+  if ((await tx.event.count({ where: { id: event.id, status: EventStatus.CANCELLED } })) > 0) return null;
   if (event.capacity != null && (await countConfirmedUnits(tx, event.id)) >= event.capacity) return null;
   const team = await tx.team.findFirst({
     where: { eventId: event.id, status: RsvpStatus.WAITLISTED },

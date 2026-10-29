@@ -115,6 +115,8 @@ export async function removeTeamMember(auth: TeamLeaderAuth, rsvpId: string): Pr
     const team = await lockedLeaderTeam(tx, auth);
     if (!team) return fail(TEAM_NOT_FOUND);
     if (team.leaderRsvpId === rsvpId) return fail("You can't remove yourself. Transfer leadership or disband the team instead.");
+    // Lock the registration before reading its check-in (docs/PAYMENTS.md): a scan waits, or is seen.
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${rsvpId} FOR UPDATE`;
     const member = await tx.rSVP.findFirst({
       where: { id: rsvpId, eventId: event.id, teamId: team.id },
       select: { ...rsvpWebhookSnapshotSelect, status: true },
@@ -122,7 +124,8 @@ export async function removeTeamMember(auth: TeamLeaderAuth, rsvpId: string): Pr
     if (!member) return fail("Member not found.");
     if (member.checkedInAt) return fail("This member has already checked in.");
     if (await hasPaidOrder(tx, { id: member.id })) return fail(PAID_MEMBER_REFUSAL);
-    await tx.rSVP.delete({ where: { id: member.id } });
+    const deleted = await tx.rSVP.deleteMany({ where: { id: member.id, checkedInAt: null } });
+    if (deleted.count !== 1) throw new Error("The member changed while being removed.");
     // The team side of the registration cancels it, as when the member leaves.
     webhooks.push({ type: "registration.status_changed", rsvpId: member.id, status: "CANCELLED", previousStatus: member.status, snapshot: rsvpWebhookSnapshot(member) });
     const settled = await settleTeamAfterMemberLeft(tx, { teamId: team.id, eventId: event.id, leftRsvpId: member.id });
@@ -240,6 +243,8 @@ export async function disbandTeam(auth: TeamLeaderAuth): Promise<TeamResult<{ ca
     if (!event) return fail(TEAM_NOT_FOUND);
     const team = await lockedLeaderTeam(tx, auth);
     if (!team) return fail(TEAM_NOT_FOUND);
+    // Every member's registration, locked by id before their check-ins are read.
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "teamId" = ${team.id} ORDER BY "id" FOR UPDATE`;
     const checkedIn = await tx.rSVP.count({ where: { teamId: team.id, checkedInAt: { not: null } } });
     if (checkedIn > 0) return fail("Someone in this team has already checked in, so it can't be disbanded.");
     if (await hasPaidOrder(tx, { teamId: team.id })) return fail(PAID_MEMBER_REFUSAL);
@@ -249,7 +254,9 @@ export async function disbandTeam(auth: TeamLeaderAuth): Promise<TeamResult<{ ca
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     // Same set as `members`: every member change takes the Event lock held here.
-    const removed = await tx.rSVP.deleteMany({ where: { teamId: team.id, eventId: event.id } });
+    const removed = await tx.rSVP.deleteMany({ where: { teamId: team.id, eventId: event.id, checkedInAt: null } });
+    // A count that doesn't match rolls everything back rather than half-disbanding.
+    if (removed.count !== members.length) throw new Error("The team changed while being disbanded.");
     await tx.team.delete({ where: { id: team.id } });
     for (const member of members) {
       webhooks.push({ type: "registration.status_changed", rsvpId: member.id, status: "CANCELLED", previousStatus: member.status, snapshot: rsvpWebhookSnapshot(member) });

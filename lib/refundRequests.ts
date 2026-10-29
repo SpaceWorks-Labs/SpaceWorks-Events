@@ -10,6 +10,7 @@ import { formatMoney, parseMoneyToMinor } from "@/lib/payments/money";
 import { PaymentOperationError, refundOrder } from "@/lib/payments/operations";
 import { orderSubject, ORDER_SUBJECT_SELECT } from "@/lib/payments/targets";
 import type { ClaimAdminContext } from "@/lib/claims/decide";
+import { ANSWER_CHANGED, lockCurrentNo, type AttendanceNo } from "@/lib/attendanceGuard";
 
 /**
  * Refund requests (docs/FINANCE.md): a buyer asks for money back outside the
@@ -48,19 +49,25 @@ export async function requestRefund(orderToken: string, reason: unknown): Promis
  * `onCreated` runs in the request's own transaction (the attendance check
  * records which request it opened).
  */
-export async function requestRefundForOrder(orderId: string, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>): Promise<Result> {
+export async function requestRefundForOrder(orderId: string, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>, attendanceNo?: AttendanceNo): Promise<Result> {
   const parsedReason = reasonSchema.safeParse(reason);
   if (!parsedReason.success) return { ok: false, error: parsedReason.error.issues[0]?.message ?? "Say why." };
   const order = await prisma.order.findUnique({ where: { id: orderId }, select: ORDER_FOR_REQUEST });
-  return openRefundRequest(order, parsedReason.data, onCreated);
+  return openRefundRequest(order, parsedReason.data, onCreated, attendanceNo);
 }
 
-async function openRefundRequest(order: Prisma.OrderGetPayload<{ select: typeof ORDER_FOR_REQUEST; }> | null, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>): Promise<Result> {
+async function openRefundRequest(order: Prisma.OrderGetPayload<{ select: typeof ORDER_FOR_REQUEST; }> | null, reason: string, onCreated?: (tx: Prisma.TransactionClient, requestId: string) => Promise<unknown>, attendanceNo?: AttendanceNo): Promise<Result> {
   if (!order) return { ok: false, error: "Order not found." };
   if (order.status !== OrderStatus.CONFIRMED || order.payments.length === 0) return { ok: false, error: "Only paid orders can ask for a refund." };
   const title = orderSubject(order)?.title ?? "your event";
   try {
-    await prisma.$transaction(async (tx) => {
+    const opened = await prisma.$transaction(async (tx) => {
+      // An attendance No opens a request only while it is still the answer:
+      // the order, then the check, locked before anything is written.
+      if (attendanceNo) {
+        await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${order.id} FOR UPDATE`;
+        if (!(await lockCurrentNo(tx, attendanceNo))) return false;
+      }
       const request = await tx.refundRequest.create({ data: { organisationId: order.organisationId, orderId: order.id, reason }, select: { id: true } });
       await recordAuditEvent({ action: "REFUND_REQUESTED", organisationId: order.organisationId, targetType: "RefundRequest", targetId: request.id, metadata: { orderId: order.id }, client: tx });
       await onCreated?.(tx, request.id);
@@ -70,7 +77,9 @@ async function openRefundRequest(order: Prisma.OrderGetPayload<{ select: typeof 
         subject: noticeSubject("Refund request", title),
         lines: [`${order.buyerName || "A buyer"} asked for a refund on order ${order.reference}: ${reason}`, "Approve or decline it from the event's Finance tab."],
       });
+      return true;
     });
+    if (!opened) return { ok: false, error: ANSWER_CHANGED };
   } catch (error) {
     if (isUniqueViolation(error)) return { ok: false, error: ALREADY_REQUESTED };
     throw error;

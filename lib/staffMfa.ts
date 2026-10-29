@@ -9,6 +9,7 @@ import { hasValidMfaProof, MFA_PROOF_COOKIE } from "@/lib/mfaProof";
 import { mobileMfaFresh } from "@/lib/staffMfaFresh";
 import { currentRequestActor } from "@/lib/requestActor";
 import { isSuperAdminEmail } from "@/lib/superAdminEmail";
+import { currentSessionSid } from "@/lib/sessionSid";
 
 /**
  * Organisation staff (anyone with a membership, or an event or series
@@ -72,7 +73,8 @@ export const staffMfaState = cache(async (userId: string): Promise<StaffMfaState
   if (!session?.user?.id) return "verify";
   if ((session as typeof session & { mfaVerified?: boolean; }).mfaVerified) return "ok";
   const proof = (await cookies()).get(MFA_PROOF_COOKIE)?.value;
-  return hasValidMfaProof(proof, userId, state.user.sessionVersion) ? "ok" : "verify";
+  // The proof counts only for the sign-in it was issued to.
+  return hasValidMfaProof(proof, userId, state.user.sessionVersion, proof ? await currentSessionSid(userId) : null) ? "ok" : "verify";
 });
 
 /** For staff checks in actions: false while the signed-in staff member still owes an authenticator check. */

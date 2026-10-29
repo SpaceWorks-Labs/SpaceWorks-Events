@@ -7,6 +7,8 @@ import { absoluteUrl, eventSummarySelect, mobileUserSelect, toEventSummary, toMy
 import { staffMfaState } from "@/lib/staffMfa";
 import { meDtoSchema, myTeamResultDtoSchema, myTeamSchema, registrationsDtoSchema, type MyTeamDto } from "@/lib/mobile/schemas";
 
+const ISOLATED_GRANTS = new Set<EventPermission>([EventPermission.JUDGE, EventPermission.MENTOR, EventPermission.REVIEW_APPLICATIONS]);
+
 export async function loadMe(userId: string, baseUrl: string) {
   const [user, memberships, collaborations, judgeGrants] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: userId }, select: mobileUserSelect }),
@@ -64,11 +66,9 @@ export async function loadMe(userId: string, baseUrl: string) {
       logoUrl: absoluteUrl(membership.organisation.logoUrl, baseUrl),
       role: membership.role,
     })),
-    // JUDGE is web-only (docs/HACKATHON.md) and not part of the mobile DTO:
-    // drop it, and drop JUDGE-only grants entirely.
     collaborations: collaborations.flatMap((grant) => {
-      // JUDGE and MENTOR open their own workspaces (`judging`, `mentoring`), not the organiser tools.
-      const permissions = grant.permissions.filter((permission) => permission !== EventPermission.JUDGE && permission !== EventPermission.MENTOR);
+      // JUDGE, MENTOR and REVIEW_APPLICATIONS open their own workspaces (`judging`, `mentoring`, the application reviews), not the organiser tools.
+      const permissions = grant.permissions.filter((permission) => !ISOLATED_GRANTS.has(permission));
       return grant.event && permissions.length > 0 ? [{
         organisation: { slug: grant.event.organisation.slug, name: grant.event.organisation.name },
         eventId: grant.event.id,

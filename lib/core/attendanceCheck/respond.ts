@@ -108,9 +108,11 @@ async function answer(locator: Locator, response: AttendanceResponseValue, note:
   });
   if (!updated) return currentAnswer(locator);
 
+  // Likewise a Yes withdraws a refund request only while it is still the answer.
   if (response === "ATTENDING") await withdrawRefundRequestOnYes(check, guestName, now);
   if (heldOutcome) return { ok: true, data: { response, released: false, releaseFailed: keptMessage(heldOutcome) } };
   if (!plan) return { ok: true, data: { response, released: false } };
+  // `now` is when this No was written: the release acts only while it is still the answer (lib/attendanceGuard.ts).
   const outcome = await carryOutRelease({ check, plan, note, guestName, now });
   if (outcome.released) return { ok: true, data: { response, released: true } };
   return { ok: true, data: { response, released: false, releaseFailed: outcome.message } };

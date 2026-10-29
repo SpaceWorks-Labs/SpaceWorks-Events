@@ -164,6 +164,13 @@ export class StripeGateway implements PaymentGateway {
     const match = items.find((item) => record(item.metadata).refund_id === reference && isProviderId(item.id));
     return match ? { refundId: match.id as string, state: REFUND_STATES[String(match.status)] ?? "PENDING" } : null;
   }
+
+  async getRefundStatus(_paymentId: string, refundId: string): Promise<RefundState> {
+    if (!isProviderId(refundId)) throw new PaymentsUnavailable("Invalid Stripe refund id.");
+    const refund = await this.call("GET", `/v1/refunds/${refundId}`);
+    if (refund.id !== refundId) throw new PaymentsUnavailable("Stripe sent an unreadable refund.");
+    return REFUND_STATES[String(refund.status)] ?? "PENDING";
+  }
 }
 
 function refundNotification(refund: Entity): RefundNotification | null {

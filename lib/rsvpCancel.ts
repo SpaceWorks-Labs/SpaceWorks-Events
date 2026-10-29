@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
 import { recordAuditEvent } from "@/lib/audit";
 import type { ActionResult } from "@/app/actions/org";
-import { EventPrivacyType, RegistrationMode, RsvpStatus } from "@prisma/client";
+import { EventPrivacyType, EventStatus, RegistrationMode, RsvpStatus } from "@prisma/client";
 import { emitTeamWebhooks, promoteOldestWaitlistedUnit, settleTeamAfterMemberLeft, type RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { NOT_FROM_PAID_ORDER } from "@/lib/rsvpCapacity";
 import { fillFromWaitlist } from "@/lib/payments/operations";
@@ -15,6 +15,7 @@ import { leadsPaidTeam } from "@/lib/payments/teamOrders";
 import { noticeEach, noticeSubject, personEmail } from "@/lib/notices";
 import { emitWebhookEvent, type RsvpWebhookSnapshot } from "@/lib/webhooks/emit";
 import { notifyChat } from "@/lib/chat/notify";
+import { ANSWER_CHANGED, lockCurrentNo, type AttendanceNo } from "@/lib/attendanceGuard";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -44,6 +45,8 @@ export async function cancelRegistrationByToken(
      * "Your place has been released". Both public pages render per request.
      */
     revalidate?: boolean;
+    /** An attendance "No" releasing the place: cancelled only while that answer is still current. */
+    attendanceNo?: AttendanceNo;
   } = {},
 ): Promise<ActionResult<{ cancelled: true; }>> {
   const rsvp = await prisma.rSVP.findUnique({
@@ -96,10 +99,15 @@ export async function cancelRegistrationByToken(
     } else if (rsvp.eventInstanceId && rsvp.eventInstance) {
       await lockSeriesDates(tx, rsvp.eventInstance.eventSeriesId, [rsvp.eventInstanceId], new Date());
     }
+    // Then its order and the registration itself (docs/PAYMENTS.md): a check-in
+    // either commits first and is seen below, or waits and finds it gone.
+    if (rsvp.orderId) await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${rsvp.orderId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${rsvp.id} FOR UPDATE`;
     const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, include: { user: { select: { email: true } }, order: { select: { id: true, status: true, buyerEmail: true, totalMinor: true, payments: { where: { status: { in: ["PAID_ONLINE", "PAID_OFFLINE", "PENDING"] } }, select: { id: true, status: true } } } } } });
     if (!current) return { error: "RSVP not found." };
     if (current.isCrew) return { error: "You're on this event's crew. Ask an organiser to remove you from the crew." };
     if (current.checkedInAt) return { error: "Cannot cancel — you have already checked in." };
+    if (options.attendanceNo && !(await lockCurrentNo(tx, options.attendanceNo))) return { error: ANSWER_CHANGED };
     // Money was taken: refunds follow the order's policy, from the order page.
     if (current.order?.payments.some((payment) => payment.status !== "PENDING")) return { error: "Paid tickets are cancelled from the order page, under the event's refund policy.", code: "PAID_ORDER" as const };
     // Money still owed (reserved to pay at the desk), or a PER_TEAM leader's
@@ -125,7 +133,9 @@ export async function cancelRegistrationByToken(
       await tx.rSVP.updateMany({ where: { orderId: current.order.id, status: "PENDING_PAYMENT" }, data: { holdExpiresAt: now } });
       return { error: null };
     }
-    await tx.rSVP.delete({ where: { id: current.id } });
+    const deleted = await tx.rSVP.deleteMany({ where: { id: current.id, checkedInAt: null } });
+    // Never a partial cancellation: anything unexpected rolls the whole transaction back.
+    if (deleted.count !== 1) throw new Error("The registration changed while it was being cancelled.");
     removed = { previousStatus: current.status, snapshot: { id: current.id, eventId: current.eventId, eventInstanceId: current.eventInstanceId, userId: current.userId, guestName: current.guestName, createdAt: current.createdAt, checkedInAt: current.checkedInAt } };
     const to = personEmail(current);
     if (to) {
@@ -156,7 +166,9 @@ export async function cancelRegistrationByToken(
     const sold = current.eventInstanceId ? await tx.ticketType.count({ where: { eventSeriesId: rsvp.eventInstance!.eventSeriesId } }) > 0 : true;
     const freed = seatTargetOf(current);
     if (current.status === "CONFIRMED" && freed && (current.eventId || sold)) return { error: null, freed };
-    if (current.status === "CONFIRMED" && privacyType !== EventPrivacyType.APPROVAL_REQUIRED) {
+    // A cancelled date or series promotes nobody (read under its lock).
+    const offDate = current.eventInstanceId ? await tx.eventInstance.count({ where: { id: current.eventInstanceId, OR: [{ cancelledAt: { not: null } }, { series: { status: EventStatus.CANCELLED } }] } }) > 0 : false;
+    if (current.status === "CONFIRMED" && privacyType !== EventPrivacyType.APPROVAL_REQUIRED && !offDate) {
       const target = current.eventId ? { eventId: current.eventId } : { eventInstanceId: current.eventInstanceId! };
       const nextWaitlisted = await tx.rSVP.findFirst({
         // Tickets from paid orders are confirmed only by payment, never by promotion.

@@ -2,6 +2,7 @@ import { submitParticipantClaimAction } from "@/app/actions/participant-claims";
 import { mobileActionError, mobileOk, readFormBody, notFound } from "@/lib/mobile/http";
 import { loadMyParticipantClaims, ownRegistration } from "@/lib/mobile/attendee";
 import { authedMobileRoute } from "@/lib/mobile/route";
+import { claimFiledDtoSchema } from "@/lib/mobile/schemas";
 
 /** Three 5 MB receipt photos and the fields; read with a hard cap before parsing. */
 const MAX_BYTES = 16 * 1024 * 1024;
@@ -16,7 +17,8 @@ export const GET = authedMobileRoute<{ rsvpId: string }>("GET /api/mobile/v1/me/
  * File a claim: multipart form with `category`, `description`, `amount`, an
  * optional `policyId` (a reimbursement policy from GET …/reimbursements) and
  * up to three `receipts` photos, exactly as the ticket page. Receipts are
- * re-encoded and stored privately.
+ * re-encoded and stored privately. Answers the claim list, or only the new
+ * claim's id when the claim was filed but the list could not be read back.
  */
 export const POST = authedMobileRoute<{ rsvpId: string }>("POST /api/mobile/v1/me/registrations/:rsvpId/claims", async (request, { rsvpId }, { auth }) => {
   const rsvp = await ownRegistration(auth.userId, rsvpId);
@@ -30,5 +32,9 @@ export const POST = authedMobileRoute<{ rsvpId: string }>("POST /api/mobile/v1/m
   for (const file of form.getAll("receipts")) if (file instanceof File) fields.append("receipts", file);
   const result = await submitParticipantClaimAction(fields);
   if (!result.ok) return mobileActionError(result);
-  return mobileOk(await loadMyParticipantClaims(auth.userId, rsvpId), 201);
+  const claims = await loadMyParticipantClaims(auth.userId, rsvpId).catch(() => undefined);
+  if (claims !== undefined) return mobileOk(claims, 201);
+  // The claim is filed: answer with its id rather than a 5xx, whose outcome a retry could not tell.
+  console.error("[mobile-api] claim filed but its list could not be read back");
+  return mobileOk(claimFiledDtoSchema.parse({ claimId: result.data?.claimId }), 201);
 }, { idempotent: { maxBytes: MAX_BYTES } });

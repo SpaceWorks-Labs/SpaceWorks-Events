@@ -7,8 +7,12 @@ import { notifyChat } from "@/lib/chat/notify";
 import { noticeEach, noticeSubject, titleWith } from "@/lib/notices";
 import { peopleWithPlaces } from "./eventCancellation";
 import { seatTakingWhere } from "./holds";
-import { PaymentOperationError, refundOrder } from "./operations";
-import { lockSeriesDates } from "./targets";
+import { PaymentOperationError, refundOrder, submitRefunds } from "./operations";
+import { ORDER_FOR_REFUND, recordRefundsTx } from "./operations/refund";
+import { formatMoney } from "./money";
+import { enqueuePaymentEmail } from "./email";
+import { lockOrderTargets, lockSeriesDates } from "./targets";
+import { lockOrderRegistrations } from "./teamOrders";
 
 const ZERO = BigInt(0);
 const COLLECTED: PaymentStatus[] = [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE];
@@ -24,16 +28,20 @@ async function ownedDate(organisationId: string, seriesId: string, instanceId: s
 
 /**
  * Give one date its own capacity, or clear it to use the series capacity.
- * Never below the seats already taken (confirmed, or held while paying).
+ * Never below the seats already taken (confirmed, or held while paying),
+ * counted under the series and date locks with the time read after them;
+ * clearing checks the series capacity it would inherit, read in the same
+ * transaction.
  */
 export async function setOccurrenceCapacity(params: { organisationId: string; seriesId: string; instanceId: string; capacity: number | null; actorUserId: string; now?: Date; }) {
-  const now = params.now ?? new Date();
   const date = await ownedDate(params.organisationId, params.seriesId, params.instanceId);
   await prisma.$transaction(async (tx) => {
-    await lockSeriesDates(tx, date.eventSeriesId, [date.id], now);
-    if (params.capacity != null) {
+    await lockSeriesDates(tx, date.eventSeriesId, [date.id], params.now ?? new Date());
+    const now = params.now ?? new Date();
+    const effective = params.capacity ?? (await tx.eventSeries.findUniqueOrThrow({ where: { id: date.eventSeriesId }, select: { capacity: true } })).capacity;
+    if (effective != null) {
       const taken = await tx.rSVP.count({ where: { eventInstanceId: date.id, ...seatTakingWhere(now) } });
-      if (taken > params.capacity) throw new PaymentOperationError(`${taken} places are already taken on this date.`);
+      if (taken > effective) throw new PaymentOperationError(params.capacity != null ? `${taken} places are already taken on this date.` : `${taken} places are already taken on this date, more than the series capacity of ${effective}.`);
     }
     await tx.eventInstance.update({ where: { id: date.id }, data: { capacity: params.capacity } });
     await recordAuditEvent({ action: "EVENT_INSTANCE_CAPACITY_UPDATED", actorUserId: params.actorUserId, organisationId: params.organisationId, targetType: "EventInstance", targetId: date.id, metadata: { capacity: params.capacity }, client: tx });
@@ -94,7 +102,7 @@ export async function cancelOccurrence(params: { organisationId: string; seriesI
         if (order.eventInstanceId === date.id) {
           await refundOrder({ orderId: order.id, organisationId: params.organisationId, actorUserId: params.actorUserId, amountMinor: null, reason: `Date cancelled: ${params.reason}`.slice(0, 500), cancelTickets: true, now });
         } else {
-          await refundPassShare({ orderId: order.id, instanceId: date.id, organisationId: params.organisationId, actorUserId: params.actorUserId, reason: params.reason, now });
+          await submitRefunds(await refundPassShare({ orderId: order.id, instanceId: date.id, actorUserId: params.actorUserId, reason: params.reason, now }));
         }
         refunded += 1;
       } else if (order.status === OrderStatus.PENDING) {
@@ -119,18 +127,37 @@ export async function cancelOccurrence(params: { organisationId: string; seriesI
   return { orders: orders.length, refunded, failed, notified };
 }
 
-/** A pass loses one date: refund that date's share of what's left on it, then remove its seats there. */
-async function refundPassShare(params: { orderId: string; instanceId: string; organisationId: string; actorUserId: string; reason: string; now: Date; }) {
-  const [onDate, all, payments] = await Promise.all([
-    prisma.rSVP.count({ where: { orderId: params.orderId, eventInstanceId: params.instanceId } }),
-    prisma.rSVP.count({ where: { orderId: params.orderId } }),
-    prisma.payment.findMany({ where: { orderId: params.orderId, status: { in: COLLECTED } }, select: { amountMinor: true, refunds: { where: { status: { in: ["PENDING", "SUCCEEDED"] } }, select: { amountMinor: true } } } }),
-  ]);
-  if (onDate === 0 || all === 0) return;
-  const left = payments.reduce((sum, payment) => sum + payment.amountMinor - payment.refunds.reduce((refunds, refund) => refunds + refund.amountMinor, ZERO), ZERO);
-  const share = (left * BigInt(onDate)) / BigInt(all);
-  if (share > ZERO) {
-    await refundOrder({ orderId: params.orderId, organisationId: params.organisationId, actorUserId: params.actorUserId, amountMinor: share, reason: `Date cancelled: ${params.reason}`.slice(0, 500), cancelTickets: false, now: params.now });
-  }
-  await prisma.rSVP.deleteMany({ where: { orderId: params.orderId, eventInstanceId: params.instanceId, checkedInAt: null } });
+/**
+ * A pass loses one date, in one transaction: the series, the pass's dates by
+ * id, the order, its payments and its registrations are locked (docs/PAYMENTS.md),
+ * then the share is worked out, recorded and the date's places removed
+ * together. A pass with nobody left on the date was handled already, so a
+ * retry (or a second organiser) refunds nothing more; a date someone on the
+ * pass already checked in to is refused, for the organiser to settle by hand.
+ * Returns the online refunds to submit after commit.
+ */
+async function refundPassShare(params: { orderId: string; instanceId: string; actorUserId: string; reason: string; now: Date; }): Promise<string[]> {
+  return prisma.$transaction(async (tx) => {
+    const head = await tx.order.findUnique({ where: { id: params.orderId }, select: { id: true, eventId: true, eventSeriesId: true, teamId: true, teamName: true } });
+    if (!head) return [];
+    await lockOrderTargets(tx, head, params.now);
+    await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${head.id} FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "orderId" = ${head.id} ORDER BY "id" FOR UPDATE`;
+    await lockOrderRegistrations(tx, head);
+    const order = await tx.order.findUniqueOrThrow({ where: { id: head.id }, select: { ...ORDER_FOR_REFUND, organisationId: true } });
+    if (order.status !== OrderStatus.CONFIRMED) return [];
+    const onDate = order.rsvps.filter((rsvp) => rsvp.eventInstanceId === params.instanceId);
+    if (onDate.length === 0) return [];
+    if (onDate.some((rsvp) => rsvp.checkedInAt)) throw new PaymentOperationError("Someone on this pass has already checked in to this date.");
+    const reason = `Date cancelled: ${params.reason}`.slice(0, 500);
+    const { wanted, onlineRefundIds, refundedPaymentId } = await recordRefundsTx(tx, order.payments, { wanted: null, share: { of: onDate.length, over: order.rsvps.length }, currency: order.currency, reason, actorUserId: params.actorUserId, now: params.now });
+    const removed = await tx.rSVP.deleteMany({ where: { orderId: order.id, eventInstanceId: params.instanceId, checkedInAt: null } });
+    if (removed.count !== onDate.length) throw new Error("The pass changed while its date was being cancelled.");
+    if (wanted > ZERO && refundedPaymentId) {
+      await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: refundedPaymentId, notice: "refunded" });
+      await notifyChat(tx, order.organisationId, "refund", `Refund of ${formatMoney(wanted, order.currency)} for ${order.buyerEmail}. Reason: ${reason.slice(0, 200)}`);
+    }
+    await recordAuditEvent({ action: "PAYMENT_REFUNDED", actorUserId: params.actorUserId, organisationId: order.organisationId, targetType: "Order", targetId: order.id, metadata: { amountMinor: wanted.toString(), cancelled: false, instanceId: params.instanceId }, client: tx });
+    return onlineRefundIds;
+  });
 }

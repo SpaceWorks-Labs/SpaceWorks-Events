@@ -10,6 +10,7 @@ import { ClaimPayoutsList, FinanceSettingsForm, RefundRequestsList } from "@/com
 import { ReimbursementPolicies } from "@/components/event-dashboard/finance/ReimbursementPolicies";
 import { NoPermission } from "./shared";
 import { HelpLink } from "@/components/help/HelpLink";
+import { FailedRefundsList } from "@/components/payments/FailedRefundsList";
 
 /**
  * The event dashboard's Finance tab (docs/FINANCE.md): money in and out
@@ -71,6 +72,12 @@ export async function FinancePanel({ ctx }: { ctx: EventDashboardContext; }) {
         <CardHeader title={<span id="refund-requests-title">Refund requests</span>} description="Buyers asking for money back outside your refund policy, from their order page." />
         <RefundRequestsList scope={data.scope} requests={finance.refundRequests} timezone={timezone} currency={data.currency} />
       </Card>
+      {data.failedRefunds.length > 0 ? (
+        <Card as="section" className="rounded-xl" aria-labelledby="failed-refunds-title">
+          <CardHeader title={<span id="failed-refunds-title" className="inline-flex items-center gap-1">Failed refunds<HelpLink article="payments/refunds" section="retrying-a-failed-refund" /></span>} description="Refunds the payment provider refused. Check your balance with the provider, then retry." />
+          <FailedRefundsList target={data.scope} refunds={data.failedRefunds} timezone={timezone} />
+        </Card>
+      ) : null}
       <Card as="section" className="rounded-xl" aria-labelledby="claim-payouts-title">
         <CardHeader title={<span id="claim-payouts-title">Claim payments</span>} description="Every payment stays on record. A mistake is reversed, never edited." />
         <ClaimPayoutsList scope={data.scope} payouts={finance.payouts} timezone={timezone} />

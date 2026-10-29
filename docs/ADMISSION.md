@@ -160,7 +160,11 @@ for its team. Per-stage reimbursements key off it.
   seed and is refused if the plan fingerprint changed; a RANDOM preview
   without a seed re-rolls. Applied runs are stored (`AdmissionAssignmentRun`,
   CHECK seed iff RANDOM) and audited (`ADMISSION_REVIEWERS_ASSIGNED`).
-  Manual assign/unassign is audited too.
+  Manual assign/unassign is audited too. Apply also sets the stage's
+  reviews per application; once the stage has a review, a changed number is
+  refused (as in `updateStage`) before anything is written. Applying with
+  the current number still works; a shortfall needs the decision's
+  override reason instead.
 - Conflicts: the reviewer's own application or their team's; every
   application when the reviewer applied to the event; declared conflicts
   (`AdmissionReviewConflict`). Recusing records a conflict and gives the
@@ -175,6 +179,16 @@ for its team. Per-stage reimbursements key off it.
 - Reviews (`AdmissionReview`) are append-only, one per assignment and answers
   revision. A review counts towards the stage target when it is on the
   current answers, by someone in the stage's pool now, without a conflict.
+  The review page returns the `answersRevision` it shows and the review sends
+  it back; `submitReview` takes the Event lock (as answer edits do) before
+  reading the assignment and refuses a review of answers that changed since:
+  "The answers changed. Reload to see them." (web and mobile; on mobile the
+  reloaded submission needs a new Idempotency-Key).
+- The review queue (`listMyReviews`) shows only assignments the reviewer may
+  still read, checked a stage at a time before any label is built: they are
+  in the stage's pool now and have no conflict (the same check as the review
+  page). A closed stage, or an application now in a later stage, doesn't hide a
+  reviewer's own earlier work.
 - Blind stages hide names, emails, phone and email answers and team names.
 
 ## Decisions

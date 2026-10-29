@@ -176,13 +176,14 @@ export async function hasFreeSeats(tx: Prisma.TransactionClient, rsvps: Array<{ 
   }
   for (const { target, rsvps: seats } of groups.values()) {
     let capacity: number | null;
+    // A cancelled event, series or date has no free seats.
     if ("eventId" in target) {
-      const event = await tx.event.findUnique({ where: { id: target.eventId }, select: { capacity: true } });
-      if (!event) return false;
+      const event = await tx.event.findUnique({ where: { id: target.eventId }, select: { capacity: true, status: true } });
+      if (!event || event.status === EventStatus.CANCELLED) return false;
       capacity = event.capacity;
     } else {
-      const date = await tx.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: { capacity: true, cancelledAt: true, series: { select: { capacity: true } } } });
-      if (!date || date.cancelledAt) return false;
+      const date = await tx.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: { capacity: true, cancelledAt: true, series: { select: { capacity: true, status: true } } } });
+      if (!date || date.cancelledAt || date.series.status === EventStatus.CANCELLED) return false;
       capacity = date.capacity ?? date.series.capacity;
     }
     if (capacity != null && await tx.rSVP.count({ where: { ...target, ...others } }) + seats.length > capacity) return false;
@@ -256,17 +257,32 @@ export function orderSubject(order: SubjectOrder): OrderSubject | null {
   };
 }
 
+/**
+ * Whether anything an order sells was cancelled: its event, its series, or a
+ * date it holds seats on (a pass reaches its dates through its
+ * registrations). Read under the order's target locks.
+ */
+export async function orderTargetCancelled(tx: Prisma.TransactionClient, order: { event: { status: EventStatus; } | null; series: { status: EventStatus; } | null; instance: { cancelledAt: Date | null; } | null; rsvps: Array<{ eventInstanceId: string | null; }>; }) {
+  if (order.event?.status === EventStatus.CANCELLED || order.series?.status === EventStatus.CANCELLED || order.instance?.cancelledAt) return true;
+  const dates = [...new Set(order.rsvps.flatMap((rsvp) => (rsvp.eventInstanceId ? [rsvp.eventInstanceId] : [])))];
+  return dates.length > 0 && (await tx.eventInstance.count({ where: { id: { in: dates }, cancelledAt: { not: null } } })) > 0;
+}
+
 /** The event or date a freed seat belongs to, for the waitlist. */
 export function seatTargetOf(rsvp: { eventId: string | null; eventInstanceId: string | null; }): SeatTarget | null {
   return rsvp.eventId ? { eventId: rsvp.eventId } : rsvp.eventInstanceId ? { eventInstanceId: rsvp.eventInstanceId } : null;
 }
 
-/** Lock one date (after its series) and read its capacity, and whether it still takes registrations. */
+/** Lock one date (after its series) and read its capacity, whether it still takes registrations, and whether it (or its series) was cancelled. */
 export async function lockDate(tx: Prisma.TransactionClient, instanceId: string, now: Date) {
   const date = await tx.eventInstance.findUnique({ where: { id: instanceId }, select: { eventSeriesId: true } });
   if (!date) return null;
   await lockSeriesDates(tx, date.eventSeriesId, [instanceId], now);
   const current = await tx.eventInstance.findUnique({ where: { id: instanceId }, select: { capacity: true, endDateTime: true, cancelledAt: true, series: { select: { capacity: true, status: true } } } });
   if (!current) return null;
-  return { capacity: current.capacity ?? current.series.capacity, open: current.series.status === EventStatus.PUBLISHED && current.endDateTime > now && !current.cancelledAt };
+  return {
+    capacity: current.capacity ?? current.series.capacity,
+    open: current.series.status === EventStatus.PUBLISHED && current.endDateTime > now && !current.cancelledAt,
+    cancelled: current.series.status === EventStatus.CANCELLED || current.cancelledAt != null,
+  };
 }

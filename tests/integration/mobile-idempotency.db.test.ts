@@ -2,9 +2,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /*
  * Idempotency-Key handling for mobile writes (lib/mobile/idempotency.ts): a
- * key replays only for the same path and body, transient and sign-in
- * refusals are never kept, an unfinished first request turns stale rather
- * than running twice, and only HMACs are stored.
+ * key replays only for the same path and body, rate-limit and sign-in
+ * refusals are never kept, a 5xx or an exception leaves the outcome unknown
+ * (stale), an unfinished first request turns stale rather than running twice,
+ * and only HMACs are stored.
  */
 
 process.env.MFA_ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
@@ -60,7 +61,6 @@ describe.sequential("mobile idempotent writes", () => {
     ["a rate limit", () => mobileError("RATE_LIMITED")],
     ["a sign-in refusal", () => mobileError("UNAUTHENTICATED")],
     ["a staff authenticator refusal", () => mobileError("STAFF_MFA_REQUIRED")],
-    ["a server error", () => mobileError("INTERNAL_ERROR")],
   ])("never keeps %s, so the same key runs again", async (_name, refusal) => {
     const key = `transient-${Math.random().toString(36).slice(2, 10)}`;
     const refused = counter(refusal);
@@ -71,6 +71,26 @@ describe.sequential("mobile idempotent writes", () => {
     const retried = await idempotentWrite(request("/api/mobile/v1/test/t/act", key), userId, ROUTE, write);
     expect(retried.headers.get("idempotent-replayed")).toBeNull();
     expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["answers a server error", () => mobileError("INTERNAL_ERROR")],
+    ["answers that payments are unavailable", () => mobileError("PAYMENT_UNAVAILABLE")],
+    ["throws after the write committed", () => { throw new Error("reading the result back failed"); }],
+  ])("calls the outcome unknown when the write %s, and never runs it again under that key", async (_name, outcome) => {
+    const key = `unknown-${Math.random().toString(36).slice(2, 10)}`;
+    const first = vi.fn(async () => outcome());
+    const answered = await idempotentWrite(request("/api/mobile/v1/test/x/act", key), userId, ROUTE, first).catch((error: unknown) => error);
+    expect(answered instanceof Response ? answered.status : 0).not.toBe(200);
+    const write = counter(() => mobileOk({ id: "twice" }));
+    const retried = await idempotentWrite(request("/api/mobile/v1/test/x/act", key), userId, ROUTE, write);
+    expect(retried.status).toBe(409);
+    await expect(retried.json()).resolves.toMatchObject({ error: { code: "IDEMPOTENCY_STALE" } });
+    expect(write).not.toHaveBeenCalled();
+    // Another body under that key is still a plain conflict, never the unknown answer.
+    const other = await idempotentWrite(request("/api/mobile/v1/test/x/act", key, { n: 2 }), userId, ROUTE, write);
+    await expect(other.json()).resolves.toMatchObject({ error: { code: "CONFLICT" } });
+    expect(write).not.toHaveBeenCalled();
   });
 
   it("never keeps a ticket token in the stored answer", async () => {
