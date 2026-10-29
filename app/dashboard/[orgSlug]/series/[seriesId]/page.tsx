@@ -29,7 +29,7 @@ function eventDateInput(date: Date, timeZone: string) {
 }
 
 export default async function SeriesManagePage({ params }: Props) {
-  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, tickets, revenue, failedRefunds, refundableOrders } = await loadSeriesManageView({ params });
+  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, pastCancelledDates, tickets, revenue, failedRefunds, refundableOrders } = await loadSeriesManageView({ params });
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title={series.title} description="Manage this recurring event and its upcoming occurrences." />
@@ -66,6 +66,13 @@ export default async function SeriesManagePage({ params }: Props) {
         <h2 id="series-instances-title" className="text-h4 text-ink">Upcoming dates</h2>
         <SeriesDatesManager organisationSlug={organisation.slug} seriesId={series.id} seriesCapacity={series.capacity} timeZone={series.timezone} dates={dates} canManage={isAdmin} />
       </section>
+
+      {pastCancelledDates.length > 0 ? (
+        <section aria-labelledby="series-past-cancelled-title" className="flex flex-col gap-3">
+          <h2 id="series-past-cancelled-title" className="text-h4 text-ink">Past cancelled dates</h2>
+          <SeriesDatesManager organisationSlug={organisation.slug} seriesId={series.id} seriesCapacity={series.capacity} timeZone={series.timezone} dates={pastCancelledDates} canManage={isAdmin} />
+        </section>
+      ) : null}
 
       {tickets ? (
         <section aria-label="Tickets and passes" className="flex flex-col gap-5">

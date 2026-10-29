@@ -20,8 +20,10 @@ import { fenceOrganisation } from "@/lib/payments/targets";
 import { noticeEach, noticeSubject, uniqueEmails } from "@/lib/notices";
 import { cancelOccurrence, setOccurrenceCapacity } from "@/lib/payments/occurrences";
 import { PaymentOperationError } from "@/lib/payments/operations";
+import { cancelUpcomingOccurrences } from "@/lib/payments/occurrenceCancellation";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { cancelDateSchema, capacitySchema, dateAccess, revalidateAllSeriesPaths, revalidatePath } from "./series/helpers";
+import { removeSeriesTx } from "./series/remove";
 
 export async function createEventSeries(
   input: unknown,
@@ -175,6 +177,7 @@ export async function updateEventSeriesMeta(
   if (!series) return { ok: false, error: "Series not found." };
 
   const saved = await prisma.$transaction(async (tx) => {
+    await fenceOrganisation(tx, org.id);
     await tx.$queryRaw`SELECT "id" FROM "EventSeries" WHERE "id" = ${series.id} FOR UPDATE`;
     if (data.capacity != null) {
       // Taken seats (confirmed, and paid holds still live), counted under the
@@ -187,6 +190,8 @@ export async function updateEventSeriesMeta(
       });
       if (counts.some((row) => row._count._all > data.capacity!)) return false;
     }
+    const upcoming = data.status === EventStatus.CANCELLED && series.status !== EventStatus.CANCELLED
+      ? await cancelUpcomingOccurrences(tx, { organisationId: org.id, seriesId: series.id, actorUserId: session.user.id, now: new Date() }) : [];
     await tx.eventSeries.update({
       where: { id: series.id },
       data: {
@@ -198,18 +203,15 @@ export async function updateEventSeriesMeta(
         privacyType: data.privacyType,
       },
     });
-    return true;
-  });
+    return upcoming;
+  }, { timeout: 60_000 });
   if (!saved) return { ok: false, error: "Capacity cannot be lower than the places already taken (or being paid for) on an occurrence." };
 
   // Cancelling the series cancels each upcoming date: refunds, and an email to everyone on it.
-  if (data.status === EventStatus.CANCELLED && series.status !== EventStatus.CANCELLED) {
-    const upcoming = await prisma.eventInstance.findMany({ where: { eventSeriesId: series.id, endDateTime: { gt: new Date() }, cancelledAt: null }, select: { id: true }, orderBy: { startDateTime: "asc" } });
-    for (const date of upcoming) {
-      await cancelOccurrence({ organisationId: org.id, seriesId: series.id, instanceId: date.id, actorUserId: session.user.id, reason: "The series was cancelled." }).catch((error: unknown) => {
-        if (!(error instanceof PaymentOperationError)) throw error;
-      });
-    }
+  for (const date of saved) {
+    await cancelOccurrence({ organisationId: org.id, seriesId: series.id, instanceId: date.id, actorUserId: session.user.id, reason: "The series was cancelled." }).catch((error: unknown) => {
+      if (!(error instanceof PaymentOperationError)) throw error;
+    });
   }
 
   await recordAuditEvent({
@@ -265,8 +267,7 @@ export async function deleteEventSeries(input: unknown): Promise<ActionResult> {
   });
   if (!series) return { ok: false, error: "Series not found." };
 
-  // Deleting would erase the tickets of people who paid: cancel dates instead,
-  // which refunds them.
+  // Retain organiser access to every order while any money is held or in flight.
   if (await hasPaidOrders({ eventSeriesId: series.id })) return { ok: false, error: PAID_SERIES_REFUSAL };
 
   const instances = await prisma.eventInstance.findMany({
@@ -287,7 +288,7 @@ export async function deleteEventSeries(input: unknown): Promise<ActionResult> {
       const people = uniqueEmails((await Promise.all(upcoming.map((date) => peopleWithPlaces(tx, { eventInstanceId: date.id })))).flat());
       await noticeEach(tx, people, { organisationId: org.id, subject: noticeSubject("Cancelled", series.title), lines: [`${series.title} has been cancelled by the organiser, with all its upcoming dates.`] });
     }
-    await tx.eventSeries.delete({ where: { id: series.id } });
+    await removeSeriesTx(tx, series.id);
     return false;
   });
   if (refused) return { ok: false, error: PAID_SERIES_REFUSAL };

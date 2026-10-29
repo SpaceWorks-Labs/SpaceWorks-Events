@@ -12,6 +12,13 @@ export async function enqueueOperatorNotice(client: OutboxClient, payload: Opera
   return client.outboxMessage.create({ data: { kind: "operator-notice", payload: payload as Prisma.InputJsonValue } });
 }
 
+export async function enqueueOperatorNotices(client: OutboxClient, payloads: OperatorNoticePayload[]) {
+  if (payloads.length === 0) return { count: 0 };
+  return client.outboxMessage.createMany({
+    data: payloads.map((payload) => ({ kind: "operator-notice", payload: payload as Prisma.InputJsonValue })),
+  });
+}
+
 export async function enqueueEventBroadcastRecipients(client: OutboxClient, recipients: EventBroadcastPayload[]) {
   if (recipients.length === 0) return { count: 0 };
   return client.outboxMessage.createMany({

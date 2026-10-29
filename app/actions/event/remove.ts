@@ -47,7 +47,7 @@ export async function deleteEvent(input: unknown): Promise<ActionResult> {
     where: { id: eventId, organisationId: org.id },
   });
   if (!event) return { ok: false, error: "Event not found." };
-  // Deleting would leave people who paid without their tickets: cancel instead, which refunds them.
+  // Retain organiser access to every order while any money is held or in flight.
   if (await hasPaidOrders({ eventId: event.id })) return { ok: false, error: PAID_EVENT_REFUSAL };
 
   const slug = event.slug;
@@ -110,6 +110,7 @@ export async function cancelEvent(input: unknown): Promise<ActionResult<{ refund
 
   let cancelledNow = false;
   const notified = await prisma.$transaction(async (tx) => {
+    await fenceOrganisation(tx, org.id);
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
     if (event.status === EventStatus.CANCELLED) return 0;
     cancelledNow = true;

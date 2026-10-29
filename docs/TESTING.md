@@ -32,6 +32,23 @@ Team registration unit suites are `team-validators` (event team settings, series
 Hackathon judging unit suites are `judging-validators` (submission content with `https:`-only links checked by `URL`, settings, rubric, awards, scores, and reviews), `judging-score` (the result-score formula, one-decimal rounding, and shared tie ranks), `judging-dto` (public results, gallery, judge, and entrant views never expose emails, answers, tickets, scores, comments, or disqualification reasons), `judging-outbox` (the `submission-received`, `submission-link`, and `results-published` kinds; the link token is a capability), `hackathon-emails` (the opt-in results and receipt emails: defaults, gating, announcement states, dialog copy, the optional switches, the submit confirmation), `judging-admin-emails` (the switches through `saveJudgingSettings` and Send results email now for owners and admins only), `judging-permissions` (JUDGE opens only the judging workspace; judge-only detection), `judging-advancement`, `judging-assignment-random` and `judging-rounds-copy` (rounds: finalist plans, seeded assignment, copy), `event-collaborator-actions` (JUDGE grants, never on a series), `submission-actions` (how the team page, account, and submission link reference a project; audit; the ticket page's link request), `submission-account` (projects in the personal data export and the Account → Registrations link), `judge-workspace` (judge progress and score inputs), and `project-links` (public project links).
 
 
+Cancellation/refund deletion regressions are in `payment-cancellation-obligations.db.test.ts`:
+barriers after the event/series cancellation commit and before refund processing,
+with deletion queued behind a real Organisation lock; checked-in event and pass
+orders resolved through the owner action without removing attendance records;
+and cancellation balances preserved against separate event deletion.
+`payment-deletion-history.db.test.ts` covers resolved refund retries separately
+from retained revenue, event/date/pass deletion, pending and failed refunds,
+fully refunded ledger retention in totals and buyer receipts, and a historical
+payment committed while deletion waits for the series lock.
+`series-cancellation-bulk.db.test.ts` covers 48 dates and 100 paid pass holders:
+one marker update, bulk durable notices, recipient deduplication, rollback and
+retry, and a competing pass reservation observed at a real PostgreSQL lock wait.
+The scale suite stubs only post-commit per-order refunds; `paid-series.db.test.ts`
+and the cancellation obligation suite exercise those refund paths.
+`payment-final-refunds.db.test.ts` includes an older refundable order behind
+205 newer fully refunded orders, without registrations.
+
 ### PostgreSQL integration tests
 
 ```bash

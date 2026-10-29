@@ -120,7 +120,7 @@ const endedRefundSchema = z.object({
 }).strict();
 
 /**
- * Refund money left on a cancelled or expired order, by order (its tickets
+ * Refund money left on an ended order or a cancelled target (its tickets
  * may be gone): the Refundable orders list (docs/PAYMENTS.md). Owners and
  * admins after a fresh sign-in, like retrying a refund.
  */

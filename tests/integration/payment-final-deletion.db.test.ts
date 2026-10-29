@@ -127,7 +127,7 @@ describe.sequential("deleting an event while a paid guest is added", () => {
     await release.wait(2);
     await release();
     expect(await adding).toMatchObject({ ok: true });
-    expect(await deleting).toMatchObject({ ok: false, error: expect.stringContaining("Cancel it instead") });
+    expect(await deleting).toMatchObject({ ok: false, error: expect.stringContaining("still holds money") });
     expect(await prisma.rSVP.count({ where: { eventId: setup.event.id, status: RsvpStatus.CONFIRMED } })).toBe(1);
   });
 

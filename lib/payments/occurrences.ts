@@ -4,14 +4,13 @@ import { OrderStatus, PaymentStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { notifyChat } from "@/lib/chat/notify";
-import { noticeEach, noticeSubject, titleWith } from "@/lib/notices";
-import { peopleWithPlaces } from "./eventCancellation";
+import { markOccurrenceCancelled } from "./occurrenceCancellation";
 import { seatTakingWhere } from "./holds";
 import { PaymentOperationError, refundOrder, submitRefunds } from "./operations";
 import { ORDER_FOR_REFUND, recordRefundsTx } from "./operations/refund";
 import { formatMoney } from "./money";
 import { enqueuePaymentEmail } from "./email";
-import { lockOrderTargets, lockSeriesDates } from "./targets";
+import { fenceOrganisation, lockOrderTargets, lockSeriesDates } from "./targets";
 import { lockOrderRegistrations } from "./teamOrders";
 
 const ZERO = BigInt(0);
@@ -62,33 +61,14 @@ export async function setOccurrenceCapacity(params: { organisationId: string; se
 export async function cancelOccurrence(params: { organisationId: string; seriesId: string; instanceId: string; actorUserId: string; reason: string; now?: Date; }) {
   const now = params.now ?? new Date();
   const date = await ownedDate(params.organisationId, params.seriesId, params.instanceId);
-  if (date.endDateTime <= now) throw new PaymentOperationError("This date has already happened.");
-  const label = titleWith(date.series.title, date.startDateTime.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: date.series.timezone }));
-
   const notified = await prisma.$transaction(async (tx) => {
+    await fenceOrganisation(tx, params.organisationId);
     await lockSeriesDates(tx, date.eventSeriesId, [date.id], now);
-    const current = await tx.eventInstance.findUniqueOrThrow({ where: { id: date.id }, select: { cancelledAt: true } });
-    if (!current.cancelledAt) {
-      await tx.eventInstance.update({ where: { id: date.id }, data: { cancelledAt: now } });
-      await recordAuditEvent({ action: "EVENT_INSTANCE_CANCELLED", actorUserId: params.actorUserId, organisationId: params.organisationId, targetType: "EventInstance", targetId: date.id, client: tx });
-    }
-    // Everyone is told before anything is removed, in this transaction, so a
-    // retry can never lose the notices. A retry that finds the date already
-    // cancelled has told them.
-    if (!current.cancelledAt) await notifyChat(tx, params.organisationId, "event", `${label} was cancelled. Everyone on it is being told, and buyers refunded.`);
-    const told = current.cancelledAt ? 0 : await noticeEach(tx, await peopleWithPlaces(tx, { eventInstanceId: date.id }), {
-      organisationId: params.organisationId,
-      subject: noticeSubject("Cancelled", label),
-      lines: [
-        `${label} has been cancelled by the organiser.`,
-        ...(params.reason ? [params.reason] : []),
-        "If you paid, your refund is on its way: card and UPI refunds can take 5 to 10 working days to appear. A pass keeps its other dates.",
-      ],
-    });
-    // Free registrations simply go; paid ones are handled with their orders below.
-    await tx.rSVP.deleteMany({ where: { eventInstanceId: date.id, OR: [{ orderId: null }, { order: { totalMinor: ZERO } }] } });
-    return told;
-  });
+    const current = await tx.eventInstance.findUniqueOrThrow({ where: { id: date.id }, select: { cancelledAt: true, endDateTime: true } });
+    // The deadline applies to a new cancellation, never to finishing refunds.
+    if (!current.cancelledAt && current.endDateTime <= now) throw new PaymentOperationError("This date has already happened.");
+    return markOccurrenceCancelled(tx, { ...params, date, now });
+  }, { timeout: 60_000 });
 
   const orders = await prisma.order.findMany({
     where: { rsvps: { some: { eventInstanceId: date.id } } },

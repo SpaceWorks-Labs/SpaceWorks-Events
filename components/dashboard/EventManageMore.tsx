@@ -52,6 +52,7 @@ export function EventManageMore(props: {
   event: EventClientDto;
 }) {
   const { organisationSlug, event } = props;
+  const cancelled = event.status === "CANCELLED";
   const router = useRouter();
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -124,7 +125,7 @@ export function EventManageMore(props: {
       setCancelOpen(false);
       if (!res.ok) return showToast(res.error, "error");
       const { refunded, failed, notified } = res.data!;
-      showToast(`Event cancelled. ${refunded} ${refunded === 1 ? "order" : "orders"} refunded, ${notified} free ${notified === 1 ? "guest" : "guests"} emailed.${failed ? ` ${failed} need settling by hand.` : ""}`, failed ? "warning" : "success");
+      showToast(`${cancelled ? "Refund processing finished." : "Event cancelled."} ${refunded} ${refunded === 1 ? "order" : "orders"} refunded, ${notified} free ${notified === 1 ? "guest" : "guests"} emailed.${failed ? ` ${failed} need settling by hand.` : ""}`, failed ? "warning" : "success");
       router.refresh();
     });
   };
@@ -221,22 +222,20 @@ export function EventManageMore(props: {
         </div>
       </section>
 
-      {event.status !== "CANCELLED" ? (
-        <section aria-labelledby="event-cancel-title" className="flex flex-col gap-4 rounded-xl border-[1.5px] border-danger-border bg-panel p-5 sm:p-6 md:flex-row md:items-center">
-          <div className="min-w-0 flex-1">
-            <h2 id="event-cancel-title" className="text-h4 text-danger-fg">Cancel event</h2>
-            <p className="mt-0.5 text-body-ui text-ink-secondary">
-              The event page goes offline and registration closes. Everyone who paid is refunded in full; everyone is emailed.
-            </p>
-          </div>
-          <Button variant="danger" className="self-start md:self-auto" disabled={pending} onClick={() => setCancelOpen(true)}>Cancel event…</Button>
-        </section>
-      ) : null}
+      <section aria-labelledby="event-cancel-title" className="flex flex-col gap-4 rounded-xl border-[1.5px] border-danger-border bg-panel p-5 sm:p-6 md:flex-row md:items-center">
+        <div className="min-w-0 flex-1">
+          <h2 id="event-cancel-title" className="text-h4 text-danger-fg">{cancelled ? "Finish cancellation refunds" : "Cancel event"}</h2>
+          <p className="mt-0.5 text-body-ui text-ink-secondary">
+            {cancelled ? "Finish any refunds left after cancellation, even after the event has ended. Orders already processed are skipped." : "The event page goes offline and registration closes. Everyone who paid is refunded in full; everyone is emailed."}
+          </p>
+        </div>
+        <Button variant={cancelled ? "secondary" : "danger"} className="self-start md:self-auto" disabled={pending} onClick={() => setCancelOpen(true)}>{cancelled ? "Finish refunds" : "Cancel event…"}</Button>
+      </section>
       <ConfirmDialog
         open={cancelOpen}
-        title={`Cancel ${event.title}?`}
-        message="The event page goes offline, registration closes, every paid order is refunded in full, and all guests are emailed. This can't be undone."
-        confirmLabel="Cancel event and refund"
+        title={cancelled ? `Finish refunds for ${event.title}?` : `Cancel ${event.title}?`}
+        message={cancelled ? "Finish cancellation refunds for orders still awaiting processing. Orders already processed are skipped; cancellation emails are not sent again." : "The event page goes offline, registration closes, every paid order is refunded in full, and all guests are emailed. This can't be undone."}
+        confirmLabel={cancelled ? "Finish refunds" : "Cancel event and refund"}
         loading={pending}
         onCancel={() => setCancelOpen(false)}
         onConfirm={doCancel}

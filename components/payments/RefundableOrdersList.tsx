@@ -12,14 +12,14 @@ import { formatDayTime } from "@/lib/format/datetime";
 import type { RefundableOrderRow } from "@/lib/payments/operations/cancelledRefund";
 
 /**
- * Cancelled or expired orders with money still refundable, for owners and
+ * Ended orders and orders on cancelled targets with money left, for owners and
  * admins (docs/PAYMENTS.md "Refundable orders"): a cancellation refunded in
  * part, or a late payment's order. Refunded by order, so it works after the
  * tickets are gone. Needs a recent sign-in.
  */
 export function RefundableOrdersList({ target, orders, timezone }: { target: { organisationSlug: string; eventId?: string; seriesId?: string; }; orders: RefundableOrderRow[]; timezone: string; }) {
   const [refunding, setRefunding] = useState<RefundableOrderRow | null>(null);
-  if (orders.length === 0) return <p className="text-caption text-ink-muted">No cancelled or expired orders have money left to refund.</p>;
+  if (orders.length === 0) return <p className="text-caption text-ink-muted">No cancelled or expired orders, or orders on cancelled events or dates, have money left to refund.</p>;
   return (
     <>
       <ul className="flex flex-col divide-y divide-line">
@@ -30,7 +30,7 @@ export function RefundableOrdersList({ target, orders, timezone }: { target: { o
               <p className="text-caption text-ink-muted">Ordered {formatDayTime(order.orderedAt, timezone)} · {order.left} left to refund</p>
             </div>
             <div className="flex items-center gap-2">
-              <Chip tone="neutral" size="sm">{order.status === "cancelled" ? "Cancelled" : "Expired"}</Chip>
+              <Chip tone="neutral" size="sm">{order.status === "cancelled" ? "Cancelled" : order.status === "expired" ? "Expired" : "Cancelled event or date"}</Chip>
               <Button size="sm" variant="secondary" startIcon={<Undo2 aria-hidden />} onClick={() => setRefunding(order)}>Refund…</Button>
             </div>
           </li>
@@ -55,6 +55,7 @@ function RefundDialog({ target, order, onClose }: { target: { organisationSlug: 
             save(() => refundEndedOrderAction({ ...target, orderId: order.id, amount, reason }), "Refund sent.", onClose);
           }}>
             {error ? <Callout tone="danger" role="alert">{error}</Callout> : null}
+            <p className="text-caption text-ink-muted">This returns money only and keeps any checked-in tickets. For payments collected in person, return the money yourself before recording the refund. For a pass, enter the cancelled date&apos;s share, or leave blank to refund the whole remaining balance.</p>
             <Field label={`Amount (${order.currency})`} optional helperText="Leave blank to refund everything left."><Input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} maxLength={20} /></Field>
             <Field label="Reason"><Textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} rows={2} required /></Field>
             <div><Button type="submit" variant="primary" loading={pending} loadingLabel="Refunding…">Refund</Button></div>

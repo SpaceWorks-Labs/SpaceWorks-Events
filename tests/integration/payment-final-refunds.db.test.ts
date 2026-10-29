@@ -1,4 +1,5 @@
-import { EventPermission, OrderStatus, PaymentRefundStatus } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { EventPermission, OrderStatus, PaymentRefundStatus, PaymentStatus } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /*
@@ -17,6 +18,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), 
 import { prisma } from "@/lib/db";
 import { refundEndedOrderAction } from "@/app/actions/payment-operations";
 import { listRefundableOrders, PaymentOperationError, refundOrder, retryFailedRefund } from "@/lib/payments/operations";
+import { newOrderReference } from "@/lib/payments/orders";
 import { submitPendingRefund } from "@/lib/payments/refunds";
 import { fake, paid, payOrder } from "./helpers/paidOrg";
 import { buyOnline, email, onlineEvent, owner, setUpPaymentAudit, tearDownPaymentAudit } from "./helpers/paymentAudit";
@@ -94,6 +96,30 @@ describe.sequential("refunding money left on a cancelled order", () => {
     expect(await listRefundableOrders({ eventId: event.id }, paid.organisationId)).toEqual([]);
     expect(await refundEndedOrderAction(input)).toMatchObject({ ok: false });
     expect(await prisma.paymentRefund.count({ where: { paymentId: payment.id } })).toBe(2);
+    session.value = null;
+  });
+
+  it("finds an older refundable order behind more than 200 fully refunded orders without RSVPs", async () => {
+    const { event, order } = await paidOrder();
+    await refundOrder({ orderId: order.id, organisationId: paid.organisationId, actorUserId: owner.id, amountMinor: BigInt(24950), reason: "Partial cancellation", cancelTickets: true });
+    await prisma.order.update({ where: { id: order.id }, data: { createdAt: new Date(Date.now() - 60_000) } });
+    const newer = Array.from({ length: 205 }, () => ({ orderId: randomUUID(), paymentId: randomUUID() }));
+    await prisma.order.createMany({ data: newer.map(({ orderId }) => ({
+      id: orderId, organisationId: paid.organisationId, eventId: event.id, reference: newOrderReference(), buyerEmail: email("exhausted"), buyerName: "Refunded buyer",
+      status: OrderStatus.CANCELLED, currency: "INR", subtotalMinor: BigInt(10000), totalMinor: BigInt(10000),
+    })) });
+    await prisma.payment.createMany({ data: newer.map(({ orderId, paymentId }) => ({
+      id: paymentId, orderId, organisationId: paid.organisationId, amountMinor: BigInt(10000), currency: "INR", provider: "OFFLINE", status: PaymentStatus.PAID_OFFLINE,
+      offlineMethod: "CASH", description: "Returned cash", paidAt: new Date(),
+    })) });
+    await prisma.paymentRefund.createMany({ data: newer.map(({ paymentId }) => ({ paymentId, amountMinor: BigInt(10000), offline: true, status: PaymentRefundStatus.SUCCEEDED, settledAt: new Date() })) });
+    expect(await prisma.rSVP.count({ where: { eventId: event.id } })).toBe(0);
+    const rows = await listRefundableOrders({ eventId: event.id }, paid.organisationId);
+    expect(rows.map((row) => row.id)).toEqual([order.id]);
+    expect(await listRefundableOrders({ eventId: event.id }, randomUUID())).toEqual([]);
+    session.value = { user: { id: owner.id }, authenticatedAt: Date.now() };
+    expect(await refundEndedOrderAction({ organisationSlug: paid.orgSlug, eventId: event.id, orderId: rows[0].id, amount: "", reason: "Return the rest" })).toEqual({ ok: true });
+    expect(await listRefundableOrders({ eventId: event.id }, paid.organisationId)).toEqual([]);
     session.value = null;
   });
 
