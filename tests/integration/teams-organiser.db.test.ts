@@ -14,6 +14,7 @@ import {
   organiserMoveMember,
   organiserRenameTeam,
   removeTeamMember,
+  resolveOrganiserEvent,
 } from "@/lib/core/teams";
 import {
   actingAs,
@@ -209,5 +210,28 @@ describe.sequential("team registration integration", () => {
     await expect(prisma.checkInListRecord.findMany({ where: { rsvpId: solo.leader.rsvpId }, select: { listId: true, source: true } })).resolves.toEqual([
       { listId: swag.id, source: "mobile-manual" },
     ]);
+  });
+
+  it("refuses a team undo once the deleter's registration access is revoked", async () => {
+    const event = await createEvent({ capacity: 5 });
+    const collaborator = await prisma.user.create({ data: { name: "Desk volunteer", email: `desk-${suffix}@example.test` } });
+    try {
+      const grant = await prisma.eventCollaborator.create({ data: { eventId: event.id, userId: collaborator.id, permissions: ["MANAGE_REGISTRATIONS"] } });
+      const ctx = await resolveOrganiserEvent(collaborator.id, orgSlug, event.id);
+      if (!ctx) throw new Error("collaborator context missing");
+      const { team } = await createTeam(event, "Revoked crew");
+      const deleted = await organiserDeleteTeam(ctx, team.id);
+      if (!deleted.ok || !deleted.data) throw new Error("team delete failed");
+
+      await prisma.eventCollaborator.delete({ where: { id: grant.id } });
+      await expect(as(collaborator.id, () => restoreRsvp({ organisationSlug: orgSlug, undoId: deleted.data!.undoId }))).resolves.toEqual({
+        ok: false,
+        error: "You do not have permission to restore RSVPs.",
+      });
+      await expect(prisma.team.findUnique({ where: { id: team.id } })).resolves.toBeNull();
+      await expect(prisma.rsvpDeletionUndo.count({ where: { id: deleted.data.undoId } })).resolves.toBe(1);
+    } finally {
+      await prisma.user.delete({ where: { id: collaborator.id } });
+    }
   });
 });
