@@ -42,6 +42,11 @@ export async function signUpWithPassword(
     return { ok: false, error: "New account creation is currently unavailable." };
   }
 
+  // Every attempt spends the address's creation quota before any lookup or
+  // hashing. A limited attempt creates and sends nothing but answers exactly
+  // like the others, so the limit can't tell existing addresses from new ones.
+  if (await isActionRateLimited("signup", email)) return { ok: true, data: { email } };
+
   // The super admin's account and password come from the server's recovery
   // tool. Answer like any other sign-up so the address isn't revealed.
   if (isSuperAdminEmail(email)) return { ok: true, data: { email } };
@@ -57,13 +62,6 @@ export async function signUpWithPassword(
     // Never attach a password based solely on a claimed email address. In
     // particular, doing so lets an attacker take over an OAuth-only account.
     return { ok: true, data: { email } };
-  }
-
-  // A double-submit or network retry can arrive just after the first request
-  // created the account. Check for that case before consuming the creation
-  // quota so a real account creation is never presented as a rate-limit error.
-  if (await isActionRateLimited("signup", email)) {
-    return { ok: false, error: "Too many attempts. Please try again later." };
   }
 
   try {

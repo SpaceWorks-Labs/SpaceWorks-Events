@@ -11,11 +11,12 @@ Only the account whose verified email matches the `SUPER_ADMIN_EMAIL` setting on
 The app lets you in only when all of these are true:
 
 - `SUPER_ADMIN_EMAIL` is set on the server, and you're signed in with the account whose email matches it (capital letters don't matter).
+- You signed in with that account's **password**, not with Google.
 - That account's email address is **verified**.
 
 A signed-out visitor to `/super-admin` is sent to the sign-in page. Anyone else who is signed in sees an ordinary "not found" page, so the area's existence isn't revealed. Every super admin page checks this again on its own, including when you move between sections.
 
-There's no separate authenticator step-up: once you're signed in with the right account, the area opens. To change who the super admin is, change `SUPER_ADMIN_EMAIL` on the server and restart, then set that account's password as described below.
+There's no separate authenticator step-up: once you're signed in with the right account, the area opens. **Continue with Google** is refused for the super admin's address, even if a Google account was linked to it before. To change who the super admin is, change `SUPER_ADMIN_EMAIL` on the server and restart, then set that account's password as described below.
 
 <Callout kind="note">
 

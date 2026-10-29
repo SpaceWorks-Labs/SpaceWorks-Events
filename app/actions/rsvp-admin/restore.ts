@@ -36,7 +36,12 @@ export async function restoreRsvp(input: unknown): Promise<ActionResult> {
   if (!undo) return { ok: false, error: "This undo has expired or is unavailable." };
   if (isTeamDeletionSnapshot(undo.payload)) {
     const teamEventId = (undo.payload as { eventId?: unknown }).eventId;
-    if (typeof teamEventId === "string" && (await prisma.event.count({ where: { id: teamEventId, admissionEnabled: true } }))) return { ok: false, error: ADMISSION_NO_RESTORE };
+    if (typeof teamEventId !== "string" || !teamEventId) return { ok: false, error: "Could not restore the team." };
+    // As for a single RSVP: the deleter's access may have changed since.
+    if (!(await canManageRegistrationsFor({ userId: session.user.id, organisationId: org.id, eventId: teamEventId }))) {
+      return { ok: false, error: "You do not have permission to restore RSVPs." };
+    }
+    if (await prisma.event.count({ where: { id: teamEventId, admissionEnabled: true } })) return { ok: false, error: ADMISSION_NO_RESTORE };
     const restoredTeam = await restoreTeamDeletionSnapshot(undo, org.id);
     if (!restoredTeam.ok || !restoredTeam.data) return restoredTeam.ok ? { ok: false, error: "Could not restore the team." } : restoredTeam;
     revalidateRsvpPaths(org.slug, { eventId: restoredTeam.data.eventId, eventInstanceId: null, eventSlug: restoredTeam.data.eventSlug });

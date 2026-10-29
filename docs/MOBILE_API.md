@@ -526,9 +526,12 @@ their orders by id, and anyone else's are `NOT_FOUND`.
 ### `GET /public/events/:orgSlug/:eventSlug/feedback`
 
 `{ "title", "intro": null, "thankYouMessage", "open": true, "certificatesEnabled", "fields": [RegistrationField] }`
-or `NOT_FOUND` unless the event is published and its form is open (as the web
-feedback page). Submit with the existing `POST /api/feedback`; its response
-contains the certificate token when one is issued.
+or `NOT_FOUND` unless the event is published, its form is open and the caller
+may open the event page (as the web feedback page): nothing while the website
+is unreleased, and an invite-only event's form only with the bearer of a
+signed-in invited guest. Submit with the existing `POST /api/feedback`, sending
+the same bearer for an invite-only event (a bearer that does not sign in gets
+`401`); its response contains the certificate token when one is issued.
 
 ### Existing web endpoints reused unchanged
 

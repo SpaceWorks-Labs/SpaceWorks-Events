@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/permissions";
 import { decryptMfaSecret, consumeMfaCode } from "@/lib/mfa";
 import { createMfaProof, MFA_PROOF_COOKIE, MFA_PROOF_MAX_AGE_SECONDS } from "@/lib/mfaProof";
+import { currentSessionSid } from "@/lib/sessionSid";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import type { ActionResult } from "./org";
 
@@ -19,6 +20,9 @@ export async function verifyStepUpMfa(input: unknown): Promise<ActionResult> {
   }
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Enter a six-digit authenticator code." };
+  // The proof is bound to this browser's sign-in (lib/sessionSid.ts); without one there is nothing to bind it to.
+  const sid = await currentSessionSid(session.user.id);
+  if (!sid) return { ok: false, error: "Sign in again, then confirm your authenticator code." };
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -36,7 +40,7 @@ export async function verifyStepUpMfa(input: unknown): Promise<ActionResult> {
   }
   if (!valid) return { ok: false, error: "Invalid authenticator code." };
 
-  (await cookies()).set(MFA_PROOF_COOKIE, createMfaProof(session.user.id, user.sessionVersion), {
+  (await cookies()).set(MFA_PROOF_COOKIE, createMfaProof(session.user.id, user.sessionVersion, sid), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

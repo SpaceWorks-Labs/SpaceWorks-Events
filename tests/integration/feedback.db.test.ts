@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { EventPrivacyType, EventStatus, RsvpStatus } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+// Feedback follows the event page's access rule; these events are public, so nobody signs in.
+vi.mock("@/lib/auth", () => ({ auth: async () => null }));
 import { prisma } from "@/lib/db";
 import { submitFeedback } from "@/lib/feedback";
 
@@ -18,12 +20,12 @@ describe.sequential("event feedback integration", () => {
     anonymousEventSlug = `anonymous-${suffix}`;
     const organisation = await prisma.organisation.create({ data: { name: "Feedback test", slug: orgSlug } });
     organisationId = organisation.id;
-    const event = await prisma.event.create({ data: { organisationId, title: "Feedback event", slug: eventSlug, startDateTime: new Date("2030-01-01T10:00:00Z"), endDateTime: new Date("2030-01-01T11:00:00Z"), timezone: "UTC", status: EventStatus.PUBLISHED, privacyType: EventPrivacyType.PUBLIC } });
+    const event = await prisma.event.create({ data: { organisationId, title: "Feedback event", slug: eventSlug, startDateTime: new Date("2030-01-01T10:00:00Z"), endDateTime: new Date("2030-01-01T11:00:00Z"), timezone: "UTC", status: EventStatus.PUBLISHED, privacyType: EventPrivacyType.PUBLIC, page: { create: { isPublished: true } } } });
     const form = await prisma.eventFeedbackForm.create({ data: { eventId: event.id, isOpen: true, certificateEnabled: true } });
     await prisma.eventFeedbackField.create({ data: { formId: form.id, key: "comment", label: "Your feedback", type: "TEXTAREA", required: true, sortOrder: 1 } });
     await prisma.rSVP.create({ data: { eventId: event.id, attendeeKey: `feedback:${suffix}`, guestEmail: `attendee-${suffix}@example.test`, guestName: "Feedback attendee", status: RsvpStatus.CONFIRMED } });
     await prisma.rSVP.create({ data: { eventId: event.id, attendeeKey: `feedback-wait:${suffix}`, guestEmail: `wait-${suffix}@example.test`, guestName: "Waitlisted attendee", status: RsvpStatus.WAITLISTED } });
-    const anonymousEvent = await prisma.event.create({ data: { organisationId, title: "Anonymous feedback", slug: anonymousEventSlug, startDateTime: new Date("2030-01-02T10:00:00Z"), endDateTime: new Date("2030-01-02T11:00:00Z"), timezone: "UTC", status: EventStatus.PUBLISHED, privacyType: EventPrivacyType.PUBLIC } });
+    const anonymousEvent = await prisma.event.create({ data: { organisationId, title: "Anonymous feedback", slug: anonymousEventSlug, startDateTime: new Date("2030-01-02T10:00:00Z"), endDateTime: new Date("2030-01-02T11:00:00Z"), timezone: "UTC", status: EventStatus.PUBLISHED, privacyType: EventPrivacyType.PUBLIC, page: { create: { isPublished: true } } } });
     const anonymousForm = await prisma.eventFeedbackForm.create({ data: { eventId: anonymousEvent.id, isOpen: true, certificateEnabled: false } });
     const anonymousField = await prisma.eventFeedbackField.create({ data: { formId: anonymousForm.id, key: "comment", label: "Comment", type: "TEXTAREA", required: true } });
     anonymousFieldId = anonymousField.id;
