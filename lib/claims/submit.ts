@@ -78,10 +78,13 @@ export async function submitStaffClaim(ctx: StaffClaimContext, input: unknown, f
   const stored = await storeReceipts(ctx.organisationId, files);
   if ("error" in stored) return fail(stored.error);
   try {
-    const claimId = await prisma.$transaction((tx) => createClaim(tx, {
-      organisationId: ctx.organisationId, event, kind: ExpenseClaimKind.STAFF, submittedByUserId: ctx.userId, rsvpId: null, payee,
-      category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
-    }, stored.keys));
+    const claimId = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
+      return createClaim(tx, {
+        organisationId: ctx.organisationId, event, kind: ExpenseClaimKind.STAFF, submittedByUserId: ctx.userId, rsvpId: null, payee,
+        category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
+      }, stored.keys);
+    });
     emitWebhookEvent({ type: "expense_claim.status_changed", claimId, status: ExpenseClaimStatus.SUBMITTED, previousStatus: null });
     return ok({ claimId });
   } catch (error) {
@@ -190,9 +193,12 @@ export async function withdrawClaim(claimId: string, scope: WithdrawScope): Prom
     ? { id: claimId, rsvpId: scope.rsvpId }
     : { id: claimId, submittedByUserId: scope.userId, organisationId: scope.organisationId, eventId: scope.eventId };
   const result = await prisma.$transaction(async (tx): Promise<ClaimResult<undefined>> => {
-    const claim = await tx.expenseClaim.findFirst({ where, select: { id: true, organisationId: true } });
+    const claim = await tx.expenseClaim.findFirst({ where, select: { id: true, organisationId: true, eventId: true } });
     if (!claim) return fail("Claim not found.");
-    const updated = await tx.expenseClaim.updateMany({ where: { id: claim.id, status: ExpenseClaimStatus.SUBMITTED }, data: { status: ExpenseClaimStatus.WITHDRAWN } });
+    if (claim.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${claim.eventId} FOR UPDATE`;
+    // A holder change may have detached the claim while Event was awaited.
+    if (!await tx.expenseClaim.findFirst({ where, select: { id: true } })) return fail("Claim not found.");
+    const updated = await tx.expenseClaim.updateMany({ where: { ...where, status: ExpenseClaimStatus.SUBMITTED }, data: { status: ExpenseClaimStatus.WITHDRAWN } });
     if (updated.count !== 1) return fail("Only claims waiting for a decision can be withdrawn.");
     await recordAuditEvent({ action: "EXPENSE_CLAIM_WITHDRAWN", actorUserId: "userId" in scope ? scope.userId : null, organisationId: claim.organisationId, targetType: "ExpenseClaim", targetId: claim.id, client: tx });
     return ok(undefined);

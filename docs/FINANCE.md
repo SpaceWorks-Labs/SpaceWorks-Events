@@ -193,6 +193,37 @@ create, edit, close (**Close to new claims**) and delete them
   the claim back to `APPROVED`. Rows are never deleted, except with their
   organisation (a BEFORE DELETE trigger).
 
+## Claim lock order
+
+Claims follow the event-first order in [Paid tickets](PAYMENTS.md#locks-and-races-developers).
+Take Event `FOR UPDATE` before locking ExpenseClaim, ReimbursementPolicy or
+RSVP, and before inserting a claim or payout whose foreign key takes Event
+`FOR KEY SHARE`. This applies to general, crew, staff and policy claims:
+staff submission, participant submission, withdrawal, decisions, payment
+recording and reversal. Records retained after event deletion have no Event
+to lock; their claim lock and ledger constraints still apply.
+
+- Participant submission takes Event, then RSVP `FOR UPDATE`, and rechecks
+  the holder before creating the claim. Keep that RSVP lock mode: taking
+  Event first in the competing paths removes the cycles without weakening
+  the protection against holder mutations.
+- Reimbursement notice queueing takes Event before Policy `FOR UPDATE`,
+  then inserts notices (whose foreign keys take RSVP key-share locks).
+  Submission cannot hold RSVP while the beat holds Policy for that event.
+- Decisions and payment recording take Event before ExpenseClaim, including
+  general claims. Reversal reads the original payout's Event, locks it,
+  re-reads the payout's references and only then locks ExpenseClaim and
+  inserts the reversal. The Event key-share needed by payout inserts cannot
+  wait behind a holder change while retaining its claim lock.
+- Organiser holder changes take Event, then RSVP, then detach claims.
+  Withdrawal rechecks its caller's claim scope after waiting for Event, so
+  a detached claim cannot be withdrawn through the former registration.
+
+Event is the common serialisation point for these paths; it precedes both
+explicit locks and locks taken by updates or foreign-key checks. The wider
+Organisation, series, date, order and payment order stays as documented in
+PAYMENTS.md. Organisation deletion retains its documented deadlock retry.
+
 ## Refund requests
 
 - On a paid order's page (bearer order link), a buyer can ask for a refund
@@ -263,3 +294,8 @@ the path.
   frozen snapshot, and each eligibility resolver.
 - `reimbursements-claims.db.test.ts`, `reimbursements-eligibility.db.test.ts`,
   `reimbursements-admin.db.test.ts`: see [Testing](TESTING.md).
+- `claims-lock-order.db.test.ts` pauses real transactions after the RSVP
+  lock and observes PostgreSQL contention before release: submission against
+  notice queueing, and organiser holder changes against payment recording
+  and reversal for general and policy claims, plus withdrawal scope after
+  detachment. Financial records and receipts stay with the original payee.
