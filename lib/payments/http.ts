@@ -46,13 +46,15 @@ type ProviderRequest = {
   body?: string;
   contentType?: string;
   idempotencyKey?: string;
+  /** The header that carries `idempotencyKey`: Stripe's Idempotency-Key, or Razorpay's X-Refund-Idempotency for refunds. */
+  idempotencyHeader?: "Idempotency-Key" | "X-Refund-Idempotency";
 };
 
 /** One JSON request to a provider API. Never logs bodies, keys or URLs with ids. */
 export async function providerRequest<T = Record<string, unknown>>(request: ProviderRequest): Promise<T> {
   const headers: Record<string, string> = { Authorization: request.authorization, Accept: "application/json" };
   if (request.body !== undefined) headers["Content-Type"] = request.contentType ?? "application/json";
-  if (request.idempotencyKey) headers["Idempotency-Key"] = request.idempotencyKey;
+  if (request.idempotencyKey) headers[request.idempotencyHeader ?? "Idempotency-Key"] = request.idempotencyKey;
   let response: Response;
   try {
     response = await fetch(`${providerApiRoot(request.provider)}${request.path}`, {

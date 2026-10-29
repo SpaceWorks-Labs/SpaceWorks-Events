@@ -56,13 +56,14 @@ export class RazorpayGateway implements PaymentGateway {
     if (!keyId || !keySecret) throw new PaymentsUnavailable("Razorpay credentials are not configured.");
   }
 
-  private call<T = Entity>(method: "GET" | "POST", path: string, body?: unknown) {
+  private call<T = Entity>(method: "GET" | "POST", path: string, body?: unknown, refundIdempotencyKey?: string) {
     return providerRequest<T>({
       provider: "RAZORPAY",
       method,
       path,
       authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString("base64")}`,
       body: body === undefined ? undefined : JSON.stringify(body),
+      ...(refundIdempotencyKey ? { idempotencyKey: refundIdempotencyKey, idempotencyHeader: "X-Refund-Idempotency" as const } : {}),
     });
   }
 
@@ -141,7 +142,7 @@ export class RazorpayGateway implements PaymentGateway {
       speed: "normal",
       receipt: request.reference.slice(0, 40),
       notes: { refund_id: request.reference },
-    });
+    }, refundIdempotencyKey(request.idempotencyKey));
     if (!isProviderId(result.id)) throw new PaymentsUnavailable("Razorpay did not return a refund id.");
     return { refundId: result.id, state: REFUND_STATES[String(result.status)] ?? "PENDING" };
   }
@@ -153,13 +154,40 @@ export class RazorpayGateway implements PaymentGateway {
     return describePaymentMethod({ type: payment.method, brand: card.network, last4: card.last4, vpa: payment.vpa, bank: payment.bank, wallet: payment.wallet });
   }
 
+  /**
+   * Every refund on the payment, page by page. A lookup that can't read them
+   * all throws (unknown), so a missing match never licenses a second refund.
+   */
   async findRefund(paymentId: string, reference: string): Promise<RefundResult | null> {
     if (!isProviderId(paymentId)) throw new PaymentsUnavailable("Invalid Razorpay payment id.");
-    const list = await this.call("GET", `/v1/payments/${paymentId}/refunds?count=100`);
-    const items = Array.isArray(list.items) ? list.items.map(record) : [];
-    const match = items.find((item) => record(item.notes).refund_id === reference && isProviderId(item.id));
-    return match ? { refundId: match.id as string, state: REFUND_STATES[String(match.status)] ?? "PENDING" } : null;
+    for (let page = 0; page < REFUND_LOOKUP_PAGES; page += 1) {
+      const list = await this.call("GET", `/v1/payments/${paymentId}/refunds?count=${REFUND_PAGE_SIZE}&skip=${page * REFUND_PAGE_SIZE}`);
+      if (!Array.isArray(list.items)) throw new PaymentsUnavailable("Razorpay sent an unreadable refund list.");
+      const items = list.items.map(record);
+      const match = items.find((item) => record(item.notes).refund_id === reference && isProviderId(item.id));
+      if (match) return { refundId: match.id as string, state: REFUND_STATES[String(match.status)] ?? "PENDING" };
+      if (items.length < REFUND_PAGE_SIZE) return null;
+    }
+    throw new PaymentsUnavailable("Too many Razorpay refunds to look through.");
   }
+
+  async getRefundStatus(paymentId: string, refundId: string): Promise<RefundState> {
+    if (!isProviderId(paymentId) || !isProviderId(refundId)) throw new PaymentsUnavailable("Invalid Razorpay refund id.");
+    const refund = await this.call("GET", `/v1/payments/${paymentId}/refunds/${refundId}`);
+    if (refund.id !== refundId) throw new PaymentsUnavailable("Razorpay sent an unreadable refund.");
+    return REFUND_STATES[String(refund.status)] ?? "PENDING";
+  }
+}
+
+const REFUND_PAGE_SIZE = 100;
+const REFUND_LOOKUP_PAGES = 20;
+
+/**
+ * Razorpay's X-Refund-Idempotency takes letters, digits, "_" and "-" only:
+ * our `refund:<id>` key, made safe the same way every time.
+ */
+export function refundIdempotencyKey(key: string) {
+  return key.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100);
 }
 
 /**
