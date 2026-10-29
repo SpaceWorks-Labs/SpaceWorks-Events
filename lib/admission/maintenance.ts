@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AdmissionMode, AdmissionStatus, OrderStatus, RsvpStatus } from "@prisma/client";
+import { AdmissionMode, AdmissionStatus, EventStatus, OrderStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { WebhookEmission } from "@/lib/webhooks/emit";
 import { emitAll, queueNotice } from "./notify";
@@ -22,6 +22,9 @@ import { closeApplication } from "./transitions";
  * 3. One reminder per offer, a day before it ends.
  * 4. AUTO events decide new applications; every event's waitlist is offered
  *    any free places.
+ *
+ * A cancelled event gets no reopened offers, reminders or new offers: only
+ * its ended offers expire.
  */
 
 const BATCH = 50;
@@ -37,7 +40,7 @@ async function settleOffer(applicationId: string, now: Date, webhooks: WebhookEm
     if (!event || !app || app.status !== AdmissionStatus.OFFERED) return null;
     const members = await unitMembers(tx, app);
     if (members.some((member) => member.status === RsvpStatus.PENDING_PAYMENT && member.holdExpiresAt && member.holdExpiresAt > now)) return null;
-    if (app.respondBy && app.respondBy > now) return (await reopenEndedHold(tx, app)) ? "reopened" : null;
+    if (app.respondBy && app.respondBy > now) return event.status !== EventStatus.CANCELLED && (await reopenEndedHold(tx, app)) ? "reopened" : null;
     webhooks.push(...(await closeApplication({ tx, event, app, now }, AdmissionStatus.EXPIRED)));
     return "expired";
   }, { timeout: 20_000, maxWait: 10_000 });
@@ -55,8 +58,8 @@ export async function runAdmissionMaintenance(now = new Date()) {
       status: AdmissionStatus.OFFERED,
       OR: [
         { respondBy: { lte: now } },
-        { rsvp: { order: { status: OrderStatus.EXPIRED } } },
-        { team: { orders: { some: { teamName: { not: null }, status: OrderStatus.EXPIRED } } } },
+        { rsvp: { order: { status: OrderStatus.EXPIRED } }, event: { status: { not: EventStatus.CANCELLED } } },
+        { team: { orders: { some: { teamName: { not: null }, status: OrderStatus.EXPIRED } } }, event: { status: { not: EventStatus.CANCELLED } } },
       ],
     },
     select: { id: true, eventId: true },
@@ -71,7 +74,7 @@ export async function runAdmissionMaintenance(now = new Date()) {
   }
 
   const remind = await prisma.admissionApplication.findMany({
-    where: { status: AdmissionStatus.OFFERED, offerReminderSentAt: null, respondBy: { gt: now, lte: new Date(now.getTime() + OFFER_REMINDER_BEFORE_MS) }, offeredAt: { lte: new Date(now.getTime() - REMINDER_MIN_AGE_MS) } },
+    where: { status: AdmissionStatus.OFFERED, offerReminderSentAt: null, event: { status: { not: EventStatus.CANCELLED } }, respondBy: { gt: now, lte: new Date(now.getTime() + OFFER_REMINDER_BEFORE_MS) }, offeredAt: { lte: new Date(now.getTime() - REMINDER_MIN_AGE_MS) } },
     select: { id: true, rsvpId: true, teamId: true, decisionRevision: true, event: { select: { organisationId: true } } },
     take: BATCH,
   });
@@ -84,12 +87,12 @@ export async function runAdmissionMaintenance(now = new Date()) {
     });
   }
 
-  const auto = await prisma.event.findMany({ where: { admissionEnabled: true, admissionMode: AdmissionMode.AUTO, startDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.IN_REVIEW } } }, select: { id: true }, take: BATCH });
+  const auto = await prisma.event.findMany({ where: { admissionEnabled: true, status: { not: EventStatus.CANCELLED }, admissionMode: AdmissionMode.AUTO, startDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.IN_REVIEW } } }, select: { id: true }, take: BATCH });
   for (const event of auto) {
     await autoDecide(event.id, now).catch(() => 0);
     touched.add(event.id);
   }
-  const waiting = await prisma.event.findMany({ where: { admissionEnabled: true, startDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.WAITLISTED } } }, select: { id: true }, take: BATCH });
+  const waiting = await prisma.event.findMany({ where: { admissionEnabled: true, status: { not: EventStatus.CANCELLED }, startDateTime: { gt: now }, admissionApplications: { some: { status: AdmissionStatus.WAITLISTED } } }, select: { id: true }, take: BATCH });
   let promoted = 0;
   for (const event of new Set([...touched, ...waiting.map((row) => row.id)])) promoted += await promoteWaitlisted(event, now).catch(() => 0);
 

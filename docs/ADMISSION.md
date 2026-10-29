@@ -253,6 +253,10 @@ rate limited), or an organiser answers for them (audited):
   at a time); the applicant is emailed.
 - Offers being paid count as OFFERED against the offer capacity, and a live
   hold keeps its seat from other acceptances.
+- A cancelled event makes no offers and accepts none, checked under the Event
+  lock (`offerPlace`, release, promotion, AUTO, accept): the beat skips it
+  for reminders, reopened holds, AUTO and the waitlist, and only expires its
+  ended offers. Decline and withdraw still work.
 
 ## Waitlist
 
@@ -304,7 +308,9 @@ stage-advanced. The payload carries ids and the decision revision only; the
 ticket link is added at send time, and a notice is dropped when the
 application moved on. `stage-advanced` is queued only when the organiser
 turned `emailApplicantsOnStageAdvance` on; every other notice always goes
-out (each carries a decision or a deadline). Accepting a free place sends
+out (each carries a decision or a deadline). Once the event is cancelled,
+offer, reminder, extended, waitlisted and stage-advanced notices still
+queued are dropped at delivery. Accepting a free place sends
 the usual `rsvp-status` ticket email; paid places get the payment emails.
 The registration email says "Application received" on these events.
 

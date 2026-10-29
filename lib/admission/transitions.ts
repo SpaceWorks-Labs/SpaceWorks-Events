@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AdmissionEntrySource, AdmissionStatus, RsvpStatus, type Prisma } from "@prisma/client";
+import { AdmissionEntrySource, AdmissionStatus, EventStatus, RsvpStatus, type Prisma } from "@prisma/client";
 import type { WebhookEmission } from "@/lib/webhooks/emit";
 import { queueNotice } from "./notify";
 import { respondByFor } from "./rules";
@@ -15,6 +15,7 @@ import { AdmissionError, cancelUnpaidOrder, setUnitStatus, updateApplication, ty
  */
 
 export const OFFERS_CLOSED = "The event has started, so no more places can be offered.";
+export const EVENT_CANCELLED = "This event has been cancelled, so no places can be offered or accepted.";
 
 type Change = { tx: Prisma.TransactionClient; event: AdmissionEvent; app: ApplicationRow; now: Date };
 
@@ -22,7 +23,8 @@ const lockAnswers = (app: ApplicationRow, now: Date) => (app.answersLockedAt ? {
 
 /** Offer a place: OFFERED until respondBy; the registrations stay pending (nothing is held or charged). */
 export async function offerPlace({ tx, event, app, now }: Change): Promise<WebhookEmission[]> {
-  // An offer must be answerable before the event starts.
+  // An offer must be answerable before the event starts, and the event must still be on.
+  if (event.status === EventStatus.CANCELLED) throw new AdmissionError(EVENT_CANCELLED);
   if (event.startDateTime <= now) throw new AdmissionError(OFFERS_CLOSED);
   const respondBy = respondByFor(now, event.admissionRsvpDays, event.startDateTime);
   await updateApplication(tx, app, { status: AdmissionStatus.OFFERED, offeredAt: now, respondBy, queuedAt: null, skipReason: null, offerReminderSentAt: null, decisionRevision: { increment: 1 }, ...lockAnswers(app, now) });
