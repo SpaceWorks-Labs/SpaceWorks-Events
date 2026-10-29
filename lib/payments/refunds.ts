@@ -103,9 +103,18 @@ export async function submitPendingRefund(refundId: string): Promise<"submitted"
   if (!account) return "skipped";
 
   let result: Awaited<ReturnType<typeof account.gateway.createRefund>> | null = null;
+  // An earlier attempt may have reached the provider before failing here. A
+  // lookup that fails in any way (a timeout, or a refusal such as a 401 while
+  // the keys are wrong) proves nothing about that refund: it stays pending,
+  // its amount still committed, and is looked up again on the next tick.
+  if (isRetry) {
+    try {
+      result = await account.gateway.findRefund(payment.externalPaymentId, refund.id);
+    } catch {
+      return "skipped";
+    }
+  }
   try {
-    // An earlier attempt may have reached the provider before failing here.
-    if (isRetry) result = await account.gateway.findRefund(payment.externalPaymentId, refund.id);
     result ??= await account.gateway.createRefund({
       paymentId: payment.externalPaymentId,
       amountMinor: refund.amountMinor,
@@ -114,8 +123,9 @@ export async function submitPendingRefund(refundId: string): Promise<"submitted"
       idempotencyKey: `refund:${refund.id}`,
     });
   } catch (error) {
-    // A definite refusal (for example the balance is too low) fails the row;
-    // anything else stays pending and is retried on the next tick.
+    // Only the provider definitely refusing to create it (for example the
+    // balance is too low) fails the row, which is what lets an organiser
+    // retry it; anything else stays pending and is retried on the next tick.
     if (error instanceof PaymentsUnavailable && error.status && error.status >= 400 && error.status < 500 && error.status !== 409 && error.status !== 429) {
       return (await settleRefundRow(refund.id, payment.organisationId, { state: PaymentRefundStatus.FAILED }, new Date())) ? "failed" : "skipped";
     }

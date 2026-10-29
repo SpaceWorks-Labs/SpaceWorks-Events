@@ -15,9 +15,7 @@ export function drawMoney(L: ReportLayout, metrics: EventReportMetrics) {
   if (money && hasRevenue(money)) {
     // Currency codes rather than symbols: the report's fonts may not carry every sign.
     const amount = (minor: number) => `${money.currency} ${cachedNumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)}`;
-    section("Money", "Money", money.testOnly
-      ? "Every payment was a test, so no real money moved."
-      : metrics.targetType === "occurrence" ? "Tickets bought for this date. Passes cover several dates and are in the series' own figures." : "What tickets brought in, after refunds.");
+    section("Money", "Money", metrics.targetType === "occurrence" ? "Tickets bought for this date. Passes cover several dates and are in the series' own figures." : "What tickets brought in, after refunds.");
     const refunds = money.refundedMinor + money.refundPendingMinor;
     const rows: Array<[string, string]> = [
       ["Collected", `${amount(money.collectedMinor)} from ${plural(money.orders.paid, "paid order")}`],
@@ -30,6 +28,7 @@ export function drawMoney(L: ReportLayout, metrics: EventReportMetrics) {
     if (money.orders.complimentary > 0) rows.push(["Complimentary", `${plural(money.orders.complimentary, "order")}, worth ${amount(money.complimentaryValueMinor)}`]);
     if (money.owedAtDeskMinor > 0) rows.push(["Still owed at the desk", amount(money.owedAtDeskMinor)]);
     if (money.automaticRefundMinor > 0) rows.push(["Late or duplicate payments returned", amount(money.automaticRefundMinor)]);
+    if (money.test.payments > 0) rows.push(["Test payments (no real money, not counted)", `${amount(money.test.collectedMinor - money.test.refundedMinor)} · ${plural(money.test.payments, "payment")}`]);
     if (money.disputes.open > 0 || money.disputes.lost > 0) rows.push(["Chargebacks", `${money.disputes.open} open (${amount(money.disputes.openMinor)}), ${money.disputes.lost} lost (${amount(money.disputes.lostMinor)})`]);
     facts(rows);
     if (money.byTicket.length) {

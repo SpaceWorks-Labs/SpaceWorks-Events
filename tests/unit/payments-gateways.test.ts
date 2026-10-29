@@ -191,6 +191,33 @@ describe("Stripe gateway", () => {
     await expect(gateway.getCheckoutStatus("cs_test_1")).resolves.toEqual({ state: "paid", paymentId: "pi_1", amountMinor: BigInt(49900), currency: "INR" });
   });
 
+  it("looks through every page of refunds by cursor, and treats a lookup it can't finish as unknown", async () => {
+    const others = Array.from({ length: 100 }, (_, index) => ({ id: `re_other${index}`, metadata: { refund_id: `x${index}` }, status: "succeeded" }));
+    fetchMock
+      .mockResolvedValueOnce(reply(200, { data: others, has_more: true }))
+      .mockResolvedValueOnce(reply(200, { data: [{ id: "re_ours", metadata: { refund_id: "refund1" }, status: "pending" }], has_more: false }));
+    await expect(gateway.findRefund("pi_1", "refund1")).resolves.toEqual({ refundId: "re_ours", state: "PENDING" });
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.stripe.com/v1/refunds?payment_intent=pi_1&limit=100");
+    expect(fetchMock.mock.calls[1]![0]).toBe("https://api.stripe.com/v1/refunds?payment_intent=pi_1&limit=100&starting_after=re_other99");
+    // The last page without ours: there is none.
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(reply(200, { data: others, has_more: true })).mockResolvedValueOnce(reply(200, { data: [], has_more: false }));
+    await expect(gateway.findRefund("pi_1", "refund1")).resolves.toBeNull();
+    // A malformed page (no list, no has_more, a bad id) or more pages than it reads is never "not found".
+    for (const body of [{ error: "nope" }, { data: others }, { data: [{ id: "bad id!", metadata: {} }], has_more: false }]) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValueOnce(reply(200, body));
+      await expect(gateway.findRefund("pi_1", "refund1")).rejects.toBeInstanceOf(PaymentsUnavailable);
+    }
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async () => reply(200, { data: others, has_more: true }));
+    await expect(gateway.findRefund("pi_1", "refund1")).rejects.toBeInstanceOf(PaymentsUnavailable);
+    // A refusal (for example 401 while the keys are wrong) is unknown too.
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(reply(401, { error: { code: "invalid_api_key" } }));
+    await expect(gateway.findRefund("pi_1", "refund1")).rejects.toMatchObject({ status: 401 });
+  });
+
   it("reads one refund's status by its id", async () => {
     fetchMock.mockResolvedValueOnce(reply(200, { id: "re_1", status: "succeeded" }));
     await expect(gateway.getRefundStatus("pi_1", "re_1")).resolves.toBe("SUCCEEDED");
