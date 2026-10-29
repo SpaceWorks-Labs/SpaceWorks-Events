@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), submit: vi.fn(), limit: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/rsvpCore", () => ({ submitRsvpCore: mocks.submit }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/rateLimit", () => ({
   getClientIpFromHeaders: () => "203.0.113.7",
   checkRateLimitById: mocks.limit,
 }));
 
 import { POST } from "@/app/api/rsvp/route";
+import { chunkedRequest, oversizedJsonParts } from "@/tests/helpers/chunkedRequest";
 
 beforeEach(() => {
   vi.clearAllMocks(); mocks.limit.mockResolvedValue(true); mocks.auth.mockResolvedValue(null); mocks.submit.mockResolvedValue({ ok: true, data: { count: 1 } });
@@ -50,5 +52,26 @@ describe("public RSVP route", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ ok: false, error: "Invalid link" });
     expect(mocks.submit).not.toHaveBeenCalled();
+  });
+
+  it("stops reading a chunked body past 128 KiB and answers 413 before any RSVP work", async () => {
+    const stream = chunkedRequest("https://events.example.test/api/rsvp", oversizedJsonParts(1024 * 1024));
+    const response = await POST(stream.request);
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({ ok: false, error: "Request is too large." });
+    expect(stream.cancelled()).toBe(true);
+    expect(stream.pulled()).toBeLessThan(200);
+    expect(mocks.limit).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+
+  it("still reads a normal chunked body and keeps the invalid-JSON answer", async () => {
+    const body = JSON.stringify({ orgSlug: "org", eventSlug: "event", guestEmail: "a@example.test", name: "Ada" });
+    const ok = await POST(chunkedRequest("https://events.example.test/api/rsvp", [body.slice(0, 20), body.slice(20)]).request);
+    expect(ok.status).toBe(200);
+    expect(mocks.submit).toHaveBeenCalledWith(JSON.parse(body), { userId: null, team: undefined });
+    const broken = await POST(chunkedRequest("https://events.example.test/api/rsvp", ["{\"orgSlug\":"]).request);
+    expect(broken.status).toBe(400);
+    await expect(broken.json()).resolves.toEqual({ ok: false, error: "Invalid JSON." });
   });
 });

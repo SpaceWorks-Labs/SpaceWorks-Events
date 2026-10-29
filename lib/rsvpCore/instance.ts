@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { isValidAttendeeName } from "@/lib/validators";
 import type { ActionResult } from "@/app/actions/org";
 import { reserveRsvp } from "./reserve";
+import { publicCountField } from "@/lib/publicRegistrationCount";
 import { sellsTickets, seriesOrderTarget, submitTicketOrder } from "./orders";
 import { isRsvpTargetClosedError, requestedItems, resolveAttendeeEmail, type OrderRequest } from "./shared";
 
@@ -14,7 +15,7 @@ export async function submitInstanceRsvp(params: {
   guestName?: string | null;
   name?: string | null;
   request: OrderRequest;
-}): Promise<ActionResult<{ count: number; status: RsvpStatus; ticketToken: string; orderToken?: string; checkoutUrl?: string | null }>> {
+}): Promise<ActionResult<{ count?: number; status: RsvpStatus; ticketToken: string; orderToken?: string; checkoutUrl?: string | null }>> {
   const { org, eventInstanceId, userId } = params;
 
   const instance = await prisma.eventInstance.findFirst({
@@ -151,7 +152,7 @@ export async function submitInstanceRsvp(params: {
 
     return {
       ok: true,
-      data: { count: reservation.count, status: reservation.status, ticketToken: reservation.checkInToken },
+      data: { ...publicCountField(reservation.count), status: reservation.status, ticketToken: reservation.checkInToken },
     };
   } catch (e: unknown) {
     if (isRsvpTargetClosedError(e)) return { ok: false, error: "This event is not open for RSVP." };

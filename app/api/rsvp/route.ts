@@ -7,14 +7,16 @@ import { flattenZodErrors } from "@/app/actions/utils";
 import { withApiMonitoring } from "@/lib/apiMonitor";
 import crypto from "node:crypto";
 import { checkRateLimitById, getClientIpFromHeaders } from "@/lib/rateLimit";
+import { readBoundedJson } from "@/lib/boundedBody";
+
+// The same cap as the app's registration route (POST /api/mobile/v1/rsvp).
+const MAX_BODY_BYTES = 128 * 1024;
 
 export const POST = withApiMonitoring("POST /api/rsvp", async (request: Request) => {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON." }, { status: 400 });
-  }
+  const read = await readBoundedJson(request, MAX_BODY_BYTES);
+  if (read === "too_large") return NextResponse.json({ ok: false, error: "Request is too large." }, { status: 413 });
+  if (read === "invalid") return NextResponse.json({ ok: false, error: "Invalid JSON." }, { status: 400 });
+  const body = read.value;
 
   const guestEmail = typeof body === "object" && body !== null && "guestEmail" in body && typeof (body as { guestEmail?: unknown }).guestEmail === "string"
     ? (body as { guestEmail: string }).guestEmail.trim().toLowerCase()

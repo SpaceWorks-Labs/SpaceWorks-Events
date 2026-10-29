@@ -7,6 +7,7 @@ import { notifyChatAbout } from "@/lib/chat/notify";
 import { isRegistrationClosed } from "@/lib/registrationCutoff";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { lockSeriesDates } from "@/lib/payments/targets";
+import { publicRegistrationCount } from "@/lib/publicRegistrationCount";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import { RsvpTargetClosedError } from "./shared";
@@ -126,7 +127,8 @@ export async function reserveRsvp(params: {
       await notifyChatAbout(tx, params.target, "registration", (title) => `${who} registered for ${title}${status === RsvpStatus.WAITLISTED ? " (waitlist)" : ""}.`);
     }
     await params.afterCreate?.(tx, rsvp.id);
-    const count = await tx.rSVP.count({ where: params.target });
+    // Only what the event page shows (null when hidden), never a capacity input.
+    const count = await publicRegistrationCount(tx, params.target);
     return { ...rsvp, status, count, teamId: team?.id ?? null };
   });
   emitWebhookEvent({ type: "registration.created", rsvpId: reservation.id });

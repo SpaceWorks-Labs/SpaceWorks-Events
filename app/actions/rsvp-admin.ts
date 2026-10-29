@@ -22,7 +22,7 @@ import { emitTeamWebhooks, type RegistrationStatusWebhook } from "@/lib/teamUnit
 
 export async function addManualRsvp(
   input: unknown,
-): Promise<ActionResult<{ count: number; status: RsvpStatus; rsvpId: string; }>> {
+): Promise<ActionResult<{ count?: number; status: RsvpStatus; rsvpId: string; }>> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "You must be signed in." };
   if (await isActionRateLimited("rsvp", session.user.id)) {
