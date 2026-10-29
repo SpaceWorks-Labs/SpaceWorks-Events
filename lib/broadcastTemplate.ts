@@ -63,6 +63,7 @@ function cleanName(value?: string | null) {
   return trimmed || "there";
 }
 
+/** Own properties only: `{{constructor}}` or `{{toString}}` must stay literal, not resolve to Object.prototype. */
 function resolveValues(variables: BroadcastVariables): Record<string, string> {
   return {
     name: cleanName(variables.name),
@@ -86,7 +87,7 @@ export function renderBroadcastTemplate(template: string, variables: BroadcastVa
   const values = resolveValues(variables);
   return template
     .replace(CONTROL_CHARACTERS, "")
-    .replace(PLACEHOLDER_PATTERN, (match, key: string) => (key in values ? values[key]! : match));
+    .replace(PLACEHOLDER_PATTERN, (match, key: string) => (Object.hasOwn(values, key) ? values[key]! : match));
 }
 
 /**
@@ -98,7 +99,7 @@ export function renderBroadcastHtml(html: string, variables: BroadcastVariables)
   const values = resolveValues(variables);
   return html
     .replace(CONTROL_CHARACTERS, "")
-    .replace(PLACEHOLDER_PATTERN, (match, key: string) => (key in values ? escapeBroadcastHtml(values[key]!) : match));
+    .replace(PLACEHOLDER_PATTERN, (match, key: string) => (Object.hasOwn(values, key) ? escapeBroadcastHtml(values[key]!) : match));
 }
 
 const NAMED_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
