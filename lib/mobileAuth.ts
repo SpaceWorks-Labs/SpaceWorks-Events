@@ -109,8 +109,18 @@ export type RefreshOutcome =
   | { ok: true; userId: string; session: IssuedMobileSession }
   | { ok: false; reason: "invalid" | "reused" };
 
+/**
+ * The account row before its app session: "sign out everywhere" locks the
+ * User and then revokes every MobileSession, and the audit rows written here
+ * reference the User, so a session write first would wait for it in a cycle.
+ */
+async function lockSessionOwner(tx: Prisma.TransactionClient, userId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+}
+
 async function revokeReplayed(replayed: { id: string; userId: string; }, now: Date) {
   await prisma.$transaction(async (tx) => {
+    await lockSessionOwner(tx, replayed.userId);
     const revoked = await tx.mobileSession.updateMany({ where: { id: replayed.id, revokedAt: null }, data: { revokedAt: now } });
     if (revoked.count === 1) {
       await recordAuditEvent({ action: "MOBILE_REFRESH_TOKEN_REUSED", actorUserId: replayed.userId, targetType: "MobileSession", targetId: replayed.id, client: tx });
@@ -237,6 +247,7 @@ export async function optionalMobileUser(request: Request): Promise<MobileAuthCo
 export async function markMobileSessionMfaVerified(context: MobileAuthContext) {
   const now = new Date();
   await prisma.$transaction(async (tx) => {
+    await lockSessionOwner(tx, context.userId);
     const updated = await tx.mobileSession.updateMany({ where: { id: context.sessionId, userId: context.userId, revokedAt: null }, data: { mfaVerifiedAt: now } });
     if (updated.count === 1) {
       await recordAuditEvent({ action: "MOBILE_MFA_VERIFIED", actorUserId: context.userId, targetType: "MobileSession", targetId: context.sessionId, client: tx });
@@ -247,6 +258,7 @@ export async function markMobileSessionMfaVerified(context: MobileAuthContext) {
 
 export async function revokeMobileSession(context: Pick<MobileAuthContext, "userId" | "sessionId">) {
   await prisma.$transaction(async (tx) => {
+    await lockSessionOwner(tx, context.userId);
     const revoked = await tx.mobileSession.updateMany({
       where: { id: context.sessionId, userId: context.userId, revokedAt: null },
       data: { revokedAt: new Date() },

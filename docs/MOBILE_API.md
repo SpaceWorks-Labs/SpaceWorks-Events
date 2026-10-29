@@ -178,7 +178,9 @@ was copied). Each session is
 bound to the user's `sessionVersion`: a password change, password reset, MFA
 enable/disable, "sign out everywhere" or operator recovery bumps it and
 invalidates every mobile session together with web sessions (the rows are also
-marked revoked).
+marked revoked). Sign-out, authenticator checks and refresh-token reuse lock
+the user row before the session row, as "sign out everywhere" does, so the
+two never deadlock.
 Sign-in, sign-out, authenticator checks and refresh-token reuse are audited
 (`MOBILE_SIGNED_IN`, `MOBILE_SIGNED_OUT`, `MOBILE_MFA_VERIFIED`,
 `MOBILE_REFRESH_TOKEN_REUSED`)
