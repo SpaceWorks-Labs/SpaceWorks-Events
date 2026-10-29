@@ -16,6 +16,15 @@ afterEach(() => {
 });
 
 describe("EventManageMore first render", () => {
+  it("keeps cancellation refund retries reachable on a cancelled past event", () => {
+    const html = renderToString(createElement(EventManageMore, {
+      organisationSlug: "org", event: { ...event, status: "CANCELLED", endDateTime: new Date("2000-01-01T12:00:00.000Z") },
+    }));
+    expect(html).toContain("Finish refunds");
+    expect(html).toContain("even after the event has ended");
+    expect(html).not.toContain("Cancel event…");
+  });
+
   it("renders the embed snippets the same whether or not a window exists, so hydration matches the server HTML", () => {
     const server = renderToString(createElement(EventManageMore, { organisationSlug: "org", event }));
     // The browser's first (hydrating) render must not read window.location: React #418 otherwise.

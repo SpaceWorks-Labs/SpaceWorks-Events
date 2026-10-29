@@ -50,14 +50,21 @@ export async function loadSeriesManageView({ params }: Props) {
   const upcoming = await prisma.eventInstance.findMany({
     where: { eventSeriesId: series.id, endDateTime: { gt: now } },
     orderBy: { startDateTime: "asc" },
-    take: 30,
     select: { id: true, startDateTime: true, capacity: true, cancelledAt: true },
   });
-  const takenRows = upcoming.length
-    ? await prisma.rSVP.groupBy({ by: ["eventInstanceId"], where: { eventInstanceId: { in: upcoming.map((date) => date.id) }, ...seatTakingWhere(now) }, _count: { _all: true } })
+  // Keep every cancelled past date reachable even after it leaves Upcoming dates.
+  const pastCancelled = isAdmin ? await prisma.eventInstance.findMany({
+    where: { eventSeriesId: series.id, endDateTime: { lte: now }, cancelledAt: { not: null } },
+    orderBy: { startDateTime: "desc" },
+    select: { id: true, startDateTime: true, capacity: true },
+  }) : [];
+  const managedIds = [...upcoming, ...pastCancelled].map((date) => date.id);
+  const takenRows = managedIds.length
+    ? await prisma.rSVP.groupBy({ by: ["eventInstanceId"], where: { eventInstanceId: { in: managedIds }, ...seatTakingWhere(now) }, _count: { _all: true } })
     : [];
   const takenBy = new Map(takenRows.map((row) => [row.eventInstanceId as string, row._count._all]));
   const dates = upcoming.map((date) => ({ id: date.id, start: date.startDateTime.toISOString(), capacity: date.capacity, taken: takenBy.get(date.id) ?? 0, cancelled: date.cancelledAt != null }));
+  const pastCancelledDates = pastCancelled.map((date) => ({ id: date.id, start: date.startDateTime.toISOString(), capacity: date.capacity, taken: takenBy.get(date.id) ?? 0, cancelled: true }));
   const tickets = canEditTickets
     ? await loadTicketSettings({ owner: { eventSeriesId: series.id }, organisation, currency: series.currency, refundPolicy: series, transfers: series, now })
     : null;
@@ -96,5 +103,5 @@ export async function loadSeriesManageView({ params }: Props) {
   const failedRefunds = isAdmin ? await listFailedRefunds({ eventSeriesId: series.id }, organisation.id) : [];
   // Money left on cancelled or expired orders, refunded by order.
   const refundableOrders = isAdmin ? await listRefundableOrders({ eventSeriesId: series.id }, organisation.id) : [];
-  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendeesPage, rollup, dates, tickets, revenue, failedRefunds, refundableOrders };
+  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendeesPage, rollup, dates, pastCancelledDates, tickets, revenue, failedRefunds, refundableOrders };
 }

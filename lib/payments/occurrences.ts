@@ -61,11 +61,12 @@ export async function setOccurrenceCapacity(params: { organisationId: string; se
 export async function cancelOccurrence(params: { organisationId: string; seriesId: string; instanceId: string; actorUserId: string; reason: string; now?: Date; }) {
   const now = params.now ?? new Date();
   const date = await ownedDate(params.organisationId, params.seriesId, params.instanceId);
-  if (date.endDateTime <= now) throw new PaymentOperationError("This date has already happened.");
-
   const notified = await prisma.$transaction(async (tx) => {
     await fenceOrganisation(tx, params.organisationId);
     await lockSeriesDates(tx, date.eventSeriesId, [date.id], now);
+    const current = await tx.eventInstance.findUniqueOrThrow({ where: { id: date.id }, select: { cancelledAt: true, endDateTime: true } });
+    // The deadline applies to a new cancellation, never to finishing refunds.
+    if (!current.cancelledAt && current.endDateTime <= now) throw new PaymentOperationError("This date has already happened.");
     return markOccurrenceCancelled(tx, { ...params, date, now });
   }, { timeout: 60_000 });
 

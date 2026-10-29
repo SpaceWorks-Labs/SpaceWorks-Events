@@ -47,6 +47,6 @@ export async function organisationMoneyBlocker(tx: Prisma.TransactionClient, org
   const cancelled = await tx.$queryRaw<Array<{ id: string }>>`
     SELECT o."id" FROM "Order" o WHERE o."organisationId" = ${organisationId}
       AND ${cancelledTargetSql} AND ${refundableBalanceSql} > 0 LIMIT 1`;
-  if (cancelled.length) return "Cancelled events or dates still have money to refund. Resolve these from Refundable orders (the event's Finance tab or the series page), including orders with checked-in guests.";
+  if (cancelled.length) return "Cancelled events or dates still have money to refund. Use Finish refunds in the event's Settings or beside the cancelled date on the series page. Use Refundable orders for checked-in guests once automatic cancellation refunds are finished.";
   return null;
 }

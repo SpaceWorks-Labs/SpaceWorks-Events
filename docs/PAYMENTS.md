@@ -132,6 +132,16 @@ registering is seen. Organisers can still add any guest by hand.
   date someone on a pass already checked in to is left for the organiser to
   settle by hand. Nobody is promoted from a waitlist onto a cancelled event,
   series or date.
+- **Interrupted cancellation:** owners and admins can choose **Finish refunds**
+  in an already-cancelled event's **Settings** (open it from the organisation's
+  **Events → Past** list), or beside a cancelled date on
+  the series page. Dates remain reachable under **Upcoming dates** and
+  **Past cancelled dates**, including after their end time. Confirm to finish
+  automatic processing; orders already processed are skipped and cancellation
+  notices are not sent again. The ended-date refusal applies only to a new
+  cancellation. This also recovers unchecked-in single-date orders that do not
+  qualify for **Refundable orders**, and clears their organisation-deletion
+  obligation once their refunds are settled.
 - **A payment that lands after a cancellation** (a delayed webhook, or a
   buyer who paid just before) never issues a ticket. It is recorded, the
   order is cancelled with its held places (a leader's unpaid team goes too;
