@@ -97,6 +97,25 @@ describe("sign-in protections", () => {
     expect(await consumeSignInCode(users.person!, code)).toBe(false);
   });
 
+  it("alerts on every missing or malformed device sign-in even before any device is remembered", async () => {
+    const userId = users.attendee!;
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash("correct horse battery", 4) } });
+    await prisma.userDevice.deleteMany({ where: { userId } });
+    const alerts = () => prisma.outboxMessage.count({ where: { kind: "operator-notice", payload: { path: ["to"], equals: email("attendee") } } });
+    const before = await alerts();
+    for (const [index, device] of [undefined, undefined, "not-a-device-id"].entries()) {
+      expect(await knownDevice(userId, deviceHash(device))).toEqual({ known: false, firstDevice: true });
+      const result = await verifyPasswordSignIn({ email: email("attendee"), password: "correct horse battery", device }, { ip: "198.51.100.21", userAgent: "curl/8.0" });
+      expect(result.ok).toBe(true);
+      expect(await alerts()).toBe(before + index + 1);
+      expect(await prisma.userDevice.count({ where: { userId } })).toBe(0);
+    }
+    await rememberSignIn({ userId, email: email("attendee"), hash: "invalid-hash", ip: "unknown", userAgent: "curl/8.0", firstDevice: true });
+    expect(await alerts()).toBe(before + 4);
+    expect(await prisma.userDevice.count({ where: { userId } })).toBe(0);
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: null } });
+  });
+
   it("counts failures per account and per address, and never blocks an unknown address", async () => {
     const victim = email("victim");
     for (let attempt = 0; attempt < 5; attempt += 1) await noteFailedSignIn("198.51.100.77", victim);

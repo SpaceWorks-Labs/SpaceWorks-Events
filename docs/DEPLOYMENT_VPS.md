@@ -359,7 +359,11 @@ or started and failed, in `_prisma_migrations`) is in its own `prisma/migrations
 Before step 3 the updater refuses a release that lacks one, changing nothing; an
 automatic deploy makes the same check in the installed `vps-deploy.sh` before the
 requested release's own updater runs, so an older release is never installed
-over newer migrations.
+over newer migrations. The installed deploy script holds the installation lock
+from before reading those migrations until the child updater finishes. The
+child inherits file descriptor 9 and `SWE_LOCK_HELD=1`; older updaters already
+honour that flag, so they do not try to acquire the same lock again. A second
+update cannot migrate the database between the check and the handoff.
 
 If any step after the backup fails, it restores the previous `compose.env` and
 starts the previous release's retained images, provided that release has every
@@ -463,7 +467,29 @@ For an encrypted backup it asks you to paste the key (or pass `--identity FILE`)
 bucket; the installer menu's **Backups → List off-site backups** shows the names.
 It shows what will be replaced and asks you to type `RESTORE`. It backs up the
 current database first, stops the app, the worker, the beat and Caddy, and
-replaces the database in one transaction. It then copies the backup's files back into Silo
+resets the `public` application schema in the `swevents` database and restores
+the dump **together in one transaction**. Any SQL error rolls back both the reset
+and the restore, preserving the database as it was before the attempt; the failure
+cleanup restarts the services. Resetting the schema removes tables and other
+objects introduced after the backup, so they cannot conflict with the restored migration history
+on the next update. Other databases and schemas are not explicitly reset, though
+`CASCADE` also removes objects that depend on `public` objects.
+
+Before connecting, `pg_restore` converts the entire dump into a private temporary
+SQL file inside the PostgreSQL container. Allow space there for the uncompressed
+SQL; it is removed on success or failure. A corrupt dump or conversion failure
+exits without resetting the database. One `psql -X -v ON_ERROR_STOP=1
+--single-transaction` invocation applies both the reset and that SQL file.
+The reset uses PostgreSQL 16's normal `pg_database_owner` schema owner (implicitly
+the database owner, `swevents`) and baseline public schema usage. It re-applies
+`swevents_app` schema `USAGE` and the table/sequence default privileges from
+`init-database.sh` before restoring objects. The full `pg_dump -Fc` backup retains
+object grants and default privileges because neither backup nor restore disables
+ACLs. The existing app login and database `CONNECT` grant are outside the schema
+and survive its reset; the dump does not create login roles. Migrations still run
+as `swevents`, and the app still connects as `swevents_app`.
+
+It then copies the backup's files back into Silo
 (newer files stay), runs migrations if the backup came from an older release,
 starts everything and runs the VPS checks.
 

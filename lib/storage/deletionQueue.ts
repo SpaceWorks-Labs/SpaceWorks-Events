@@ -29,6 +29,26 @@ type Tx = Prisma.TransactionClient;
 type Row = { id: string; kind: "OBJECT" | "PREFIX"; state: "PENDING" | "CLAIMED" | "VERIFYING"; location: string; key: string; organisationId: string | null; continuationToken: string | null; attempts: number; lastErrorCode: string | null };
 
 /**
+ * Detach replaced/deleted assets and queue their objects atomically, without
+ * calling storage from the request. UNATTACHED also covers these files whose
+ * references have already gone. Keep S3 records if their location is unknown.
+ */
+export async function queueAssetDeletions(keys: string[]) {
+  if (keys.length === 0) return;
+  const location = currentStorageLocation();
+  await prisma.$executeRaw`
+    WITH gone AS (
+      DELETE FROM "Asset" WHERE "key" = ANY(${keys}::text[])
+        AND (${location}::text IS NOT NULL OR "provider" <> 's3')
+      RETURNING "key", "organisationId", "provider"
+    )
+    INSERT INTO "StorageDeletion" ("id", "kind", "location", "key", "organisationId", "reason", "notBefore", "createdAt")
+    SELECT gen_random_uuid()::text, 'OBJECT', ${location}, g."key", g."organisationId", 'UNATTACHED', ${SQL_UTC_NOW}, ${SQL_UTC_NOW}
+    FROM gone g WHERE g."provider" = 's3'
+    ON CONFLICT ("location", "key", "kind") DO NOTHING`;
+}
+
+/**
  * Inside the organisation-deletion transaction, with the organisation row
  * locked: queue every object-storage Asset of the organisation (images,
  * receipts, unused uploads), every expense receipt key, and one listing of its

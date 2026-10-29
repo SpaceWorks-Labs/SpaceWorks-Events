@@ -43,6 +43,19 @@ beforeEach(() => {
   write("migrate.txt", "");
   write("migrate-status", "0\n");
   bin("id", '[ "$1" = -u ] && echo 0 || exit 1');
+  // Git Bash's recursive mkdir tries to write existing parent directories,
+  // which a Windows workspace sandbox denies. Native recursive mkdir does not.
+  if (process.platform === "win32") bin("mkdir", [
+    'if [[ ${1:-} = -p ]]; then',
+    '  shift; node -e \'for (const p of process.argv.slice(1)) require("node:fs").mkdirSync(p, { recursive: true });\' "$@"',
+    'else /usr/bin/mkdir "$@"; fi',
+  ].join("\n"));
+  if (process.platform === "win32") bin("install", [
+    'if [[ ${1:-} = -d ]]; then',
+    '  shift; [[ ${1:-} != -m ]] || shift 2',
+    '  node -e \'for (const p of process.argv.slice(1)) require("node:fs").mkdirSync(p, { recursive: true });\' "$@"',
+    'else /usr/bin/install "$@"; fi',
+  ].join("\n"));
   // Compose: psql prints the recorded migrations; the migrator records migrate.txt (even when it then fails); `up` fails.
   bin("docker", [
     'args="$*"',
@@ -99,6 +112,46 @@ describe("automatic deploy of a requested release", { timeout: 120_000 }, () => 
     expect(result.status, result.stderr).toBe(0);
     expect(readFileSync(path.join(dir, "updater.log"), "utf8")).toBe("ran\n");
   });
+
+  it("holds the installation lock from the migration read through an older updater's completion", () => {
+    release("release-src/top", older);
+    // Fake flock: a second independent lock acquisition fails. Re-entry must
+    // use the inherited flag and fd, just as pre-guard releases already did.
+    bin("flock", ': >&9; mkdir "$FAKE/locked" 2>/dev/null');
+    write("competing-update.sh", [
+      '. scripts/vps-lib.sh',
+      'unset SWE_LOCK_HELD',
+      'take_lock',
+      `echo '${newest}' >> "$FAKE/applied.txt"`,
+    ].join("\n"));
+    bin("docker", [
+      'case "$*" in',
+      '  *" exec -T postgres psql "*)',
+      '    cat "$FAKE/applied.txt"',
+      '    bash "$FAKE/competing-update.sh" 9>&- > "$FAKE/competitor-check.log" 2>&1 || : ;;',
+      '  *) exit 1 ;;',
+      'esac',
+    ].join("\n"));
+    // Use the lock implementation from before the migration guard existed.
+    const lib = readFileSync(path.join(root, "scripts/vps-lib.sh"), "utf8");
+    const lock = lib.slice(lib.indexOf("take_lock() {"), lib.indexOf("\n}", lib.indexOf("take_lock() {")) + 2);
+    write("release-src/top/scripts/update-vps.sh", [
+      'set -eu', lock,
+      'take_lock',
+      ': >&9',
+      'bash "$FAKE/competing-update.sh" 9>&- > "$FAKE/competitor-child.log" 2>&1 || :',
+      `! grep -qx '${newest}' "$FAKE/applied.txt"`,
+      'echo ran >> "$FAKE/updater.log"',
+    ].join("\n"));
+    pack();
+    const result = bash(`bash scripts/vps-deploy.sh ${tag}`);
+    expect(result.status, result.stderr).toBe(0);
+    for (const phase of ["check", "child"]) {
+      expect(readFileSync(path.join(dir, `competitor-${phase}.log`), "utf8")).toContain("Another Space Works Events");
+    }
+    expect(readFileSync(path.join(dir, "applied.txt"), "utf8")).toBe(lines(older));
+    expect(readFileSync(path.join(dir, "updater.log"), "utf8")).toBe("ran\n");
+  });
 });
 
 describe("a failed update", { timeout: 120_000 }, () => {
@@ -113,7 +166,7 @@ describe("a failed update", { timeout: 120_000 }, () => {
     write("migrate-status", "1\n");
     const result = update();
     expect(result.status).not.toBe(0);
-    expect(log()).toMatch(/ stop app worker beat\n/);
+    expect(log(), result.stderr).toMatch(/ stop app worker beat\n/);
     expect(log()).not.toContain("previous up");
     expect(result.stderr).toContain(`it lacks migrations already recorded (${newest})`);
     expect(result.stderr).toMatch(/swe\/current\/scripts\/vps-restore\.sh .*\/backups\/2\d+T\d+Z/);

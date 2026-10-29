@@ -47,6 +47,10 @@ printf '%s\n' "$version" > "$stage/source/.release-version"
 # already has is refused, and the running release is left exactly as it is.
 load_config_dir
 SWE_REPO_DIR=$source_dir
+# Keep the compatibility decision valid through the complete child update.
+# Older updaters already honour SWE_LOCK_HELD and inherit fd 9, so their
+# take_lock is re-entrant without dropping the lock or opening a new fd.
+take_lock
 applied=$(applied_migrations) || die "Could not read this database's migrations; $tag was not deployed and the running release is unchanged."
 missing=$(missing_migrations "$stage/source" <<< "$applied")
 [[ -z "$missing" ]] || die "$tag cannot run against this database: it lacks migrations already applied ($(paste -sd ' ' <<< "$missing")). It was not deployed and the running release is unchanged. An older release needs the backup from before those migrations restored (docs/DEPLOYMENT_VPS.md, Upgrades and rollback)."

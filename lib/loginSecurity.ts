@@ -113,7 +113,7 @@ export function newSignInAdvice(email: string): string {
 export async function rememberSignIn(params: { userId: string; email: string; hash: string | null; ip: string; userAgent: string; firstDevice: boolean; }) {
   const userAgent = describeBrowser(params.userAgent);
   const lastIp = params.ip === "unknown" ? null : params.ip.slice(0, 64);
-  const hash = params.hash;
+  const hash = params.hash && /^[a-f0-9]{64}$/.test(params.hash) ? params.hash : null;
   if (hash) {
     const existing = await prisma.userDevice.findUnique({ where: { userId_deviceHash: { userId: params.userId, deviceHash: hash } }, select: { id: true } });
     if (existing) {
@@ -124,7 +124,7 @@ export async function rememberSignIn(params: { userId: string; email: string; ha
   await prisma.$transaction(async (tx) => {
     if (hash) await tx.userDevice.create({ data: { userId: params.userId, deviceHash: hash, userAgent, lastIp } });
     await tx.auditEvent.create({ data: { action: "SIGN_IN_NEW_DEVICE", actorUserId: params.userId, targetType: "User", targetId: params.userId } });
-    if (!params.firstDevice) {
+    if (!hash || !params.firstDevice) {
       await enqueueOperatorNotice(tx, {
         to: params.email,
         subject: "New sign-in to your account",

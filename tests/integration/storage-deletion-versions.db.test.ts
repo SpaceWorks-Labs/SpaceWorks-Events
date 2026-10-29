@@ -15,7 +15,8 @@ vi.mock("@aws-sdk/client-s3", async (importOriginal) => {
 
 import * as sdk from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
-import { uploadFile } from "@/lib/storage";
+import { deleteFiles, uploadFile } from "@/lib/storage";
+import { deleteReceipts, uploadReceipt } from "@/lib/storage/private";
 import { processStorageDeletions, queueOrganisationStorage, VERIFY_AFTER_MS } from "@/lib/storage/deletionQueue";
 
 const HOUR = 60 * 60_000;
@@ -70,6 +71,46 @@ async function runUntilDone() {
 }
 
 describe.sequential("storage deletion queue with object versions", () => {
+  it.each(["event-covers", "organisation-logos", "claim-receipts"])("queues a replaced %s file without calling S3, then removes every old version and marker", async (folder) => {
+    const organisationId = (await prisma.organisation.create({ data: { name: "replacement", slug: `replacement-${randomUUID()}` } })).id;
+    const key = `organisations/${organisationId}/${folder}/${randomUUID()}.webp`;
+    const replacement = `organisations/${organisationId}/${folder}/${randomUUID()}.webp`;
+    const upload = async (key: string) => folder === "claim-receipts"
+      ? uploadReceipt(organisationId, key, Buffer.from("webp"))
+      : uploadFile({ key, body: Buffer.from("webp"), contentType: "image/webp", organisationId });
+    const remove = folder === "claim-receipts" ? deleteReceipts : deleteFiles;
+    try {
+      await upload(key);
+      await upload(replacement);
+      fake.s3!.put(key);
+      fake.s3!.deleteKey(key);
+      const entries = [...fake.s3!.bucket.entries];
+      // External S3 permission failures must never reach a replacement request.
+      fake.s3!.bucket.failListWith = Object.assign(new Error("denied"), { name: "AccessDenied" });
+      await remove([key, key]);
+      expect(fake.s3!.bucket.entries).toEqual(entries);
+      expect(fake.s3!.bucket.versionLists).toBe(0);
+      expect(await prisma.asset.findUnique({ where: { key } })).toBeNull();
+      expect(await prisma.asset.findUnique({ where: { key: replacement } })).not.toBeNull();
+      expect(await prisma.storageDeletion.findFirst({ where: { key } })).toMatchObject({ kind: "OBJECT", state: "PENDING", reason: "UNATTACHED", organisationId });
+      // Repeating the request never loses or duplicates its durable row.
+      await remove([key]);
+      expect(await prisma.storageDeletion.count({ where: { key } })).toBe(1);
+      const now = new Date();
+      expect((await processStorageDeletions(now)).failed).toBe(1);
+      expect(await prisma.storageDeletion.findFirst({ where: { key } })).toMatchObject({ state: "CLAIMED", lastErrorCode: "AccessDenied" });
+      fake.s3!.bucket.failListWith = null;
+      const retry = later(now, HOUR);
+      await processStorageDeletions(retry);
+      expect(fake.s3!.keys()).toEqual([replacement]);
+      expect(await prisma.storageDeletion.findFirst({ where: { key } })).toMatchObject({ state: "VERIFYING" });
+      await processStorageDeletions(later(retry, VERIFY_AFTER_MS + HOUR));
+      expect(await prisma.storageDeletion.findFirst({ where: { key } })).toBeNull();
+    } finally {
+      await prisma.organisation.delete({ where: { id: organisationId } });
+    }
+  });
+
   it("removes every version and delete marker of a deleted organisation, including keys only a marker holds", async () => {
     const { cover, hidden } = await deleteOrganisationWithFiles();
     expect(fake.s3!.keys()).toEqual([cover, hidden].sort());

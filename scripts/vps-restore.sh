@@ -112,12 +112,31 @@ if [[ $assume_yes = 0 ]]; then
   [[ "$answer" = RESTORE ]] || { say 'Cancelled. Nothing was changed.'; exit 2; }
 fi
 SWE_BACKUP_PROTECT=$source_backup bash "$SWE_REPO_DIR/scripts/vps-backup.sh" --no-objects
-# A failed restore must not leave the site down; the database restore is one
-# transaction, so a failure there keeps the current data.
+# Stop every application writer before resetting the application schema.
+# Reset and restore share one transaction: failure must preserve the live data.
 stopped=1
 compose stop "${serving[@]}"
-compose exec postgres pg_restore -U swevents -d swevents --clean --if-exists --single-transaction --exit-on-error \
-  < "$backup/database.dump"
+say 'Resetting the application schema and restoring the database in one transaction.'
+# compose exec supplies -T. Generate SQL fully before connecting: a failed
+# pg_restore producer piped into psql could otherwise commit a partial stream.
+# Keep the temporary SQL private, inside postgres, and remove it on either exit.
+# Recreate PostgreSQL 16 public ownership/ACL defaults (pg_dump assumes them),
+# plus init-database.sh's app grants before creating any restored objects.
+# The dump retains object ACLs and default privileges; database CONNECT survives.
+compose exec postgres sh -eu -c '
+  umask 077
+  restore_sql=$(mktemp)
+  trap '\''rm -f -- "$restore_sql"'\'' EXIT
+  pg_restore --clean --if-exists -f - > "$restore_sql"
+  psql -U swevents -d swevents -X -v ON_ERROR_STOP=1 --single-transaction \
+    -c "DROP SCHEMA public CASCADE;
+        CREATE SCHEMA public AUTHORIZATION pg_database_owner;
+        GRANT USAGE ON SCHEMA public TO PUBLIC;
+        GRANT USAGE ON SCHEMA public TO swevents_app;
+        ALTER DEFAULT PRIVILEGES FOR ROLE swevents IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO swevents_app;
+        ALTER DEFAULT PRIVILEGES FOR ROLE swevents IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO swevents_app;" \
+    -f "$restore_sql"
+' < "$backup/database.dump"
 if [[ $has_objects = 1 ]]; then
   compose run --rm --no-deps --volume "$backup:/backup:ro" --entrypoint mc storage-init \
     mirror --overwrite --quiet /backup/objects local/spaceworks-events > /dev/null

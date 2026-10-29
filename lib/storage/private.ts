@@ -1,10 +1,11 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { DeleteObjectsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { client, storageConfigured } from "./objects";
 import { uploadObject } from "./uploads";
+import { queueAssetDeletions } from "./deletionQueue";
 
 /**
  * Private files: expense claim receipts (docs/FINANCE.md). They never go
@@ -57,9 +58,5 @@ export async function downloadReceipt(key: string) {
 export async function deleteReceipts(keys: string[]) {
   const valid = [...new Set(keys.filter(isReceiptKey))];
   if (valid.length === 0) return;
-  const stored = await prisma.asset.findMany({ where: { key: { in: valid }, provider: "s3" }, select: { key: true } });
-  if (stored.length > 0 && storageConfigured()) {
-    await client().send(new DeleteObjectsCommand({ Bucket: process.env.S3_BUCKET!, Delete: { Objects: stored.map(({ key }) => ({ Key: key })), Quiet: true } }));
-  }
-  await prisma.asset.deleteMany({ where: { key: { in: valid } } });
+  await queueAssetDeletions(valid);
 }

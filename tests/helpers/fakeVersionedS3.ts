@@ -61,8 +61,9 @@ export function fakeVersionedS3(sdk: typeof S3) {
         ...(truncated && last ? { NextKeyMarker: last.key, NextVersionIdMarker: last.versionId } : {}),
       };
     }
-    if (command instanceof sdk.DeleteObjectsCommand) {
-      for (const { Key, VersionId } of command.input.Delete?.Objects ?? []) {
+    if (command instanceof sdk.DeleteObjectsCommand || command instanceof sdk.DeleteObjectCommand) {
+      const objects = command instanceof sdk.DeleteObjectCommand ? [command.input] : command.input.Delete?.Objects ?? [];
+      for (const { Key, VersionId } of objects) {
         if (!Key) continue;
         if (VersionId) bucket.entries = bucket.entries.filter((entry) => !(entry.key === Key && entry.versionId === VersionId));
         else deleteKey(Key);

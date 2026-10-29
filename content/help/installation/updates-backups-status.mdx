@@ -38,6 +38,8 @@ Database migrations that already ran aren't reversed by the rollback. A release 
 
 If you answered yes to automatic deploys, or added them later with **7) Automatic deploys**, a GitHub Actions runner on the server installs each new published release by itself. It runs the same steps as a manual update: a backup, the new images, migrations, health checks, and the previous release restored if the new one is unhealthy. A release that is older than the database's migrations is refused, and the running release is left as it is. Nothing connects in from GitHub; the runner checks outwards. It runs under its own account with no Docker access, and only installs published releases from the main branch.
 
+Automatic deploys hold the installation lock while checking the database and running the updater, so another update cannot change the migration history between those steps.
+
 ## Backups
 
 <Steps>
@@ -70,6 +72,8 @@ A backup on the same server isn't a backup of the server. Turn on off-site copie
 </Callout>
 
 Restoring is done from the server with the restore tool. It shows what will be replaced, asks you to type `RESTORE`, and backs up the current database before it starts. Restoring onto a new server has its own order of steps, because the configuration must go back before the database. Follow `docs/DEPLOYMENT_VPS.md` for both.
+
+During a restore, the tool stops the services and clears the application schema before loading the backup. Tables added after that backup are removed too, keeping the data and migration history together. If loading the backup fails, use the safety backup taken just before the restore to recover.
 
 ## Checking status
 
