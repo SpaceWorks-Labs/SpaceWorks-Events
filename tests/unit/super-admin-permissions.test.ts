@@ -9,14 +9,14 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
 
-import { requireSuperAdmin } from "@/lib/permissions";
+import { requireSuperAdmin, superAdminEmailFor } from "@/lib/permissions";
 
 const originalEmail = process.env.SUPER_ADMIN_EMAIL;
 
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.SUPER_ADMIN_EMAIL = "admin@example.test";
-  mocks.auth.mockResolvedValue({ user: { id: "user_1", email: "stale@example.test" } });
+  mocks.auth.mockResolvedValue({ user: { id: "user_1", email: "stale@example.test" }, authMethod: "credentials" });
   mocks.userFind.mockResolvedValue({ email: "admin@example.test", emailVerified: new Date() });
 });
 
@@ -37,7 +37,7 @@ describe("super-admin identity boundary", () => {
   });
 
   it("rejects a stale session after the database email no longer matches", async () => {
-    mocks.auth.mockResolvedValue({ user: { id: "user_1", email: "admin@example.test" } });
+    mocks.auth.mockResolvedValue({ user: { id: "user_1", email: "admin@example.test" }, authMethod: "credentials" });
     mocks.userFind.mockResolvedValue({ email: "former-admin@example.test", emailVerified: new Date() });
     await expect(requireSuperAdmin()).rejects.toThrow("not-found");
   });
@@ -45,5 +45,15 @@ describe("super-admin identity boundary", () => {
   it("rejects an unverified current account", async () => {
     mocks.userFind.mockResolvedValue({ email: "admin@example.test", emailVerified: null });
     await expect(requireSuperAdmin()).rejects.toThrow("not-found");
+  });
+
+  it.each([
+    ["a Google sign-in", { authMethod: "google" as const }],
+    ["a session from before sign-in methods were recorded", {}],
+  ])("refuses %s, even for the super admin's own account", async (_label, extra) => {
+    mocks.auth.mockResolvedValue({ user: { id: "user_1", email: "admin@example.test" }, ...extra });
+    await expect(requireSuperAdmin()).rejects.toThrow("not-found");
+    await expect(superAdminEmailFor({ user: { id: "user_1" }, ...extra })).resolves.toBeNull();
+    expect(mocks.userFind).not.toHaveBeenCalled();
   });
 });

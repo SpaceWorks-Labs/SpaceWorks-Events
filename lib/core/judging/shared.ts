@@ -30,6 +30,7 @@ export type EntrantAuth =
 export const NOT_FOUND = "Submission not found.";
 export const EVENT_NOT_FOUND = "Event not found.";
 export const WINDOW_CLOSED = "Submissions are not open right now.";
+export const RESULTS_PUBLISHED = "Results are published, so projects can no longer change.";
 export const NOT_CONFIRMED = "Only confirmed registrations can submit a project.";
 /** A REJECTED team or registration: final, like the team-side refusals in lib/core/teams.ts. */
 const DECLINED = "The organisers declined this registration, so its project can't be submitted or changed.";
@@ -141,6 +142,16 @@ export function isSubmissionWindowOpen(
   if (!event.submissionsEnabled || !event.submissionsOpenAt || !event.submissionsCloseAt) return false;
   if (event.status !== undefined && event.status !== EventStatus.PUBLISHED) return false;
   return event.submissionsOpenAt <= now && now < event.submissionsCloseAt;
+}
+
+/**
+ * Published results freeze every project, even while the window is still
+ * open: no save, submit or withdrawal (withdrawing would delete awards), and
+ * an entry fee that lands later doesn't submit a draft. Read it from the
+ * event under the Event lock; publication takes that lock for update.
+ */
+export function resultsFreezeSubmissions(event: { resultsPublishedAt: Date | null }): boolean {
+  return event.resultsPublishedAt != null;
 }
 
 /** The public gallery is visible once the window has closed and the organiser turned it on. */

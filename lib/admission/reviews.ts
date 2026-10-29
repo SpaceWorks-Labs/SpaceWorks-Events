@@ -25,15 +25,16 @@ const NOT_YOURS = "This review isn't assigned to you.";
 
 export type ReviewQueueItem = { assignmentId: string; stageName: string; stagePosition: number; stageOpen: boolean; label: string; status: AdmissionAssignmentStatus; reviewedCurrent: boolean };
 
-/** The reviewer's assignments on this event, open stages first. */
+/** The reviewer's assignments on this event that they may still read, open stages first. */
 export async function listMyReviews(ctx: AdmissionContext): Promise<ReviewQueueItem[]> {
   const rows = await prisma.admissionReviewAssignment.findMany({
     where: { reviewerUserId: ctx.userId, status: { not: AdmissionAssignmentStatus.RECUSED }, stage: { eventId: ctx.eventId, event: { organisationId: ctx.organisationId } }, application: { status: AdmissionStatus.IN_REVIEW } },
-    select: { id: true, status: true, applicationId: true, stage: { select: { name: true, position: true, status: true, blindReview: true } }, application: { select: { answersRevision: true, team: { select: { name: true } }, rsvp: { select: { guestName: true, user: { select: { name: true } } } } } }, reviews: { select: { answersRevision: true } } },
+    select: { id: true, status: true, stageId: true, stage: { select: { name: true, position: true, status: true, blindReview: true, panel: { select: { userId: true } } } }, application: { select: { id: true, rsvpId: true, teamId: true, answersRevision: true, team: { select: { name: true } }, rsvp: { select: { guestName: true, user: { select: { name: true } } } } } }, reviews: { select: { answersRevision: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: 500,
   });
-  return rows
+  // Filtered before any label is built: off the panel now, or a conflict, shows nothing.
+  return (await readable(prisma, ctx, rows))
     .map((row, index) => ({
       assignmentId: row.id,
       stageName: row.stage.name,
@@ -46,6 +47,28 @@ export async function listMyReviews(ctx: AdmissionContext): Promise<ReviewQueueI
     .sort((a, b) => Number(b.stageOpen) - Number(a.stageOpen) || Number(a.reviewedCurrent) - Number(b.reviewedCurrent) || a.stagePosition - b.stagePosition);
 }
 
+type ReadableRow = { stageId: string; stage: { panel: Array<{ userId: string }> }; application: { id: string; rsvpId: string | null; teamId: string | null } };
+
+/**
+ * The assignments the reviewer may still read, whether or not their stage
+ * is open: the reviewer is in the stage's pool now and has no conflict with
+ * the application. Checked a stage at a time; shared by the queue and the
+ * detail.
+ */
+async function readable<T extends ReadableRow>(client: Prisma.TransactionClient, ctx: AdmissionContext, rows: T[]): Promise<T[]> {
+  if (rows.length === 0) return rows;
+  const eligible = await eligibleReviewers(client, ctx.organisationId, ctx.eventId);
+  const byStage = new Map<string, T[]>();
+  for (const row of rows) byStage.set(row.stageId, [...(byStage.get(row.stageId) ?? []), row]);
+  const keep = new Set<T>();
+  for (const [stageId, group] of byStage) {
+    if (!stagePool(group[0]!.stage.panel.map((member) => member.userId), eligible).has(ctx.userId)) continue;
+    const blocked = await blockedPairs(client, ctx.eventId, group.map((row) => row.application), [ctx.userId], stageId);
+    for (const row of group) if (!blocked.has(pairKey(ctx.userId, row.application.id))) keep.add(row);
+  }
+  return rows.filter((row) => keep.has(row));
+}
+
 async function ownAssignment(client: Prisma.TransactionClient, ctx: AdmissionContext, assignmentId: string) {
   return client.admissionReviewAssignment.findFirst({
     where: { id: assignmentId, reviewerUserId: ctx.userId, stage: { eventId: ctx.eventId, event: { organisationId: ctx.organisationId } } },
@@ -53,20 +76,21 @@ async function ownAssignment(client: Prisma.TransactionClient, ctx: AdmissionCon
   });
 }
 
-export type ReviewItem = { assignmentId: string; stageName: string; stageOpen: boolean; blind: boolean; criteria: string[]; guidance: string; teamName: string | null; people: ApplicantPerson[]; reviewed: { scores: Record<string, number>; notes: string } | null; canReview: boolean };
+export type ReviewItem = { assignmentId: string; answersRevision: number; stageName: string; stageOpen: boolean; blind: boolean; criteria: string[]; guidance: string; teamName: string | null; people: ApplicantPerson[]; reviewed: { scores: Record<string, number>; notes: string } | null; canReview: boolean };
 
 export async function loadReviewItem(ctx: AdmissionContext, assignmentId: string): Promise<ReviewItem | null> {
   const assignment = await ownAssignment(prisma, ctx, assignmentId);
   if (!assignment || assignment.status === AdmissionAssignmentStatus.RECUSED) return null;
   const { stage, application } = assignment;
   // Off the panel now, or a conflict: no more reading either.
-  const pool = stagePool(stage.panel.map((row) => row.userId), await eligibleReviewers(prisma, ctx.organisationId, ctx.eventId));
-  if (!pool.has(ctx.userId) || (await blockedPairs(prisma, ctx.eventId, [application], [ctx.userId], assignment.stageId)).size) return null;
+  if ((await readable(prisma, ctx, [assignment])).length === 0) return null;
   const shown = await applicationPeople(prisma, application, stage.blindReview);
   const review = await prisma.admissionReview.findFirst({ where: { assignmentId, answersRevision: application.answersRevision }, select: { scores: true, notes: true } });
   const open = stage.status === AdmissionStageStatus.OPEN && application.status === AdmissionStatus.IN_REVIEW && application.currentStageId === assignment.stageId;
   return {
     assignmentId,
+    // Sent back with the review: answers changed since are refused (reload).
+    answersRevision: application.answersRevision,
     stageName: stage.name,
     stageOpen: open,
     blind: stage.blindReview,
@@ -78,13 +102,22 @@ export async function loadReviewItem(ctx: AdmissionContext, assignmentId: string
   };
 }
 
-export async function submitReview(ctx: AdmissionContext, assignmentId: string, input: { scores: Record<string, unknown>; notes: string }): Promise<Result> {
+export const STALE_ANSWERS = "The answers changed. Reload to see them.";
+
+/**
+ * Review the answers the reviewer saw (`answersRevision`, from
+ * loadReviewItem). The Event lock comes first, as for answer edits, so the
+ * answers can't change between this check and the review.
+ */
+export async function submitReview(ctx: AdmissionContext, assignmentId: string, input: { answersRevision: number; scores: Record<string, unknown>; notes: string }): Promise<Result> {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${ctx.eventId} FOR UPDATE`;
     const assignment = await ownAssignment(tx, ctx, assignmentId);
     if (!assignment || assignment.status === AdmissionAssignmentStatus.RECUSED) return fail(NOT_YOURS);
     const { stage, application } = assignment;
     if (stage.status !== AdmissionStageStatus.OPEN) return fail("This stage isn't open for reviews.");
     if (application.status !== AdmissionStatus.IN_REVIEW || application.currentStageId !== assignment.stageId) return fail("This application has moved on, so it can't be reviewed here any more.");
+    if (application.answersRevision !== input.answersRevision) return fail(STALE_ANSWERS);
     const pool = stagePool(stage.panel.map((row) => row.userId), await eligibleReviewers(tx, ctx.organisationId, ctx.eventId));
     if (!pool.has(ctx.userId)) return fail("You aren't on this stage's reviewer panel any more.");
     if ((await blockedPairs(tx, ctx.eventId, [application], [ctx.userId], assignment.stageId)).size) return fail("You have a conflict with this application (or reviewed it in an earlier stage, and this stage wants fresh eyes), so you can't review it.");

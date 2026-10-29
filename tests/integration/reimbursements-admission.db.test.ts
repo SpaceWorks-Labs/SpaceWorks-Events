@@ -22,7 +22,7 @@ import { admin, claimInput, ctx, freeEvent, person, setUpReimbursements, team, t
  */
 
 const claim = (token: string, policyId: string) => submitParticipantClaim({ ticketToken: token, actorUserId: null }, claimInput("100", policyId), []);
-const offered = async (rsvp: { id: string; eventId: string | null; status: RsvpStatus }) => ((await loadTicketClaims(rsvp))?.policies ?? []).map((row) => row.id);
+const offered = async (rsvp: { id: string; eventId: string | null; status: RsvpStatus; isCrew: boolean }) => ((await loadTicketClaims(rsvp))?.policies ?? []).map((row) => row.id);
 const base = { eligibility: "ADMISSION_STAGE", cap: "1000", categories: ["TRAVEL"] };
 
 /** An event taking applications with stages 1 and 2 (applications are opened by triggers on registration). */

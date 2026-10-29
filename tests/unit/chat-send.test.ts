@@ -1,8 +1,8 @@
+import net from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/net/publicAddress", () => ({
-  resolvePublicAddress: async () => { throw new (class PrivateAddressError extends Error {})("private"); },
-}));
+const resolved = vi.hoisted(() => ({ addresses: vi.fn() }));
+vi.mock("@/lib/net/publicAddress", () => ({ resolvePublicAddresses: resolved.addresses }));
 
 import { describeChatTarget, parseChatConfig } from "@/lib/chat/config";
 import { ChatDeliveryError, sendChatMessage } from "@/lib/chat/send";
@@ -60,9 +60,31 @@ describe("sending", () => {
   });
 
   it("never connects to a Mattermost server on a private address", async () => {
+    resolved.addresses.mockRejectedValue(new (class PrivateAddressError extends Error {})("private"));
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     await expect(sendChatMessage("MATTERMOST", { url: "https://chat.internal.example/hooks/abc" }, "x")).rejects.toThrow("private");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("connects a Mattermost host name to its vetted address when Node asks the lookup for every address", async () => {
+    // Node's default family autoselection calls the lookup with `all: true`, which needs an array answer.
+    expect(net.getDefaultAutoSelectFamily()).toBe(true);
+    const connections: string[] = [];
+    const server = net.createServer((socket) => {
+      connections.push(socket.remoteAddress ?? "");
+      socket.destroy();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as net.AddressInfo;
+    resolved.addresses.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+    try {
+      // A plain TCP server: reaching it proves the pinned lookup answered (the name itself never resolves); TLS then fails.
+      await expect(sendChatMessage("MATTERMOST", { url: `https://chat.example.test:${port}/hooks/abc` }, "x")).rejects.toBeInstanceOf(ChatDeliveryError);
+      expect(connections).toHaveLength(1);
+      expect(resolved.addresses).toHaveBeenCalledWith("chat.example.test");
+    } finally {
+      server.close();
+    }
   });
 });

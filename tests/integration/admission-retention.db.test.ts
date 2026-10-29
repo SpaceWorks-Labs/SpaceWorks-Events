@@ -38,7 +38,7 @@ describe.sequential("application retention", () => {
     const stage = await prisma.admissionStage.findFirstOrThrow({ where: { eventId: event.id } });
     const assignment = await prisma.admissionReviewAssignment.create({ data: { stageId: stage.id, applicationId: a.application.id, reviewerUserId: people.r1 } });
     expect(await editApplicationAnswers(a.token, { why: "First" })).toEqual({ ok: true });
-    expect(await submitReview(reviewCtx(event.id, event.organisationId, people.r1), assignment.id, { scores: { overall: 3 }, notes: "" })).toMatchObject({ ok: true });
+    expect(await submitReview(reviewCtx(event.id, event.organisationId, people.r1), assignment.id, { answersRevision: 2, scores: { overall: 3 }, notes: "" })).toMatchObject({ ok: true });
     await decide(ctx, [a.application.id], "WAITLIST");
     // Unassigning a reviewed assignment is refused; the review stays either way.
     expect(await unassignReviewer(ctx, assignment.id)).toMatchObject({ ok: false });
@@ -101,7 +101,7 @@ describe.sequential("application retention", () => {
     const input = { name: "Review", reviewsPerApplication: 1, blindReview: false, criteria: [], guidance: "", opensAt: null, closesAt: null, status: "OPEN" as const };
     expect(await updateStage(ctx, stage.id, { ...input, criteria: ["Fit"] })).toMatchObject({ ok: true });
     const assignment = await prisma.admissionReviewAssignment.create({ data: { stageId: stage.id, applicationId: a.application.id, reviewerUserId: people.r2 } });
-    expect(await submitReview(reviewCtx(event.id, event.organisationId, people.r2), assignment.id, { scores: { Fit: 4 }, notes: "" })).toMatchObject({ ok: true });
+    expect(await submitReview(reviewCtx(event.id, event.organisationId, people.r2), assignment.id, { answersRevision: 1, scores: { Fit: 4 }, notes: "" })).toMatchObject({ ok: true });
     expect(await updateStage(ctx, stage.id, { ...input, criteria: ["Fit", "Impact"] })).toMatchObject({ ok: false });
     expect(await updateStage(ctx, stage.id, { ...input, criteria: ["Fit"], name: "Screening" })).toMatchObject({ ok: true });
     // A withdrawn applicant's offer path is closed too.

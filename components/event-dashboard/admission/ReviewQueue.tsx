@@ -60,7 +60,7 @@ export function ReviewQueue({ scope, items }: { scope: AdmissionScope; items: Re
               onSubmit={(event) => {
                 event.preventDefault();
                 const numeric = Object.fromEntries(Object.entries(scores).map(([key, value]) => [key, Number(value)]));
-                run("submit", () => submitApplicationReview({ ...scope, assignmentId: open.assignmentId, scores: numeric, notes }), "Review submitted.", (result) => result.ok && setOpen(null));
+                run("submit", () => submitApplicationReview({ ...scope, assignmentId: open.assignmentId, answersRevision: open.answersRevision, scores: numeric, notes }), "Review submitted.", (result) => result.ok && setOpen(null));
               }}
             >
               {open.criteria.map((criterion) => (

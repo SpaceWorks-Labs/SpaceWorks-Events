@@ -2,6 +2,7 @@
   "ok": true,
   "data": {
     "assignmentId": "classign00000000000000001",
+    "answersRevision": 1,
     "stageName": "Review",
     "stageOpen": true,
     "blind": true,

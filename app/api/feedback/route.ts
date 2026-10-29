@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { checkRateLimitById, getClientIpFromHeaders } from "@/lib/rateLimit";
 import { submitFeedback } from "@/lib/feedback";
 import { withApiMonitoring } from "@/lib/apiMonitor";
+import { optionalMobileUser } from "@/lib/mobileAuth";
+import { runAsRequestActor } from "@/lib/requestActor";
 
 const MAX_FEEDBACK_BODY_BYTES = 128 * 1024;
 
@@ -46,6 +48,10 @@ export const POST = withApiMonitoring("POST /api/feedback", async (request: Requ
     const subject = crypto.createHash("sha256").update(email).digest("hex").slice(0, 32);
     if (!(await checkRateLimitById("feedback", `email:${subject}`))) return json({ ok: false, error: "Too many attempts. Try again shortly." }, 429);
   }
-  const result = await submitFeedback(body);
+  // The website sends its session cookie; the app may send its bearer, so an
+  // invited guest can answer an invite-only event's form (lib/feedback.ts).
+  const appUser = await optionalMobileUser(request);
+  if (request.headers.get("authorization") && !appUser) return json({ ok: false, error: "Sign in again to send feedback." }, 401);
+  const result = appUser ? await runAsRequestActor(appUser, () => submitFeedback(body)) : await submitFeedback(body);
   return json(result, result.ok ? 200 : 400);
 });

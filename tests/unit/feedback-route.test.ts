@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ limit: vi.fn(), submit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ limit: vi.fn(), submit: vi.fn(), appUser: vi.fn() }));
+vi.mock("@/lib/mobileAuth", () => ({ optionalMobileUser: mocks.appUser }));
 vi.mock("@/lib/rateLimit", () => ({ getClientIpFromHeaders: () => "203.0.113.4", checkRateLimitById: mocks.limit }));
 vi.mock("@/lib/feedback", () => ({ submitFeedback: mocks.submit }));
 vi.mock("@/lib/apiMonitor", () => ({ withApiMonitoring: (_label: string, handler: unknown) => handler }));
@@ -11,6 +12,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.limit.mockResolvedValue(true);
   mocks.submit.mockResolvedValue({ ok: true, data: { certificateToken: "secret-capability" } });
+  mocks.appUser.mockResolvedValue(null);
 });
 
 describe("feedback HTTP boundary", () => {
@@ -33,6 +35,16 @@ describe("feedback HTTP boundary", () => {
       body: "{}",
     }));
     expect(response.status).toBe(413);
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+
+  it("refuses an app bearer that does not sign in, before submitting", async () => {
+    const response = await POST(new Request("https://events.example.test/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer revoked" },
+      body: JSON.stringify({ orgSlug: "org", eventSlug: "event", answers: {} }),
+    }));
+    expect(response.status).toBe(401);
     expect(mocks.submit).not.toHaveBeenCalled();
   });
 });

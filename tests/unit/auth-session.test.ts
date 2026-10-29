@@ -72,8 +72,24 @@ describe("authentication boundary", () => {
     expect(await jwt({ token: { sub: "user_1", ...token } })).toBeNull();
   });
   it("does not let session updates renew authentication freshness", async () => {
-    const token = { sub: "user_1", sessionVersion: 2, authenticatedAt: 123 };
+    const token = { sub: "user_1", sessionVersion: 2, authenticatedAt: 123, sid: "sid-a" };
     expect(await jwt({ token, trigger: "update", session: { authenticatedAt: Date.now(), sessionVersion: 99 } })).toEqual(token);
+  });
+  it("retires a token from before sign-in ids, like a revoked one", async () => {
+    expect(await jwt({ token: { sub: "user_1", sessionVersion: 2, authenticatedAt: 123 } })).toBeNull();
+  });
+  it("records the sign-in method and a fresh sign-in id, and keeps both on refresh", async () => {
+    const first = await jwt({ token: {}, user: { id: "user_1", sessionVersion: 2 }, account: { provider: "credentials" } }) as Record<string, unknown>;
+    expect(first).toMatchObject({ authMethod: "credentials", sid: expect.stringMatching(/^[A-Za-z0-9_-]{22}$/) });
+    expect(await jwt({ token: { ...first } })).toMatchObject({ sid: first.sid, authMethod: "credentials" });
+    const google = await jwt({ token: {}, user: { id: "user_1" }, account: { provider: "google" } }) as Record<string, unknown>;
+    expect(google.authMethod).toBe("google");
+    expect(google.sid).not.toBe(first.sid);
+  });
+  it("puts the sign-in method on the session but never the sign-in id", async () => {
+    const session = await config.callbacks!.session!({ session: { user: {}, expires: "" }, token: { sub: "user_1", sid: "sid-a", authMethod: "credentials" } } as never) as unknown as Record<string, unknown>;
+    expect(session).toMatchObject({ user: { id: "user_1" }, authMethod: "credentials" });
+    expect(JSON.stringify(session)).not.toContain("sid-a");
   });
   it("clears deleted users", async () => {
     mocks.find.mockResolvedValue(null);
@@ -83,6 +99,18 @@ describe("authentication boundary", () => {
     mocks.find.mockResolvedValue({ passwordHash: "attacker-hash", emailVerified: null });
     const callback = config.callbacks!.signIn!;
     expect(await callback({ user: { email: "person@example.test" }, account: { provider: "google" }, profile: { email_verified: true } } as Parameters<typeof callback>[0])).toBe(false);
+  });
+
+  it("refuses Google for the super admin's address, and for a Google account linked to the super admin", async () => {
+    vi.stubEnv("SUPER_ADMIN_EMAIL", "admin@example.test");
+    const callback = config.callbacks!.signIn!;
+    const attempt = (email: string) => callback({ user: { email }, account: { provider: "google", providerAccountId: "google-user" }, profile: { email_verified: true } } as Parameters<typeof callback>[0]);
+    await expect(attempt("ADMIN@example.test")).resolves.toBe(false);
+    mocks.accountFind.mockResolvedValue({ id: "account_1", user: { email: "admin@example.test" } });
+    await expect(attempt("renamed-in-google@example.test")).resolves.toBe(false);
+    mocks.accountFind.mockResolvedValue({ id: "account_1", user: { email: "person@example.test" } });
+    await expect(attempt("person@example.test")).resolves.toBe(true);
+    vi.unstubAllEnvs();
   });
 
   it("creates an account for a verified new Google identity when registration is enabled", async () => {

@@ -219,11 +219,17 @@ async function loadTicketing(organisationId: string, event: Parameters<typeof pu
   });
 }
 
-/** The public feedback form, exactly as /:orgSlug/:eventSlug/feedback decides it is open. */
+/**
+ * The public feedback form, exactly as /:orgSlug/:eventSlug/feedback decides it
+ * is open, including the event page's access rule. Inside a signed-in app
+ * request auth() is the app session, so an invited guest can open it.
+ */
 export async function loadPublicFeedbackForm(orgSlug: string, eventSlug: string) {
   const event = await prisma.event.findFirst({
     where: { organisation: { slug: orgSlug }, slug: eventSlug, status: EventStatus.PUBLISHED },
     select: {
+      id: true, organisationId: true, status: true, privacyType: true,
+      page: { select: { isPublished: true } },
       feedbackForm: {
         select: {
           isOpen: true, title: true, thankYouMessage: true, certificateEnabled: true,
@@ -233,7 +239,9 @@ export async function loadPublicFeedbackForm(orgSlug: string, eventSlug: string)
     },
   });
   const form = event?.feedbackForm;
-  if (!form?.isOpen) return null;
+  if (!event || !form?.isOpen) return null;
+  const access = await resolvePublicEventAccess({ organisationId: event.organisationId, eventId: event.id, status: event.status, privacyType: event.privacyType, websiteReleased: event.page?.isPublished ?? false });
+  if (!access.allowed) return null;
   return feedbackFormDtoSchema.parse({
     title: form.title,
     intro: null,

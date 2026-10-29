@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readBoundedJson } from "@/lib/boundedBody";
 import { reportOpsAlert, sanitizeAlertPath } from "@/lib/opsAlerts";
 import { checkRateLimitById, getClientIpFromHeaders } from "@/lib/rateLimit";
 
@@ -28,15 +29,10 @@ export async function POST(request: Request) {
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return noContent();
   if (!(await checkRateLimitById("clientError", `ip:${getClientIpFromHeaders(request.headers)}`))) return noContent();
 
-  let body: unknown;
-  try {
-    const text = await request.text();
-    if (text.length > MAX_BODY_BYTES) return noContent();
-    body = JSON.parse(text);
-  } catch {
-    return noContent();
-  }
-  const parsed = reportSchema.safeParse(body);
+  // Read with a hard cap, so a chunked body without Content-Length stops at 4 KiB.
+  const body = await readBoundedJson(request, MAX_BODY_BYTES);
+  if (typeof body === "string") return noContent();
+  const parsed = reportSchema.safeParse(body.value);
   if (!parsed.success) return noContent();
 
   const { boundary, name, message, path } = parsed.data;

@@ -13,6 +13,9 @@ import { commitCheckInProjection, commitUndoCheckInProjection } from "@/lib/chec
 import { listRecentCheckIns } from "@/lib/checkInRecent";
 import { badgeBrandingFor, badgeDesignFor, loadBadgeEvent } from "@/lib/badge/data";
 import { attendeePhotoUrl } from "@/lib/badge/imageUrl";
+import { readBoundedJson } from "@/lib/boundedBody";
+
+const MAX_BODY_BYTES = 128 * 1024;
 
 const bodySchema = z.object({
   organisationSlug: z.string().trim().min(1).max(120), eventSlug: z.string().trim().min(1).max(160),
@@ -40,8 +43,11 @@ function toData(rsvp: StationRsvp, force = false) {
 }
 
 export async function POST(request: Request) {
-  let input: z.infer<typeof bodySchema>;
-  try { input = bodySchema.parse(await request.json()); } catch { return failure("Invalid request."); }
+  const read = await readBoundedJson(request, MAX_BODY_BYTES);
+  if (read === "too_large") return failure("Request is too large.", 413);
+  const parsed = read === "invalid" ? null : bodySchema.safeParse(read.value);
+  if (!parsed?.success) return failure("Invalid request.");
+  const input = parsed.data;
   const event = await prisma.event.findFirst({ where: { slug: input.eventSlug, organisation: { slug: input.organisationSlug } }, select: { id: true, title: true, slug: true, organisationId: true, startDateTime: true, endDateTime: true, checkInStationPinHash: true, checkInStationSecretVersion: true, organisation: { select: { slug: true, name: true } } } });
   if (!event || !event.checkInStationPinHash) return failure();
   if (input.action === "unlock") {

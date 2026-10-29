@@ -50,7 +50,7 @@ describe("guide access", () => {
   });
 
   it("opens everything to the verified super admin, and nothing extra when unverified", async () => {
-    mocks.session.mockResolvedValue({ user: { id: "root" } });
+    mocks.session.mockResolvedValue({ user: { id: "root" }, authMethod: "credentials" });
     mocks.findUser.mockResolvedValue({ email: "Root@Example.org", emailVerified: new Date() });
     expect((await loadHelpAccess()).sort()).toEqual(["org-admin", "public", "super-admin"]);
 
@@ -58,9 +58,15 @@ describe("guide access", () => {
     expect(await loadHelpAccess()).toEqual(["public"]);
   });
 
+  it("opens nothing extra to the super admin's account signed in without the password", async () => {
+    mocks.session.mockResolvedValue({ user: { id: "root" }, authMethod: "google" });
+    mocks.findUser.mockResolvedValue({ email: "root@example.org", emailVerified: new Date() });
+    expect(await loadHelpAccess()).toEqual(["public"]);
+  });
+
   it("opens nothing extra when no super admin is configured", async () => {
     vi.stubEnv("SUPER_ADMIN_EMAIL", "");
-    mocks.session.mockResolvedValue({ user: { id: "root" } });
+    mocks.session.mockResolvedValue({ user: { id: "root" }, authMethod: "credentials" });
     mocks.findUser.mockResolvedValue({ email: "root@example.org", emailVerified: new Date() });
     expect(await loadHelpAccess()).toEqual(["public"]);
   });
