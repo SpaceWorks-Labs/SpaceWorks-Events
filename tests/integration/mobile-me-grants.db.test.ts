@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { EventPermission } from "@prisma/client";
+import { EventPermission, EventPrivacyType } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /*
@@ -50,6 +50,19 @@ describe("GET /me with application-review grants", () => {
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
     expect(body.data.collaborations).toEqual([]);
+    // Applications are off on that event, so there is no review workspace to open yet.
+    expect(body.data.reviewing).toEqual([]);
+  });
+
+  it("lists the review workspace of a review-only collaborator once applications are on, still outside organiser tools", async () => {
+    await prisma.event.update({ where: { id: ids.reviewOnly }, data: { privacyType: EventPrivacyType.APPROVAL_REQUIRED, admissionEnabled: true } });
+    const reviewer = await signIn(email("reviewer"));
+    const response = await me(get("/api/mobile/v1/me", reviewer.accessToken), none);
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.data.reviewing).toEqual([expect.objectContaining({ eventId: ids.reviewOnly, organisation: { slug: `mob-review-${suffix}`, name: "Review grants" } })]);
+    expect(body.data.collaborations).toEqual([]);
+    expect(body.data.organisations).toEqual([]);
   });
 
   it("lists only the organiser permissions of a mixed grant", async () => {

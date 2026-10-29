@@ -130,7 +130,7 @@ Example `registration.status_changed`:
 }
 ```
 
-`application.status_changed` carries ids, status and stage only, never answers, scores, reviews or reviewers:
+`application.status_changed` carries ids, status and stage only, never answers, scores, reviews or reviewers. Each recorded change has one event id, kept if queueing is retried, so it is queued once:
 
 ```json
 "data": {
@@ -179,6 +179,7 @@ export function verifySpaceWorksWebhook(secret, signatureHeader, rawBody, tolera
 
 ## Delivery and retries
 
+- Application status changes are marked sent and their deliveries queued in one transaction. Payload construction and endpoint queries use the same transaction connection, including on installations using `connection_limit=1`.
 - Delivery rows (`WebhookDelivery`, one per endpoint and event) are processed every 15 seconds by the beat (`SWE_PROCESS_ROLE` `beat` or `all`), and by the protected `POST /api/internal/outbox` recovery trigger. Rows are claimed with `FOR UPDATE SKIP LOCKED` and finished under a lease, so replicas never send the same attempt twice; a lease older than 5 minutes is returned to the queue. Up to 25 rows are sent per pass, 5 at a time.
 - Each request has a **10-second** timeout and a **256 KB** body cap. Redirects are **not followed**: a `3xx` is a failed delivery.
 - Any `2xx` is success. Anything else (other status, timeout, connection or TLS error, blocked address) is a failure. Only a short, redacted excerpt of the response body (at most 120 characters, emails and token-like strings removed) is kept with the status code; the URL and secret never appear in errors.

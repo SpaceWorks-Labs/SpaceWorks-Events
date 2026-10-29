@@ -6,7 +6,7 @@ import { mobileActionError, mobileError, mobileOk, parseJsonBody, zodFieldErrors
 import { judgingRoute } from "@/lib/mobile/judging";
 import { judgeScoresSavedDtoSchema } from "@/lib/mobile/schemas";
 import { judgeReviewSchema } from "@/lib/validators";
-import { currentRoundReview, refuseUnlessCurrentRound } from "@/lib/mobile/judgeReview";
+import { pinnedRoundReview, pinScoringRound } from "@/lib/mobile/judgeReview";
 
 type Params = { orgSlug: string; eventId: string; submissionId: string };
 
@@ -19,12 +19,13 @@ const bodySchema = z.object({
  * Save some or all of this judge's scores (and, optionally, the private
  * comment as a draft) without submitting. The core re-checks the judge,
  * judging status (JUDGING_CLOSED), visibility (NOT_VISIBLE) and each
- * criterion's range inside its transaction.
+ * criterion's range inside its transaction. Both writes and the response
+ * read use one round, pinned at the start (JUDGING_CLOSED if it changes).
  */
 export const PUT = judgingRoute<Params>("PUT /api/mobile/v1/orgs/:orgSlug/events/:eventId/judging/submissions/:submissionId/scores", "action", async (request, { submissionId }, { judge }) => {
-  // Scores and reviews are written to the current round only.
-  const notCurrent = await refuseUnlessCurrentRound(judge, new URL(request.url).searchParams.get("roundId"));
-  if (notCurrent) return notCurrent;
+  // Scores and reviews are written to the current round only, the same one for the whole request.
+  const pin = await pinScoringRound(judge, new URL(request.url).searchParams.get("roundId"));
+  if ("response" in pin) return pin.response;
   const body = await parseJsonBody(request, bodySchema);
   if ("response" in body) return body.response;
   const { scores, comment } = body.data;
@@ -33,14 +34,14 @@ export const PUT = judgingRoute<Params>("PUT /api/mobile/v1/orgs/:orgSlug/events
     const review = judgeReviewSchema.safeParse({ submissionId, comment, submit: false });
     if (!review.success) return mobileError("INVALID_REQUEST", "Check the highlighted fields.", { fieldErrors: zodFieldErrors(review.error) });
   }
-  const saved = await saveJudgeScores(judge, { submissionId, scores });
+  const saved = await saveJudgeScores(judge, { submissionId, scores }, pin.roundId);
   if (!saved.ok) return mobileActionError(saved);
   if (comment !== undefined) {
-    const draft = await submitJudgeReview(judge, { submissionId, comment, submit: false });
+    const draft = await submitJudgeReview(judge, { submissionId, comment, submit: false }, pin.roundId);
     if (!draft.ok) return mobileActionError(draft);
   }
   revalidatePath(`/dashboard/${judge.orgSlug}/event/${judge.eventId}`);
-  const review = await currentRoundReview(judge, submissionId);
+  const review = await pinnedRoundReview(judge, pin.roundId, submissionId);
   if (!saved.data) return mobileError("INTERNAL_ERROR");
   return mobileOk(judgeScoresSavedDtoSchema.parse({
     scored: saved.data.scored,

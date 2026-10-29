@@ -56,8 +56,10 @@ matter, like prize payouts and payment settings. Every step is audited.
   cap don't apply to them. The Finance list labels them *(crew)*.
 - Lifecycle: `SUBMITTED` → `APPROVED` (for the amount asked or less, with an
   optional note) or `REJECTED` (with a reason the claimant sees) →
-  `PAID`. The claimant may withdraw (`WITHDRAWN`) while it waits. Each step
-  locks the claim row.
+  `PAID`. The claimant may withdraw (`WITHDRAWN`) while it waits: staff only
+  their own claims on the organisation and event of the route they use
+  (`withdrawClaim` matches all three), a participant only claims of the
+  registration their ticket proves. Each step locks the claim row.
 - Emails (operator notices through the outbox): owners and admins when a
   claim arrives; the person being paid back when it is approved, rejected or
   paid. Chat: *Expense claims* for claims and refund requests, *Payouts* for

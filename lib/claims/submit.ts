@@ -166,18 +166,24 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
   }
 }
 
+/**
+ * Who withdraws, and where: staff (and finance callers) as the filer, on the
+ * organisation and event their access was checked for; a participant by the
+ * registration their ticket proves. The claim must match the whole scope.
+ */
+export type WithdrawScope = { userId: string; organisationId: string; eventId: string; } | { rsvpId: string; };
+
 /** The claimant takes back a claim nobody has decided yet. */
-export async function withdrawClaim(claimId: string, claimant: { userId: string | null; rsvpId?: string | null; }): Promise<ClaimResult<undefined>> {
-  if (!claimant.userId && !claimant.rsvpId) return fail("Claim not found.");
+export async function withdrawClaim(claimId: string, scope: WithdrawScope): Promise<ClaimResult<undefined>> {
+  const where = "rsvpId" in scope
+    ? { id: claimId, rsvpId: scope.rsvpId }
+    : { id: claimId, submittedByUserId: scope.userId, organisationId: scope.organisationId, eventId: scope.eventId };
   const result = await prisma.$transaction(async (tx): Promise<ClaimResult<undefined>> => {
-    const claim = await tx.expenseClaim.findFirst({
-      where: { id: claimId, OR: [...(claimant.userId ? [{ submittedByUserId: claimant.userId }] : []), ...(claimant.rsvpId ? [{ rsvpId: claimant.rsvpId }] : [])] },
-      select: { id: true, organisationId: true },
-    });
+    const claim = await tx.expenseClaim.findFirst({ where, select: { id: true, organisationId: true } });
     if (!claim) return fail("Claim not found.");
     const updated = await tx.expenseClaim.updateMany({ where: { id: claim.id, status: ExpenseClaimStatus.SUBMITTED }, data: { status: ExpenseClaimStatus.WITHDRAWN } });
     if (updated.count !== 1) return fail("Only claims waiting for a decision can be withdrawn.");
-    await recordAuditEvent({ action: "EXPENSE_CLAIM_WITHDRAWN", actorUserId: claimant.userId, organisationId: claim.organisationId, targetType: "ExpenseClaim", targetId: claim.id, client: tx });
+    await recordAuditEvent({ action: "EXPENSE_CLAIM_WITHDRAWN", actorUserId: "userId" in scope ? scope.userId : null, organisationId: claim.organisationId, targetType: "ExpenseClaim", targetId: claim.id, client: tx });
     return ok(undefined);
   });
   if (result.ok) emitWebhookEvent({ type: "expense_claim.status_changed", claimId, status: ExpenseClaimStatus.WITHDRAWN, previousStatus: ExpenseClaimStatus.SUBMITTED });

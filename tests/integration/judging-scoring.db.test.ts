@@ -50,7 +50,7 @@ describe.sequential("hackathon judging integration", () => {
     expect(await score(6)).toMatchObject({ ok: false });
     expect(await saveJudgeScores(judge.ctx, { submissionId, scores: [{ criterionId: c, score: -1 }] })).toMatchObject({ ok: false });
     expect(await saveJudgeScores(judge.ctx, { submissionId, scores: [{ criterionId: c, score: 2.5 }] })).toMatchObject({ ok: false });
-    expect(await score(3)).toEqual({ ok: true, data: { scored: 1, total: 1 } });
+    expect(await score(3)).toEqual({ ok: true, data: { scored: 1, total: 1, roundId: expect.any(String) } });
 
     // Drafts and withdrawn projects are not judged.
     expect(await withdrawSubmission(auth)).toMatchObject({ ok: true });
@@ -162,7 +162,7 @@ describe.sequential("hackathon judging integration", () => {
     // S3: J2 (5, 4) = (2 + 0.4) / 3 = 80 — a tie with S2.
     await review(j2.ctx, s3, 5, 4);
     // S4: partial scores only; a submitted review needs every criterion.
-    expect(await saveJudgeScores(j3.ctx, { submissionId: s4, scores: [{ criterionId: design, score: 5 }] })).toEqual({ ok: true, data: { scored: 1, total: 2 } });
+    expect(await saveJudgeScores(j3.ctx, { submissionId: s4, scores: [{ criterionId: design, score: 5 }] })).toEqual({ ok: true, data: { scored: 1, total: 2, roundId: expect.any(String) } });
     expect(await submitJudgeReview(j3.ctx, { submissionId: s4 })).toMatchObject({ ok: false, error: "Score every criterion before submitting your review." });
 
     const results = await loadJudgingResults(ctx);
