@@ -9,13 +9,18 @@
 # A repository-level runner accepts any workflow that names its label, so it
 # runs as the unprivileged account swe-runner, without Docker access. Its only
 # root command is the deploy wrapper, which installs verified, published main
-# releases and nothing else.
+# releases and nothing else. As root, this script never runs anything from the
+# runner's directory: the service is a unit written here (runner-service.sh),
+# the runner's files are unpacked as swe-runner, and its system dependencies
+# are installed from a fresh root-owned extraction of the verified archive.
 set -euo pipefail
 # Tokens must stay out of shell traces, argv, answer files and the runner's .env.
 set +x
 source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 # shellcheck source=scripts/vps-lib.sh
 . "$source_dir/scripts/vps-lib.sh"
+# shellcheck source=scripts/runner-service.sh
+. "$source_dir/scripts/runner-service.sh"
 mode=install
 case "${1:-}" in
   '') ;;
@@ -40,6 +45,7 @@ repository=${SWE_REPOSITORY:-$(conf_get "$(install_conf)" SWE_REPOSITORY)}
 repository=${repository:-$SWE_DEFAULT_REPOSITORY}
 is_repository "$repository" || die 'SWE_REPOSITORY must be a GitHub owner/name.'
 if [[ $mode = remove && ! -f "$RUNNER_DIR/.runner" ]]; then
+  stop_runner_services
   rm -f "$SUDOERS" "$WRAPPER"
   say 'No configured runner to remove.'
   exit 0
@@ -68,8 +74,7 @@ configure_runner() (
 )
 unregister() {
   read_token removal
-  cd "$RUNNER_DIR"
-  if [[ -f .service ]]; then bash ./svc.sh stop; bash ./svc.sh uninstall; fi
+  stop_runner_services
   configure_runner remove
   runner_token=''
 }
@@ -113,18 +118,23 @@ install -d -m 0700 -o "$RUNNER_USER" -g "$RUNNER_USER" "$RUNNER_DIR"
 if [[ -f "$RUNNER_DIR/.runner" ]]; then
   say 'Re-registering replaces the existing registration, which needs its removal token first.'
   unregister
+else
+  stop_runner_services
 fi
 read_token registration
-tar -xzf "$temporary/runner.tar.gz" --no-same-owner -C "$RUNNER_DIR"
-[[ -f "$RUNNER_DIR/config.sh" ]] || die 'The official runner archive is incomplete.'
-chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_DIR"
+# System packages the runner needs, installed by the archive's own script from a
+# fresh root-owned copy, never from the runner-writable directory.
+install -d -m 0700 "$temporary/archive"
+tar -xzf "$temporary/runner.tar.gz" --no-same-owner -C "$temporary/archive"
+[[ -f "$temporary/archive/config.sh" && -f "$temporary/archive/bin/runsvc.sh" ]] || die 'The official runner archive is incomplete.'
+[[ ! -f "$temporary/archive/bin/installdependencies.sh" ]] || bash "$temporary/archive/bin/installdependencies.sh" >/dev/null
+# Unpacked as the runner account, so root never writes into its directory.
+runuser -u "$RUNNER_USER" -- tar -xzf - -C "$RUNNER_DIR" < "$temporary/runner.tar.gz"
 # The archive resets the directory mode; the registration credentials live here.
 chmod 0700 "$RUNNER_DIR"
-[[ ! -f "$RUNNER_DIR/bin/installdependencies.sh" ]] || bash "$RUNNER_DIR/bin/installdependencies.sh" >/dev/null
 configure_runner --url "https://github.com/$repository" --name "$(hostname)-spaceworks-events" \
   --labels spaceworks-events-prod --unattended --replace
 runner_token=''
-[[ -f "$RUNNER_DIR/svc.sh" ]] || die 'Runner configuration did not create its service helper.'
 
 # The single root command the runner may run: deploy a verified published release.
 cat > "$WRAPPER.new" <<EOF
@@ -142,12 +152,10 @@ chmod 0440 "$SUDOERS.new"
 if command -v visudo >/dev/null; then visudo -cqf "$SUDOERS.new" || { rm -f "$SUDOERS.new"; die 'The sudoers rule did not validate.'; }; fi
 mv -f "$SUDOERS.new" "$SUDOERS"
 
-cd "$RUNNER_DIR"
-[[ -f .service ]] || bash ./svc.sh install "$RUNNER_USER"
-bash ./svc.sh start
+write_runner_unit
 cat <<EOF
 
-Runner installed as the systemd service of $RUNNER_USER. Finish in GitHub repository $repository:
+Runner installed as the systemd service $RUNNER_UNIT, running as $RUNNER_USER. Finish in GitHub repository $repository:
 1. Settings -> Secrets and variables -> Actions -> Variables -> New repository variable:
    SWE_DEPLOY = true
 2. Settings -> Environments -> New environment "production" -> Deployment branches and

@@ -1,0 +1,8 @@
+{
+  "name": "spaceworks-events-prisma-cli",
+  "private": true,
+  "description": "Prisma CLI for the backend image's MIGRATE_ON_START path. Keep the version equal to the root lockfile's (tests/unit/docker-deps.test.ts).",
+  "dependencies": {
+    "prisma": "6.19.3"
+  }
+}

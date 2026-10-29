@@ -46,3 +46,15 @@ describe("VPS backup status", () => {
     expect(backupProblem({ ...stale, scheduled: false }, now)).toBeNull();
   });
 });
+
+describe("VPS backup refusals", () => {
+  it("names a backup refused because encryption is not working", () => {
+    const refused = { ...healthy, lastStatus: "failed" as const, encrypted: false, lastAttemptAt: "2026-10-20T02:31:00Z" };
+    const missing = backupProblem({ ...refused, reason: "encryption-key-missing" }, now);
+    expect(missing).toMatchObject({ key: "failed:2026-10-20T02:31:00Z", subject: "Backups refused: encryption is not working" });
+    expect(missing?.detail).toContain("no encryption key is saved");
+    expect(backupProblem({ ...refused, reason: "encryption-unavailable" }, now)?.detail).toContain('Install the "age" package');
+    // Status files from older releases have no reason.
+    expect(backupProblem({ ...refused, reason: null }, now)?.subject).toBe("Backup failed");
+  });
+});

@@ -54,6 +54,12 @@ If you answered yes to automatic deploys, or added them later with **7) Automati
 
 To back up straight away, choose **2) Back up now**. The site keeps running while it works.
 
+<Callout kind="warning">
+
+Once you ask for encryption, backups are never made unencrypted instead. If the age tool can't be installed or doesn't work, setup leaves nightly backups off, and every backup (including the one taken before an update) is refused until encryption works. **Operations** shows *Backups refused: encryption is not working*. Install the `age` package, then in **Backups** choose **Set up the requested encryption** and turn nightly backups on. If you really want unencrypted backups, turn the request off in the same menu.
+
+</Callout>
+
 <Callout kind="tip">
 
 A backup on the same server isn't a backup of the server. Turn on off-site copies, or copy the backups away yourself, and practise restoring now and then on a separate machine.

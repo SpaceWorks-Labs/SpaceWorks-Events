@@ -22,6 +22,9 @@ const statusSchema = z.object({
   offsite: z.enum(["off", "ok", "failed"]),
   scheduled: z.boolean(),
   keepDays: z.number().int().positive(),
+  // Why a backup was refused: encryption is on or requested but not working,
+  // so no unencrypted backup was made. Absent in files from older releases.
+  reason: z.enum(["encryption-unavailable", "encryption-key-missing"]).nullable().optional(),
 });
 export type VpsBackupStatus = z.infer<typeof statusSchema>;
 
@@ -47,6 +50,15 @@ export type BackupProblem = { key: string; subject: string; detail: string };
  */
 export function backupProblem(status: VpsBackupStatus | null, now = new Date()): BackupProblem | null {
   if (!status) return null;
+  if (status.lastStatus === "failed" && status.reason) {
+    return {
+      key: `failed:${status.lastAttemptAt}`,
+      subject: "Backups refused: encryption is not working",
+      detail: status.reason === "encryption-key-missing"
+        ? `Backups are set to be encrypted but no encryption key is saved, so no unencrypted backup was made (${status.lastAttemptAt}). Turn on encryption in the installer menu (Backups), or turn the encryption request off there.`
+        : `Backups are set to be encrypted but the age tool is missing or not working, so no unencrypted backup was made (${status.lastAttemptAt}). Install the "age" package, then turn on encryption in the installer menu (Backups).`,
+    };
+  }
   if (status.lastStatus === "failed") {
     const offsite = status.offsite === "failed";
     return {

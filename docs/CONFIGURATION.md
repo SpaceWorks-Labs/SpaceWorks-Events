@@ -119,7 +119,24 @@ Configure SMTP, Google SSO, paid events, backup status, and operational alerts u
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Provider-dependent | Configure both, or neither when using a workload/IAM role |
 | `S3_FORCE_PATH_STYLE` | Optional | Set to `1` for providers that require path-style addressing (`1` for Cloudflare R2 and Silo) |
 
-The bucket must remain private. Existing database-backed assets can be moved with `npm run storage:migrate` after S3 is configured.
+The bucket must remain private. Existing database-backed assets can be moved with `npm run storage:migrate` after S3 is configured. That script is an operator-only one-off: do not run it while an organisation is being deleted, because its uploads are not tracked by the deletion queue below.
+
+### Storage contract and the deletion queue
+
+Stored files are removed through a durable queue (`StorageDeletion`, worked by the beat every minute; `lib/storage/deletionQueue.ts`):
+
+- **Every upload is tracked from before its first byte.** An upload records a pending deletion for its fresh key, sends the file (refused once 30 minutes have passed since it was recorded, and aborted then), and removes the pending row only in the transaction that saves its `Asset`. A failed, abandoned or uncertain upload therefore keeps its row, and the beat deletes the file 2 hours after that deadline. Once the beat has claimed a row, that upload can no longer be saved.
+- **Deleting an organisation** queues every stored file it owns (images, receipts, unused uploads and every expense receipt key) in the same transaction as the deletion, plus one listing of its `organisations/<id>/` prefix for files an earlier release may have left without a record. The queue has no foreign key, so it survives the cascade. User profile images are not touched.
+- **Abandoned receipts:** a receipt photo no expense claim refers to after a day is removed by the hourly retention job; its file is queued in the same statement.
+- **Deletion is checked.** After a delete succeeds (or finds nothing), the file is checked again 24 hours later; it is deleted again if it is still there, and the queue row goes only once the file is gone. Repeating a delete is harmless; completion is eventual. Failures are retried with back-off and recorded only as short error codes.
+
+The queue relies on this contract with the storage provider:
+
+- **No versioning on the private bucket** (S3, Cloudflare R2, Silo/MinIO and any compatible service). A delete on a versioned bucket only adds a delete marker and keeps the bytes. **Super admin → Operations** warns when a deleted file is still there on two checks.
+- **One storage location.** `Asset` rows record no bucket, so changing `S3_BUCKET` or `S3_ENDPOINT` while files exist is unsupported unless every object is first copied to the new location (and the deletion queue is empty). Each queued deletion records the location (a hash of the provider, endpoint and bucket) it belongs to; the beat never deletes a row's key in another location. It keeps such rows and **Operations** reports them, so restore the earlier settings or delete those files there by hand.
+- **Residual risk (accepted):** an upload that the storage service applies more than 26 hours after the application aborted it would not be removed. No supported provider behaves this way.
+
+Release requirement: see [the storage queue rollout](production-operations.md#storage-deletion-queue-rollout); every instance of an older release must be stopped within an hour of the `20261120010100_storage_deletion_queue` migration.
 
 ## Operational metadata
 

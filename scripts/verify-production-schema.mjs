@@ -204,6 +204,26 @@ try {
     ...releaseIndexes.filter((name) => !releaseFound.indexes.has(name)),
     ...releaseTriggers.filter((name) => !releaseFound.triggers.has(name)),
   );
+  // UTC trigger timestamps, the storage deletion queue and offline check-in
+  // replay records (20261120010000…20261120010200).
+  const opsTables = ["StorageDeletion", "StorageProtocol", "OfflineCheckInMutation"];
+  const opsIndexes = ["StorageDeletion_location_key_kind_key", "StorageDeletion_state_notBefore_idx", "OfflineCheckInMutation_eventId_clientMutationId_key"];
+  const utcFunctions = ["rsvp_waitlist_dates", "write_security_audit_fallback", "write_api_security_audit_fallback"];
+  const [opsTableRows, opsIndexRows, utcFunctionRows] = await Promise.all([
+    prisma.$queryRaw`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY(${opsTables}::text[])`,
+    prisma.$queryRaw`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname = ANY(${opsIndexes}::text[])`,
+    prisma.$queryRaw`SELECT proname FROM pg_proc WHERE proname = ANY(${utcFunctions}::text[]) AND prosrc LIKE '%(CURRENT_TIMESTAMP AT TIME ZONE ''UTC'')::timestamp(3)%'`,
+  ]);
+  const opsFound = { tables: present(opsTableRows, "table_name"), indexes: present(opsIndexRows, "indexname"), functions: present(utcFunctionRows, "proname") };
+  missing.push(
+    ...opsTables.filter((name) => !opsFound.tables.has(name)),
+    ...opsIndexes.filter((name) => !opsFound.indexes.has(name)),
+    ...utcFunctions.filter((name) => !opsFound.functions.has(name)).map((name) => `${name}:UTC timestamps`),
+  );
+  // The deletion queue's epoch row, written by its migration.
+  if (opsFound.tables.has("StorageProtocol") && (await prisma.$queryRaw`SELECT 1 FROM "StorageProtocol" WHERE "id" = 1`).length === 0) {
+    missing.push("StorageProtocol:epoch row");
+  }
   if (missing.length > 0) {
     throw new Error(`Database schema contract failed; missing: ${missing.join(", ")}`);
   }
