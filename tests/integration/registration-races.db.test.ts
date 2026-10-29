@@ -19,7 +19,7 @@ vi.mock("@/lib/outboxWorker", () => ({ startOutboxWorker: vi.fn() }));
 import { prisma } from "@/lib/db";
 import { submitRsvpCore } from "@/lib/rsvpCore";
 import { joinTeamWithExistingRsvp, organiserMoveMember, transitionTeamStatus } from "@/lib/core/teams";
-import { whileLocked } from "./helpers/paymentAudit";
+import { whileLocked } from "./helpers/lockWait";
 import { createEvent, createTeam, organisationId, organiser, orgSlug, registerOk, seekerHolder, setUpTeams, statusOf, suffix, tearDownTeams } from "./helpers/teams";
 
 beforeAll(() => setUpTeams());
@@ -33,7 +33,7 @@ async function account(label: string) {
 }
 afterAll(() => prisma.user.deleteMany({ where: { id: { in: users } } }));
 
-/** The organiser switches the audience to invite-only while holding the Event lock; `work` waits behind it. */
+/** The audience switch commits only once PostgreSQL confirms `work` is waiting behind its lock. */
 const switchedWhile = <T>(eventId: string, work: () => Promise<T>) => whileLocked(async (tx) => {
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
   await tx.event.update({ where: { id: eventId }, data: { privacyType: EventPrivacyType.INVITE_ONLY } });
@@ -44,6 +44,7 @@ describe.sequential("invite-only registration under the reservation lock", () =>
     const event = await createEvent({ registrationMode: RegistrationMode.INDIVIDUAL });
     const guestEmail = `waiting-guest-${suffix}@example.test`;
     const result = await switchedWhile(event.id, () => submitRsvpCore({ orgSlug, eventSlug: event.slug, guestEmail, name: "Waiting Guest", answers: {} }, { userId: null }));
+    expect(result.ok).toBe(false);
     expect(result).toEqual({ ok: false, error: "This event is invite-only. Sign in with the invited account to register." });
     expect(await prisma.rSVP.count({ where: { eventId: event.id } })).toBe(0);
   });
@@ -52,6 +53,7 @@ describe.sequential("invite-only registration under the reservation lock", () =>
     const event = await createEvent({ registrationMode: RegistrationMode.INDIVIDUAL });
     const user = await account("not-invited");
     const result = await switchedWhile(event.id, () => submitRsvpCore({ orgSlug, eventSlug: event.slug, answers: {} }, { userId: user.id }));
+    expect(result.ok).toBe(false);
     expect(result).toEqual({ ok: false, error: "This event is invite-only. Use the email you were invited with." });
     expect(await prisma.rSVP.count({ where: { eventId: event.id } })).toBe(0);
   });
@@ -72,6 +74,7 @@ describe.sequential("invite-only registration under the reservation lock", () =>
       await tx.$queryRaw`SELECT "id" FROM "EventSeries" WHERE "id" = ${series.id} FOR UPDATE`;
       await tx.eventSeries.update({ where: { id: series.id }, data: { privacyType: EventPrivacyType.INVITE_ONLY } });
     }, () => submitRsvpCore({ orgSlug, eventInstanceId: date.id, guestEmail: `series-guest-${suffix}@example.test`, name: "Series Guest", answers: {} }, { userId: null }));
+    expect(result.ok).toBe(false);
     expect(result).toEqual({ ok: false, error: "This event is invite-only. Sign in with the invited account to register." });
     expect(await prisma.rSVP.count({ where: { eventInstanceId: date.id } })).toBe(0);
   });

@@ -49,6 +49,7 @@ export async function cancelRegistrationByToken(
     attendanceNo?: AttendanceNo;
   } = {},
 ): Promise<ActionResult<{ cancelled: true; }>> {
+  const authority = { checkInToken: checkInToken.trim(), OR: [{ userId: null }, ...(actorUserId ? [{ userId: actorUserId }] : [])] };
   const rsvp = await prisma.rSVP.findUnique({
     where: { checkInToken: checkInToken.trim() },
     include: {
@@ -103,7 +104,10 @@ export async function cancelRegistrationByToken(
     // either commits first and is seen below, or waits and finds it gone.
     if (rsvp.orderId) await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${rsvp.orderId} FOR UPDATE`;
     await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${rsvp.id} FOR UPDATE`;
-    const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, include: { user: { select: { email: true } }, order: { select: { id: true, status: true, buyerEmail: true, totalMinor: true, payments: { where: { status: { in: ["PAID_ONLINE", "PAID_OFFLINE", "PENDING"] } }, select: { id: true, status: true } } } } } });
+    // A holder change can commit while we wait for Event. Re-prove both the
+    // capability and account ownership under the RSVP lock, including writes.
+    const authorisedRsvp = { id: rsvp.id, ...authority };
+    const current = await tx.rSVP.findFirst({ where: authorisedRsvp, include: { user: { select: { email: true } }, order: { select: { id: true, status: true, buyerEmail: true, totalMinor: true, payments: { where: { status: { in: ["PAID_ONLINE", "PAID_OFFLINE", "PENDING"] } }, select: { id: true, status: true } } } } } });
     if (!current) return { error: "RSVP not found." };
     if (current.isCrew) return { error: "You're on this event's crew. Ask an organiser to remove you from the crew." };
     if (current.checkedInAt) return { error: "Cannot cancel — you have already checked in." };
@@ -120,8 +124,8 @@ export async function cancelRegistrationByToken(
     const organisationId = rsvp.event?.organisation.id ?? rsvp.eventInstance!.series.organisation.id;
     if (current.order?.status === "REQUESTED") {
       // A paid request is withdrawn as a whole; nothing was charged.
-      await tx.order.update({ where: { id: current.order.id }, data: { status: "CANCELLED" } });
-      await tx.rSVP.deleteMany({ where: { orderId: current.order.id } });
+      await tx.order.update({ where: { id: current.order.id, rsvps: { some: authorisedRsvp } }, data: { status: "CANCELLED" } });
+      await tx.rSVP.deleteMany({ where: { orderId: current.order.id, order: { rsvps: { some: authorisedRsvp } } } });
       await noticeEach(tx, [current.order.buyerEmail], { organisationId, subject: noticeSubject("Request withdrawn", title), lines: [`Your request to join ${title} was withdrawn. Nothing was charged.`] });
       return { error: null };
     }
@@ -129,11 +133,11 @@ export async function cancelRegistrationByToken(
       // A held order is released as a whole: ending its hold lets the
       // scheduler close the payment page before the seats go back on sale.
       const now = new Date();
-      await tx.order.update({ where: { id: current.order.id }, data: { holdExpiresAt: now } });
-      await tx.rSVP.updateMany({ where: { orderId: current.order.id, status: "PENDING_PAYMENT" }, data: { holdExpiresAt: now } });
+      await tx.order.update({ where: { id: current.order.id, rsvps: { some: authorisedRsvp } }, data: { holdExpiresAt: now } });
+      await tx.rSVP.updateMany({ where: { orderId: current.order.id, status: "PENDING_PAYMENT", order: { rsvps: { some: authorisedRsvp } } }, data: { holdExpiresAt: now } });
       return { error: null };
     }
-    const deleted = await tx.rSVP.deleteMany({ where: { id: current.id, checkedInAt: null } });
+    const deleted = await tx.rSVP.deleteMany({ where: { ...authorisedRsvp, checkedInAt: null } });
     // Never a partial cancellation: anything unexpected rolls the whole transaction back.
     if (deleted.count !== 1) throw new Error("The registration changed while it was being cancelled.");
     removed = { previousStatus: current.status, snapshot: { id: current.id, eventId: current.eventId, eventInstanceId: current.eventInstanceId, userId: current.userId, guestName: current.guestName, createdAt: current.createdAt, checkedInAt: current.checkedInAt } };

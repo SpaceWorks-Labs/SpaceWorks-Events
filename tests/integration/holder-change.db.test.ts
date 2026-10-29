@@ -38,7 +38,9 @@ import { generateSubmissionLinkToken } from "@/lib/submissionToken";
 import { updateRsvpRegistration } from "@/app/actions/rsvp-admin";
 import { askAndToken, buyPaid, email, owner, paidEvent, setUpPaidAttendance, tearDownPaidAttendance } from "./helpers/attendancePaid";
 import { paid } from "./helpers/paidOrg";
-import { whileLocked } from "./helpers/paymentAudit";
+import { waitForLockWait, whileLocked } from "./helpers/lockWait";
+import { holdNextTransaction } from "./helpers/transactionBarrier";
+import { cancelRegistrationByToken } from "@/lib/rsvpCancel";
 
 beforeAll(() => setUpPaidAttendance("Holder change"));
 afterAll(() => tearDownPaidAttendance());
@@ -67,6 +69,45 @@ const answer = (token: string, response: "ATTENDING" | "NOT_ATTENDING") => respo
 const NO_LONGER_VALID = { ok: false, error: "This link is no longer valid." };
 
 describe.sequential("a registration changing hands", () => {
+  it.each(["organiser", "buyer"])("refuses an old ticket cancellation waiting behind a %s holder change", async (editor) => {
+    const { event, order, seat } = await freeOrder(`cancel-${editor}`);
+    // Exercise both a standalone free registration and a free ticket on an order.
+    if (editor === "organiser") await prisma.rSVP.update({ where: { id: seat.id }, data: { orderId: null, ticketTypeId: null } });
+    identity.id = owner.id;
+    const barrier = holdNextTransaction();
+    const changing = editor === "buyer"
+      ? transferTicket({ orderToken: order.accessToken, rsvpId: seat.id, name: "Replacement Holder", email: email(`replacement-${editor}`) })
+      : updateRsvpRegistration({ organisationSlug: paid.orgSlug, eventId: event.id, rsvpId: seat.id, name: "Replacement Holder", guestEmail: email(`replacement-${editor}`), answers: {} });
+    let cancelling: ReturnType<typeof cancelRegistrationByToken> | undefined;
+    try {
+      const pid = await barrier.entered;
+      cancelling = cancelRegistrationByToken(null, seat.checkInToken);
+      await waitForLockWait(pid);
+    } finally {
+      barrier.release();
+      await changing;
+      barrier.restore();
+      identity.id = "";
+    }
+    expect(await cancelling).toEqual({ ok: false, error: "RSVP not found." });
+    const after = await prisma.rSVP.findUniqueOrThrow({ where: { id: seat.id } });
+    expect(after).toMatchObject({ status: "CONFIRMED", guestEmail: email(`replacement-${editor}`) });
+    expect(after.checkInToken === seat.checkInToken).toBe(false);
+  });
+
+  it("rechecks account ownership under the RSVP lock even if the capability is unchanged", async () => {
+    const { event, seat } = await freeOrder("owner-check");
+    const old = await prisma.user.create({ data: { email: email("previous-account") } });
+    const next = await prisma.user.create({ data: { email: email("next-account") } });
+    await prisma.rSVP.update({ where: { id: seat.id }, data: { userId: old.id, attendeeKey: `user:${old.id}` } });
+    const result = await whileLocked(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
+      await tx.rSVP.update({ where: { id: seat.id }, data: { userId: next.id, attendeeKey: `user:${next.id}` } });
+    }, () => cancelRegistrationByToken(old.id, seat.checkInToken));
+    expect(result).toMatchObject({ ok: false });
+    expect(await prisma.rSVP.count({ where: { id: seat.id, userId: next.id } })).toBe(1);
+  });
+
   it("never transfers a ticket checked in while the transfer waited for it", async () => {
     const { order, seat } = await freeOrder("race-buyer");
     // The check-in holds the registration's row lock; the transfer reads it only once that commits.

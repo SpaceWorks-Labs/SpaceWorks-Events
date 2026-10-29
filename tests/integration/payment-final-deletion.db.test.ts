@@ -30,12 +30,12 @@ import { deleteEvent } from "@/app/actions/event";
 import { submitManualTicketOrderCore } from "@/lib/rsvpCore";
 import { newOrderReference } from "@/lib/payments/orders";
 import { setUpPaymentAudit, tearDownPaymentAudit } from "./helpers/paymentAudit";
+import { backendPid, waitForLockWait } from "./helpers/lockWait";
 
 const suffix = randomUUID().replace(/-/g, "").slice(0, 12);
 const orgIds: string[] = [];
 let counter = 0;
 const mail = (name: string) => `${name}-${suffix}@example.test`;
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const as = <T>(userId: string, run: () => Promise<T>) => ctx.store.run({ user: { id: userId }, authenticatedAt: Date.now() }, run);
 
 beforeAll(() => setUpPaymentAudit("Final deletion"));
@@ -64,11 +64,14 @@ async function organisation() {
 async function holding(lock: (tx: Prisma.TransactionClient) => Promise<unknown>) {
   let release!: () => void;
   const released = new Promise<void>((resolve) => { release = resolve; });
-  let locked!: () => void;
-  const isLocked = new Promise<void>((resolve) => { locked = resolve; });
-  const holder = prisma.$transaction(async (tx) => { await lock(tx); locked(); await released; }, { timeout: 20_000 });
-  await isLocked;
-  return async () => { release(); await holder; };
+  let locked!: (pid: number) => void;
+  const isLocked = new Promise<number>((resolve) => { locked = resolve; });
+  const holder = prisma.$transaction(async (tx) => { await lock(tx); locked(await backendPid(tx)); await released; }, { timeout: 20_000 });
+  const pid = await isLocked;
+  const unlock = async () => { release(); await holder; };
+  return Object.assign(unlock, { wait: async (count = 1) => {
+    try { await waitForLockWait(pid, count); } catch (error) { await unlock(); throw error; }
+  } });
 }
 
 const lockEvent = (eventId: string) => (tx: Prisma.TransactionClient) => tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
@@ -82,9 +85,11 @@ describe.sequential("deleting an organisation while a paid guest is added", () =
     const setup = await organisation();
     const release = await holding(lockEvent(setup.event.id));
     const adding = addPaidGuest(setup, "first-guest");
-    await sleep(300);
+    void adding.catch(() => {});
+    await release.wait();
     const deleting = as(setup.owner.id, () => deleteOrganisation({ organisationSlug: setup.org.slug }));
-    await sleep(300);
+    void deleting.catch(() => {});
+    await release.wait(2);
     await release();
     expect(await adding).toMatchObject({ ok: true });
     expect(await deleting).toMatchObject({ ok: false, error: expect.stringContaining("paid for upcoming events") });
@@ -97,9 +102,11 @@ describe.sequential("deleting an organisation while a paid guest is added", () =
     const release = await holding(lockEvent(setup.event.id));
     // The deletion holds the organisation row and waits to remove the event.
     const deleting = as(setup.owner.id, () => deleteOrganisation({ organisationSlug: setup.org.slug }));
-    await sleep(400);
+    void deleting.catch(() => {});
+    await release.wait();
     const adding = addPaidGuest(setup, "second-guest");
-    await sleep(300);
+    void adding.catch(() => {});
+    await release.wait(2);
     await release();
     expect(await deleting).toEqual({ ok: true });
     expect(await adding).toMatchObject({ ok: false });
@@ -113,9 +120,11 @@ describe.sequential("deleting an event while a paid guest is added", () => {
     const setup = await organisation();
     const release = await holding(lockEvent(setup.event.id));
     const adding = addPaidGuest(setup, "event-first");
-    await sleep(300);
+    void adding.catch(() => {});
+    await release.wait();
     const deleting = as(setup.owner.id, () => deleteEvent({ organisationSlug: setup.org.slug, eventId: setup.event.id }));
-    await sleep(300);
+    void deleting.catch(() => {});
+    await release.wait(2);
     await release();
     expect(await adding).toMatchObject({ ok: true });
     expect(await deleting).toMatchObject({ ok: false, error: expect.stringContaining("Cancel it instead") });
@@ -126,9 +135,11 @@ describe.sequential("deleting an event while a paid guest is added", () => {
     const setup = await organisation();
     const release = await holding(lockEvent(setup.event.id));
     const deleting = as(setup.owner.id, () => deleteEvent({ organisationSlug: setup.org.slug, eventId: setup.event.id }));
-    await sleep(300);
+    void deleting.catch(() => {});
+    await release.wait();
     const adding = addPaidGuest(setup, "event-second");
-    await sleep(300);
+    void adding.catch(() => {});
+    await release.wait(2);
     await release();
     expect(await deleting).toEqual({ ok: true });
     expect(await adding).toMatchObject({ ok: false });
@@ -173,10 +184,10 @@ describe.sequential("membership changes", () => {
     const member = await prisma.user.create({ data: { email: mail("member"), name: "Member", memberships: { create: { organisationId: setup.org.id, role: "MEMBER" } } } });
     const release = await holding((tx) => tx.$queryRaw`SELECT "id" FROM "Organisation" WHERE "id" = ${setup.org.id} FOR UPDATE`);
     const promoting = as(setup.owner.id, () => updateMemberRole({ organisationSlug: setup.org.slug, targetUserId: member.id, role: "ADMIN" }));
-    await sleep(300);
+    await release.wait();
     // The admin's check reads MEMBER before the promotion commits.
     const removing = as(admin.id, () => removeMember({ organisationSlug: setup.org.slug, targetUserId: member.id }));
-    await sleep(300);
+    await release.wait(2);
     await release();
     expect(await promoting).toEqual({ ok: true });
     expect(await removing).toMatchObject({ ok: false, error: "Admins can only remove members." });

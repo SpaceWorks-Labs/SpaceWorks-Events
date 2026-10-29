@@ -291,6 +291,10 @@ Rules that go with it:
   transaction, so a "No" the old holder answered before the transfer finds
   no current answer and releases nothing. Organiser email changes and the
   buyer's attendee edits take the same event-then-registrations order.
+- Ticket-token cancellation rechecks the supplied token and the caller's
+  account ownership under the registration lock. Its writes retain those
+  conditions, so a cancellation waiting behind a holder change cannot remove
+  the replacement holder's place, including a free ticket on an order.
 
 ## Applications
 

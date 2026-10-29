@@ -1,4 +1,4 @@
-import { EventPrivacyType, EventStatus, RsvpStatus, TicketTypeKind, type Prisma } from "@prisma/client";
+import { EventPrivacyType, EventStatus, RsvpStatus, TicketTypeKind } from "@prisma/client";
 import { expect } from "vitest";
 import { prisma } from "@/lib/db";
 import { submitRsvpCore } from "@/lib/rsvpCore";
@@ -76,25 +76,4 @@ export async function freeRsvp(eventId: string, name: string, status: RsvpStatus
 
 export const paymentNotices = (paymentId: string, notice: string) => prisma.outboxMessage.count({ where: { kind: "payment-notice", AND: [{ payload: { path: ["paymentId"], equals: paymentId } }, { payload: { path: ["notice"], equals: notice } }] } });
 
-/**
- * Start `work` while another transaction holds a row lock (`lock` runs a FOR
- * UPDATE), so everything in `work` queues behind it; then let it go. Makes a
- * race's operations contend for the same rows instead of running one by one.
- */
-export async function whileLocked<T>(lock: (tx: Prisma.TransactionClient) => Promise<unknown>, work: () => Promise<T>, holdMs = 300) {
-  let release!: () => void;
-  const released = new Promise<void>((resolve) => { release = resolve; });
-  let locked!: () => void;
-  const isLocked = new Promise<void>((resolve) => { locked = resolve; });
-  const holder = prisma.$transaction(async (tx) => {
-    await lock(tx);
-    locked();
-    await released;
-  }, { timeout: 15_000 });
-  await isLocked;
-  const running = work();
-  await new Promise((resolve) => setTimeout(resolve, holdMs));
-  release();
-  await holder;
-  return running;
-}
+export { whileLocked } from "./lockWait";

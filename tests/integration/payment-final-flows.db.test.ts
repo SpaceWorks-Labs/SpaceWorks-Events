@@ -123,6 +123,7 @@ describe.sequential("invite-only ticket orders", () => {
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
       await tx.event.update({ where: { id: event.id }, data: { privacyType: EventPrivacyType.INVITE_ONLY } });
     }, () => order(event, ticket.id, carol.id));
+    expect(result.ok).toBe(false);
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining("invite-only") });
     expect(await prisma.rSVP.count({ where: { eventId: event.id } })).toBe(0);
   });

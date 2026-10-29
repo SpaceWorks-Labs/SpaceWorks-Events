@@ -84,6 +84,11 @@ export async function lockEvent(tx: Prisma.TransactionClient, eventId: string) {
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
 }
 
+/** Before grants, rounds and RSVP/team locks: help inserts reference Event. */
+export async function lockHelpEvent(tx: Prisma.TransactionClient, eventId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR KEY SHARE`;
+}
+
 export async function lockTeam(tx: Prisma.TransactionClient, teamId: string) {
   await tx.$queryRaw`SELECT "id" FROM "Team" WHERE "id" = ${teamId} FOR UPDATE`;
 }

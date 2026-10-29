@@ -105,6 +105,13 @@ Attendance confirmation ([ATTENDANCE.md](ATTENDANCE.md)) unit suites are `attend
 | `attendance-check-card.db.test.ts` | The Emails card: not sent yet, the last send and its sender, replies and newly confirmed guests, remindable after 12 hours, closed after the start and when cancelled; the Overview counts; clone copies the switch but no checks |
 | `attendance-guest-list.db.test.ts` | Guests · People filter and counts inside the event, the paging action behind the registration-manager check, CSV columns and filter, the desk lookup, preview and offline roster showing the reply but never the note, and the personal data export |
 
+Database race tests use `tests/integration/helpers/lockWait.ts`: capture the
+holder's backend pid, then observe `pg_stat_activity.wait_event_type = 'Lock'`
+and `pg_blocking_pids` before releasing it. The observer follows blocking
+chains when two contenders queue behind each other. A timeout fails the
+test; elapsed time alone never releases a race barrier. Query text and bind
+arguments are never selected, so ticket capabilities stay out of diagnostics.
+
 ### Coverage
 
 ```bash
