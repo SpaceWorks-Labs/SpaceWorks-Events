@@ -601,14 +601,21 @@ REVIEW_APPLICATIONS (with JUDGE or MENTOR) gets no organiser routes, like a judg
 - Reviewers (REVIEW_APPLICATIONS or OWNER/ADMIN, behind the staff
   authenticator; anyone else, or an event not taking applications, is `NOT_FOUND`):
   - `GET .../applications/reviews` → `{ "reviews": [{ "assignmentId", "stageName", "stagePosition", "stageOpen", "label", "status", "reviewedCurrent" }] }`
-    (the caller's own assignments, open stages first; `label` is "Application n" on a blind stage).
-  - `GET .../applications/reviews/:assignmentId` → `{ "assignmentId", "stageName", "stageOpen", "blind", "criteria", "guidance", "teamName|null", "people": [{ "name", "email|null", "isLeader", "answers": [{ "label", "value" }] }], "reviewed|null", "canReview" }`.
+    (the caller's own assignments that they may still read, open stages first;
+    `label` is "Application n" on a blind stage). Assignments on a stage
+    whose panel no longer includes the caller, or with a conflict of interest,
+    are left out.
+  - `GET .../applications/reviews/:assignmentId` → `{ "assignmentId", "answersRevision", "stageName", "stageOpen", "blind", "criteria", "guidance", "teamName|null", "people": [{ "name", "email|null", "isLeader", "answers": [{ "label", "value" }] }], "reviewed|null", "canReview" }`.
     A blind stage has no names, emails, phone or email answers, or team name.
     Another reviewer's, a recused one, or one the caller may no longer review
     (off the stage's panel, a conflict of interest) is `NOT_FOUND`.
-  - `POST .../applications/reviews/:assignmentId` `{ "scores": { criterion: 1..5 }, "notes" }`
+  - `POST .../applications/reviews/:assignmentId` `{ "answersRevision", "scores": { criterion: 1..5 }, "notes" }`
     (Idempotency-Key) → `{ "assignmentId", "outcome": "SUBMITTED", "replaced": null }`.
-    Final once submitted; only while the stage is open.
+    Final once submitted; only while the stage is open. `answersRevision` is
+    the one `GET` returned: when the applicant has changed their answers since,
+    the review is refused with `CONFLICT` ("The answers changed. Reload to see
+    them."). Reload, then submit with a new Idempotency-Key: the refused
+    request's key is spent.
   - `POST .../applications/reviews/:assignmentId/recuse` (Idempotency-Key)
     → `{ "assignmentId", "outcome": "RECUSED", "replaced" }`: a conflict of
     interest is recorded and the least-loaded panel reviewer takes it.

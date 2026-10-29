@@ -64,6 +64,8 @@ export const reviewQueueDtoSchema = z.object({ reviews: z.array(reviewQueueItemS
 
 export const reviewItemDtoSchema = z.object({
   assignmentId: z.string(),
+  /** The answers shown; send it back with the review (changed answers are refused). */
+  answersRevision: z.number().int(),
   stageName: z.string(),
   stageOpen: z.boolean(),
   blind: z.boolean(),

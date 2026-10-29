@@ -2368,7 +2368,7 @@ paths:
     post:
       tags: [Applications]
       summary: Submit the review
-      description: Every criterion (or "overall") scored 1 to 5, and notes for the organisers. Final once submitted; only while the stage is open.
+      description: Every criterion (or "overall") scored 1 to 5, and notes for the organisers. Final once submitted; only while the stage is open. `answersRevision` is the one GET returned; answers changed since are `CONFLICT` ("The answers changed. Reload to see them."), and the reloaded submission needs a new Idempotency-Key.
       parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventId" }, { name: assignmentId, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 }, description: "One per user action; a retry with the same key and body replays the first answer." }]
       requestBody:
         required: true
@@ -2377,8 +2377,9 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [scores, notes]
+              required: [answersRevision, scores, notes]
               properties:
+                answersRevision: { type: integer, minimum: 1 }
                 scores: { type: object, additionalProperties: { type: integer, minimum: 1, maximum: 5 } }
                 notes: { type: string, maxLength: 2000 }
       responses:
@@ -2964,9 +2965,10 @@ components:
     ReviewItem:
       type: object
       additionalProperties: false
-      required: [assignmentId, stageName, stageOpen, blind, criteria, guidance, teamName, people, reviewed, canReview]
+      required: [assignmentId, answersRevision, stageName, stageOpen, blind, criteria, guidance, teamName, people, reviewed, canReview]
       properties:
         assignmentId: { type: string }
+        answersRevision: { type: integer, description: "The answers shown; send it back with the review." }
         stageName: { type: string }
         stageOpen: { type: boolean }
         blind: { type: boolean }
