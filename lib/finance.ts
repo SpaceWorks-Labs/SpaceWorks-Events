@@ -20,21 +20,34 @@ function net(rows: Array<{ amountMinor: bigint; reversesId: string | null; }>) {
   return rows.reduce((sum, row) => (row.reversesId ? sum - row.amountMinor : sum + row.amountMinor), ZERO);
 }
 
-/** Collected money and committed refunds on the event's orders, split into tickets and entry fees. */
+/**
+ * Collected money and committed refunds on the event's orders, split into
+ * tickets and entry fees. Payments taken online with test keys moved no real
+ * money: they and their refunds are totalled apart (`test`, net of refunds).
+ * Money recorded as collected in person is always real.
+ */
 async function income(eventId: string) {
   const payments = await prisma.payment.findMany({
     where: { status: { in: COLLECTED }, order: { eventId } },
-    select: { amountMinor: true, order: { select: { submissionId: true } }, refunds: { where: { status: { in: [PaymentRefundStatus.PENDING, PaymentRefundStatus.SUCCEEDED] } }, select: { amountMinor: true } } },
+    select: { amountMinor: true, status: true, testMode: true, order: { select: { submissionId: true } }, refunds: { where: { status: { in: [PaymentRefundStatus.PENDING, PaymentRefundStatus.SUCCEEDED] } }, select: { amountMinor: true } } },
   });
   let tickets = ZERO;
   let entryFees = ZERO;
   let refunds = ZERO;
+  let test = ZERO;
+  let testPayments = 0;
   for (const payment of payments) {
+    const refunded = payment.refunds.reduce((sum, refund) => sum + refund.amountMinor, ZERO);
+    if (payment.testMode && payment.status === PaymentStatus.PAID_ONLINE) {
+      testPayments += 1;
+      test += payment.amountMinor - refunded;
+      continue;
+    }
     if (payment.order.submissionId) entryFees += payment.amountMinor;
     else tickets += payment.amountMinor;
-    refunds += payment.refunds.reduce((sum, refund) => sum + refund.amountMinor, ZERO);
+    refunds += refunded;
   }
-  return { tickets, entryFees, refunds };
+  return { tickets, entryFees, refunds, test, testPayments };
 }
 
 export async function loadEventFinance(eventId: string, organisationId: string) {
@@ -81,6 +94,8 @@ export async function loadEventFinance(eventId: string, organisationId: string) 
       tickets: label(money.tickets),
       entryFees: money.entryFees > ZERO ? label(money.entryFees) : null,
       refunds: label(money.refunds),
+      // Test payments, kept out of income and net.
+      test: money.testPayments > 0 ? { amount: label(money.test), payments: money.testPayments } : null,
       netIncome: label(netIncome),
       expensesPaid: label(expensesPaid),
       prizesPaid: label(prizesPaid),

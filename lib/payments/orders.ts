@@ -142,6 +142,19 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
     const type = types.find((candidate) => candidate.id === line.ticketTypeId)!;
     return Array<string>(line.quantity * type.seatsPerTicket).fill(type.id);
   });
+  // Invite-only (docs/PAYMENTS.md): one place, for the signed-in invitee,
+  // checked under the lock so an audience change or a withdrawn invitation
+  // is seen. An organiser adding a guest by hand isn't limited.
+  if (sellable.privacyType === EventPrivacyType.INVITE_ONLY && !params.manual) {
+    if (!params.buyer.userId) throw new OrderError("This event is invite-only. Sign in with the invited account to register.");
+    const invited = "eventId" in sellable.owner
+      ? await tx.eventInvite.findUnique({ where: { eventId_email: { eventId: sellable.owner.eventId, email: params.buyer.email } }, select: { id: true } })
+      : await tx.seriesInvite.findUnique({ where: { eventSeriesId_email: { eventSeriesId: sellable.owner.eventSeriesId, email: params.buyer.email } }, select: { id: true } });
+    if (!invited) throw new OrderError("This event is invite-only. Use the email you were invited with.");
+    if (seatTypes.length !== 1 || params.attendees.some((attendee) => attendee.name?.trim() || attendee.email?.trim())) {
+      throw new OrderError("Each invitation is for one person: choose one ticket, for yourself.");
+    }
+  }
   const attendees = seatTypes.slice(1).map((_, index) => params.attendees[index] ?? {});
   const emails = [params.buyer.email, ...attendees.map((attendee) => attendee.email?.trim().toLowerCase()).filter(Boolean)];
   if (new Set(emails).size !== emails.length) throw new OrderError("Each ticket needs a different email address, or leave extra ones blank.");

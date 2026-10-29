@@ -157,12 +157,28 @@ export class StripeGateway implements PaymentGateway {
     return describePaymentMethod({ type, brand: specific.brand, last4: specific.last4, vpa: specific.vpa, bank: specific.bank_name ?? specific.bank, wallet: record(specific.wallet).type });
   }
 
+  /**
+   * Every refund on the PaymentIntent, page by page (`has_more`,
+   * `starting_after`). A lookup that can't read them all (a malformed or
+   * incomplete page, too many pages) throws (unknown), so a missing match
+   * never licenses a second refund.
+   */
   async findRefund(paymentId: string, reference: string): Promise<RefundResult | null> {
     if (!isProviderId(paymentId)) throw new PaymentsUnavailable("Invalid Stripe PaymentIntent id.");
-    const list = await this.call("GET", `/v1/refunds?payment_intent=${paymentId}&limit=100`);
-    const items = Array.isArray(list.data) ? list.data.map(record) : [];
-    const match = items.find((item) => record(item.metadata).refund_id === reference && isProviderId(item.id));
-    return match ? { refundId: match.id as string, state: REFUND_STATES[String(match.status)] ?? "PENDING" } : null;
+    let after: string | null = null;
+    for (let page = 0; page < REFUND_LOOKUP_PAGES; page += 1) {
+      const list: Entity = await this.call("GET", `/v1/refunds?payment_intent=${paymentId}&limit=${REFUND_PAGE_SIZE}${after ? `&starting_after=${after}` : ""}`);
+      if (!Array.isArray(list.data) || typeof list.has_more !== "boolean") throw new PaymentsUnavailable("Stripe sent an unreadable refund list.");
+      const items: Entity[] = list.data.map(record);
+      if (items.some((item) => !isProviderId(item.id))) throw new PaymentsUnavailable("Stripe sent an unreadable refund list.");
+      const match = items.find((item) => record(item.metadata).refund_id === reference);
+      if (match) return { refundId: match.id as string, state: REFUND_STATES[String(match.status)] ?? "PENDING" };
+      if (!list.has_more) return null;
+      const last: unknown = items.at(-1)?.id;
+      if (!isProviderId(last)) throw new PaymentsUnavailable("Stripe sent an unreadable refund list.");
+      after = last;
+    }
+    throw new PaymentsUnavailable("Too many Stripe refunds to look through.");
   }
 
   async getRefundStatus(_paymentId: string, refundId: string): Promise<RefundState> {
@@ -172,6 +188,9 @@ export class StripeGateway implements PaymentGateway {
     return REFUND_STATES[String(refund.status)] ?? "PENDING";
   }
 }
+
+const REFUND_PAGE_SIZE = 100;
+const REFUND_LOOKUP_PAGES = 20;
 
 function refundNotification(refund: Entity): RefundNotification | null {
   if (!isProviderId(refund.id)) return null;

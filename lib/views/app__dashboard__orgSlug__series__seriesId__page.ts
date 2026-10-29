@@ -9,6 +9,7 @@ import { seatTakingWhere } from "@/lib/payments/holds";
 import { loadTicketSettings } from "@/lib/payments/ticketSettings";
 import { loadRevenue } from "@/lib/payments/revenue";
 import { listFailedRefunds } from "@/lib/payments/operations/retryRefund";
+import { listRefundableOrders } from "@/lib/payments/operations/cancelledRefund";
 import { listAttendeesPage } from "@/lib/eventDashboard/attendees";
 type Props = { params: Promise<{ orgSlug: string; seriesId: string; }>; };
 export async function loadSeriesManageView({ params }: Props) {
@@ -93,5 +94,7 @@ export async function loadSeriesManageView({ params }: Props) {
   const revenue = canManageRegistrations ? await loadRevenue({ eventSeriesId: series.id }, series.timezone, now) : null;
   // Refunds the provider refused, for owners and admins to retry (docs/PAYMENTS.md).
   const failedRefunds = isAdmin ? await listFailedRefunds({ eventSeriesId: series.id }, organisation.id) : [];
-  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendeesPage, rollup, dates, tickets, revenue, failedRefunds };
+  // Money left on cancelled or expired orders, refunded by order.
+  const refundableOrders = isAdmin ? await listRefundableOrders({ eventSeriesId: series.id }, organisation.id) : [];
+  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendeesPage, rollup, dates, tickets, revenue, failedRefunds, refundableOrders };
 }
