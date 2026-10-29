@@ -35,7 +35,7 @@ export async function withdrawParticipantClaimAction(ticketToken: unknown, claim
   const rsvp = await prisma.rSVP.findUnique({ where: { checkInToken: ticketToken }, select: { id: true, userId: true } });
   const session = await auth();
   if (!rsvp || (rsvp.userId && rsvp.userId !== session?.user?.id)) return { ok: false, error: "Claim not found." };
-  return withdrawClaim(claimId.slice(0, 128), { userId: null, rsvpId: rsvp.id });
+  return withdrawClaim(claimId.slice(0, 128), { rsvpId: rsvp.id });
 }
 
 /** Ask for a refund outside the automatic policy, from the order page. */

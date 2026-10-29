@@ -62,7 +62,7 @@ describe.sequential("expense claims", () => {
 
     expect(await approveClaim(admin(), { claimId: claim.id, amount: "2000" })).toMatchObject({ ok: false });
     expect(await approveClaim(admin(), { claimId: claim.id, amount: "1200", note: "Standard fare" })).toEqual({ ok: true, data: undefined });
-    expect(await withdrawClaim(claim.id, { userId: staff.id })).toMatchObject({ ok: false });
+    expect(await withdrawClaim(claim.id, { userId: staff.id, organisationId: paid.organisationId, eventId: event.id })).toMatchObject({ ok: false });
     expect(await recordClaimPayout(admin(), { claimId: claim.id, method: "UPI", reference: "UPI-1" })).toEqual({ ok: true, data: undefined });
     expect(await prisma.expenseClaim.findUniqueOrThrow({ where: { id: claim.id } })).toMatchObject({ status: ExpenseClaimStatus.PAID, approvedMinor: BigInt(120000) });
     const payout = await prisma.claimPayout.findFirstOrThrow({ where: { claimId: claim.id } });
@@ -88,7 +88,7 @@ describe.sequential("expense claims", () => {
     expect(await rejectClaim(admin(), { claimId: first.id, note: "No ticket stub" })).toEqual({ ok: true, data: undefined });
     expect(await claim(rsvp.checkInToken, "1000")).toMatchObject({ ok: true });
     const second = await prisma.expenseClaim.findFirstOrThrow({ where: { rsvpId: rsvp.id, status: ExpenseClaimStatus.SUBMITTED } });
-    expect(await withdrawClaim(second.id, { userId: null, rsvpId: rsvp.id })).toEqual({ ok: true, data: undefined });
+    expect(await withdrawClaim(second.id, { rsvpId: rsvp.id })).toEqual({ ok: true, data: undefined });
   });
 });
 
