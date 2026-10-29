@@ -19,6 +19,7 @@ import { ticketSalesState } from "./tickets";
 import { OrderError } from "./orderError";
 import { placeTeamOrderRegistration, planTeamOrder } from "./teamOrders";
 import type { TeamRegistrationIntent } from "@/lib/validators";
+import { publicRegistrationCount } from "@/lib/publicRegistrationCount";
 
 export { OrderError } from "./orderError";
 
@@ -339,6 +340,6 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   else if (orderStatus === OrderStatus.CONFIRMED) {
     await notifyChat(tx, sellable.organisationId, "registration", `${params.buyer.name || "Someone"} booked ${rsvps.length} ${rsvps.length === 1 ? "ticket" : "tickets"} for ${sellable.slots[0]!.label}.`);
   }
-  const count = await tx.rSVP.count({ where: sellable.slots[0]!.target });
+  const count = await publicRegistrationCount(tx, sellable.slots[0]!.target);
   return { orderId: order.id, reference: order.reference, accessToken: order.accessToken, status, buyerRsvpId: rsvps[0]!.id, buyerTicketToken: rsvps[0]!.checkInToken, paymentId, count, teamId: placedTeam?.teamId ?? null, rsvpIds: rsvps.map((rsvp) => rsvp.id) };
 }

@@ -9,6 +9,7 @@ import { OrderError, reserveOrder } from "@/lib/payments/orders";
 import { validateAndNormalizeAnswers } from "./answers";
 import { paymentContextFor, sellsTickets } from "./orders";
 import { reserveRsvp } from "./reserve";
+import { publicCountField } from "@/lib/publicRegistrationCount";
 import { TeamRegistrationError, teamRegistrationFailure } from "./team";
 import { normalizeGuestEmail } from "./shared";
 
@@ -21,7 +22,7 @@ import { normalizeGuestEmail } from "./shared";
 export async function submitManualGuestRsvpCore(
   input: unknown,
   opts: { organisationId: string },
-): Promise<ActionResult<{ count: number; status: RsvpStatus; rsvpId: string }>> {
+): Promise<ActionResult<{ count?: number; status: RsvpStatus; rsvpId: string }>> {
   const parsed = manualRsvpSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -91,7 +92,7 @@ export async function submitManualGuestRsvpCore(
     return {
       ok: true,
       data: {
-        count: reservation.count,
+        ...publicCountField(reservation.count),
         status: reservation.status,
         rsvpId: reservation.id,
       },
