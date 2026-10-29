@@ -62,7 +62,11 @@ On an event or series dashboard → **Tickets**:
 
 At checkout the seats are held for 30 minutes while the buyer pays. Approval
 requests and waitlist places get a payment link that holds the seats for 24
-hours, with one reminder a few hours before it ends.
+hours, with one reminder a few hours before it ends. Opening the payment page
+may extend a hold (up to its cap), never revive one that has ended. Extras
+with a limit count toward it in confirmed orders and live holds; a request is
+only held, an ended hold only reopened, and a late payment only takes its
+extras back while they are still in stock.
 
 ## Teams, entry fees, prizes and extras
 
@@ -100,11 +104,39 @@ hours, with one reminder a few hours before it ends.
   admins are emailed and told in chat, and the guest list shows *Said No · paid*.
   The email and the form only promise a release when it would really happen.
 - **Cancelling an event or a series date** refunds everyone who paid in full
-  (a pass gets its share for that date) and tells every guest by email.
+  (a pass gets its share for that date) and tells every guest by email. A
+  date someone on a pass already checked in to is left for the organiser to
+  settle by hand. Nobody is promoted from a waitlist onto a cancelled event,
+  series or date.
+- **A payment that lands after a cancellation** (a delayed webhook, or a
+  buyer who paid just before) never issues a ticket. It is recorded, the
+  order is cancelled with its held places (a leader's unpaid team goes too;
+  an entry fee's project stays a draft), and the whole amount is refunded
+  automatically. The buyer is emailed that the refund is on its way (it is
+  still pending at the provider then), and the organisers' chat is told.
+  This covers the event, its series, and every date a pass holds. Settling
+  such an order by hand is refused.
 - **Chargebacks** arrive by webhook: the guest list marks the order, and the
   owners are emailed (and told in chat, if connected).
 - **Refused refunds** (for example a low provider balance) are emailed to the
-  owners and admins so they can retry or refund another way.
+  owners and admins. They're listed by order under **Failed refunds** (the
+  event's Finance tab, or the series page), still there after the order's
+  tickets were cancelled. **Retry refund** sends a new refund for the same
+  amount: owners and admins only, after an authenticator check and a recent
+  sign-in (`retryFailedRefundAction`). The failed refund is kept as it is;
+  the new one points at it (`PaymentRefund.retryOfRefundId`, unique, so a
+  failed refund is retried once even by two people at once), and the
+  database guard still refuses anything over what is left on the payment.
+- **Refunds the provider accepted but never finished**: when a refund has the
+  provider's id but no final webhook came, the minute's maintenance asks the
+  provider about it once it is an hour old, 25 at a time, least recently
+  checked first (`PaymentRefund.lastCheckedAt`). A finished or failed answer
+  settles it (a failure is told to the organisers once); a timeout or an
+  unreadable answer leaves it pending for the next pass. Maintenance never
+  creates a provider refund. Razorpay refunds are created with its
+  `X-Refund-Idempotency` header (a key made from our refund id), and the
+  lookup before a retry reads every page of the payment's refunds; a lookup
+  it can't finish counts as unknown, never as "no refund yet".
 
 ### In the mobile apps
 
@@ -139,6 +171,46 @@ the check-in preview shows what is owed.
   and last four digits) are stored.
 - Deleting an organisation, event or series is refused while people have paid
   for something still to come: cancel it instead, which refunds them.
+
+## Locks and races (developers)
+
+Every transaction that touches seats, orders or money takes its row locks in
+one order, so two of them never wait on each other:
+
+1. the event row, or the series row;
+2. the series' dates, by id;
+3. the order;
+4. its payments, by id;
+5. its registrations (RSVPs), by id, including a PER_TEAM leader's whole team;
+6. attendance check rows.
+
+Rules that go with it:
+
+- Refund writes lock the Payment first (`lockRefundPayment` in
+  `lib/payments/refunds.ts`): the ledger trigger locks the Payment after any
+  `PaymentRefund` write, so writing the refund row first would take the two
+  in the opposite order. Submission claims, provider results, webhooks and
+  reconciliation all follow it.
+- A provider is never called inside a database transaction. Refunds are
+  recorded PENDING under the locks and submitted after commit.
+- A notice (email, chat, audit) for a refund or a release goes out only when
+  the conditional update it describes changed a row.
+- A cancellation locks the registrations before reading their check-in, and
+  deletes only rows still not checked in; a count that doesn't match throws,
+  rolling the whole cancellation back. A scan either commits first and the
+  cancellation is refused, or waits and finds the ticket gone. Organisers
+  deleting a checked-in guest is unchanged.
+- Cancelling a pass's date is one transaction per order: the share is worked
+  out, recorded and the date's places removed together, so a retry finds
+  nothing left to refund.
+- Extending a hold takes the event (or series and dates) locks before the
+  order and reads the time after them.
+- Capacity edits count confirmed places and live holds with the time read
+  under the series lock; clearing a date's own capacity checks the series
+  capacity it would inherit.
+- A release started by an attendance "No" (free cancellation, paid
+  cancellation, refund request) runs only while that exact No is still the
+  answer (`lockCurrentNo` in `lib/attendanceGuard.ts`, the last lock taken).
 
 ## Applications
 
