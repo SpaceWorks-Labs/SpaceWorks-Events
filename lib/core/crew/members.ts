@@ -205,6 +205,7 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
     return await prisma.$transaction(async (tx): Promise<CrewResult> => {
       // Under the Event row lock, like adding: a new address is checked against the event's registrations.
       if (!(await lockEventForCrew(tx, event.id))) return fail("Event not found.");
+      if (!(await lockCrewRows(tx, event.id, memberId))) return fail("Crew member not found.");
       const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, userId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
       if (!member) return fail("Crew member not found.");
       if (data.email !== member.email) {
@@ -240,6 +241,20 @@ export async function setCrewMemberVisibility(ctx: OrganiserCrewContext, memberI
 }
 
 /**
+ * Crew lock order (docs/CREW.md): the Event, then the member's RSVP, then the
+ * crew row, for editing and removal alike. Removal deletes the RSVP and the
+ * crew row cascades from it, so an edit holding the crew row while it waits
+ * for the RSVP would deadlock with it. Returns false when the member is gone.
+ */
+async function lockCrewRows(tx: Prisma.TransactionClient, eventId: string, memberId: string) {
+  const found = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId }, select: { rsvpId: true } });
+  if (!found) return false;
+  await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${found.rsvpId} FOR UPDATE`;
+  const locked = await tx.$queryRaw<unknown[]>`SELECT "id" FROM "EventCrewMember" WHERE "id" = ${memberId} AND "eventId" = ${eventId} FOR UPDATE`;
+  return locked.length === 1;
+}
+
+/**
  * Removing a crew member deletes their free crew ticket (and its check-in)
  * with them. An account-tied ticket was that person's own registration before
  * it became crew, so they are told it is gone.
@@ -251,6 +266,7 @@ export async function removeCrewMember(ctx: OrganiserCrewContext, memberId: stri
   });
   if (!member) return fail("Crew member not found.");
   const removed = await prisma.$transaction(async (tx) => {
+    if (!(await lockEventForCrew(tx, ctx.eventId)) || !(await lockCrewRows(tx, ctx.eventId, memberId))) return 0;
     // The crew row cascades from the RSVP. Crew tickets never have an order, so nothing is refunded.
     const deleted = await tx.rSVP.deleteMany({ where: { id: member.rsvp.id, eventId: ctx.eventId, isCrew: true, orderId: null } });
     if (deleted.count === 1 && member.rsvp.userId) {
