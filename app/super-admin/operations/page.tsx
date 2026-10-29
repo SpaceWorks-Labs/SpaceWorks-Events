@@ -44,7 +44,7 @@ export default async function SuperAdminOperationsPage() {
             </div>
             {serverBackupProblem ? <p className="text-sm text-danger-fg">{serverBackupProblem.detail} The super admin is emailed once about it.</p> : null}
             <p className="text-sm text-ink-secondary">Newest full backup: {time(serverBackup.lastFullSuccessAt)}. Newest of any kind: {time(serverBackup.lastSuccessAt)}.</p>
-            <p className="text-sm text-ink-secondary">Last run: {time(serverBackup.lastAttemptAt)}, {serverBackup.lastStatus === "ok" ? `succeeded (${serverBackup.lastKind === "full" ? "database, configuration and uploads" : "database and configuration"}, ${(serverBackup.sizeBytes / 1_048_576).toFixed(1)} MB)` : "failed"}. Kept on the server for {serverBackup.keepDays} days.</p>
+            <p className="text-sm text-ink-secondary">Last run: {time(serverBackup.lastAttemptAt)}, {serverBackup.lastStatus === "ok" ? `succeeded (${serverBackup.lastKind === "full" ? "database, configuration and uploads" : "database and configuration"}, ${(serverBackup.sizeBytes / 1_048_576).toFixed(1)} MB)` : serverBackup.reason ? "refused because encryption is not working" : "failed"}. Kept on the server for {serverBackup.keepDays} days.</p>
           </div>
         </AdminPanel>
       ) : null}

@@ -82,22 +82,31 @@ EOF
 
 # Timers (nightly backups if chosen, certificate renewal) and the encryption key
 # chosen during setup. The key is shown once; a resumed setup that already made
-# one keeps it.
+# one keeps it. Encryption comes first: while it was requested but does not
+# work, the nightly timer is withheld and the reason recorded in the status
+# file the Operations page shows (vps-backup.sh refuses such backups too).
 finish_backups() {
-  local file
+  local file problem='' kind=full keep
   file=$(backup_env)
   install -d -m 0755 "$(status_dir)"
-  if [[ $managed = 1 ]] && has_systemd; then
-    install_certificate_timer
-    [[ "$(conf_get "$file" BACKUP_SCHEDULE)" != nightly ]] || install_backup_timer
-  fi
   if [[ "$(conf_get "$file" BACKUP_ENCRYPTION)" = requested ]]; then
+    problem=encryption-unavailable
     if ensure_age; then
       new_backup_key
-      conf_unset "$file" BACKUP_ENCRYPTION
-    else
-      warn 'age could not be installed, so backups are not encrypted. Install the "age" package, then turn on encryption in the installer menu (Backups).'
+      problem=$(backup_encryption_problem "$(conf_get "$file" BACKUP_AGE_RECIPIENT)")
     fi
+    [[ -n "$problem" ]] || conf_unset "$file" BACKUP_ENCRYPTION
+  fi
+  if [[ $managed = 1 ]] && has_systemd; then
+    install_certificate_timer
+    [[ "$(conf_get "$file" BACKUP_SCHEDULE)" != nightly || -n "$problem" ]] || install_backup_timer
+  fi
+  if [[ -n "$problem" ]]; then
+    [[ "$(conf_get "$SWE_CONFIG_DIR/compose.env" SWE_STORAGE)" != external ]] || kind=database
+    keep=$(conf_get "$file" BACKUP_KEEP_DAYS)
+    is_days "$keep" || keep=14
+    write_backup_status failed "$kind" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 0 false off "$keep" "$problem"
+    warn 'Backup encryption could not be set up (age is missing or not working), so no backup is made and nightly backups were not turned on: an unencrypted backup would hold every secret. Install the "age" package, then in the installer menu (Backups) turn on encryption and nightly backups, or turn the encryption request off.'
   fi
   if [[ -n "$(conf_get "$file" OFFSITE_BUCKET)" ]]; then
     run_mc "$(silo_image)" ls "offsite/$(conf_get "$file" OFFSITE_BUCKET)" > /dev/null \
