@@ -47,7 +47,7 @@ export async function deleteEvent(input: unknown): Promise<ActionResult> {
     where: { id: eventId, organisationId: org.id },
   });
   if (!event) return { ok: false, error: "Event not found." };
-  // Deleting would leave people who paid without their tickets: cancel instead, which refunds them.
+  // Retain organiser access to every order while any money is held or in flight.
   if (await hasPaidOrders({ eventId: event.id })) return { ok: false, error: PAID_EVENT_REFUSAL };
 
   const slug = event.slug;

@@ -81,7 +81,7 @@ A cancelled order can still have money on it, for example when the buyer cancell
 
 This only returns money; it keeps any tickets and attendance records. Other confirmed orders are refunded from the guest list instead. Return money collected in person yourself before recording its refund.
 
-Cancelling a series cancels its upcoming dates. Payments for earlier dates that were not cancelled stay with you: those date orders, and passes covering only those dates, do not appear here or block deletion of the cancelled series or organisation.
+Cancelling a series cancels its upcoming dates. Payments for earlier dates that were not cancelled stay with you: those date orders, and passes covering only those dates, do not appear here. Retaining that revenue prevents deleting the series, so leave it cancelled as a record with its finance, exports and refund controls available. These payments alone do not block organisation deletion. To refund attended orders, use the date's guest list.
 
 The list shows the newest 100 orders with money left. Fully refunded orders never hide older orders. As you refund these, the list refreshes to show the next ones.
 
@@ -142,6 +142,8 @@ To cancel one date of a series instead, use **Cancel date** under **Upcoming dat
 ## Good to know
 
 - You cannot delete an organisation while cancelled events, series or dates still have money to refund, even before their first refund is recorded. Use **Refundable orders** to resolve these, then wait for online refunds to finish. Cancelled events and series with money left cannot be deleted separately either.
-- Once all collected payments for a cancelled event or date have been fully refunded and no refund is on its way, those orders allow deletion of the event, series or organisation. You do not need to remove checked-in attendance first.
+- You cannot delete an event or series while it holds any collected money, including revenue for attended dates, or has unpaid orders or pending refunds to resolve. Keep it as a record if you are retaining revenue. A failed refund that has been retried is not a separate obligation; the retry's own outcome counts.
+- Once every collected payment has been fully refunded, unpaid orders resolved and no refund is on its way, those orders allow deletion. You do not need to remove checked-in attendance first.
+- Before deleting, download your orders CSV. Fully refunded orders, payments and refunds stay in the database and organisation totals, and buyers can still open their receipts, but organisers lose finance access and order exports. There is no organisation order ledger to replace them. Receipts keep line items and amounts but lose the event or series title, date and time zone. Keep the event or series instead if you need that context.
 - Refunds go through the provider the buyer paid with, using its saved keys. Keep those keys connected while you may still need to refund.
 - A team event has extra rules about who leaves when an order is cancelled. See [Paid team places](/help/payments/paid-team-places#cancellations-and-refunds).

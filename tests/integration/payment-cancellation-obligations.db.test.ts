@@ -117,7 +117,7 @@ describe.sequential("durable cancellation obligations before a refund exists", (
     await assertGap(s, "date", () => updateEventSeriesMeta({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id, title: "Course", timezone: "UTC", privacyType: "PUBLIC", status: EventStatus.CANCELLED }));
   });
 
-  it.each(["series", "organisation"])("marks upcoming dates atomically but retains attended non-cancelled dates without refund obligations for %s deletion", async (target) => {
+  it.each(["series", "organisation"])("marks upcoming dates atomically and retains attended revenue as a series record for %s deletion", async (target) => {
     const s = await setup(true);
     const past = await prisma.eventInstance.create({ data: {
       eventSeriesId: s.course!.id, startDateTime: new Date(Date.now() - 90_000_000), endDateTime: new Date(Date.now() - 86_400_000),
@@ -162,7 +162,7 @@ describe.sequential("durable cancellation obligations before a refund exists", (
     expect(await prisma.paymentRefund.count({ where: { payment: { orderId: { in: earlier } } } })).toBe(0);
     expect(await prisma.rSVP.count({ where: { orderId: { in: earlier }, checkedInAt: { not: null } } })).toBe(2);
     expect(await prisma.$transaction((tx) => organisationMoneyBlocker(tx, s.org.id, new Date()))).toBeNull();
-    if (target === "series") expect(await deleteEventSeries({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id })).toEqual({ ok: true });
+    if (target === "series") expect(await deleteEventSeries({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id })).toMatchObject({ ok: false, error: expect.stringContaining("earlier dates") });
     expect(await s.deleting()).toEqual({ ok: true });
   });
 

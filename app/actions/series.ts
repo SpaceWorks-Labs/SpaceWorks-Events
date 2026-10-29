@@ -204,7 +204,7 @@ export async function updateEventSeriesMeta(
       },
     });
     return upcoming;
-  });
+  }, { timeout: 60_000 });
   if (!saved) return { ok: false, error: "Capacity cannot be lower than the places already taken (or being paid for) on an occurrence." };
 
   // Cancelling the series cancels each upcoming date: refunds, and an email to everyone on it.
@@ -267,8 +267,7 @@ export async function deleteEventSeries(input: unknown): Promise<ActionResult> {
   });
   if (!series) return { ok: false, error: "Series not found." };
 
-  // Deleting would erase the tickets of people who paid: cancel dates instead,
-  // which refunds them.
+  // Retain organiser access to every order while any money is held or in flight.
   if (await hasPaidOrders({ eventSeriesId: series.id })) return { ok: false, error: PAID_SERIES_REFUSAL };
 
   const instances = await prisma.eventInstance.findMany({

@@ -67,7 +67,7 @@ export async function cancelOccurrence(params: { organisationId: string; seriesI
     await fenceOrganisation(tx, params.organisationId);
     await lockSeriesDates(tx, date.eventSeriesId, [date.id], now);
     return markOccurrenceCancelled(tx, { ...params, date, now });
-  });
+  }, { timeout: 60_000 });
 
   const orders = await prisma.order.findMany({
     where: { rsvps: { some: { eventInstanceId: date.id } } },

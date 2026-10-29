@@ -37,6 +37,15 @@ barriers after the event/series cancellation commit and before refund processing
 with deletion queued behind a real Organisation lock; checked-in event and pass
 orders resolved through the owner action without removing attendance records;
 and cancellation balances preserved against separate event deletion.
+`payment-deletion-history.db.test.ts` covers resolved refund retries separately
+from retained revenue, event/date/pass deletion, pending and failed refunds,
+fully refunded ledger retention in totals and buyer receipts, and a historical
+payment committed while deletion waits for the series lock.
+`series-cancellation-bulk.db.test.ts` covers 48 dates and 100 paid pass holders:
+one marker update, bulk durable notices, recipient deduplication, rollback and
+retry, and a competing pass reservation observed at a real PostgreSQL lock wait.
+The scale suite stubs only post-commit per-order refunds; `paid-series.db.test.ts`
+and the cancellation obligation suite exercise those refund paths.
 `payment-final-refunds.db.test.ts` includes an older refundable order behind
 205 newer fully refunded orders, without registrations.
 

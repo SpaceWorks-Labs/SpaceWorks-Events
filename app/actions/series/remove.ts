@@ -7,7 +7,8 @@ export async function removeSeriesTx(tx: Prisma.TransactionClient, seriesId: str
   await tx.$queryRaw`SELECT "id" FROM "EventInstance" WHERE "eventSeriesId" = ${seriesId} ORDER BY "id" FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "eventSeriesId" = ${seriesId} ORDER BY "id" FOR UPDATE`;
   // The two SET NULL foreign keys can otherwise leave a date without its series
-  // between cascade statements, violating Order_one_target. Preserve the ledger.
+  // between cascade statements, violating Order_one_target. Preserve fully
+  // refunded rows for organisation totals and buyer receipts (docs/PAYMENTS.md).
   await tx.order.updateMany({ where: { eventSeriesId: seriesId }, data: { eventSeriesId: null, eventInstanceId: null } });
   await tx.eventSeries.delete({ where: { id: seriesId } });
 }
