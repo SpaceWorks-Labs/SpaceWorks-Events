@@ -120,7 +120,10 @@ Who may edit an entrant's submission (always re-scoped by event):
   ticket page; it is emailed to the RSVP's address through the outbox (so
   possessing the ticket QR alone is never enough). The token is random, at
   least 128 bits, stored as a SHA-256 hash on the RSVP-scoped row, and
-  regenerating it retires the old one.
+  regenerating it retires the old one. When the registration changes hands
+  (a ticket transfer, or an organiser changing the guest's email) the link
+  is deleted in the same transaction (`lib/rsvpHolder.ts`): the project stays
+  with the registration, and the new holder requests a new link.
 
 Entrants can save a draft, submit, edit while the window is open, and withdraw.
 Published results freeze every project, even while the window is still open:

@@ -125,7 +125,14 @@ team gets a solo application.
 
 `version` changes with every state change; `decisionRevision` counts released
 decisions (emails carry it and are dropped when outdated); `answersRevision`
-changes when the applicant edits answers.
+changes when the answers change. Every editor of an application's answers
+(the applicant's ticket page, the organiser's **Edit registration** and the
+buyer's order page) goes through `replaceRegistrationAnswers`
+(`lib/admission/answers.ts`) under the Event lock: unchanged answers write
+nothing (a name correction stays possible after a decision); changed answers
+are refused once the application has left review or its answers are locked,
+and otherwise keep the replaced answers as a revision, raise
+`answersRevision` and `version`, and ask submitted reviewers again.
 
 ## Stages
 
