@@ -110,6 +110,8 @@ export const meDtoSchema = z.object({
   judging: z.array(judgingEventSchema),
   /** Space Works: events this user mentors (a MENTOR grant, Mentor Desk on); the console is under orgs/:orgSlug/events/:eventId/mentor. */
   mentoring: z.array(judgingEventSchema.omit({ judgingStatus: true }).strict()),
+  /** Events whose applications this user reviews (a REVIEW_APPLICATIONS grant, applications on); the workspace is under orgs/:orgSlug/events/:eventId/applications/reviews. */
+  reviewing: z.array(judgingEventSchema.omit({ judgingStatus: true }).strict()),
   /**
    * The staff authenticator rule for this app session: "ok", "verify" (POST
    * /auth/mfa with a code) or "enrol" (set an authenticator up on the website;

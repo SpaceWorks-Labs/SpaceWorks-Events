@@ -279,7 +279,7 @@ Account creation and password reset happen on the website.
 
 ### `GET /me` (auth)
 
-`{ "user": User, "organisations": [OrgSummary], "collaborations": [{ "organisation": { "slug", "name" }, "eventId", "eventTitle", "permissions": ["CHECK_IN", …] }], "judging": [JudgingEvent] }`
+`{ "user": User, "organisations": [OrgSummary], "collaborations": [{ "organisation": { "slug", "name" }, "eventId", "eventTitle", "permissions": ["CHECK_IN", …] }], "judging": [JudgingEvent], "mentoring": [WorkspaceEvent], "reviewing": [WorkspaceEvent], "staffMfa" }`
 
 `OrgSummary = { "id", "slug", "name", "logoUrl|null", "role": "OWNER|ADMIN|MEMBER" }`.
 Collaborations list standalone-event grants only; `JUDGE`, `MENTOR` and
@@ -290,6 +290,14 @@ Collaborations list standalone-event grants only; `JUDGE`, `MENTOR` and
 events the caller judges through a `JUDGE` grant, once the event takes
 submissions. Organisation owners and admins judge through their role: they
 find their events through `myPermissions.judge` on the organiser event list.
+
+`WorkspaceEvent = { "organisation": { "slug", "name" }, "eventId", "eventTitle", "startDateTime", "endDateTime", "timezone" }`
+(`MentoringEvent` in the OpenAPI file). `mentoring`: events the caller
+mentors through a `MENTOR` grant while the Mentor Desk is on. `reviewing`:
+events whose applications the caller reviews through a `REVIEW_APPLICATIONS`
+grant while applications are on, so a review-only collaborator can open
+`…/applications/reviews` from here. Review grants still open no organiser
+tools; owners and admins find these events on the organiser event list.
 
 ### `PATCH /me` (auth)
 
