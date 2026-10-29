@@ -223,7 +223,13 @@ conflicts stay, so turning the desk off never clears mentoring that happened.
 `OfficeHourSlot`: a mentor's slot inside the event and the mentor's
 availability, no overlap with their other slots, capacity 1–50, booking
 deadline before the start (CHECK `OfficeHourSlot_shape`). Mentors open their
-own; organisers open, cancel and reschedule anyone's.
+own; organisers open, cancel and reschedule anyone's. Creating or
+rescheduling a slot locks the mentor's grant FOR UPDATE as its first lock
+(`liveMentor(..., { exclusive: true })`), before any team or slot, so two
+schedule changes for one mentor run one after the other and the second sees
+the first's slot in its overlap check ("This overlaps another of the
+mentor's slots."). Booking keeps the shared grant lock, and a grant removal
+still takes the grant before the slots.
 
 Booking (teams only: a team member signed in, or the management link) locks
 the team, then the slot: open, before the start and the deadline; the mentor
@@ -338,4 +344,6 @@ earlier visits are not shown to other mentors.
   `mentor-desk-audit` / `mentor-desk-audit-assign` (grant fencing and work in
   progress, crew refused, help-claimed recipient, reopen races, round close
   locks, closed rounds, skipped covered teams, off-shift preview, seed
-  fingerprint, volunteer-shift clashes, cancellation reasons).
+  fingerprint, volunteer-shift clashes, cancellation reasons), and
+  `mentor-desk-office-overlap` (concurrent overlapping slot creations and a
+  reschedule racing a creation: exactly one succeeds; booking unaffected).

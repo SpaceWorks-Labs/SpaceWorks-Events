@@ -7,7 +7,9 @@ import "server-only";
  * under the slot lock, and no team cancellation once the slot has started.
  * Every schedule change and cancellation is logged with its reason
  * (append-only). Lock order: the mentor's grant (FOR SHARE), the teams, then
- * the slot, as the grant removal takes the grant before the slots.
+ * the slot, as the grant removal takes the grant before the slots. Creating
+ * or rescheduling a slot takes the grant FOR UPDATE as its first lock, so
+ * two schedule changes for one mentor can't both pass the overlap check.
  */
 
 import { OfficeHourBookingStatus, Prisma } from "@prisma/client";
@@ -39,11 +41,11 @@ async function lockSlot(tx: Prisma.TransactionClient, eventId: string, slotId: s
   return slot;
 }
 
-/** Takes the slot mentor's grant (FOR SHARE) before any team or slot lock; a slot's mentor never changes. */
-async function slotMentorFirst(tx: Prisma.TransactionClient, eventId: string, slotId: string) {
+/** Takes the slot mentor's grant (FOR SHARE, or FOR UPDATE when `exclusive`) before any team or slot lock; a slot's mentor never changes. */
+async function slotMentorFirst(tx: Prisma.TransactionClient, eventId: string, slotId: string, exclusive = false) {
   const slot = await tx.officeHourSlot.findFirst({ where: { id: slotId, eventId }, select: { mentorUserId: true } });
   if (!slot) refuse(COPY.notFound);
-  return liveMentor(tx, eventId, slot.mentorUserId, { onShift: false });
+  return liveMentor(tx, eventId, slot.mentorUserId, { onShift: false, exclusive });
 }
 
 /** Parses a slot window in the event's zone and checks it against the event, the mentor and their other slots. */
@@ -69,6 +71,8 @@ export async function createOfficeHourSlot(actor: Staff, input: unknown): Promis
   if (actor.kind === "mentor" && parsed.data.mentorUserId !== actor.userId) return fail(COPY.notFound);
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, actor);
+    // The mentor's schedule lock first; slotWindow's own (shared) read then holds nothing new.
+    await liveMentor(tx, event.id, parsed.data.mentorUserId, { onShift: false, exclusive: true });
     const window = await slotWindow(tx, event, parsed.data.mentorUserId, parsed.data);
     return tx.officeHourSlot.create({ data: { eventId: event.id, mentorUserId: parsed.data.mentorUserId, ...window, location: parsed.data.location, capacity: parsed.data.capacity }, select: { id: true } });
   });
@@ -90,7 +94,7 @@ export async function rescheduleOfficeHourSlot(actor: Staff, input: unknown): Pr
   if (!parsed.success) return fail(COPY.invalid);
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, actor);
-    await slotMentorFirst(tx, event.id, parsed.data.slotId);
+    await slotMentorFirst(tx, event.id, parsed.data.slotId, true);
     // Lock order as everywhere: teams before the slot (booking takes them in that order too).
     const teams = await tx.officeHourBooking.findMany({ where: { slotId: parsed.data.slotId, eventId: event.id, status: OfficeHourBookingStatus.BOOKED }, select: { teamId: true }, orderBy: { teamId: "asc" } });
     for (const { teamId } of teams) await lockTeam(tx, teamId);
