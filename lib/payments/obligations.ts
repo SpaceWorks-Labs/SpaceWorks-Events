@@ -1,6 +1,7 @@
 import "server-only";
 
 import { EventStatus, OrderStatus, PaymentRefundStatus, PaymentStatus, type Prisma } from "@prisma/client";
+import { cancelledTargetSql, refundableBalanceSql } from "./refundableBalance";
 
 /*
  * What still ties an organisation to money (docs/PAYMENTS.md "Deleting"):
@@ -40,5 +41,12 @@ export async function organisationMoneyBlocker(tx: Prisma.TransactionClient, org
   });
   const owed = failed.some(({ payment }) => payment.amountMinor > payment.refunds.reduce((sum, refund) => sum + refund.amountMinor, BigInt(0)));
   if (owed) return "Some refunds failed and are still owed to buyers. Retry them from Failed refunds (the event's Finance tab or the series page) first.";
+  // The cancellation itself is durable, even before refund processing starts
+  // or when checked-in tickets prevent automatic cancellation. No time cutoff:
+  // an unresolved cancellation remains owed after the event has ended.
+  const cancelled = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT o."id" FROM "Order" o WHERE o."organisationId" = ${organisationId}
+      AND ${cancelledTargetSql} AND ${refundableBalanceSql} > 0 LIMIT 1`;
+  if (cancelled.length) return "Cancelled events or dates still have money to refund. Resolve these from Refundable orders (the event's Finance tab or the series page), including orders with checked-in guests.";
   return null;
 }

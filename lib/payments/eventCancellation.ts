@@ -1,11 +1,12 @@
 import "server-only";
 
-import { OrderStatus, RsvpStatus, type Prisma } from "@prisma/client";
+import { OrderStatus, Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { notifyChat } from "@/lib/chat/notify";
 import { noticeEach, noticeSubject, personEmail, uniqueEmails } from "@/lib/notices";
 import { PaymentOperationError, refundOrder } from "./operations";
+import { cancelledTargetSql, refundableBalanceSql } from "./refundableBalance";
 
 /**
  * An event was cancelled: every paid order is refunded in full and its
@@ -81,8 +82,19 @@ export async function notifyEventCancelled(tx: Prisma.TransactionClient, params:
  * transaction, under the locks reservations take.
  */
 export async function hasPaidOrders(owner: { eventId: string; } | { eventSeriesId: string; }, client: Prisma.TransactionClient = prisma) {
-  return (await client.order.count({ where: { ...owner, totalMinor: { gt: 0 }, status: { in: [OrderStatus.CONFIRMED, OrderStatus.PENDING, OrderStatus.REQUESTED] } } })) > 0;
+  if ((await client.order.count({ where: { ...owner, totalMinor: { gt: 0 }, status: { in: [OrderStatus.CONFIRMED, OrderStatus.PENDING, OrderStatus.REQUESTED] } } })) > 0) return true;
+  // Keep the cancelled target attached until its balance is resolved: deleting
+  // it would otherwise orphan the order and remove its refund UI and blocker.
+  const scope = "eventId" in owner ? Prisma.sql`o."eventId" = ${owner.eventId}` : Prisma.sql`o."eventSeriesId" = ${owner.eventSeriesId}`;
+  const owed = await client.$queryRaw<Array<{ id: string }>>`SELECT o."id" FROM "Order" o
+    WHERE ${scope} AND (
+      (${cancelledTargetSql} AND ${refundableBalanceSql} > 0)
+      OR EXISTS (SELECT 1 FROM "Payment" p JOIN "PaymentRefund" r ON r."paymentId" = p."id"
+        WHERE p."orderId" = o."id" AND (r."status" = 'PENDING'
+          OR (r."status" = 'FAILED' AND ${refundableBalanceSql} > 0)))
+    ) LIMIT 1`;
+  return owed.length > 0;
 }
 
-export const PAID_EVENT_REFUSAL = "People have paid for this event. Cancel it instead, which refunds them in full.";
-export const PAID_SERIES_REFUSAL = "People have paid for this series. Cancel its dates instead, which refunds them.";
+export const PAID_EVENT_REFUSAL = "People have paid for this event. Cancel it instead, which refunds them in full. If already cancelled, resolve Refundable orders and Failed refunds in Finance before deleting.";
+export const PAID_SERIES_REFUSAL = "People have paid for this series. Cancel its dates instead, which refunds them. Resolve Refundable orders and Failed refunds on the series page before deleting.";

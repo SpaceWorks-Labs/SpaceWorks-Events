@@ -175,6 +175,7 @@ export async function updateEventSeriesMeta(
   if (!series) return { ok: false, error: "Series not found." };
 
   const saved = await prisma.$transaction(async (tx) => {
+    await fenceOrganisation(tx, org.id);
     await tx.$queryRaw`SELECT "id" FROM "EventSeries" WHERE "id" = ${series.id} FOR UPDATE`;
     if (data.capacity != null) {
       // Taken seats (confirmed, and paid holds still live), counted under the

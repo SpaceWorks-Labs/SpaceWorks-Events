@@ -11,7 +11,7 @@ import { PaymentOperationError, refundOrder, submitRefunds } from "./operations"
 import { ORDER_FOR_REFUND, recordRefundsTx } from "./operations/refund";
 import { formatMoney } from "./money";
 import { enqueuePaymentEmail } from "./email";
-import { lockOrderTargets, lockSeriesDates } from "./targets";
+import { fenceOrganisation, lockOrderTargets, lockSeriesDates } from "./targets";
 import { lockOrderRegistrations } from "./teamOrders";
 
 const ZERO = BigInt(0);
@@ -66,6 +66,7 @@ export async function cancelOccurrence(params: { organisationId: string; seriesI
   const label = titleWith(date.series.title, date.startDateTime.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: date.series.timezone }));
 
   const notified = await prisma.$transaction(async (tx) => {
+    await fenceOrganisation(tx, params.organisationId);
     await lockSeriesDates(tx, date.eventSeriesId, [date.id], now);
     const current = await tx.eventInstance.findUniqueOrThrow({ where: { id: date.id }, select: { cancelledAt: true } });
     if (!current.cancelledAt) {

@@ -74,12 +74,14 @@ A cancelled order can still have money on it, for example when the buyer cancell
 <Steps>
 
 1. Open the event's **Finance** tab (for a series, the series page).
-2. Under **Refundable orders**, find the order. Cancelled and expired orders with money left are listed with the buyer, the order reference and how much is left, even when their tickets are gone.
+2. Under **Refundable orders**, find the order. Cancelled and expired orders with money left are listed with the buyer, the order reference and how much is left, even when their tickets are gone. Confirmed orders on cancelled events, series or dates also appear, including checked-in guests.
 3. Choose **Refund…**, enter an amount (or leave it blank to refund everything left) and a reason, then choose **Refund**.
 
 </Steps>
 
-This only returns money; it doesn't change any tickets. Orders that still have their tickets are refunded from the guest list instead.
+This only returns money; it keeps any tickets and attendance records. Other confirmed orders are refunded from the guest list instead. Return money collected in person yourself before recording its refund.
+
+The list shows the newest 100 orders with money left. Fully refunded orders never hide older orders. As you refund these, the list refreshes to show the next ones.
 
 <Callout kind="permission">
 
@@ -131,11 +133,12 @@ A buyer may have paid just before you cancelled, or the provider may tell the ap
 
 You can't settle an order by hand for a cancelled event or date either; the app refuses it.
 
-The message afterwards says how many orders were refunded, and how many need settling by hand, such as an order where someone had already checked in. Settle those from the guest list. If the provider later refuses a refund, the owners and admins are emailed. See [Cloning, cancelling and deleting](/help/events/clone-cancel-delete).
+The message afterwards says how many orders were refunded, and how many need settling by hand, such as an order where someone had already checked in. Find those orders under **Refundable orders** in the **Finance** tab and refund the balance there. Their checked-in tickets and attendance records stay intact. If the provider later refuses a refund, the owners and admins are emailed. See [Cloning, cancelling and deleting](/help/events/clone-cancel-delete).
 
-To cancel one date of a series instead, use **Cancel date** under **Upcoming dates** on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share, once, even if the date is cancelled twice. A pass whose holder already checked in to that date is left for you to settle by hand. See [Passes](/help/payments/passes#cancelling-a-date).
+To cancel one date of a series instead, use **Cancel date** under **Upcoming dates** on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share, once, even if the date is cancelled twice. A pass whose holder already checked in to that date is left for you to settle by hand from **Refundable orders** on the series page. Enter the cancelled date's share, or leave the amount blank to return the whole remaining balance. If a checked-in place stays attached to a cancelled date, any remaining balance on the pass still blocks organisation deletion; refund the rest before deleting. See [Passes](/help/payments/passes#cancelling-a-date).
 
 ## Good to know
 
+- You cannot delete an organisation while cancelled events, series or dates still have money to refund, even before their first refund is recorded. Use **Refundable orders** to resolve these, then wait for online refunds to finish. Cancelled events and series with money left cannot be deleted separately either.
 - Refunds go through the provider the buyer paid with, using its saved keys. Keep those keys connected while you may still need to refund.
 - A team event has extra rules about who leaves when an order is cancelled. See [Paid team places](/help/payments/paid-team-places#cancellations-and-refunds).

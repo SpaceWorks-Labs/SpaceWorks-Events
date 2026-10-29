@@ -110,6 +110,7 @@ export async function cancelEvent(input: unknown): Promise<ActionResult<{ refund
 
   let cancelledNow = false;
   const notified = await prisma.$transaction(async (tx) => {
+    await fenceOrganisation(tx, org.id);
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
     if (event.status === EventStatus.CANCELLED) return 0;
     cancelledNow = true;

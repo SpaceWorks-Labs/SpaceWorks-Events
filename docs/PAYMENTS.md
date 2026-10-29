@@ -157,8 +157,17 @@ registering is seen. Organisers can still add any guest by hand.
   lists cancelled and expired orders with money left, whether or not a refund
   failed, and owners and admins refund what is left from there, by order,
   after an authenticator check and a recent sign-in (`refundEndedOrderAction`).
-  It works after the order's tickets are gone and refunds money only. Confirmed
-  orders are refunded from the guest list.
+  It works after the order's tickets are gone and refunds money only. It also
+  lists confirmed orders on cancelled events, series or dates, including orders
+  with checked-in guests: refund them here without cancelling their tickets or
+  removing attendance records. Return cash yourself before recording an in-person
+  refund. For a pass, enter the cancelled date's share; leaving the amount blank
+  returns the whole remaining balance. While a checked-in place remains on a
+  cancelled date, any remaining pass balance still blocks organisation deletion;
+  refund the rest before deleting. Other confirmed orders use the guest list.
+  Balances are calculated before the newest 100 refundable orders are selected,
+  so fully refunded orders never hide older money. After refunding these orders,
+  the list refreshes to show the next ones, independently of guest registrations.
 - **Refunds the provider accepted but never finished**: when a refund has the
   provider's id but no final webhook came, the minute's maintenance asks the
   provider about it once it is an hour old, 25 at a time, least recently
@@ -214,7 +223,11 @@ the check-in preview shows what is owed.
   paying, while any refund is still on its way, and while a refund the
   provider refused is still owed (retry it first), whatever the event's or
   order's state: deleting would erase the payment records and settings those
-  need. Nothing is announced or removed when it is refused.
+  need. Cancelled events, series and dates with a collected balance also block
+  deletion, even before the first refund is recorded and after the event ends.
+  Resolve them from **Refundable orders**, including checked-in orders. Cancelled
+  events and series with such balances cannot be deleted separately either.
+  Nothing is announced or removed when deletion is refused.
 
 ## Locks and races (developers)
 
@@ -268,6 +281,12 @@ Rules that go with it:
   ticket type is checked apart from the event's units.
 - Promo code limits are read under the event or series lock that every order
   on the code takes first (`promoStillFits` in `lib/payments/promo.ts`).
+- Cancellation takes the organisation fence before the event or series and date
+  locks. The saved CANCELLED status (or a date's cancelledAt) together with its
+  collected balance is the durable refund obligation, committed atomically with
+  cancellation; no separate refund row is needed for deletion to see it. A pass's
+  date registrations stay attached until their refund share and removal commit
+  together. Checked-in places stay attached for money-only manual refunds.
 - Organisation deletion is one transaction: the Organisation row
   `FOR UPDATE`, then what is still owed (`organisationMoneyBlocker` in
   `lib/payments/obligations.ts`), then the notices, the audit record, the
