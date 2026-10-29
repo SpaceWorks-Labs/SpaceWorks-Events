@@ -38,7 +38,7 @@ describe("summariseRevenue", () => {
     expect(summary.orders.paid).toBe(3);
     expect(summary.byTicket).toEqual([{ name: "General", tickets: 6, revenueMinor: 300000 }]);
     expect(summary.byMethod).toEqual([{ label: "Razorpay", payments: 3, amountMinor: 300000 }]);
-    expect(summary.testOnly).toBe(false);
+    expect(summary.test).toEqual({ payments: 0, collectedMinor: 0, refundedMinor: 0 });
   });
 
   it("splits fees, extras and discounts out of the ticket takings", () => {
@@ -81,15 +81,35 @@ describe("summariseRevenue", () => {
     expect(hasRevenue(summary)).toBe(true);
   });
 
-  it("labels in-person methods, tracks chargebacks and flags test-only money", () => {
+  it("labels in-person methods and tracks chargebacks", () => {
     const summary = summariseRevenue([
-      order({ payments: [payment({ provider: "OFFLINE", status: "PAID_OFFLINE", offlineMethod: "CASH", testMode: true })] }),
-      order({ payments: [payment({ provider: "STRIPE", testMode: true, disputes: [{ status: "OPEN", amountMinor: b(100000) }] })] }),
-      order({ payments: [payment({ testMode: true, disputes: [{ status: "LOST", amountMinor: b(40000) }, { status: "WON", amountMinor: b(1) }] })] }),
+      order({ payments: [payment({ provider: "OFFLINE", status: "PAID_OFFLINE", offlineMethod: "CASH" })] }),
+      order({ payments: [payment({ provider: "STRIPE", disputes: [{ status: "OPEN", amountMinor: b(100000) }] })] }),
+      order({ payments: [payment({ disputes: [{ status: "LOST", amountMinor: b(40000) }, { status: "WON", amountMinor: b(1) }] })] }),
     ], { now, timeZone: "UTC" });
     expect(summary.byMethod.map((row) => row.label).sort()).toEqual(["Cash", "Razorpay", "Stripe"]);
     expect(summary.disputes).toEqual({ open: 1, openMinor: 100000, lost: 1, lostMinor: 40000 });
-    expect(summary.testOnly).toBe(true);
+  });
+
+  it("keeps test payments, their refunds and chargebacks out of the live totals, totalled apart", () => {
+    const summary = summariseRevenue([
+      order({ payments: [payment({ testMode: true, amountMinor: b(1000000), refunds: [{ amountMinor: b(5000), status: "SUCCEEDED", automatic: false }], disputes: [{ status: "OPEN", amountMinor: b(1000000) }] })] }),
+      order({ payments: [payment({ amountMinor: b(10000), paidAt: new Date("2030-03-10T10:00:00Z") })] }),
+    ], { now, timeZone: "UTC", days: 2 });
+    expect(summary).toMatchObject({ collectedMinor: 10000, refundedMinor: 0, netMinor: 10000, orders: { paid: 1 } });
+    expect(summary.byMethod).toEqual([{ label: "Razorpay", payments: 1, amountMinor: 10000 }]);
+    expect(summary.byTicket).toEqual([{ name: "General", tickets: 2, revenueMinor: 100000 }]);
+    expect(summary.disputes).toEqual({ open: 0, openMinor: 0, lost: 0, lostMinor: 0 });
+    expect(summary.daily.largest).toBe(10000);
+    expect(summary.test).toEqual({ payments: 1, collectedMinor: 1000000, refundedMinor: 5000 });
+    // Only test money: nothing live, but still something to show.
+    const testOnly = summariseRevenue([order({ payments: [payment({ testMode: true })] })], { now, timeZone: "UTC" });
+    expect(testOnly).toMatchObject({ collectedMinor: 0, netMinor: 0, orders: { paid: 0 }, test: { payments: 1, collectedMinor: 100000 } });
+    expect(hasRevenue(testOnly)).toBe(true);
+    // Cash recorded at the desk is real money, whatever mode the account was in.
+    const desk = summariseRevenue([order({ payments: [payment({ provider: "RAZORPAY", status: "PAID_OFFLINE", offlineMethod: "CASH", testMode: true })] })], { now, timeZone: "UTC" });
+    expect(desk).toMatchObject({ collectedMinor: 100000, test: { payments: 0 } });
+    expect(desk.byMethod).toEqual([{ label: "Cash", payments: 1, amountMinor: 100000 }]);
   });
 
   it("buckets collected money by day in the event's time zone", () => {

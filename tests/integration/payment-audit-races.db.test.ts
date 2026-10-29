@@ -23,6 +23,8 @@ import { seatTakingWhere } from "@/lib/payments/holds";
 import { cancelRegistrationByToken } from "@/lib/rsvpCancel";
 import { fake, paid, payOrder } from "./helpers/paidOrg";
 import { buyOnline, freeRsvp, onlineEvent, onlineSeries, owner, setUpPaymentAudit, tearDownPaymentAudit, whileLocked } from "./helpers/paymentAudit";
+import { backendPid, waitForLockWait } from "./helpers/lockWait";
+import { holdNextTransaction } from "./helpers/transactionBarrier";
 
 beforeAll(() => setUpPaymentAudit("Audit races"));
 afterAll(() => tearDownPaymentAudit());
@@ -46,7 +48,7 @@ describe.sequential("cancelling a pass date", () => {
   it("refunds the date's share once when two cancellations race", async () => {
     const { series, dates, order } = await paidPass();
     const cancel = () => cancelOccurrence({ organisationId: paid.organisationId, seriesId: series.id, instanceId: dates[1].id, actorUserId: owner.id, reason: "Storm" });
-    await whileLocked(lockRow("Order", order.id), () => Promise.all([cancel(), cancel()]));
+    await whileLocked(lockRow("Order", order.id), () => Promise.all([cancel(), cancel()]), { waiters: 2 });
     expect((await committedRefunds(order.id)).map((refund) => refund.amountMinor)).toEqual([BigInt(30000)]);
     expect(await prisma.rSVP.count({ where: { orderId: order.id, eventInstanceId: dates[1].id } })).toBe(0);
     expect(await prisma.rSVP.count({ where: { orderId: order.id } })).toBe(2);
@@ -77,55 +79,64 @@ describe.sequential("extending a hold", () => {
     const { event, ticket } = await onlineEvent({ capacity: 1 });
     const first = await buyOnline({ eventSlug: event.slug }, ticket.id, "extend-a");
     // A's hold ends a moment from now, and its page can't be reused.
-    const ends = new Date(Date.now() + 150);
+    const ends = new Date(Date.now() + 60_000);
     await prisma.order.update({ where: { id: first.id }, data: { holdExpiresAt: ends } });
     await prisma.rSVP.updateMany({ where: { orderId: first.id }, data: { holdExpiresAt: ends } });
     await prisma.paymentCheckoutAttempt.updateMany({ where: { payment: { orderId: first.id } }, data: { expiresAt: new Date() } });
-    // A asks to extend before its hold ends; B reserves just after, counting A's hold as over.
-    const [extended, second] = await whileLocked(lockRow("Event", event.id), async () => {
-      const extending = startCheckout(first.id);
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return Promise.all([extending, buyOnline({ eventSlug: event.slug }, ticket.id, "extend-b")]);
-    }, 400);
+    // A reaches Event while its hold is live; B starts only after it expires.
+    let reserving!: ReturnType<typeof buyOnline>;
+    const extended = await whileLocked(lockRow("Event", event.id), () => startCheckout(first.id), { beforeRelease: async (tx) => {
+      const expired = new Date(Date.now() - 1);
+      await tx.order.update({ where: { id: first.id }, data: { holdExpiresAt: expired } });
+      await tx.rSVP.updateMany({ where: { orderId: first.id }, data: { holdExpiresAt: expired } });
+      reserving = buyOnline({ eventSlug: event.slug }, ticket.id, "extend-b");
+      await waitForLockWait(await backendPid(tx), 2);
+    } });
+    const second = await reserving;
     expect(extended).toEqual({ error: "hold_ended" });
     expect(second.status).toBe(OrderStatus.PENDING);
     expect(await prisma.rSVP.count({ where: { eventId: event.id, ...seatTakingWhere(new Date()) } })).toBe(1);
   });
 });
 
+/** The real scan writes first; cancellation reaches its lock before the scan commits. */
+async function scanThenCancel<T>(rsvpId: string, cancel: () => Promise<T>) {
+  const barrier = holdNextTransaction();
+  const scan = commitCheckInProjection({ rsvpId, actorUserId: owner.id, source: "online", checkedInAt: new Date(), force: false });
+  void scan.catch(() => {});
+  let cancelling!: Promise<T>;
+  try {
+    const pid = await barrier.entered;
+    cancelling = cancel();
+    void cancelling.catch(() => {});
+    await waitForLockWait(pid);
+  } finally {
+    barrier.release();
+    barrier.restore();
+  }
+  expect(await scan).toMatchObject({ state: "checked-in" });
+  return cancelling;
+}
+
 describe.sequential("a scan racing a cancellation", () => {
-  it("either checks in and refuses the paid cancellation, or cancels and the scan fails", async () => {
+  it("refuses the paid cancellation waiting behind a committed scan", async () => {
     const { event, ticket } = await onlineEvent();
     await prisma.event.update({ where: { id: event.id }, data: { refundPolicyKind: "FULL_UNTIL", refundPolicyHours: 1 } });
     const order = await buyOnline({ eventSlug: event.slug }, ticket.id, "scan-paid");
     expect((await payOrder(order.id)).outcome).toBe("confirmed");
     const rsvp = order.rsvps[0]!;
-    const [scan, cancel] = await whileLocked(lockRow("RSVP", rsvp.id), () => Promise.allSettled([
-      commitCheckInProjection({ rsvpId: rsvp.id, actorUserId: owner.id, source: "online", checkedInAt: new Date(), force: false }),
-      cancelOrderAsBuyer({ orderId: order.id }),
-    ]));
-    const after = await prisma.rSVP.findUnique({ where: { id: rsvp.id } });
-    if (after) {
-      expect(after.checkedInAt).not.toBeNull();
-      expect(scan).toMatchObject({ status: "fulfilled", value: { state: "checked-in" } });
-      expect(cancel).toMatchObject({ status: "rejected", reason: expect.any(PaymentOperationError) });
-      expect(await committedRefunds(order.id)).toHaveLength(0);
-    } else {
-      expect(scan).toMatchObject({ status: "fulfilled", value: { state: "missing" } });
-      expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: OrderStatus.CANCELLED });
-    }
+    const cancel = await scanThenCancel(rsvp.id, () => cancelOrderAsBuyer({ orderId: order.id }).then(() => null, (error: unknown) => error));
+    expect(cancel).toBeInstanceOf(PaymentOperationError);
+    expect((await prisma.rSVP.findUniqueOrThrow({ where: { id: rsvp.id } })).checkedInAt).not.toBeNull();
+    expect(await committedRefunds(order.id)).toHaveLength(0);
   });
 
   it("does the same for a free guest's own cancellation", async () => {
     const { event } = await onlineEvent({ price: 0 });
     const rsvp = await freeRsvp(event.id, "scan-free", RsvpStatus.CONFIRMED);
-    const [scan, cancel] = await whileLocked(lockRow("RSVP", rsvp.id), () => Promise.all([
-      commitCheckInProjection({ rsvpId: rsvp.id, actorUserId: owner.id, source: "online", checkedInAt: new Date(), force: false }),
-      cancelRegistrationByToken(null, rsvp.checkInToken),
-    ]));
-    const after = await prisma.rSVP.findUnique({ where: { id: rsvp.id } });
-    if (after) expect([after.checkedInAt != null, scan.state, cancel.ok]).toEqual([true, "checked-in", false]);
-    else expect([scan.state, cancel.ok]).toEqual(["missing", true]);
+    const cancel = await scanThenCancel(rsvp.id, () => cancelRegistrationByToken(null, rsvp.checkInToken));
+    expect(cancel.ok).toBe(false);
+    expect((await prisma.rSVP.findUniqueOrThrow({ where: { id: rsvp.id } })).checkedInAt).not.toBeNull();
   });
 });
 

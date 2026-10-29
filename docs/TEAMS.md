@@ -71,7 +71,9 @@ member.
 - Organisers approve, reject, and promote **whole teams**. Individual
   approve/reject/promote on an RSVP that belongs to a team is refused with a
   message pointing to the team. Approving a team below `teamMinSize` is
-  refused.
+  refused, and so is approving or promoting a team on a cancelled event
+  (`isEventCancelled`, the guard automatic promotion uses, under the Event
+  lock).
 - When a unit is freed (a confirmed team disbanded, deleted or cancelled, a
   confirmed solo registrant cancelled or moved into a team), the existing
   auto-promotion applies to the oldest waitlisted **unit** (a team or solo
@@ -116,7 +118,10 @@ Both ways are always available in `TEAM` mode:
      team's status, its seeker profile is hidden, its pending invitations and
      requests are cancelled, and a confirmed solo unit is freed and promotes
      the oldest waitlisted unit. A checked-in registration can only join a
-     `CONFIRMED` team. Rejected teams and declined registrations are refused.
+     `CONFIRMED` team: the registration is locked and read again before that
+     check (check-in takes only its row lock, not the Event's), and the move
+     expects the check-in state it was decided on; organiser moves do the
+     same. Rejected teams and declined registrations are refused.
      This works while the event and its page are published and the event has
      not ended (a withdrawn page refuses it, like the join page's 404), even
      after new registrations close, because it never adds a unit.
@@ -141,7 +146,10 @@ to 30 characters).
   shown once, and stored only as a SHA-256 hash (`Team.manageTokenHash`).
   Regenerating it invalidates the old link; the page moves to the new address
   and the new link is emailed to the leader. The check-in token (the ticket
-  QR) never grants team management.
+  QR) never grants team management. When the leader's registration changes
+  hands (a ticket transfer, or an organiser changing the leader's email) the
+  link is rotated and the new one emailed to the new holder
+  (`lib/rsvpHolder.ts`).
 - A signed-in leader also reaches the team page from **Account → Registrations**
   without the token.
 - On the team page the leader can rename the team, regenerate the join link,
@@ -322,8 +330,13 @@ Paid places are paid **up front**, never requested first:
   is confirmed, or waits for approval (`PENDING_APPROVAL`) on an
   approval-required event; a joining member takes the team's status. The
   leader's team page link is emailed then. If the place was lost (the hold
-  ended and the unit or team place was taken, or the team was rejected or
-  removed), the payment is refunded in full instead.
+  ended and the unit or team place was taken, its ticket type sold out, its
+  promo code was used up, or the team was rejected or removed), the payment
+  is refunded in full instead, checked before the team changes.
+- A paid solo place waiting for approval is approved from the guest list like
+  any request: under the Event lock its order must be confirmed with a settled
+  payment, and it takes a unit only if one is free (`confirmRsvpWithinCapacity`).
+  An unpaid order is never confirmed this way.
 - A paid team or solo place never waits on the waitlist: a full event refuses
   it, and a member can't pay to join a waitlisted team. Free tickets keep the
   usual waitlist and promotion of whole units.

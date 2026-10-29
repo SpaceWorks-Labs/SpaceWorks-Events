@@ -103,8 +103,9 @@ export async function saveJudgeScoresAction(input: unknown): Promise<ActionResul
   const gate = await judgeGate(input);
   if (!gate.ok) return gate;
   const result = await saveJudgeScores(gate.ctx, { submissionId: gate.rest.submissionId, scores: gate.rest.scores });
-  if (result.ok) revalidateJudgeWorkspace(gate.ctx);
-  return result;
+  if (!result.ok) return result;
+  revalidateJudgeWorkspace(gate.ctx);
+  return { ok: true, data: { scored: result.data.scored, total: result.data.total } };
 }
 
 /**
@@ -122,10 +123,11 @@ export async function saveJudgeReviewAction(input: unknown): Promise<ActionResul
   if (!review.success) return { ok: false, error: "Check the highlighted fields.", fieldErrors: flattenZodErrors(review.error) };
   const saved = await saveJudgeScores(gate.ctx, { submissionId, scores });
   if (!saved.ok) return saved;
-  const reviewed = await submitJudgeReview(gate.ctx, { submissionId, comment, submit: submit === true });
+  // The review goes to the round the scores went to, or is refused if the round changed in between.
+  const reviewed = await submitJudgeReview(gate.ctx, { submissionId, comment, submit: submit === true }, saved.data.roundId);
   revalidateJudgeWorkspace(gate.ctx);
   if (!reviewed.ok) return reviewed;
-  return { ok: true, data: { ...saved.data, submitted: reviewed.data.submitted } };
+  return { ok: true, data: { scored: saved.data.scored, total: saved.data.total, submitted: reviewed.data.submitted } };
 }
 
 /**

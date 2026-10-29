@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AdmissionStatus, RsvpStatus } from "@prisma/client";
+import { AdmissionStatus, EventStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
@@ -12,7 +12,7 @@ import { holdPaidPlace } from "./payment";
 import { promoteWaitlisted } from "./promotion";
 import { extensionRefusal } from "./rules";
 import { AdmissionError, applicationSelect, isPaid, lockAdmissionEvent, personEmailOf, placesTaken, setUnitStatus, ticketTypeHasRoom, unitMembers, unitOrder, updateApplication } from "./state";
-import { closeApplication } from "./transitions";
+import { closeApplication, EVENT_CANCELLED } from "./transitions";
 import { queueNotice } from "./notify";
 
 /*
@@ -24,6 +24,7 @@ import { queueNotice } from "./notify";
  *   lock) with the usual ticket email.
  * - Accept, paid place: the place is held while the order is paid (see
  *   payment.ts); the payment confirms it. Never confirmed unpaid.
+ * - Accept is refused once the event is cancelled (checked under the lock).
  * - Decline (an offer) or withdraw (in review, waitlisted or offered): closed
  *   for good, any unpaid order cancelled, and the next waitlisted application
  *   is offered the place.
@@ -79,6 +80,7 @@ async function respond(eventId: string, applicationId: string, action: RespondAc
         if (app.status === AdmissionStatus.ACCEPTED) return { ok: true, status: app.status, paying: false };
         if (app.status !== AdmissionStatus.OFFERED) return fail("There's no offer to accept.");
         if (!app.respondBy || app.respondBy <= now) return fail("This offer has ended.");
+        if (event.status === EventStatus.CANCELLED) return fail(EVENT_CANCELLED);
         if (paying) return { ok: true, status: app.status, paying: true };
         if (account) {
           await holdPaidPlace(tx, { event, app, account, actorUserId, now });

@@ -51,7 +51,7 @@ export { setJudgingStatus, setScoreNormalization, type PublishResultsOutcome, pu
 export { type SendResultsAnnouncementOutcome, sendResultsAnnouncement, countResultsAnnouncementRecipients } from "./judging/announcement";
 export { listSubmissionsForJudge, listJudgeSubmissionsPage, loadSubmissionForJudge, type JudgeNextDto, nextSubmissionForJudge } from "./judging/judgeWorkspace";
 export { type RecusedProjectDto, setJudgeRecusal } from "./judging/recusal";
-export { saveJudgeScores, submitJudgeReview } from "./judging/judgeScoring";
+export { saveJudgeScores, submitJudgeReview, type ExpectedRound } from "./judging/judgeScoring";
 export {
   type OrganiserSubmissionsPage,
   listSubmissionsForOrganiser,

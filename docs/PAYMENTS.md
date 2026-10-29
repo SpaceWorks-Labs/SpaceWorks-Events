@@ -58,7 +58,14 @@ On an event or series dashboard → **Tickets**:
 - **Transfers:** optionally let buyers hand a ticket to someone else until a
   cut-off before the start. A ticket whose holder has expense claims waiting,
   approved or paid ([Finance](FINANCE.md)) stays with them, since claims
-  belong to the registration.
+  belong to the registration. The new holder gets a new ticket link, and
+  every link the previous holder had for that registration stops working:
+  the ticket, the attendance question (reset, so the next send asks the new
+  holder), the solo submission link (the project stays with the
+  registration; the new holder requests a new link) and, for a team leader,
+  the team page link (a new one is emailed to the new holder). An organiser
+  changing a guest's email in **Edit registration** does the same
+  (`retireHolderCapabilities`, `lib/rsvpHolder.ts`).
 
 At checkout the seats are held for 30 minutes while the buyer pays. Approval
 requests and waitlist places get a payment link that holds the seats for 24
@@ -66,13 +73,25 @@ hours, with one reminder a few hours before it ends. Opening the payment page
 may extend a hold (up to its cap), never revive one that has ended. Extras
 with a limit count toward it in confirmed orders and live holds; a request is
 only held, an ended hold only reopened, and a late payment only takes its
-extras back while they are still in stock.
+extras back while they are still in stock. The same goes for its ticket
+type's limit and its promo code's use: an ended hold's payment (or reopening
+it, or re-accepting a declined request) keeps them only if they are still
+free; otherwise a late payment is refunded in full and a reopen or re-accept
+is refused.
+
+**Invite-only events** sell one place per invitation: the invited person,
+signed in with the invited address, buys one ticket for themselves (no group
+tickets, no extra attendees). It is checked again inside the reservation, so
+an event switched to invite-only, or an invitation removed, while someone was
+registering is seen. Organisers can still add any guest by hand.
 
 ## Teams, entry fees, prizes and extras
 
 - **Team events** can sell tickets: every member pays, or the leader pays once
   for the team. Team places are paid up front; rejecting a team refunds it.
-  See [Tickets in TEAMS.md](TEAMS.md#tickets).
+  On an approval event a paid solo place waits for approval after payment,
+  and approving it confirms it within the event's units (never an unpaid
+  one). See [Tickets in TEAMS.md](TEAMS.md#tickets).
 - **Hackathon entry fees** are paid through the same checkout when a project
   is submitted, and refunded in full on disqualification when the event says
   so. See [Entry fees](HACKATHON.md#entry-fees).
@@ -127,6 +146,19 @@ extras back while they are still in stock.
   the new one points at it (`PaymentRefund.retryOfRefundId`, unique, so a
   failed refund is retried once even by two people at once), and the
   database guard still refuses anything over what is left on the payment.
+  Only the provider definitely refusing to *create* a refund fails it. A
+  refund whose first answer was lost is looked up before it is sent again,
+  and a lookup that fails in any way (a timeout, or a refusal such as 401
+  while the keys are wrong) leaves it pending with its money still committed,
+  so it can't be retried into a second refund.
+- **Refundable orders**: a cancelled order refunded in part (a partial
+  refund under the policy) or the expired order of a payment that arrived
+  late can still have money on it. The Finance tab (and the series page)
+  lists cancelled and expired orders with money left, whether or not a refund
+  failed, and owners and admins refund what is left from there, by order,
+  after an authenticator check and a recent sign-in (`refundEndedOrderAction`).
+  It works after the order's tickets are gone and refunds money only. Confirmed
+  orders are refunded from the guest list.
 - **Refunds the provider accepted but never finished**: when a refund has the
   provider's id but no final webhook came, the minute's maintenance asks the
   provider about it once it is an hour old, 25 at a time, least recently
@@ -134,9 +166,11 @@ extras back while they are still in stock.
   settles it (a failure is told to the organisers once); a timeout or an
   unreadable answer leaves it pending for the next pass. Maintenance never
   creates a provider refund. Razorpay refunds are created with its
-  `X-Refund-Idempotency` header (a key made from our refund id), and the
-  lookup before a retry reads every page of the payment's refunds; a lookup
-  it can't finish counts as unknown, never as "no refund yet".
+  `X-Refund-Idempotency` header (a key made from our refund id), Stripe's
+  with an `Idempotency-Key`, and the lookup before a retry reads every page of
+  the payment's refunds (Razorpay by offset; Stripe by cursor, `has_more` and
+  `starting_after`); a lookup it can't finish, or a malformed page, counts as
+  unknown, never as "no refund yet".
 
 ### In the mobile apps
 
@@ -155,6 +189,11 @@ the check-in preview shows what is owed.
   refunded, net, by ticket and by payment method, plus desk money, holds,
   complimentary tickets and chargebacks. **Download orders (CSV)** exports every
   order.
+- **Test payments** (taken online while the account uses test keys) moved no
+  real money: they, their refunds and chargebacks are left out of every
+  money figure (Money cards, the organisation dashboard, the PDF report and
+  the Finance tab) and shown apart, labelled as test payments. Money recorded
+  as collected in person always counts.
 - The **organisation dashboard** shows six months of takings per currency.
 - The PDF event report has a Money section.
 - The machine API has an `orders:read` scope (`GET /api/v1/events/:id/orders`),
@@ -169,14 +208,26 @@ the check-in preview shows what is owed.
 - Card, UPI and bank details never reach the installation; only the provider's
   payment reference and a short method description (for example the card brand
   and last four digits) are stored.
-- Deleting an organisation, event or series is refused while people have paid
-  for something still to come: cancel it instead, which refunds them.
+- Deleting an event or series is refused while people have paid for it:
+  cancel it instead, which refunds them. Deleting an organisation is refused
+  while people have paid for something still to come, while a buyer is still
+  paying, while any refund is still on its way, and while a refund the
+  provider refused is still owed (retry it first), whatever the event's or
+  order's state: deleting would erase the payment records and settings those
+  need. Nothing is announced or removed when it is refused.
 
 ## Locks and races (developers)
 
 Every transaction that touches seats, orders or money takes its row locks in
 one order, so two of them never wait on each other:
 
+0. the organisation fence: `FOR KEY SHARE` on the Organisation row
+   (`fenceOrganisation` in `lib/payments/targets.ts`), first in every path
+   that may create an order or a payment (reservations and manual ticket
+   orders through `lockSellable`, entry fees, settlement, everything through
+   `lockOrder`, accepting an application's paid offer through
+   `lockAdmissionEvent`) and in event and series deletion. Key-share locks
+   never block each other; organisation deletion takes the row `FOR UPDATE`;
 1. the event row, or the series row;
 2. the series' dates, by id;
 3. the order;
@@ -204,13 +255,46 @@ Rules that go with it:
   out, recorded and the date's places removed together, so a retry finds
   nothing left to refund.
 - Extending a hold takes the event (or series and dates) locks before the
-  order and reads the time after them.
+  order and reads the time after them. Settlement (provider notifications,
+  the return page, maintenance closing a paid page) and settling by hand do
+  the same: the timestamp taken before the provider call only stamps the
+  payment; whether the hold is still live, and so whether places, extras,
+  the ticket type and the promo code must be counted again, is read under the
+  locks.
+- An ended hold coming back (late payment, settling by hand) checks extras,
+  ticket-type limits and the promo code's limit before a team place is
+  touched, so a refused one leaves nothing changed. On a TEAM event the
+  ticket type is checked apart from the event's units.
+- Promo code limits are read under the event or series lock that every order
+  on the code takes first (`promoStillFits` in `lib/payments/promo.ts`).
+- Organisation deletion is one transaction: the Organisation row
+  `FOR UPDATE`, then what is still owed (`organisationMoneyBlocker` in
+  `lib/payments/obligations.ts`), then the notices, the audit record, the
+  storage queue and the delete. A reservation that holds the fence first
+  commits and is seen; one that comes after waits and finds the organisation
+  gone. Event and series deletion take the fence and the event or series
+  lock, then check paid orders again.
+- Membership role changes and removals serialise on the Organisation row
+  (`FOR NO KEY UPDATE`, which never blocks the fence, and waits for leaving,
+  which takes `FOR UPDATE`), re-read both people's roles under it, and
+  change only a row still in the role that was checked.
 - Capacity edits count confirmed places and live holds with the time read
   under the series lock; clearing a date's own capacity checks the series
   capacity it would inherit.
 - A release started by an attendance "No" (free cancellation, paid
   cancellation, refund request) runs only while that exact No is still the
   answer (`lockCurrentNo` in `lib/attendanceGuard.ts`, the last lock taken).
+- A transfer locks the holder's registrations (by id, after the event or
+  dates) before reading their check-in, and each write still expects an
+  unused, confirmed ticket: a scan either commits first and the transfer is
+  refused, or waits for it. The attendance check is deleted in the same
+  transaction, so a "No" the old holder answered before the transfer finds
+  no current answer and releases nothing. Organiser email changes and the
+  buyer's attendee edits take the same event-then-registrations order.
+- Ticket-token cancellation rechecks the supplied token and the caller's
+  account ownership under the registration lock. Its writes retain those
+  conditions, so a cancellation waiting behind a holder change cannot remove
+  the replacement holder's place, including a free ticket on an order.
 
 ## Applications
 

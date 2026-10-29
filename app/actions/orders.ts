@@ -1,6 +1,6 @@
 "use server";
 
-import { CREW_EMAIL_REFUSED, lockedHasCrewEmail } from "@/lib/core/crew/shared";
+import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
 import { z } from "zod";
 import { revalidatePath as nextRevalidatePath } from "next/cache";
 import type { ActionResult } from "@/app/actions/org";
@@ -12,7 +12,9 @@ import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { AdmissionManagedError, cancelOrderAsBuyer, PaymentOperationError } from "@/lib/payments/operations";
 import { validateAndNormalizeAnswers } from "@/lib/rsvpCore";
 import { isValidAttendeeName } from "@/lib/validators";
-import { ORDER_SUBJECT_SELECT, orderSubject } from "@/lib/payments/targets";
+import { lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject } from "@/lib/payments/targets";
+import { replaceRegistrationAnswers } from "@/lib/admission/answers";
+import { AdmissionError } from "@/lib/admission/state";
 import { OpenClaimsError, transferTicket } from "@/lib/payments/transfers";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
@@ -38,19 +40,9 @@ export async function updateOrderAttendee(input: unknown): Promise<ActionResult>
   if (!isValidAttendeeName(parsed.data.name)) return { ok: false, error: "Enter a valid name." };
   const order = await prisma.order.findUnique({
     where: { accessToken: parsed.data.orderToken },
-    select: { id: true, organisationId: true, status: true, eventId: true, ...ORDER_SUBJECT_SELECT },
+    select: { id: true, organisationId: true, status: true, eventId: true, eventSeriesId: true, ...ORDER_SUBJECT_SELECT },
   });
   if (!order) return { ok: false, error: "Order not found." };
-  const rsvp = await prisma.rSVP.findFirst({
-    where: { id: parsed.data.rsvpId, orderId: order.id },
-    select: { id: true, userId: true, guestEmail: true, checkedInAt: true, checkInToken: true, status: true, attendeeKey: true },
-  });
-  if (!rsvp) return { ok: false, error: "Ticket not found." };
-  if (rsvp.checkedInAt) return { ok: false, error: "This ticket has already been used to check in." };
-  const email = parsed.data.email || null;
-  if (rsvp.userId && email) return { ok: false, error: "This ticket belongs to a signed-in account; its email can't change here." };
-  if (rsvp.guestEmail && email && email !== rsvp.guestEmail) return { ok: false, error: "To give this ticket to someone else, ask the organiser to transfer it." };
-
   const form = order.eventId ? await prisma.eventRegistrationForm.findUnique({ where: { eventId: order.eventId }, include: { fields: { orderBy: { sortOrder: "asc" } } } }) : null;
   const validated = validateAndNormalizeAnswers({
     fields: (form?.fields ?? []).map((field) => ({ id: field.id, key: field.key, label: field.label, type: field.type, required: field.required, options: field.options, settings: field.settings })),
@@ -58,11 +50,23 @@ export async function updateOrderAttendee(input: unknown): Promise<ActionResult>
   });
   if ("error" in validated) return { ok: false, error: validated.error };
 
-  const newEmail = !rsvp.userId && !rsvp.guestEmail && email ? email : null;
+  const email = parsed.data.email || null;
   try {
     const refused = await prisma.$transaction(async (tx) => {
+      // The event or dates, then the order's tickets by id (docs/PAYMENTS.md lock order); read under the lock.
+      await lockOrderTargets(tx, order);
+      await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "orderId" = ${order.id} ORDER BY "id" FOR UPDATE`;
+      const rsvp = await tx.rSVP.findFirst({
+        where: { id: parsed.data.rsvpId, orderId: order.id },
+        select: { id: true, eventId: true, teamId: true, userId: true, guestEmail: true, checkedInAt: true, checkInToken: true, status: true, attendeeKey: true },
+      });
+      if (!rsvp) return "Ticket not found.";
+      if (rsvp.checkedInAt) return "This ticket has already been used to check in.";
+      if (rsvp.userId && email) return "This ticket belongs to a signed-in account; its email can't change here.";
+      if (rsvp.guestEmail && email && email !== rsvp.guestEmail) return "To give this ticket to someone else, ask the organiser to transfer it.";
+      const newEmail = !rsvp.userId && !rsvp.guestEmail && email ? email : null;
       // A crew member already holds a free crew ticket (docs/CREW.md); checked under the Event lock.
-      if (newEmail && order.eventId && (await lockedHasCrewEmail(tx, order.eventId, [newEmail]))) return CREW_EMAIL_REFUSED;
+      if (newEmail && order.eventId && (await hasCrewEmail(tx, order.eventId, [newEmail]))) return CREW_EMAIL_REFUSED;
       // The same person on every date of a pass.
       if (!rsvp.userId) {
         await tx.rSVP.updateMany({
@@ -70,12 +74,8 @@ export async function updateOrderAttendee(input: unknown): Promise<ActionResult>
           data: { guestName: parsed.data.name, ...(newEmail ? { guestEmail: newEmail, attendeeKey: `guest:${newEmail}` } : {}) },
         });
       }
-      await tx.rsvpAnswer.deleteMany({ where: { rsvpId: rsvp.id } });
-      if (validated.rows.length > 0) {
-        await tx.rsvpAnswer.createMany({
-          data: validated.rows.map((row) => ({ rsvpId: rsvp.id, fieldId: row.fieldId, valueText: row.valueText ?? null, valueBool: row.valueBool ?? null, valueNumber: row.valueNumber ?? null, valueDate: row.valueDate ?? null })),
-        });
-      }
+      // Applications keep their answer rules and revisions (lib/admission/answers.ts).
+      await replaceRegistrationAnswers(tx, { id: rsvp.id, eventId: rsvp.eventId, teamId: rsvp.teamId, attendeeKey: newEmail ? `guest:${newEmail}` : rsvp.attendeeKey }, validated.rows);
       // A confirmed ticket that just got its holder's address is sent to them.
       if (newEmail && rsvp.status === "CONFIRMED") {
         await enqueueRsvpConfirmation(tx, { to: newEmail, eventTitle: orderSubject(order)?.title ?? "Your event", status: "CONFIRMED", checkInToken: rsvp.checkInToken });
@@ -85,6 +85,7 @@ export async function updateOrderAttendee(input: unknown): Promise<ActionResult>
     });
     if (refused) return { ok: false, error: refused };
   } catch (error) {
+    if (error instanceof AdmissionError) return { ok: false, error: error.message };
     if (typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "P2002") {
       return { ok: false, error: "That person is already registered for this event." };
     }

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AdmissionBatchStatus, AdmissionDecisionOutcome, Prisma } from "@prisma/client";
+import { AdmissionBatchStatus, AdmissionDecisionOutcome, EventStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import type { WebhookEmission } from "@/lib/webhooks/emit";
@@ -9,7 +9,7 @@ import { stageCoverage } from "./coverage";
 import { emitAll } from "./notify";
 import { allowedOutcomes, coverageMet, offerCeiling, offersLeft } from "./rules";
 import { AdmissionError, applicationSelect, countOfferHolding, lockAdmissionEvent, type ApplicationRow } from "./state";
-import { advanceApplication, OFFERS_CLOSED, offerPlace, rejectApplication, waitlistApplication } from "./transitions";
+import { advanceApplication, EVENT_CANCELLED, OFFERS_CLOSED, offerPlace, rejectApplication, waitlistApplication } from "./transitions";
 
 /*
  * Decisions (docs/ADMISSION.md "Decisions"). Organisers draft decisions into
@@ -109,6 +109,7 @@ export async function releaseDraftBatch(ctx: AdmissionContext, now = new Date())
       const stale = batch.decisions.filter(isStale);
       const live = batch.decisions.filter((d) => !isStale(d));
       if (live.length === 0) return fail(`${stale.length === 1 ? "The application has" : "Every application has"} changed since the decision was drafted. Draft again.`);
+      if (live.some((d) => d.outcome === "ACCEPT") && event.status === EventStatus.CANCELLED) return fail(EVENT_CANCELLED);
       if (live.some((d) => d.outcome === "ACCEPT") && event.startDateTime <= now) return fail(OFFERS_CLOSED);
 
       // Review coverage, per stage.

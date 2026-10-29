@@ -30,12 +30,11 @@ const answer = (token: string, response: "ATTENDING" | "NOT_ATTENDING") => respo
  * answered and committed; once the lock goes, the stale release runs.
  */
 async function noThenYes(lock: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<unknown>, token: string) {
-  return whileLocked(lock, async () => {
-    const no = answer(token, "NOT_ATTENDING");
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    const yes = await answer(token, "ATTENDING");
-    return { no: await no, yes };
-  }, 500);
+  let yes!: Awaited<ReturnType<typeof answer>>;
+  const no = await whileLocked(lock, () => answer(token, "NOT_ATTENDING"), {
+    beforeRelease: async () => { yes = await answer(token, "ATTENDING"); },
+  });
+  return { no, yes };
 }
 
 describe.sequential("a No racing a newer Yes", () => {

@@ -10,6 +10,7 @@ import { HOLD_EXTENSION_CAP_MS, PAYMENT_LINK_HOLD_MS } from "../holds";
 import { providerMinimumMinor } from "../money";
 import { hasFreeSeats, lockSeriesDates, ORDER_SUBJECT_SELECT, orderSubject, seatTargetOf, type SeatTarget } from "../targets";
 import { addOnsFit } from "../addOnStock";
+import { promoStillFits } from "../promo";
 import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, onlineAccount, PaymentOperationError, subjectTitle, ZERO } from "./shared";
 
 /**
@@ -191,13 +192,14 @@ export async function sendPaymentLink(params: { orderId: string; organisationId:
     await lockOrder(tx, order.id);
     const current = await tx.order.findUniqueOrThrow({
       where: { id: order.id },
-      select: { status: true, totalMinor: true, currency: true, buyerEmail: true, ...ORDER_SUBJECT_SELECT, rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true } } },
+      select: { id: true, status: true, totalMinor: true, currency: true, buyerEmail: true, promoCodeId: true, ...ORDER_SUBJECT_SELECT, rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true } } },
     });
     if (current.status !== OrderStatus.EXPIRED) throw new PaymentOperationError("This order was changed by someone else.");
     if (current.rsvps.length === 0) throw new PaymentOperationError("The buyer has registered again since this order expired.");
     if (current.totalMinor < providerMinimumMinor(account.provider, current.currency)) throw new PaymentOperationError("This order is below the smallest payment the provider accepts.");
     if (!(await hasFreeSeats(tx, current.rsvps, now))) throw new PaymentOperationError("Its places have gone since the hold ended.");
     if (!(await addOnsFit(tx, order.id, now))) throw new PaymentOperationError("Some extras on this order have sold out since the hold ended.");
+    if (!(await promoStillFits(tx, current, now))) throw new PaymentOperationError("The promo code on this order has been used up since the hold ended.");
     const holdExpiresAt = new Date(now.getTime() + PAYMENT_LINK_HOLD_MS);
     await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.PENDING, holdExpiresAt, holdCapAt: new Date(holdExpiresAt.getTime() + HOLD_EXTENSION_CAP_MS), testMode: account.testMode } });
     await tx.rSVP.updateMany({ where: { orderId: order.id }, data: { status: RsvpStatus.PENDING_PAYMENT, holdExpiresAt } });

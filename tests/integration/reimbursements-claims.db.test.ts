@@ -52,7 +52,7 @@ describe.sequential("claims under a reimbursement policy", () => {
     expect(snapshot?.terms).toMatchObject({ policyId: travel, capPerPersonMinor: "100000", eligibility: "CONFIRMED_PARTICIPANT" });
     expect(snapshot?.submitted).toMatchObject({ eligible: true, facts: { registrationStatus: "CONFIRMED" } });
     // Withdrawn claims stop counting.
-    expect(await withdrawClaim(filed[1]!.id, { userId: null, rsvpId: alice.id })).toMatchObject({ ok: true });
+    expect(await withdrawClaim(filed[1]!.id, { rsvpId: alice.id })).toMatchObject({ ok: true });
     expect(await claim(alice.checkInToken, "400", travel)).toMatchObject({ ok: true });
   });
 

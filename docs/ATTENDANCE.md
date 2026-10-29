@@ -35,7 +35,11 @@ delivery, replies, the card counts and the Guests filters. It requires
 `isCrew: false`: [crew](CREW.md) are never asked, counted or given a link, and
 carry no attendance badge. Adding an asked guest to the crew deletes their
 question, so its link stops working and a later No can never release a crew
-ticket.
+ticket. A registration that changes hands (a ticket transfer, or an organiser
+changing the guest's email) deletes its question in the same transaction
+(`retireHolderCapabilities`, `lib/rsvpHolder.ts`): the previous holder's link
+stops working, a No they answered just before finds no current answer under
+the release lock and releases nothing, and the next send asks the new holder.
 
 ## Sending
 

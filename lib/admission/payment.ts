@@ -6,6 +6,7 @@ import { enqueuePaymentEmail } from "@/lib/payments/email";
 import { HOLD_EXTENSION_CAP_MS, PAYMENT_LINK_HOLD_MS } from "@/lib/payments/holds";
 import { providerMinimumMinor } from "@/lib/payments/money";
 import { offerInTransaction } from "@/lib/payments/operations/waitlist";
+import { promoStillFits } from "@/lib/payments/promo";
 import { ORDER_SUBJECT_SELECT, orderSubject } from "@/lib/payments/targets";
 import { countConfirmedUnits } from "@/lib/teamUnits";
 import { AdmissionError, setUnitStatus, ticketTypeHasRoom, unitOrder, type AdmissionEvent, type ApplicationRow } from "./state";
@@ -30,7 +31,7 @@ export async function holdPaidPlace(
   const { event, app, account, now } = params;
   const order = await unitOrder(tx, app);
   if (!order) throw new AdmissionError("This place has no order to pay.");
-  if (order.status === OrderStatus.EXPIRED) await reopenEndedHold(tx, app);
+  if (order.status === OrderStatus.EXPIRED && (await reopenEndedHold(tx, app)) === "promo-used-up") throw new AdmissionError(PROMO_USED_UP);
   if (app.rsvpId) {
     // A solo applicant on a TEAM event takes one unit (teams count once), not one person against capacity.
     const hasRoom = event.registrationMode === RegistrationMode.TEAM
@@ -78,17 +79,25 @@ async function holdTeamPlace(
   await recordAuditEvent({ action: "ORDER_OFFERED", actorUserId: params.actorUserId, organisationId: event.organisationId, targetType: "Order", targetId: order.id, client: tx });
 }
 
+export const PROMO_USED_UP = "The promo code on this place has been used up since, so it can't be paid at that price. Ask the organiser.";
+
 /**
  * A payment hold ended unpaid (the order is EXPIRED): put the order back to
  * REQUESTED and the registrations back to pending, so the offer can be
- * accepted (and paid) again while it lasts. Returns whether anything changed.
+ * accepted (and paid) again while it lasts. A REQUESTED order counts as using
+ * its promo code again, so a code used up meanwhile (checked under the Order
+ * lock, at a time read there) leaves the order EXPIRED: "promo-used-up".
+ * Null when nothing changed.
  */
-export async function reopenEndedHold(tx: Prisma.TransactionClient, app: Pick<ApplicationRow, "rsvpId" | "teamId">): Promise<boolean> {
+export async function reopenEndedHold(tx: Prisma.TransactionClient, app: Pick<ApplicationRow, "rsvpId" | "teamId">): Promise<"reopened" | "promo-used-up" | null> {
   const order = await unitOrder(tx, app);
-  if (!order || order.status !== OrderStatus.EXPIRED) return false;
+  if (!order || order.status !== OrderStatus.EXPIRED) return null;
   await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${order.id} FOR UPDATE`;
+  const locked = await tx.order.findUnique({ where: { id: order.id }, select: { id: true, status: true, promoCodeId: true } });
+  if (locked?.status !== OrderStatus.EXPIRED) return null;
+  if (!(await promoStillFits(tx, locked, new Date()))) return "promo-used-up";
   const reopened = await tx.order.updateMany({ where: { id: order.id, status: OrderStatus.EXPIRED }, data: { status: OrderStatus.REQUESTED, holdExpiresAt: null, holdCapAt: null, paymentReminderSentAt: null } });
-  if (reopened.count !== 1) return false;
+  if (reopened.count !== 1) return null;
   await setUnitStatus(tx, app, RsvpStatus.PENDING_APPROVAL);
-  return true;
+  return "reopened";
 }

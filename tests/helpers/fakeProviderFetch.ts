@@ -104,7 +104,14 @@ export function createFakeProvider() {
         refunds.push(created);
         return json(200, { id: created.id, status: created.status });
       }
-      if (method === "GET" && path === "/v1/refunds") return json(200, { data: refunds.filter((item) => item.paymentId === url.searchParams.get("payment_intent")).map((item) => ({ id: item.id, status: item.status, metadata: { refund_id: item.reference } })) });
+      if (method === "GET" && path === "/v1/refunds") {
+        const all = refunds.filter((item) => item.paymentId === url.searchParams.get("payment_intent"));
+        const after = url.searchParams.get("starting_after");
+        const from = after ? all.findIndex((item) => item.id === after) + 1 : 0;
+        const limit = Number(url.searchParams.get("limit") ?? 10);
+        const page = all.slice(from, from + limit);
+        return json(200, { data: page.map((item) => ({ id: item.id, status: item.status, metadata: { refund_id: item.reference } })), has_more: from + limit < all.length });
+      }
       const stripeRefund = path.match(/^\/v1\/refunds\/(\w+)$/);
       if (method === "GET" && stripeRefund) {
         const found = refunds.find((item) => item.id === stripeRefund[1]);

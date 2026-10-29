@@ -31,7 +31,7 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ user: { id: "judge_1" } });
   mocks.rateLimit.mockResolvedValue(false);
   mocks.resolveJudge.mockResolvedValue({ userId: "judge_1", organisationId: "org_1", orgSlug: "org", eventId: "event_1", eventSlug: "hack", isAdmin: false });
-  mocks.saveScores.mockResolvedValue({ ok: true, data: { scored: 1, total: 2 } });
+  mocks.saveScores.mockResolvedValue({ ok: true, data: { scored: 1, total: 2, roundId: "round_1" } });
   mocks.submitReview.mockResolvedValue({ ok: true, data: { submitted: false } });
 });
 
@@ -44,11 +44,11 @@ describe("saveJudgeReviewAction", () => {
     expect(mocks.submitReview).not.toHaveBeenCalled();
   });
 
-  it("saves scores then the review when the input is valid", async () => {
+  it("saves scores then the review, pinned to the scores' round, when the input is valid", async () => {
     const result = await saveJudgeReviewAction({ ...scope, submissionId: "sub_1", scores, comment: "Good", submit: false });
     expect(result).toEqual({ ok: true, data: { scored: 1, total: 2, submitted: false } });
     expect(mocks.saveScores).toHaveBeenCalledOnce();
-    expect(mocks.submitReview).toHaveBeenCalledWith(expect.anything(), { submissionId: "sub_1", comment: "Good", submit: false });
+    expect(mocks.submitReview).toHaveBeenCalledWith(expect.anything(), { submissionId: "sub_1", comment: "Good", submit: false }, "round_1");
   });
 });
 

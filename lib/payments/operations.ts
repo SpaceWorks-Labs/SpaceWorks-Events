@@ -10,3 +10,4 @@ export { reacceptDeclinedOrder } from "./operations/reaccept";
 export { amendOfflinePayment, settleOrderByHand } from "./operations/settle";
 export { buyerCancellation, cancelOrderAsBuyer, refundOrder, refundWholeOrderTx, submitRefunds } from "./operations/refund";
 export { listFailedRefunds, retryFailedRefund } from "./operations/retryRefund";
+export { listRefundableOrders, refundEndedOrder } from "./operations/cancelledRefund";

@@ -15,7 +15,8 @@ import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { recordAuditEvent } from "@/lib/audit";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
-import { hasPaidOrders, peopleWithPlaces } from "@/lib/payments/eventCancellation";
+import { hasPaidOrders, PAID_SERIES_REFUSAL, peopleWithPlaces } from "@/lib/payments/eventCancellation";
+import { fenceOrganisation } from "@/lib/payments/targets";
 import { noticeEach, noticeSubject, uniqueEmails } from "@/lib/notices";
 import { cancelOccurrence, setOccurrenceCapacity } from "@/lib/payments/occurrences";
 import { PaymentOperationError } from "@/lib/payments/operations";
@@ -266,16 +267,20 @@ export async function deleteEventSeries(input: unknown): Promise<ActionResult> {
 
   // Deleting would erase the tickets of people who paid: cancel dates instead,
   // which refunds them.
-  if (await hasPaidOrders({ eventSeriesId: series.id })) {
-    return { ok: false, error: "People have paid for this series. Cancel its dates instead, which refunds them." };
-  }
+  if (await hasPaidOrders({ eventSeriesId: series.id })) return { ok: false, error: PAID_SERIES_REFUSAL };
 
   const instances = await prisma.eventInstance.findMany({
     where: { eventSeriesId: series.id },
     select: { id: true },
   });
 
-  await prisma.$transaction(async (tx) => {
+  const refused = await prisma.$transaction(async (tx) => {
+    // The locks a reservation takes first (docs/PAYMENTS.md): the organisation
+    // fence, then the series row. A paid order committed before this is seen
+    // here; one that waits finds the series gone.
+    await fenceOrganisation(tx, org.id);
+    await tx.$queryRaw`SELECT "id" FROM "EventSeries" WHERE "id" = ${series.id} FOR UPDATE`;
+    if (await hasPaidOrders({ eventSeriesId: series.id }, tx)) return true;
     // People booked on upcoming dates are told the series won't go ahead.
     if (series.status === EventStatus.PUBLISHED) {
       const upcoming = await tx.eventInstance.findMany({ where: { eventSeriesId: series.id, endDateTime: { gt: new Date() }, cancelledAt: null }, select: { id: true } });
@@ -283,7 +288,9 @@ export async function deleteEventSeries(input: unknown): Promise<ActionResult> {
       await noticeEach(tx, people, { organisationId: org.id, subject: noticeSubject("Cancelled", series.title), lines: [`${series.title} has been cancelled by the organiser, with all its upcoming dates.`] });
     }
     await tx.eventSeries.delete({ where: { id: series.id } });
+    return false;
   });
+  if (refused) return { ok: false, error: PAID_SERIES_REFUSAL };
 
   await recordAuditEvent({
     action: "EVENT_SERIES_DELETED",

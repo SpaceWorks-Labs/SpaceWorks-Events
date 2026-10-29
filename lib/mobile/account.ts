@@ -41,23 +41,31 @@ export async function loadMe(userId: string, baseUrl: string) {
       },
     }),
   ]);
-  // Events this user mentors (a MENTOR grant) while their Mentor Desk is on.
-  const mentorGrants = await prisma.eventCollaborator.findMany({
-    where: { userId, permissions: { has: EventPermission.MENTOR }, event: { is: { mentorDeskEnabled: true } } },
+  // Events this user mentors (a MENTOR grant) while their Mentor Desk is on, and
+  // reviews applications for (a REVIEW_APPLICATIONS grant) while applications
+  // are on (resolveMobileReviewer's rule). Admins use the org event list.
+  const grantEvents = (permission: EventPermission, event: Prisma.EventWhereInput) => prisma.eventCollaborator.findMany({
+    where: { userId, permissions: { has: permission }, event: { is: event } },
     orderBy: { createdAt: "desc" },
     take: 200,
     select: { event: { select: { id: true, title: true, startDateTime: true, endDateTime: true, timezone: true, organisation: { select: { slug: true, name: true } } } } },
   });
+  const [mentorGrants, reviewGrants] = await Promise.all([
+    grantEvents(EventPermission.MENTOR, { mentorDeskEnabled: true }),
+    grantEvents(EventPermission.REVIEW_APPLICATIONS, { admissionEnabled: true }),
+  ]);
+  const workspaceEvent = (grant: (typeof mentorGrants)[number]) => grant.event ? [{
+    organisation: { slug: grant.event.organisation.slug, name: grant.event.organisation.name },
+    eventId: grant.event.id,
+    eventTitle: grant.event.title,
+    startDateTime: grant.event.startDateTime.toISOString(),
+    endDateTime: grant.event.endDateTime.toISOString(),
+    timezone: grant.event.timezone,
+  }] : [];
   return meDtoSchema.parse({
     user: toUserDto(user, baseUrl),
-    mentoring: mentorGrants.flatMap((grant) => grant.event ? [{
-      organisation: { slug: grant.event.organisation.slug, name: grant.event.organisation.name },
-      eventId: grant.event.id,
-      eventTitle: grant.event.title,
-      startDateTime: grant.event.startDateTime.toISOString(),
-      endDateTime: grant.event.endDateTime.toISOString(),
-      timezone: grant.event.timezone,
-    }] : []),
+    mentoring: mentorGrants.flatMap(workspaceEvent),
+    reviewing: reviewGrants.flatMap(workspaceEvent),
     staffMfa: await staffMfaState(userId),
     organisations: memberships.map((membership) => ({
       id: membership.organisation.id,

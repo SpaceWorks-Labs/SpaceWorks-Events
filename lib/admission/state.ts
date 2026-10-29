@@ -3,6 +3,7 @@ import "server-only";
 import { AdmissionStatus, OrderStatus, Prisma, RegistrationMode, RsvpStatus } from "@prisma/client";
 import { countConfirmedUnits } from "@/lib/teamUnits";
 import { seatTakingWhere } from "@/lib/payments/holds";
+import { fenceOrganisation } from "@/lib/payments/targets";
 import type { RegistrationStatusWebhook } from "@/lib/teamUnits";
 import { OFFER_HOLDING } from "./rules";
 
@@ -41,8 +42,14 @@ export const admissionEventSelect = {
 
 export type AdmissionEvent = Prisma.EventGetPayload<{ select: typeof admissionEventSelect }>;
 
-/** Lock the Event row and read it; null when the event is gone or not in the organisation. */
+/**
+ * Lock the Event row and read it; null when the event is gone or not in the
+ * organisation. The organisation fence comes first, as on every path that may
+ * create a payment (accepting a paid offer; docs/PAYMENTS.md lock order).
+ */
 export async function lockAdmissionEvent(tx: Prisma.TransactionClient, eventId: string, organisationId?: string): Promise<AdmissionEvent | null> {
+  const owner = await tx.event.findUnique({ where: { id: eventId }, select: { organisationId: true } });
+  if (!owner || !(await fenceOrganisation(tx, owner.organisationId))) return null;
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
   return tx.event.findFirst({ where: { id: eventId, ...(organisationId ? { organisationId } : {}) }, select: admissionEventSelect });
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { CREW_EMAIL_REFUSED, CREW_REGISTRATION_ERROR, lockedHasCrewEmail } from "@/lib/core/crew/shared";
+import { CREW_EMAIL_REFUSED, CREW_REGISTRATION_ERROR, hasCrewEmail } from "@/lib/core/crew/shared";
 import { Prisma, RsvpStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -19,6 +19,9 @@ import { revalidatePath, revalidateRsvpPaths, settleTeamAfterRemoval, teamDeleti
 import { restoreRsvp as restoreRsvpAction } from "./rsvp-admin/restore";
 import { captureSubmissionSnapshotTx, type SubmissionSnapshot } from "@/lib/core/submissionLifecycle";
 import { emitTeamWebhooks, type RegistrationStatusWebhook } from "@/lib/teamUnits";
+import { newTicketToken, retireHolderCapabilities } from "@/lib/rsvpHolder";
+import { replaceRegistrationAnswers } from "@/lib/admission/answers";
+import { AdmissionError } from "@/lib/admission/state";
 
 export async function addManualRsvp(
   input: unknown,
@@ -92,45 +95,38 @@ export async function updateRsvpRegistration(input: unknown): Promise<ActionResu
   });
   if ("error" in validated) return { ok: false, error: validated.error };
 
-  const guestUpdate = rsvp.userId ? {} : {
-    guestName: parsed.data.name?.trim() || rsvp.guestName,
-    guestEmail: parsed.data.guestEmail?.trim().toLowerCase() || rsvp.guestEmail,
-  };
-  const guestEmail = "guestEmail" in guestUpdate ? guestUpdate.guestEmail : rsvp.guestEmail;
-  // Moving a ticket to a crew member's email would give them a second, capacity-taking place.
-  const toCrewEmail = Boolean(rsvp.eventId && guestEmail && guestEmail !== rsvp.guestEmail);
   try {
     const refused = await prisma.$transaction(async (tx) => {
-      if (toCrewEmail && rsvp.eventId && (await lockedHasCrewEmail(tx, rsvp.eventId, [guestEmail]))) return CREW_EMAIL_REFUSED;
+      // The Event, then the registration (docs/PAYMENTS.md lock order); read again under the lock.
+      if (rsvp.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${rsvp.eventId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${rsvp.id} FOR UPDATE`;
+      const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, select: { userId: true, guestName: true, guestEmail: true, status: true, checkInToken: true, attendeeKey: true, teamId: true } });
+      if (!current) return "RSVP not found.";
+      const guestEmail = current.userId ? current.guestEmail : parsed.data.guestEmail?.trim().toLowerCase() || current.guestEmail;
+      // A new address is a new holder: a new ticket link, and the old holder's
+      // attendance, submission and team links stop working (lib/rsvpHolder.ts).
+      const newHolder = Boolean(!current.userId && guestEmail && guestEmail !== current.guestEmail);
+      // Moving a ticket to a crew member's email would give them a second, capacity-taking place.
+      if (newHolder && rsvp.eventId && (await hasCrewEmail(tx, rsvp.eventId, [guestEmail]))) return CREW_EMAIL_REFUSED;
+      const checkInToken = newHolder ? newTicketToken() : current.checkInToken;
+      const attendeeKey = current.userId ? current.attendeeKey : `guest:${guestEmail}`;
       await tx.rSVP.update({
         where: { id: rsvp.id },
-        data: {
-          ...guestUpdate,
-          ...(rsvp.userId ? {} : { attendeeKey: `guest:${guestEmail}` }),
-        },
+        data: current.userId ? {} : { guestName: parsed.data.name?.trim() || current.guestName, guestEmail, attendeeKey, checkInToken },
       });
+      if (newHolder) await retireHolderCapabilities(tx, rsvp.id);
       const title = rsvp.event?.title ?? rsvp.eventInstance?.series.title;
-      const live = rsvp.status === RsvpStatus.CONFIRMED || rsvp.status === RsvpStatus.WAITLISTED || rsvp.status === RsvpStatus.PENDING_APPROVAL;
-      if (guestEmail && guestEmail !== rsvp.guestEmail && title && live) {
-        await enqueueRsvpConfirmation(tx, { to: guestEmail, eventTitle: title, status: rsvp.status, checkInToken: rsvp.checkInToken });
+      const live = current.status === RsvpStatus.CONFIRMED || current.status === RsvpStatus.WAITLISTED || current.status === RsvpStatus.PENDING_APPROVAL;
+      if (newHolder && guestEmail && title && live) {
+        await enqueueRsvpConfirmation(tx, { to: guestEmail, eventTitle: title, status: current.status, checkInToken });
       }
-      await tx.rsvpAnswer.deleteMany({ where: { rsvpId: rsvp.id } });
-      if (validated.rows.length > 0) {
-        await tx.rsvpAnswer.createMany({
-          data: validated.rows.map((row) => ({
-            rsvpId: rsvp.id,
-            fieldId: row.fieldId,
-            valueText: row.valueText ?? null,
-            valueBool: row.valueBool ?? null,
-            valueNumber: row.valueNumber ?? null,
-            valueDate: row.valueDate ?? null,
-          })),
-        });
-      }
+      // Applications keep their answer rules and revisions (lib/admission/answers.ts).
+      await replaceRegistrationAnswers(tx, { id: rsvp.id, eventId: rsvp.eventId, teamId: current.teamId, attendeeKey }, validated.rows);
       return null;
     });
     if (refused) return { ok: false, error: refused };
   } catch (error) {
+    if (error instanceof AdmissionError) return { ok: false, error: error.message };
     if (typeof error === "object" && error !== null && "code" in error && (error as { code?: string; }).code === "P2002") {
       return { ok: false, error: "This email is already registered for this event." };
     }

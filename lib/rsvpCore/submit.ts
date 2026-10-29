@@ -10,7 +10,7 @@ import { joinsFree, sellsTickets, submitTicketOrder } from "./orders";
 import { reserveRsvp } from "./reserve";
 import { publicCountField } from "@/lib/publicRegistrationCount";
 import { isUniqueViolationOn, TeamRegistrationError, teamRegistrationFailure } from "./team";
-import { isRsvpTargetClosedError, resolveAttendeeEmail } from "./shared";
+import { isRsvpTargetClosedError, resolveAttendeeEmail, RsvpInviteRequiredError } from "./shared";
 import { submitGuestRsvp, type SubmitRsvpResult } from "./submitGuest";
 
 export async function submitRsvpCore(
@@ -177,6 +177,7 @@ export async function submitRsvpCore(
       };
     } catch (e: unknown) {
       if (isRsvpTargetClosedError(e)) return { ok: false, error: "This event is not open for RSVP." };
+      if (e instanceof RsvpInviteRequiredError) return { ok: false, error: e.message };
       if (e instanceof TeamRegistrationError) return teamRegistrationFailure(e);
       if (isUniqueViolationOn(e, "nameKey")) return { ok: false, error: "That team name is already taken for this event." };
       if (

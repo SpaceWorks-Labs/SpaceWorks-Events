@@ -11,7 +11,7 @@ import { joinsFree, sellsTickets, submitTicketOrder } from "./orders";
 import { reserveRsvp } from "./reserve";
 import { publicCountField } from "@/lib/publicRegistrationCount";
 import { isUniqueViolationOn, TeamRegistrationError, teamRegistrationFailure } from "./team";
-import { isRsvpTargetClosedError, normalizeGuestEmail } from "./shared";
+import { isRsvpTargetClosedError, normalizeGuestEmail, RsvpInviteRequiredError } from "./shared";
 
 export type SubmitRsvpResult = ActionResult<{ count?: number; status: RsvpStatus; ticketToken: string; orderToken?: string; checkoutUrl?: string | null; teamId?: string | null }>;
 
@@ -146,6 +146,7 @@ export async function submitGuestRsvp(
     };
   } catch (e: unknown) {
     if (isRsvpTargetClosedError(e)) return { ok: false, error: "This event is not open for RSVP." };
+    if (e instanceof RsvpInviteRequiredError) return { ok: false, error: e.message };
     if (e instanceof TeamRegistrationError) return teamRegistrationFailure(e);
     if (isUniqueViolationOn(e, "nameKey")) return { ok: false, error: "That team name is already taken for this event." };
     if (

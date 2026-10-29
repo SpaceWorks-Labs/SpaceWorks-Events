@@ -91,8 +91,10 @@ team gets a solo application.
   hashed keys stay, so the person still can't apply twice. Otherwise
   applications stay until their event is deleted.
 - Sent `AdmissionStatusEvent` rows are purged after 30 days (retention job);
-  a partial index covers only the rows still to send. A row whose webhook
-  couldn't be queued is released for the next pass (at least once).
+  a partial index covers only the rows still to send. Each row is marked sent
+  in the same transaction that inserts its deliveries, so a row whose webhook
+  couldn't be queued (an error or a crash) stays for the next pass, and its
+  webhook event id is derived from the row, so it is never queued twice.
 - Reviews, answer revisions, stage entries, released (and cancelled)
   decisions and applications are deleted only with their event; an update
   may only clear a user link (an account deleted). A reviewer's deleted
@@ -125,7 +127,14 @@ team gets a solo application.
 
 `version` changes with every state change; `decisionRevision` counts released
 decisions (emails carry it and are dropped when outdated); `answersRevision`
-changes when the applicant edits answers.
+changes when the answers change. Every editor of an application's answers
+(the applicant's ticket page, the organiser's **Edit registration** and the
+buyer's order page) goes through `replaceRegistrationAnswers`
+(`lib/admission/answers.ts`) under the Event lock: unchanged answers write
+nothing (a name correction stays possible after a decision); changed answers
+are refused once the application has left review or its answers are locked,
+and otherwise keep the replaced answers as a revision, raise
+`answersRevision` and `version`, and ask submitted reviewers again.
 
 ## Stages
 
@@ -244,7 +253,11 @@ rate limited), or an organiser answers for them (audited):
 - A hold that ends unpaid: the beat puts the order back to REQUESTED and the
   registrations to pending while `respondBy` is in the future (the offer
   stands); after it, the application EXPIRES and the order is CANCELLED. An
-  applying team is never deleted with its expired hold.
+  applying team is never deleted with its expired hold. A request counts as
+  using its promo code, so the order goes back only while its code still has a
+  use left (`promoStillFits`, under the Order lock); otherwise it stays
+  EXPIRED and accepting again is refused until the code frees up or the offer
+  ends.
 - Decline (OFFERED) and withdraw (IN_REVIEW, WAITLISTED, OFFERED) close the
   application, cancel an unpaid order and offer the freed place onwards. Both
   are refused while a payment hold is live. An accepted applicant cancels
@@ -253,6 +266,10 @@ rate limited), or an organiser answers for them (audited):
   at a time); the applicant is emailed.
 - Offers being paid count as OFFERED against the offer capacity, and a live
   hold keeps its seat from other acceptances.
+- A cancelled event makes no offers and accepts none, checked under the Event
+  lock (`offerPlace`, release, promotion, AUTO, accept): the beat skips it
+  for reminders, reopened holds, AUTO and the waitlist, and only expires its
+  ended offers. Decline and withdraw still work.
 
 ## Waitlist
 
@@ -304,7 +321,9 @@ stage-advanced. The payload carries ids and the decision revision only; the
 ticket link is added at send time, and a notice is dropped when the
 application moved on. `stage-advanced` is queued only when the organiser
 turned `emailApplicantsOnStageAdvance` on; every other notice always goes
-out (each carries a decision or a deadline). Accepting a free place sends
+out (each carries a decision or a deadline). Once the event is cancelled,
+offer, reminder, extended, waitlisted and stage-advanced notices still
+queued are dropped at delivery. Accepting a free place sends
 the usual `rsvp-status` ticket email; paid places get the payment emails.
 The registration email says "Application received" on these events.
 
@@ -316,7 +335,11 @@ The registration email says "Application received" on these events.
   scores, reviews or reviewers. A trigger records every status or stage
   change in `AdmissionStatusEvent`, whatever made it (a release, an answer, a
   settled payment, a deleted registration); after each commit and from the
-  beat those rows are claimed once each and sent (`drainApplicationEvents`).
+  beat each row is locked, marked sent and its deliveries inserted in one
+  transaction (`drainApplicationEvents`), with a stable event id per row.
+  Payload reads (including the application and recorded stage), endpoint
+  reads and delivery inserts all use that transaction's client, so draining
+  also works with `connection_limit=1`.
 - `GET /api/v1/events/:eventId/applications` (`applications:read`,
   `docs/API.md`): counts by status and stage and the offers out. Numbers only.
 

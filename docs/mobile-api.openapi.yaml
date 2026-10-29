@@ -2559,13 +2559,14 @@ components:
     Me:
       type: object
       additionalProperties: false
-      required: [user, organisations, collaborations, judging, mentoring, staffMfa]
+      required: [user, organisations, collaborations, judging, mentoring, reviewing, staffMfa]
       properties:
         user: { $ref: "#/components/schemas/User" }
         organisations: { type: array, items: { $ref: "#/components/schemas/OrgSummary" } }
         collaborations: { type: array, items: { $ref: "#/components/schemas/Collaboration" } }
         judging: { type: array, items: { $ref: "#/components/schemas/JudgingEvent" } }
         mentoring: { type: array, items: { $ref: "#/components/schemas/MentoringEvent" }, description: Events this user mentors while their Mentor Desk is on. }
+        reviewing: { type: array, items: { $ref: "#/components/schemas/MentoringEvent" }, description: "Events whose applications this user reviews through a REVIEW_APPLICATIONS grant, while applications are on (the workspace is under orgs/{orgSlug}/events/{eventId}/applications/reviews). Organisation owners and admins find their events on the org event list. Never listed as collaborations." }
         staffMfa: { type: string, enum: [ok, verify, enrol], description: "The staff authenticator rule for this app session: verify (POST /auth/mfa) or enrol (on the website). Attendees are always ok." }
 
     EventSummary:
