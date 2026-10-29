@@ -7,6 +7,7 @@ import { shouldQueueSubmissionReceipt } from "@/lib/hackathonEmails";
 import { enqueuePaymentEmail } from "./email";
 import { createPendingRefund } from "./refunds";
 import { PaymentOperationError } from "./operations/shared";
+import { resultsFreezeSubmissions } from "@/lib/core/judging/shared";
 
 /**
  * Hackathon entry fees (docs/HACKATHON.md). Submitting a project on an event
@@ -43,14 +44,15 @@ export async function entryFeeOwed(tx: Prisma.TransactionClient, eventId: string
  * is opt-in per event (`emailSubmissionReceipts`, lib/hackathonEmails.ts),
  * read in this transaction; the payment email is never gated. A cancelled
  * event never takes a project in: callers refund the fee (settlement) or
- * refuse (settling by hand) first, and this refuses too.
+ * refuse (settling by hand) first, and this refuses too. Once results are
+ * published the project is frozen, so a late fee is kept but submits nothing.
  */
 export async function confirmEntryFeeTx(tx: Prisma.TransactionClient, order: { id: string; organisationId: string; submissionId: string; buyerEmail: string; buyerName: string; }, paymentId: string, now: Date, notifyPaid = true) {
-  const submission = await tx.submission.findUnique({ where: { id: order.submissionId }, select: { event: { select: { status: true } } } });
+  const submission = await tx.submission.findUnique({ where: { id: order.submissionId }, select: { event: { select: { status: true, resultsPublishedAt: true } } } });
   if (submission?.event.status === EventStatus.CANCELLED) throw new PaymentOperationError("This event was cancelled, so the project can't be submitted.");
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.CONFIRMED, holdExpiresAt: null, holdCapAt: null } });
-  // E5: apply results-publication freeze here once fix/audit-admission-mentor merges
-  const submitted = await tx.submission.updateMany({
+  // Published results freeze projects (docs/HACKATHON.md): the fee stays recorded, the project isn't submitted.
+  const submitted = submission && resultsFreezeSubmissions(submission.event) ? { count: 0 } : await tx.submission.updateMany({
     where: { id: order.submissionId, status: { in: [SubmissionStatus.DRAFT, SubmissionStatus.WITHDRAWN] } },
     data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },
   });

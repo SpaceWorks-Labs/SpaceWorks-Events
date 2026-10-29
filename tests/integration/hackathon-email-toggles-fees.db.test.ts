@@ -104,4 +104,14 @@ describe.sequential("hackathon receipts on the entry-fee path", () => {
     expect(await disqualifySubmission(organiser, { submissionId: waived.submission.id, reason: "Checking" })).toMatchObject({ ok: true });
     expect(await reinstateSubmission(organiser, waived.submission.id)).toMatchObject({ ok: true });
   });
+
+  it("keeps a fee paid after results are published but leaves the project unsubmitted", async () => {
+    const { event, submission, order } = await feeOwed(true, "frozen");
+    await prisma.event.update({ where: { id: event.id }, data: { resultsPublishedAt: new Date() } });
+    expect((await payOrder(order.id)).outcome).toBe("confirmed");
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: "CONFIRMED" });
+    expect(await prisma.submission.findUniqueOrThrow({ where: { id: submission.id } })).toMatchObject({ status: SubmissionStatus.DRAFT });
+    expect(await receipts(submission.id)).toBe(0);
+    expect(await notices(order.id, "paid")).toBe(1);
+  });
 });

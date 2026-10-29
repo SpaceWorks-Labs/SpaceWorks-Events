@@ -128,6 +128,9 @@ saving, submitting and withdrawing are refused ("Results are published, so
 projects can no longer change.") and the editor is read-only
 (`resultsFreezeSubmissions` in lib/core/judging/shared.ts, read under the
 Event lock that publishing takes for update). Unpublishing lifts the freeze.
+An entry fee whose payment arrives after publication is kept and its order
+confirmed, but the waiting draft is not submitted (`confirmEntryFeeTx`,
+lib/payments/entryFees.ts); the organiser decides what to do with it.
 The editor's window line says when submissions open or close, that they are
 closed, or, if the dates are missing, that the organisers haven't set them.
 A team that is disbanded or a solo RSVP that is cancelled has its submission
