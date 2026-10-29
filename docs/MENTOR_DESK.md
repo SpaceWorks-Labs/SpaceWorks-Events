@@ -299,7 +299,10 @@ commands queue on the same row instead of deadlocking:
 1. The `Event` row: `FOR UPDATE` (`lockEvent`) for assignment runs and hand
    edits, configuration, rounds, and the help commands claim and assign;
    `FOR KEY SHARE` (`shareEvent`) for office-hour creation, rescheduling and
-   booking, and for grant changes (`lockCollaborator`, invite acceptance).
+   booking, and for grant changes (`lockCollaborator`). Invite acceptance
+   takes `FOR UPDATE` before claiming the invite, validates the target still
+   exists, then links any crew account before locking the grant. This also
+   serialises acceptance with event deletion and its invite cascade.
    Key share waits for (and holds off) `FOR UPDATE` but not other key-share
    holders, so office hours for different mentors still run side by side.
    A slot or a mentor profile references the Event, so creating one under
@@ -315,7 +318,9 @@ commands queue on the same row instead of deadlocking:
    volunteer shift never overlap: booking and rescheduling check approved
    shifts, and approval, automatic approval, promotion and shift time changes
    check booked office hours ("This volunteer has a booked office hour at the
-   same time.").
+   same time."). Adding either crew identity link takes the Event and all
+   involved person locks before the crew row and refuses a link whose existing
+   approved duties overlap BOOKED office hours (`lib/core/crew/identity.ts`).
 3. The mentor's grant (`EventCollaborator`): `FOR SHARE` in mentor commands
    (`liveMentor`), `FOR UPDATE` in schedule changes and grant changes.
 4. The team (or the solo registration), then the request, slot, visit or

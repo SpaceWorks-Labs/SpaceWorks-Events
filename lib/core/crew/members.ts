@@ -12,6 +12,8 @@ import { isOrganisationUploadUrl } from "@/lib/uploadUrl";
 import { rsvpWebhookSnapshot, rsvpWebhookSnapshotSelect } from "@/lib/teamUnits";
 import { emitWebhookEvent, type WebhookEmission } from "@/lib/webhooks/emit";
 import { detachApplicationForCrew } from "./application";
+import { DeskError } from "@/lib/core/mentorDesk/shared";
+import { lockCrewLinkPersons, requireCrewLinkAvailable } from "./identity";
 import {
   ALREADY_ON_CREW,
   ALREADY_REGISTERED,
@@ -205,6 +207,9 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
     return await prisma.$transaction(async (tx): Promise<CrewResult> => {
       // Under the Event row lock, like adding: a new address is checked against the event's registrations.
       if (!(await lockEventForCrew(tx, event.id))) return fail("Event not found.");
+      const identity = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { userId: true, rsvp: { select: { userId: true } } } });
+      const account = identity?.userId ?? identity?.rsvp.userId ?? await verifiedAccountFor(tx, data.email);
+      await lockCrewLinkPersons(tx, event.id, [memberId], account ? [account] : []);
       if (!(await lockCrewRows(tx, event.id, memberId))) return fail("Crew member not found.");
       const member = await tx.eventCrewMember.findFirst({ where: { id: memberId, eventId: event.id }, select: { id: true, email: true, rsvpId: true, userId: true, rsvp: { select: { userId: true, checkInToken: true, user: { select: { email: true } } } } } });
       if (!member) return fail("Crew member not found.");
@@ -218,7 +223,8 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
         if (await findRegistrationByEmail(tx, event.id, data.email, member.rsvpId)) return fail(ALREADY_REGISTERED);
       }
       // The account link is sticky: a new email never unlinks it (docs/VOLUNTEERS.md), it can only gain one.
-      const relink = data.email !== member.email && !member.userId ? { userId: member.rsvp.userId ?? (await verifiedAccountFor(tx, data.email)) } : {};
+      const relink = data.email !== member.email && !member.userId ? { userId: account } : {};
+      if (relink.userId) await requireCrewLinkAvailable(tx, event.id, member.id, relink.userId);
       await tx.eventCrewMember.update({ where: { id: member.id }, data: { ...data, showOnPage, ...(kind ? { kind } : {}), ...relink } });
       // A new address gets the ticket too; the old one keeps working (same QR).
       if (data.email !== member.email) await enqueueCrewTicket(tx, { to: data.email, checkInToken: member.rsvp.checkInToken, organisationId: event.organisationId });
@@ -229,6 +235,7 @@ export async function updateCrewMemberAsOrganiser(ctx: OrganiserCrewContext, mem
       return { ok: true, data: undefined };
     });
   } catch (error) {
+    if (error instanceof DeskError) return fail(error.message);
     if (isUniqueViolation(error)) return fail(uniqueViolationModel(error) === "EventCrewMember" ? ALREADY_ON_CREW : ALREADY_REGISTERED);
     throw error;
   }
@@ -287,6 +294,10 @@ export async function removeCrewMember(ctx: OrganiserCrewContext, memberId: stri
 
 export async function moveCrewMember(ctx: OrganiserCrewContext, memberId: string, direction: -1 | 1): Promise<CrewResult> {
   return prisma.$transaction(async (tx): Promise<CrewResult> => {
+    const event = await lockEventForCrew(tx, ctx.eventId);
+    if (event?.organisationId !== ctx.organisationId) return fail("Crew member not found.");
+    // Updates below follow display order; acquire the complete set in id order first, like shift edits.
+    await tx.$queryRaw`SELECT c."id" FROM "EventCrewMember" c JOIN "Event" e ON e."id" = c."eventId" WHERE c."eventId" = ${ctx.eventId} AND e."organisationId" = ${ctx.organisationId} ORDER BY c."id" FOR UPDATE OF c`;
     const rows = await tx.eventCrewMember.findMany({
       where: { eventId: ctx.eventId, event: { organisationId: ctx.organisationId } },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],

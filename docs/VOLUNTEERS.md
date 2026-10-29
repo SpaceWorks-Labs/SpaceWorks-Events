@@ -92,7 +92,15 @@ Cores: `lib/volunteer/shifts.ts`, `lib/volunteer/signups.ts`.
   statement (`lockCrewMembers`), so withdrawals or edits on two shifts with
   crossed rosters wait for each other instead of deadlocking; promotion then
   takes no new lock. The order is: person locks, shift, crew members. No path
-  locks a crew member before a shift.
+  locks a crew member before a shift when taking both. Crew reordering holds
+  Event to keep the crew set fixed, then locks the complete set in id order
+  before making display-order updates.
+  Adding either identity link also takes the Event lock, then all current and
+  proposed person locks, then the crew row. Before linking it checks approved
+  duties against BOOKED office hours with the proposed identity; a clash
+  refuses the link and asks for the shift place to be cancelled or the booking
+  rescheduled. This also covers email edits, invitation acceptance and the
+  mentor crew hook. Creating a fresh crew row has no existing duties to check.
 - **Apply** (volunteer, from their crew ticket): shifts on, event not
   cancelled, shift open and not closed, before `signupDeadline`, crew ticket
   confirmed. One sign-up per shift; someone who withdrew may sign up again

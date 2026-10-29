@@ -143,14 +143,7 @@ export async function verifiedAccountFor(client: Prisma.TransactionClient, email
  * whose email is exactly `email` is linked, and only unlinked rows change.
  * Safe to run twice.
  */
-export async function linkCrewAccount(client: Prisma.TransactionClient, userId: string, email: string | null | undefined, eventId?: string) {
-  const normalised = email?.trim().toLowerCase();
-  if (!normalised) return 0;
-  const user = await client.user.findUnique({ where: { id: userId }, select: { email: true, emailVerified: true } });
-  if (!user?.emailVerified || user.email?.trim().toLowerCase() !== normalised) return 0;
-  const linked = await client.eventCrewMember.updateMany({ where: { email: normalised, userId: null, ...(eventId ? { eventId } : {}) }, data: { userId } });
-  return linked.count;
-}
+export { linkCrewAccount } from "./identity";
 
 /**
  * Whether any of these emails already holds a crew place on the event. The

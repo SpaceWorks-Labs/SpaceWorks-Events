@@ -5,12 +5,12 @@ import { prisma } from "@/lib/db";
 import { hashEventCollaboratorToken } from "@/lib/eventCollaboratorToken";
 import { linkCrewAccount } from "@/lib/core/crew/shared";
 import { syncMentorGrantLocked } from "@/lib/core/mentorDesk/grant";
-import { shareEvent } from "@/lib/core/mentorDesk/shared";
+import { DeskError } from "@/lib/core/mentorDesk/shared";
 
 export type InviteAcceptance =
   /** `mentorGrant`: the event grant before and after, for the post-commit Mentor Desk crew hook. */
   | { ok: true; href: string; mentorGrant?: { eventId: string; userId: string; before: EventPermission[]; after: EventPermission[] } }
-  | { ok: false; reason: "unavailable" | "wrong-account" };
+  | { ok: false; reason: "unavailable" | "wrong-account"; error?: string };
 
 export async function acceptOrganisationInviteToken(token: string, userId: string): Promise<InviteAcceptance> {
   return prisma.$transaction(async (tx) => {
@@ -37,7 +37,7 @@ export async function acceptOrganisationInviteToken(token: string, userId: strin
 
 export async function acceptEventCollaboratorInviteToken(token: string, user: { id: string; email: string }): Promise<InviteAcceptance> {
   const tokenHash = hashEventCollaboratorToken(token);
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction<InviteAcceptance>(async (tx) => {
     const invite = await tx.eventCollaboratorInvite.findUnique({
       where: { tokenHash },
       select: {
@@ -49,6 +49,12 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
     const now = new Date();
     if (!invite || invite.usedAt || invite.expiresAt <= now) return { ok: false, reason: "unavailable" };
     if (invite.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) return { ok: false, reason: "wrong-account" };
+    // The target precedes the invite claim: deletion holds it before cascading to the invite.
+    // Exclusive for an event because account linking below also takes the Event lock.
+    const target = invite.eventId
+      ? await tx.$queryRaw<unknown[]>`SELECT "id" FROM "Event" WHERE "id" = ${invite.eventId} FOR UPDATE`
+      : await tx.$queryRaw<unknown[]>`SELECT "id" FROM "EventSeries" WHERE "id" = ${invite.eventSeriesId} FOR KEY SHARE`;
+    if (target.length !== 1) return { ok: false, reason: "unavailable" };
     const claim = await tx.eventCollaboratorInvite.updateMany({
       where: { id: invite.id, usedAt: null, expiresAt: { gt: now } },
       data: { usedAt: now, usedByUserId: user.id },
@@ -56,8 +62,8 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
     if (claim.count !== 1) return { ok: false, reason: "unavailable" };
     let mentorGrant: { eventId: string; userId: string; before: EventPermission[]; after: EventPermission[] } | undefined;
     if (invite.eventId) {
-      // Locked like any grant change (the Event, then the grant), so a mentor command in flight is fenced (docs/MENTOR_DESK.md).
-      await shareEvent(tx, invite.eventId);
+      // Link before taking the grant: Event -> people -> crew, with existing duties rechecked.
+      await linkCrewAccount(tx, user.id, invite.email, invite.eventId);
       await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${invite.eventId} AND "userId" = ${user.id} FOR UPDATE`;
       const before = await tx.eventCollaborator.findUnique({ where: { eventId_userId: { eventId: invite.eventId, userId: user.id } }, select: { permissions: true } });
       await tx.eventCollaborator.upsert({
@@ -68,8 +74,6 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
       // A MENTOR grant gets its Mentor Desk profile (docs/MENTOR_DESK.md); it never creates an order.
       await syncMentorGrantLocked(tx, invite.eventId, user.id, before?.permissions ?? [], invite.permissions, user.id);
       mentorGrant = { eventId: invite.eventId, userId: user.id, before: before?.permissions ?? [], after: invite.permissions };
-      // The invited email may also be on the event crew: link that crew record to this account (docs/VOLUNTEERS.md).
-      await linkCrewAccount(tx, user.id, invite.email, invite.eventId);
     } else if (invite.eventSeriesId) {
       await tx.eventCollaborator.upsert({
         where: { eventSeriesId_userId: { eventSeriesId: invite.eventSeriesId, userId: user.id } },
@@ -84,5 +88,8 @@ export async function acceptEventCollaboratorInviteToken(token: string, user: { 
     await tx.auditEvent.create({ data: { action: "EVENT_COLLABORATOR_INVITE_ACCEPTED", actorUserId: user.id, organisationId: organisation.id, targetType: "EventCollaboratorInvite", targetId: invite.id } });
     const href = invite.eventId ? `/dashboard/${organisation.slug}/event/${invite.eventId}` : `/dashboard/${organisation.slug}/series/${invite.eventSeriesId}`;
     return { ok: true, href, ...(mentorGrant ? { mentorGrant } : {}) };
+  }).catch((error) => {
+    if (error instanceof DeskError) return { ok: false as const, reason: "unavailable" as const, error: error.message };
+    throw error;
   });
 }

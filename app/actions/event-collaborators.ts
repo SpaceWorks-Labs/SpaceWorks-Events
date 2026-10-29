@@ -140,12 +140,13 @@ export async function updateEventCollaboratorPermissions(input: unknown): Promis
   }));
   if (!outcome.ok) return outcome;
   const { updated, existing } = outcome.data;
-  if (updated.count && existing?.eventId) await syncMentorCrewAfterGrant({ eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: parsed.data.permissions, actorUserId: session.user.id });
   if (!updated.count) return { ok: false, error: "Collaborator not found." };
+  const crewChange = existing?.eventId ? { eventId: existing.eventId, userId: existing.userId, before: existing.permissions, after: parsed.data.permissions, actorUserId: session.user.id } : null;
+  const crewOutcome = crewChange ? await mentorGrantChange(() => syncMentorCrewAfterGrant(crewChange)) : { ok: true as const };
   await recordAuditEvent({ action: "EVENT_COLLABORATOR_PERMISSIONS_UPDATED", actorUserId: session.user.id, organisationId: org.id, targetType: "EventCollaborator", targetId: parsed.data.collaboratorId, metadata: { permissions: parsed.data.permissions.join(",") } });
   if (parsed.data.eventId) revalidatePath(`/dashboard/${org.slug}/event/${parsed.data.eventId}`);
   revalidatePath("/dashboard");
-  return { ok: true };
+  return crewOutcome.ok ? { ok: true } : crewOutcome;
 }
 
 /** Cancels a pending (unused) co-organiser invite so its emailed link stops working. Organisation admins only. */

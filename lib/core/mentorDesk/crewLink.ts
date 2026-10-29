@@ -17,6 +17,7 @@ import { CrewKind, EventPermission } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { addCrewMemberTx, afterCrewAdded, removeCrewMember } from "@/lib/core/crew/members";
 import { eventForCrewSelect, findRegistrationByEmail, linkCrewAccount } from "@/lib/core/crew/shared";
+import { linkMentorCrew } from "@/lib/core/crew/identity";
 
 export type MentorGrantChange = { eventId: string; userId: string; before: readonly EventPermission[]; after: readonly EventPermission[]; actorUserId: string };
 
@@ -41,13 +42,19 @@ export async function syncMentorCrewAfterGrant(change: MentorGrantChange): Promi
   if (!event?.mentorsGetCrewTicket || !email) return;
   if (await findRegistrationByEmail(prisma, event.id, email)) {
     // An existing crew place with this email is linked to the mentor's verified account (its kind stays the organiser's choice).
-    await linkCrewAccount(prisma, change.userId, email, event.id);
+    await prisma.$transaction((tx) => linkCrewAccount(tx, change.userId, email, event.id));
     return;
   }
   const result = await addCrewMemberTx(event, { name: user?.name?.trim() || email, email, foodPreference: "", role: "Mentor", bio: "" }, { showOnPage: false, joinedViaLink: false, kind: CrewKind.MENTOR });
   if (!result.ok) return;
   // Linked only when the mentor's account email is verified (linkCrewAccount, docs/VOLUNTEERS.md).
-  await linkCrewAccount(prisma, change.userId, email, event.id);
-  await prisma.mentorProfile.updateMany({ where: { id: profile.id, crewMemberId: null }, data: { crewMemberId: result.data.id } });
-  await afterCrewAdded(event.id, result);
+  try {
+    await prisma.$transaction(async (tx) => {
+      await linkMentorCrew(tx, event.id, change.userId, result.data.id);
+      await linkCrewAccount(tx, change.userId, email, event.id);
+    });
+  } finally {
+    // The crew ticket already committed, even if a conflicting duty now refuses its profile link.
+    await afterCrewAdded(event.id, result);
+  }
 }
