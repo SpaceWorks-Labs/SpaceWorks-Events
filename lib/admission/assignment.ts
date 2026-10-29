@@ -38,6 +38,7 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 const fail = (error: string) => ({ ok: false as const, error });
 const POOL_CHANGED = "Some of the people you picked can't review this stage any more. Refresh and try again.";
 const PLAN_CHANGED = "Applications, reviewers or assignments changed since the preview. Preview again before applying.";
+const TARGET_FROZEN = "This stage already has reviews, so its reviews per application can't change. Keep the current number.";
 
 export function newAdmissionSeed(): string {
   return randomBytes(16).toString("hex");
@@ -95,6 +96,9 @@ export async function applyAssignment(ctx: AdmissionContext, input: AssignInput)
   const seed = input.strategy === "random" ? input.seed! : null;
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${ctx.eventId} FOR UPDATE`;
+    // The review target is frozen once the stage has a review, as in the stage editor.
+    const current = await tx.admissionStage.findFirst({ where: { id: input.stageId, eventId: ctx.eventId }, select: { reviewsPerApplication: true, _count: { select: { reviews: true } } } });
+    if (current && current.reviewsPerApplication !== input.perApplication && current._count.reviews > 0) return fail(TARGET_FROZEN);
     const built = await buildPlan(tx, ctx, input, seed);
     if (!built.ok) return built;
     const { plan, stage } = built.data;

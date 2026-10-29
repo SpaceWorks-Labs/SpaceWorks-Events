@@ -44,7 +44,7 @@ export async function loadApplicationReview(input: unknown): Promise<ActionResul
 
 export async function submitApplicationReview(input: unknown): Promise<ActionResult> {
   const gate = await reviewerGate(reviewSchema, input);
-  return gate.ok ? done(gate.ctx, await submitReview(gate.ctx, gate.data.assignmentId, { scores: gate.data.scores, notes: gate.data.notes })) : gate;
+  return gate.ok ? done(gate.ctx, await submitReview(gate.ctx, gate.data.assignmentId, { answersRevision: gate.data.answersRevision, scores: gate.data.scores, notes: gate.data.notes })) : gate;
 }
 
 export async function recuseFromApplication(input: unknown): Promise<ActionResult<{ replacedBy: boolean }>> {
