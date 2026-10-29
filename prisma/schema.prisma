@@ -553,7 +553,7 @@ model MobileIdempotencyKey {
   keyHash     String
   /// HMAC of the method, path and body; the same key on another path or with another body is refused.
   requestHash String
-  /// 0 while the first request is still running.
+  /// 0 while the first request is still running; 1 when it ran with an unknown outcome (a 5xx or an exception).
   status      Int      @default(0)
   body        Json?
   createdAt   DateTime @default(now())

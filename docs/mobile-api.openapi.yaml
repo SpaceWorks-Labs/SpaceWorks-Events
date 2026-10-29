@@ -1233,7 +1233,7 @@ paths:
                 policyId: { type: string, description: File under this reimbursement policy (from GET …/reimbursements); blank for general claims. }
                 receipts: { type: array, maxItems: 3, items: { type: string, format: binary } }
       responses:
-        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantClaimsResponse" } } } }
+        "201": { description: "The claim list; only the new claim's id (ClaimFiled) when it was filed but the list could not be read back", content: { application/json: { schema: { $ref: "#/components/schemas/ParticipantClaimFiledResponse" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2451,7 +2451,7 @@ components:
     EventStatus: { type: string, enum: [DRAFT, PUBLISHED, HIDDEN, CANCELLED] }
     PrivacyType: { type: string, enum: [PUBLIC, HIDDEN_LINK, APPROVAL_REQUIRED, INVITE_ONLY] }
     MembershipRole: { type: string, enum: [OWNER, ADMIN, MEMBER] }
-    EventPermission: { type: string, enum: [EDIT_DETAILS, MANAGE_REGISTRATIONS, MANAGE_INVITATIONS, CHECK_IN, PUBLISH_AND_SCHEDULE, JUDGE, MENTOR] }
+    EventPermission: { type: string, enum: [EDIT_DETAILS, MANAGE_REGISTRATIONS, MANAGE_INVITATIONS, CHECK_IN, PUBLISH_AND_SCHEDULE, JUDGE, MENTOR, REVIEW_APPLICATIONS] }
     FieldType: { type: string, enum: [TEXT, TEXTAREA, EMAIL, PHONE, SELECT, MULTI_SELECT, RADIO, CHECKBOX, NUMBER, DATE] }
     Attendance: { type: string, enum: [ANY, CHECKED_IN, NOT_CHECKED_IN], default: ANY }
     RegistrationMode: { type: string, enum: [INDIVIDUAL, TEAM], description: "TEAM: capacity counts teams plus solo registrants (\"teams & solo places\")." }
@@ -3835,6 +3835,13 @@ components:
         cap: { type: [string, "null"] }
         categories: { type: array, items: { type: object, additionalProperties: false, required: [value, label], properties: { value: { type: string }, label: { type: string } } } }
         claims: { type: array, items: { $ref: "#/components/schemas/Claim" } }
+    ClaimFiled:
+      description: The claim was filed but the list could not be read back; GET …/claims shows it.
+      type: object
+      additionalProperties: false
+      required: [claimId]
+      properties:
+        claimId: { type: string }
     StaffClaim:
       description: Closed form of StaffClaimFields (no other properties).
       allOf: [{ $ref: "#/components/schemas/StaffClaimFields" }]
@@ -4011,6 +4018,7 @@ components:
     CheckInListsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/CheckInLists" } } }
     ListCheckInResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ListCheckInResult" } } }
     ParticipantClaimsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/ParticipantClaims" }, { type: "null" }] } } }
+    ParticipantClaimFiledResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/ParticipantClaims" }, { $ref: "#/components/schemas/ClaimFiled" }, { type: "null" }] } } }
     MyReimbursementsResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { oneOf: [{ $ref: "#/components/schemas/MyReimbursements" }, { type: "null" }] } } }
     ReimbursementPoliciesResponse: { type: object, additionalProperties: false, required: [ok, data], properties: { ok: { const: true }, data: { $ref: "#/components/schemas/ReimbursementPolicies" } } }
     MyReimbursements:

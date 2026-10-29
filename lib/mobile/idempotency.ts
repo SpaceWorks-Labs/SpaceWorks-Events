@@ -18,13 +18,15 @@ import { MAX_BODY_BYTES, mobileError, readJsonBody } from "@/lib/mobile/http";
  * acting twice. The same key on another path (another event, request, slot or
  * round) or with another body is CONFLICT, never another resource's answer.
  *
- * Only definitive answers are kept. Transient and sign-in refusals (5xx, 429,
- * 401, the staff authenticator checks) are not: retry them with the same key.
- * Use a new key only after a definitive 4xx answer, which the same key would
- * replay. A first request still running is CONFLICT; one that started more
- * than STALE_AFTER_MS ago and never finished (the process died mid-write) is
- * IDEMPOTENCY_STALE: its outcome is unknown, so it is never run again under
- * that key. Re-read the record and, if the change is not there, send a new key.
+ * Only definitive answers are kept. Refusals made before anything is done
+ * (429, 401, the staff authenticator checks) are not: retry them with the same
+ * key. Use a new key only after a definitive 4xx answer, which the same key
+ * would replay. A first request still running is CONFLICT. A 5xx answer or an
+ * exception after the write ran may come after a commit, so its outcome is
+ * unknown: the key then answers IDEMPOTENCY_STALE and never runs again, as does
+ * one that started more than STALE_AFTER_MS ago and never finished (the
+ * process died mid-write). Re-read the record and, if the change is not there,
+ * send a new key.
  *
  * Keys and bodies are stored only as HMACs under a key derived from
  * MFA_ENCRYPTION_KEY for this purpose alone. The kept answers are the routes'
@@ -37,11 +39,13 @@ export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60_000;
 export const STALE_AFTER_MS = 60_000;
 const KEY_PATTERN = /^[\x21-\x7e]{8,128}$/;
 const IN_PROGRESS = 0;
+/** The write ran but its outcome is unknown (a 5xx or an exception): never run again under this key. Not an HTTP status (the table checks status >= 0). */
+const UNKNOWN = 1;
 
-/** Refusals a retry may change: never kept, so the same key runs again. */
-const TRANSIENT_CODES = new Set([
+/** Refusals made before acting, which a retry may change: never kept, so the same key runs again. */
+const REFUSAL_CODES = new Set([
   "RATE_LIMITED", "TOO_MANY_ATTEMPTS", "UNAUTHENTICATED", "MFA_REQUIRED", "REAUTH_REQUIRED", "EMAIL_CODE_REQUIRED",
-  "EMAIL_VERIFICATION_REQUIRED", "STAFF_MFA_REQUIRED", "STAFF_MFA_ENROLMENT_REQUIRED", "INTERNAL_ERROR", "PAYMENT_UNAVAILABLE",
+  "EMAIL_VERIFICATION_REQUIRED", "STAFF_MFA_REQUIRED", "STAFF_MFA_ENROLMENT_REQUIRED",
 ]);
 
 const digest = (value: string) => crypto.createHmac("sha256", deriveSecretKey("spaceworks-events-mobile-idempotency-v1")).update(value).digest("hex");
@@ -50,10 +54,10 @@ function replay(row: { status: number; body: Prisma.JsonValue | null; }) {
   return NextResponse.json(row.body, { status: row.status, headers: { "Cache-Control": "no-store", "Idempotent-Replayed": "true" } });
 }
 
-function isTransient(status: number, kept: unknown) {
-  if (status >= 500 || status === 401 || status === 429) return true;
+function isRefusal(status: number, kept: unknown) {
+  if (status === 401 || status === 429) return true;
   const code = (kept as { error?: { code?: unknown } } | null)?.error?.code;
-  return typeof code === "string" && TRANSIENT_CODES.has(code);
+  return typeof code === "string" && REFUSAL_CODES.has(code);
 }
 
 /** Ticket links are bearer capabilities: never kept in a stored answer. */
@@ -89,8 +93,8 @@ async function bodyFingerprint(contentType: string, bytes: Uint8Array) {
 /**
  * Run `run` at most once per Idempotency-Key. The body is read here (up to
  * `maxBytes`) and handed to `run` in a fresh copy of the request, so a route
- * reads it as usual. Transient answers (see above) are not kept, so a retry
- * runs again.
+ * reads it as usual. Refusals (see above) are not kept, so a retry runs again;
+ * a 5xx or an exception leaves the outcome unknown (IDEMPOTENCY_STALE).
  */
 export async function idempotentRequest(
   request: Request,
@@ -110,6 +114,8 @@ export async function idempotentRequest(
   const requestHash = digest(`request\n${request.method}\n${url.pathname}${url.search}\n${await bodyFingerprint(contentType, bytes)}`);
   const where = { userId_route_keyHash: { userId, route: routeId, keyHash } };
   const forget = () => prisma.mobileIdempotencyKey.deleteMany({ where: { userId, route: routeId, keyHash } }).catch(() => undefined);
+  // If even this fails the row stays in progress and turns stale: never run twice either way.
+  const markUnknown = () => prisma.mobileIdempotencyKey.update({ where, data: { status: UNKNOWN } }).catch(() => undefined);
   const now = new Date();
 
   // Expired keys are free again.
@@ -121,6 +127,7 @@ export async function idempotentRequest(
     const existing = await prisma.mobileIdempotencyKey.findUnique({ where });
     if (!existing) return mobileError("CONFLICT", "Retry with a new Idempotency-Key.");
     if (existing.requestHash !== requestHash) return mobileError("CONFLICT", "This Idempotency-Key was used for a different request.");
+    if (existing.status === UNKNOWN) return mobileError("IDEMPOTENCY_STALE");
     if (existing.status !== IN_PROGRESS) return replay(existing);
     if (now.getTime() - existing.createdAt.getTime() > STALE_AFTER_MS) return mobileError("IDEMPOTENCY_STALE");
     return mobileError("CONFLICT", "The first request with this Idempotency-Key is still running. Try again shortly.");
@@ -132,11 +139,16 @@ export async function idempotentRequest(
   try {
     response = await run(new Request(request.url, { method: request.method, headers, body: bytes.byteLength > 0 ? Buffer.from(bytes) : undefined }));
   } catch (error) {
-    await forget();
+    // It may have failed after a commit (reading the result back, say).
+    await markUnknown();
     throw error;
   }
+  if (response.status >= 500) {
+    await markUnknown();
+    return response;
+  }
   const kept = await response.clone().json().catch(() => null) as Prisma.InputJsonValue | null;
-  if (isTransient(response.status, kept)) {
+  if (isRefusal(response.status, kept)) {
     await forget();
     return response;
   }
