@@ -3,14 +3,13 @@ import "server-only";
 /*
  * The MENTOR grant's lifecycle (docs/MENTOR_DESK.md), kept free of auth and
  * framework imports so invite acceptance and collaborator actions can call it
- * inside their own transactions. The optional crew ticket is added or removed
- * after the commit (./crewLink.ts), because the crew core runs its own
- * transaction under the Event lock.
+ * inside their own transactions, including the optional crew ticket and its
+ * identity links (./crewLink.ts). Only webhook emission happens after commit.
  *
  * Fencing: a grant change locks the EventCollaborator row FOR UPDATE
  * (lockCollaborator) before it cleans up, and every mentor command reads the
  * grant FOR SHARE (liveMentor), so a command either finishes before the
- * removal or sees the grant gone. The Event comes first (FOR KEY SHARE), as
+ * removal or sees the grant gone. The Event comes first (FOR UPDATE), as
  * in every Mentor Desk command (docs/MENTOR_DESK.md "Lock order"): granting
  * MENTOR creates a profile referencing the Event, which would otherwise wait
  * for an assignment holding the Event while it waits for this grant.
@@ -21,7 +20,8 @@ import { helpDeadline } from "@/lib/mentorDesk/rules";
 import { OFFICE_HOUR_CANCELLED_KIND } from "@/lib/outbox/mentor";
 import { notifyBooking, scheduleOf } from "./officeHourMail";
 import { lockHelpRow, releaseLocked } from "./helpShared";
-import { refuse, shareEvent } from "./shared";
+import { refuse } from "./shared";
+import { lockMentorGrantEvent, lockMentorGrantPersons, syncMentorCrewLocked } from "./crewLink";
 import { revokeMentoringCertificatesLocked } from "@/lib/volunteer/mentoring";
 
 /** Creates the profile for a MENTOR grant (on invite acceptance or a grant change). Idempotent. */
@@ -30,14 +30,18 @@ export async function ensureMentorProfile(tx: Prisma.TransactionClient, eventId:
 }
 
 /**
- * Finds a collaborator row, locks its event (FOR KEY SHARE) and then the row
+ * Finds a collaborator row, locks its event (FOR UPDATE), people and then the row
  * FOR UPDATE, and re-reads it, so a grant change never races a mentor command
  * holding the grant FOR SHARE. A collaborator never moves between events.
  */
 export async function lockCollaborator(tx: Prisma.TransactionClient, where: Prisma.EventCollaboratorWhereInput) {
-  const found = await tx.eventCollaborator.findFirst({ where, select: { id: true, eventId: true } });
+  const found = await tx.eventCollaborator.findFirst({ where, select: { id: true, eventId: true, userId: true } });
   if (!found) return null;
-  if (found.eventId) await shareEvent(tx, found.eventId);
+  if (found.eventId) {
+    // Crew operations need UPDATE too: never upgrade key share after taking the grant.
+    await lockMentorGrantEvent(tx, found.eventId);
+    await lockMentorGrantPersons(tx, found.eventId, found.userId);
+  }
   await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "id" = ${found.id} FOR UPDATE`;
   return tx.eventCollaborator.findFirst({ where: { AND: [where, { id: found.id }] }, select: { id: true, eventId: true, userId: true, permissions: true } });
 }
@@ -102,4 +106,5 @@ export async function syncMentorGrantLocked(tx: Prisma.TransactionClient, eventI
   const has = after.includes(EventPermission.MENTOR);
   if (has) await ensureMentorProfile(tx, eventId, userId);
   if (had && !has) await endMentorRoleLocked(tx, eventId, userId, actorUserId);
+  return syncMentorCrewLocked(tx, { eventId, userId, before, after, actorUserId });
 }

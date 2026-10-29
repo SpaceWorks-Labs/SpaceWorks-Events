@@ -4,8 +4,6 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { acceptEventCollaboratorInviteToken, acceptOrganisationInviteToken } from "@/lib/inviteAcceptance";
-import { syncMentorCrewAfterGrant } from "@/lib/core/mentorDesk/crewLink";
-import { DeskError } from "@/lib/core/mentorDesk/shared";
 import type { ActionResult } from "./org";
 
 const tokenSchema = z.string().trim().min(20).max(256).regex(/^[A-Za-z0-9_-]+$/);
@@ -28,13 +26,6 @@ export async function acceptEventCollaboratorInvite(input: unknown): Promise<Act
   if (await isActionRateLimited("invite", session.user.id)) return { ok: false, error: "Too many attempts. Please try again later." };
   const result = await acceptEventCollaboratorInviteToken(token.data, { id: session.user.id, email: session.user.email });
   if (result.ok) {
-    // Mentor Desk crew hook (docs/MENTOR_DESK.md), after the grant committed.
-    try {
-      if (result.mentorGrant) await syncMentorCrewAfterGrant({ ...result.mentorGrant, actorUserId: session.user.id });
-    } catch (error) {
-      if (error instanceof DeskError) return { ok: false, error: error.message };
-      throw error;
-    }
     return { ok: true, data: { href: result.href } };
   }
   return { ok: false, error: result.error ?? (result.reason === "wrong-account" ? "Sign in with the invited email address." : "This invite is unavailable.") };

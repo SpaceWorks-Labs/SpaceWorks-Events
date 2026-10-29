@@ -18,7 +18,8 @@ import { applyForShift } from "@/lib/volunteer/signups";
 import { updateShift } from "@/lib/volunteer/shifts";
 import { flushWebhookEmits } from "@/lib/webhooks/emit";
 import { createTeam, createUser, organiserId, setUpJudgingSuite, tearDownJudgingSuite } from "./helpers/judging";
-import { fulfilled, holdLocks, lockWaiters, raceBehind, untilLockWaiters } from "./helpers/locks";
+import { fulfilled, holdLocks, raceBehind } from "./helpers/locks";
+import { whileLocked } from "./helpers/lockWait";
 import { addMentor, createDeskEvent, goLive, local, teamParticipant } from "./helpers/mentorDesk";
 
 describe.sequential("final lock-order regressions", () => {
@@ -139,30 +140,20 @@ describe.sequential("final lock-order regressions", () => {
     expect((await prisma.eventCollaborator.findUniqueOrThrow({ where: { eventId_userId: { eventId: f.event.id, userId: f.user.id } } })).permissions).toEqual(["MENTOR"]);
   });
 
-  it("rechecks duty approved while the mentor crew hook waits to add its profile identity link", async () => {
+  it("keeps the mentor ticket and its ownership private until both commit, then refuses overlapping duty", async () => {
     const f = await linkingFixture();
     expect(await book(f)).toMatchObject({ ok: true });
     await prisma.event.update({ where: { id: f.event.id }, data: { mentorsGetCrewTicket: true } });
     await prisma.user.update({ where: { id: f.user.id }, data: { emailVerified: null } });
-    const barrier = await holdLocks((tx) => tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${f.user.id} FOR NO KEY UPDATE`);
-    const baseline = await lockWaiters();
-    const linking = syncMentorCrewAfterGrant({ eventId: f.event.id, userId: f.user.id, before: [], after: ["MENTOR"], actorUserId: organiserId })
-      .then(() => ({ ok: true }), (error: unknown) => {
-        if (error instanceof Error && error.message === CREW_LINK_CONFLICT) return { ok: false, error: error.message };
-        throw error;
-      });
-    try {
-      await Promise.race([untilLockWaiters(() => baseline + 1), linking.then(() => { throw new Error("The profile link did not wait for the person lock."); })]);
-      const created = await prisma.eventCrewMember.findUniqueOrThrow({ where: { eventId_email: { eventId: f.event.id, email: f.user.email! } } });
-      expect(created.userId).toBeNull();
-      // The hook has committed its new crew ticket, but cannot yet associate its duties with this person.
-      expect(await applyForShift({ eventId: f.event.id, crewMemberId: created.id }, f.duty.id)).toMatchObject({ ok: true, data: { status: "APPROVED" } });
-    } finally {
-      await barrier.release();
-      await linking;
-    }
-    expect(await linking).toEqual({ ok: false, error: CREW_LINK_CONFLICT });
-    expect((await prisma.mentorProfile.findUniqueOrThrow({ where: { eventId_userId: { eventId: f.event.id, userId: f.user.id } } })).crewMemberId).toBeNull();
+    await whileLocked((tx) => tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${f.user.id} FOR NO KEY UPDATE`,
+      () => syncMentorCrewAfterGrant({ eventId: f.event.id, userId: f.user.id, before: [], after: ["MENTOR"], actorUserId: organiserId }),
+      { beforeRelease: async () => {
+        expect(await prisma.eventCrewMember.count({ where: { eventId: f.event.id, email: f.user.email! } })).toBe(0);
+      } });
+    const created = await prisma.eventCrewMember.findUniqueOrThrow({ where: { eventId_email: { eventId: f.event.id, email: f.user.email! } } });
+    expect(created.userId).toBeNull();
+    expect((await prisma.mentorProfile.findUniqueOrThrow({ where: { eventId_userId: { eventId: f.event.id, userId: f.user.id } } })).crewMemberId).toBe(created.id);
+    expect(await applyForShift({ eventId: f.event.id, crewMemberId: created.id }, f.duty.id)).toMatchObject({ ok: false });
   });
 
   it("serialises an email link behind a booking already waiting on the person lock", async () => {

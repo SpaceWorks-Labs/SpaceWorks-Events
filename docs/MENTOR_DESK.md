@@ -65,14 +65,19 @@ they are the only member: deleting that row would open the round to every
 mentor, so it stays, inert without the grant.
 
 **Crew ticket** (Settings → Mentor Desk → *Give mentors a crew ticket*,
-`Event.mentorsGetCrewTicket`, off by default). After a `MENTOR` grant commits,
-`syncMentorCrewAfterGrant` (`lib/core/mentorDesk/crewLink.ts`) adds the mentor
+`Event.mentorsGetCrewTicket`, off by default). In the `MENTOR` grant transaction,
+`syncMentorCrewLocked` (`lib/core/mentorDesk/crewLink.ts`) adds the mentor
 to the [event crew](CREW.md) through the crew core: role "Mentor", not listed
 publicly, a free crew ticket with no order. The place is recorded on
 `MentorProfile.crewMemberId`; removing the grant removes that place and only
 that one. Someone already registered for the event keeps their own ticket and
 gets no crew place. Mentors invited before the switch was turned on are not
-changed.
+changed. The grant, profile, ticket, queued ticket email and identity links
+commit together. A refused link refuses the entire permission save or invite
+acceptance with its reason; the invite stays unused. Resolve the conflict
+and save or accept again. A newly created ticket is never visible without
+its `MentorProfile.crewMemberId` ownership link. Removal deletes that ticket
+in the grant transaction too. Webhooks are emitted only after commit.
 
 **Reimbursements.** Like any co-organiser grant, a mentor-only grant passes
 `canViewEventDashboard` for its own event, so the server accepts a staff
@@ -305,10 +310,16 @@ commands queue on the same row instead of deadlocking:
 1. The `Event` row: `FOR UPDATE` (`lockEvent`) for assignment runs and hand
    edits, configuration, rounds, and the help commands claim and assign;
    `FOR KEY SHARE` (`shareEvent`) for office-hour creation, rescheduling and
-   booking, and for grant changes (`lockCollaborator`). Invite acceptance
-   takes `FOR UPDATE` before claiming the invite, validates the target still
+   booking, and before every `liveMentor` grant lock (including conflict
+   declarations). Grant changes (`lockCollaborator`) use `FOR UPDATE`.
+   Invite acceptance takes `FOR UPDATE` before claiming the invite, validates the target still
    exists, then links any crew account before locking the grant. This also
    serialises acceptance with event deletion and its invite cascade.
+   Grant changes also take `FOR UPDATE` up front because atomic crew
+   creation, removal and identity linking require it; neither path upgrades
+   a shared Event lock after taking a grant or person lock.
+   Grant changes and acceptance first fence `Organisation` with `FOR KEY SHARE`,
+   before Event, because their queued crew emails and audits reference it.
    Key share waits for (and holds off) `FOR UPDATE` but not other key-share
    holders, so office hours for different mentors still run side by side.
    A slot or a mentor profile references the Event, so creating one under
@@ -316,7 +327,8 @@ commands queue on the same row instead of deadlocking:
    while it waits for that grant.
 2. The **person lock**: the mentor's `User` row `FOR NO KEY UPDATE`
    (`lib/personLock.ts`), taken by office-hour creation, rescheduling and
-   booking, and by the volunteer commands that can approve a place
+   booking, grant changes and invite acceptance (all current/proposed crew
+   identities together, before the grant), and the volunteer commands that can approve a place
    ([VOLUNTEERS.md](VOLUNTEERS.md#shifts-and-sign-ups)). A crew place belongs to a
    person through `EventCrewMember.userId` or through
    `MentorProfile.crewMemberId` (a mentor crew place not yet linked to the

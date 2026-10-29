@@ -14,7 +14,7 @@ import { getMembership, isOrgAdmin } from "@/lib/permissions";
 import { staffMfaSatisfied } from "@/lib/staffMfa";
 import { hashTeamManageToken, isTeamTokenShape } from "@/lib/teamToken";
 import { inWindows, parseAvailability } from "@/lib/mentorDesk/rules";
-import { COPY, refuse } from "./shared";
+import { COPY, refuse, shareEvent } from "./shared";
 
 export type DeskEventRef = { userId: string; organisationId: string; orgSlug: string; eventId: string; eventSlug: string };
 /** Organisation OWNER/ADMIN: manages the desk. */
@@ -81,6 +81,9 @@ export type LiveMentor = { userId: string; skills: string[]; maxActiveTeams: num
  * is never upgraded.
  */
 export async function liveMentor(tx: Prisma.TransactionClient, eventId: string, userId: string, options: { at?: Date; onShift?: boolean; exclusive?: boolean } = {}): Promise<LiveMentor> {
+  // Every caller fences Event before the grant, including conflict inserts
+  // whose Event foreign key would otherwise invert acceptance's locks.
+  await shareEvent(tx, eventId);
   if (options.exclusive) await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${eventId} AND "userId" = ${userId} FOR UPDATE`;
   else await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "eventId" = ${eventId} AND "userId" = ${userId} FOR SHARE`;
   const [grant, profile] = await Promise.all([
