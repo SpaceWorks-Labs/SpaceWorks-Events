@@ -65,6 +65,28 @@ Retrying a refund: owners and admins only, after an authenticator check. If you 
 
 Each failed refund can be retried once. If the retry fails too, it's listed again so you can retry that one, or refund the buyer another way. A retry is refused if it would return more than is left on the payment.
 
+Only a refund the provider refused is listed as failed. If the app couldn't hear back from the provider, for example while your keys were being changed, the refund stays "on its way" and the app checks with the provider again, so the same money is never sent twice.
+
+## Refunding a cancelled order
+
+A cancelled order can still have money on it, for example when the buyer cancelled under a policy that refunds part of the price, or when a payment arrived too late and its order expired. To give back what's left:
+
+<Steps>
+
+1. Open the event's **Finance** tab (for a series, the series page).
+2. Under **Refundable orders**, find the order. Cancelled and expired orders with money left are listed with the buyer, the order reference and how much is left, even when their tickets are gone.
+3. Choose **Refund…**, enter an amount (or leave it blank to refund everything left) and a reason, then choose **Refund**.
+
+</Steps>
+
+This only returns money; it doesn't change any tickets. Orders that still have their tickets are refunded from the guest list instead.
+
+<Callout kind="permission">
+
+Refunding a cancelled order: owners and admins only, after an authenticator check. If you signed in more than a few minutes ago, you're asked to sign in again first.
+
+</Callout>
+
 ## The refund policy
 
 The **Refund policy** card on the event's **Settings** tab (or the series page) appears once a ticket has a price. It decides whether buyers can cancel by themselves for money back.
