@@ -3,7 +3,7 @@ import "server-only";
 import { PaymentRefundStatus, PaymentStatus, type Prisma } from "@prisma/client";
 import { isPaidEventsEnabled } from "@/lib/instanceSettings";
 import { loadPaymentAccount } from "../settings";
-import { lockOrderTargets, orderSubject } from "../targets";
+import { fenceOrganisation, lockOrderTargets, orderSubject } from "../targets";
 
 /** An organiser operation was refused; the message is safe to show. */
 export class PaymentOperationError extends Error {}
@@ -33,10 +33,16 @@ export const ZERO = BigInt(0);
 export const COLLECTED: PaymentStatus[] = [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE];
 export const COMMITTED_REFUND: PaymentRefundStatus[] = [PaymentRefundStatus.PENDING, PaymentRefundStatus.SUCCEEDED];
 
-/** Lock order everywhere: the event row (or the series, then its dates), then the order. */
+/**
+ * Lock order everywhere (docs/PAYMENTS.md): the organisation fence, the event
+ * row (or the series, then its dates), then the order.
+ */
 export async function lockOrder(tx: Prisma.TransactionClient, orderId: string) {
-  const row = await tx.order.findUnique({ where: { id: orderId }, select: { id: true, eventId: true, eventSeriesId: true } });
-  if (row) await lockOrderTargets(tx, row);
+  const row = await tx.order.findUnique({ where: { id: orderId }, select: { id: true, organisationId: true, eventId: true, eventSeriesId: true } });
+  if (row) {
+    await fenceOrganisation(tx, row.organisationId);
+    await lockOrderTargets(tx, row);
+  }
   await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
 }
 

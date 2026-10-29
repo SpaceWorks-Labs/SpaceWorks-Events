@@ -72,15 +72,16 @@ export function OrgRevenuePanel({ organisationSlug, revenue }: { organisationSlu
                 ["Paid orders", String(summary.orders.paid)],
               ].map(([label, value]) => (
                 <div key={label} className="flex flex-col-reverse gap-0.5">
-                  <dt className="text-caption text-ink-muted">{label}{summary.testOnly ? " (test)" : ""}</dt>
+                  <dt className="text-caption text-ink-muted">{label}</dt>
                   <dd className="font-display text-xl font-semibold text-ink">{value}</dd>
                 </div>
               ))}
             </dl>
-            {summary.owedAtDeskMinor > 0 || summary.disputes.open > 0 ? (
+            {summary.owedAtDeskMinor > 0 || summary.disputes.open > 0 || summary.test.payments > 0 ? (
               <p className="text-caption text-ink-muted">
                 {summary.owedAtDeskMinor > 0 ? `${money(summary.owedAtDeskMinor)} to collect at the desk. ` : ""}
-                {summary.disputes.open > 0 ? `${summary.disputes.open} open ${summary.disputes.open === 1 ? "chargeback" : "chargebacks"}.` : ""}
+                {summary.disputes.open > 0 ? `${summary.disputes.open} open ${summary.disputes.open === 1 ? "chargeback" : "chargebacks"}. ` : ""}
+                {summary.test.payments > 0 ? `${money(summary.test.collectedMinor - summary.test.refundedMinor)} in test payments, not counted above.` : ""}
               </p>
             ) : null}
             {top.length > 0 ? (

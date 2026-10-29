@@ -9,6 +9,7 @@ import { CHECKOUT_HOLD_MS, HOLD_EXTENSION_CAP_MS } from "./holds";
 import { DEFAULT_CURRENCY } from "./money";
 import { newOrderReference } from "./orders";
 import { loadPaymentAccount } from "./settings";
+import { fenceOrganisation } from "./targets";
 
 const UNAVAILABLE = "Entry fees can't be paid right now. Contact the organisers.";
 
@@ -29,6 +30,8 @@ export async function openEntryFeeCheckout(params: {
   if (!account) return { error: UNAVAILABLE };
   const now = new Date();
   const orderId = await prisma.$transaction(async (tx) => {
+    // The organisation fence, then the event (docs/PAYMENTS.md lock order).
+    if (!(await fenceOrganisation(tx, event.organisationId))) return "gone" as const;
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${params.eventId} FOR UPDATE`;
     if (await entryFeePaid(tx, params.submissionId)) return null;
     const held = await tx.order.findFirst({ where: { submissionId: params.submissionId, status: OrderStatus.PENDING, holdExpiresAt: { gt: now } }, select: { id: true } });
@@ -50,6 +53,7 @@ export async function openEntryFeeCheckout(params: {
     });
     return order.id;
   });
+  if (orderId === "gone") return { error: UNAVAILABLE };
   if (!orderId) return { paid: true };
   const checkout = await startCheckout(orderId).catch(() => null);
   return checkout && "url" in checkout ? { url: checkout.url } : { error: "The payment page couldn't open. Try again in a minute." };
