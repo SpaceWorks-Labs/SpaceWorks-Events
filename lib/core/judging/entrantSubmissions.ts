@@ -28,6 +28,8 @@ import {
   ok,
   personEmail,
   personSelect,
+  RESULTS_PUBLISHED,
+  resultsFreezeSubmissions,
   WINDOW_CLOSED,
 } from "./shared";
 import { entrantWhere, lockedEntrant, lockEntrantRow } from "./entrantAuth";
@@ -58,6 +60,7 @@ async function writeSubmission(
       const refusal = entrantRefusal(entrant.status);
       if (refusal) return fail(refusal);
       if (!isSubmissionWindowOpen(event, new Date())) return fail(WINDOW_CLOSED);
+      if (resultsFreezeSubmissions(event)) return fail(RESULTS_PUBLISHED);
       const existing = await tx.submission.findFirst({ where: entrantWhere(entrant), select: submissionStateSelect });
       if (existing?.status === SubmissionStatus.DISQUALIFIED) return fail("This submission can no longer be changed. Contact the organisers.");
 
@@ -138,6 +141,7 @@ export async function withdrawSubmission(auth: EntrantAuth): Promise<JudgingResu
     const refusal = entrantRefusal(entrant.status);
     if (refusal) return fail(refusal);
     if (!isSubmissionWindowOpen(event, new Date())) return fail(WINDOW_CLOSED);
+    if (resultsFreezeSubmissions(event)) return fail(RESULTS_PUBLISHED);
     const existing = await tx.submission.findFirst({ where: entrantWhere(entrant), select: submissionStateSelect });
     if (!existing) return fail(NOT_FOUND);
     if (existing.status !== SubmissionStatus.DRAFT && existing.status !== SubmissionStatus.SUBMITTED) return fail("This submission cannot be withdrawn.");
@@ -185,7 +189,7 @@ export async function loadEntrantSubmission(auth: EntrantAuth, now: Date = new D
     window: { opensAt: event.submissionsOpenAt, closesAt: event.submissionsCloseAt, isOpen },
     confirmed,
     declined: entrant.status === RsvpStatus.REJECTED,
-    canEdit: isOpen && confirmed && submission?.status !== SubmissionStatus.DISQUALIFIED,
+    canEdit: isOpen && confirmed && !resultsFreezeSubmissions(event) && submission?.status !== SubmissionStatus.DISQUALIFIED,
     submission: entrantSubmissionView(submission),
     entryFee,
   };
