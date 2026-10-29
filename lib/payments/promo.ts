@@ -71,3 +71,17 @@ export async function lockPromoCode(tx: Prisma.TransactionClient, params: { owne
     rule: { kind: locked.kind, appliesPer: locked.appliesPer, percentOff: locked.percentOff, amountOffMinor: locked.amountOffMinor, ticketTypeId: locked.ticketTypeId, minQuantity: locked.minQuantity, perOrderLimit: locked.perOrderLimit },
   };
 }
+
+/**
+ * Whether an order coming back after its code's use was released (an ended
+ * hold paid late or reopened, a declined request re-accepted) still fits the
+ * code's redemption limit, counting every other order using it. Read under
+ * the event or series lock that every order on the code takes first.
+ */
+export async function promoStillFits(tx: Prisma.TransactionClient, order: { id: string; promoCodeId: string | null; }, now: Date) {
+  if (!order.promoCodeId) return true;
+  const promo = await tx.promoCode.findUnique({ where: { id: order.promoCodeId }, select: { maxRedemptions: true } });
+  if (promo?.maxRedemptions == null) return true;
+  const others = await tx.order.count({ where: { ...redeemingOrdersWhere(order.promoCodeId, now), id: { not: order.id } } });
+  return others < promo.maxRedemptions;
+}
