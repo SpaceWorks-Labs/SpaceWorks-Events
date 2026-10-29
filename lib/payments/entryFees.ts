@@ -1,11 +1,12 @@
 import "server-only";
 
-import { OrderStatus, PaymentRefundStatus, PaymentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
+import { EventStatus, OrderStatus, PaymentRefundStatus, PaymentStatus, SubmissionStatus, type Prisma } from "@prisma/client";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueSubmissionReceived } from "@/lib/outbox";
 import { shouldQueueSubmissionReceipt } from "@/lib/hackathonEmails";
 import { enqueuePaymentEmail } from "./email";
 import { createPendingRefund } from "./refunds";
+import { PaymentOperationError } from "./operations/shared";
 
 /**
  * Hackathon entry fees (docs/HACKATHON.md). Submitting a project on an event
@@ -40,10 +41,15 @@ export async function entryFeeOwed(tx: Prisma.TransactionClient, eventId: string
  * money stays recorded; the organiser decides). The payment row is already
  * settled by the caller, which holds the event and order locks. The submission receipt
  * is opt-in per event (`emailSubmissionReceipts`, lib/hackathonEmails.ts),
- * read in this transaction; the payment email is never gated.
+ * read in this transaction; the payment email is never gated. A cancelled
+ * event never takes a project in: callers refund the fee (settlement) or
+ * refuse (settling by hand) first, and this refuses too.
  */
 export async function confirmEntryFeeTx(tx: Prisma.TransactionClient, order: { id: string; organisationId: string; submissionId: string; buyerEmail: string; buyerName: string; }, paymentId: string, now: Date, notifyPaid = true) {
+  const submission = await tx.submission.findUnique({ where: { id: order.submissionId }, select: { event: { select: { status: true } } } });
+  if (submission?.event.status === EventStatus.CANCELLED) throw new PaymentOperationError("This event was cancelled, so the project can't be submitted.");
   await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.CONFIRMED, holdExpiresAt: null, holdCapAt: null } });
+  // E5: apply results-publication freeze here once fix/audit-admission-mentor merges
   const submitted = await tx.submission.updateMany({
     where: { id: order.submissionId, status: { in: [SubmissionStatus.DRAFT, SubmissionStatus.WITHDRAWN] } },
     data: { status: SubmissionStatus.SUBMITTED, submittedAt: now },

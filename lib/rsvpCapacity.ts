@@ -83,6 +83,7 @@ export async function confirmRsvpWithinCapacity(params: {
   const outcome = await prisma.$transaction(async (tx): Promise<"confirmed" | "waitlisted" | "full" | "changed" | "closed"> => {
     let capacity: number | null;
     let isOpen: boolean;
+    let cancelled: boolean;
     let teamMode = false;
     if (params.eventId) {
       const events = await tx.$queryRaw<Array<{ capacity: number | null; status: EventStatus; endDateTime: Date; registrationMode?: RegistrationMode }>>`
@@ -92,6 +93,7 @@ export async function confirmRsvpWithinCapacity(params: {
       if (!event) return "changed";
       capacity = event.capacity;
       isOpen = event.status === EventStatus.PUBLISHED && event.endDateTime > new Date();
+      cancelled = event.status === EventStatus.CANCELLED;
       teamMode = event.registrationMode === RegistrationMode.TEAM;
     } else {
       // The series, then the date: the same lock order as every series path.
@@ -99,8 +101,10 @@ export async function confirmRsvpWithinCapacity(params: {
       if (!date) return "changed";
       capacity = date.capacity;
       isOpen = date.open;
+      cancelled = date.cancelled;
     }
-    if (params.requireOpen && !isOpen) return "closed";
+    // Nobody is confirmed onto a cancelled event, series or date, requireOpen or not.
+    if (cancelled || (params.requireOpen && !isOpen)) return "closed";
     // TEAM events count units, and only solo RSVPs are confirmed one by one:
     // team members change status with their whole team (lib/core/teams.ts).
     const taken = teamMode

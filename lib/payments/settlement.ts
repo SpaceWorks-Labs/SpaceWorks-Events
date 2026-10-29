@@ -4,7 +4,8 @@ import { CheckoutAttemptStatus, OrderStatus, PaymentStatus, RsvpStatus, type Pri
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { enqueueOrderEmail, enqueuePaymentEmail, organisationOwnerEmails } from "./email";
-import { hasFreeSeats, lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
+import { hasFreeSeats, lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject, orderTargetCancelled } from "./targets";
+import { addOnsFit } from "./addOnStock";
 import type { OnlineProvider } from "./http";
 import type { PaidNotification } from "./providers/types";
 import { createPendingRefund } from "./refunds";
@@ -60,6 +61,8 @@ async function findPayment(tx: Prisma.TransactionClient, context: { organisation
  *   recorded as paid and refunded in full automatically.
  * - A second capture for an already-paid order is recorded as its own
  *   payment and refunded in full.
+ * - A payment for a cancelled event, series or date is recorded, its order
+ *   cancelled without tickets, and refunded in full automatically.
  *
  * Lock order matches registration: the event row, the order, then the payment.
  */
@@ -117,6 +120,10 @@ export async function settlePaidNotification(
     return { outcome: "duplicate", refundIds: [refund.id] };
   }
 
+  // Cancelled meanwhile (a pass reaches its dates through its registrations):
+  // refunded before any team place or project is confirmed.
+  if (await orderTargetCancelled(tx, order)) return refundCancelledCapture(tx, payment, order, paid.paymentId, now);
+
   // A project entry fee (docs/HACKATHON.md) holds no places: it is always accepted.
   if (order.submissionId && order.rsvps.length === 0) {
     const refundId = await settleEntryFeePayment(tx, payment, { id: order.id, submissionId: order.submissionId, buyerEmail: order.buyerEmail, buyerName: order.buyerName }, paid, now);
@@ -125,9 +132,11 @@ export async function settlePaidNotification(
 
   const held = order.rsvps.filter((rsvp) => rsvp.status === RsvpStatus.PENDING_PAYMENT);
   const holdActive = order.status === OrderStatus.PENDING && Boolean(order.holdExpiresAt && order.holdExpiresAt > now);
+  // After the hold ended, its extras were released too: only taken back if still in stock.
+  const stocked = holdActive || await addOnsFit(tx, order.id, now);
   // TEAM events place the one registration in its team or unit (docs/TEAMS.md).
-  const team = held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, now) : null;
-  const seats = team ? team !== "gone" : held.length > 0 && (holdActive || await hasFreeSeats(tx, held, now));
+  const team = stocked && held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, now) : null;
+  const seats = stocked && (team ? team !== "gone" : held.length > 0 && (holdActive || await hasFreeSeats(tx, held, now)));
   const placed = team && team !== "gone" ? team : null;
   const status = placed?.status ?? RsvpStatus.CONFIRMED;
   await tx.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.PAID_ONLINE, externalPaymentId: paid.paymentId, paidAt: now } });
@@ -162,5 +171,31 @@ export async function settlePaidNotification(
     await enqueuePaymentEmail(tx, { to: owner, paymentId: payment.id, notice: "organiser-late-refund" });
   }
   await recordAuditEvent({ action: "PAYMENT_LATE_REFUNDED", organisationId: payment.organisationId, targetType: "Payment", targetId: payment.id, client: tx });
+  return { outcome: "refunding", refundIds: [refund.id] };
+}
+
+/**
+ * A payment captured for a cancelled event, series or date (the payment, order
+ * and target locks are held): recorded as paid, the order cancelled with its
+ * held places, and the whole amount refunded. The buyer is told the refund is
+ * on its way (it is still pending at the provider) and the organisers' chat
+ * hears it.
+ */
+async function refundCancelledCapture(
+  tx: Prisma.TransactionClient,
+  payment: { id: string; organisationId: string; amountMinor: bigint; currency: string; description: string; testMode: boolean; },
+  order: { id: string; buyerEmail: string; },
+  externalPaymentId: string,
+  now: Date,
+): Promise<SettlementResult> {
+  await tx.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.PAID_ONLINE, externalPaymentId, paidAt: now } });
+  await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.CANCELLED, holdExpiresAt: null, holdCapAt: null } });
+  // A leader's unpaid team goes first, then the held places: no ticket is issued.
+  await releaseUnpaidTeam(tx, order.id);
+  await tx.rSVP.deleteMany({ where: { orderId: order.id, status: RsvpStatus.PENDING_PAYMENT } });
+  const refund = await createPendingRefund(tx, { paymentId: payment.id, amountMinor: payment.amountMinor, reason: "Paid after the event was cancelled", automatic: true });
+  await enqueuePaymentEmail(tx, { to: order.buyerEmail, paymentId: payment.id, notice: "cancelled-refund" });
+  await notifyChat(tx, payment.organisationId, "refund", `A payment of ${formatMoney(payment.amountMinor, payment.currency)} for ${payment.description} arrived after it was cancelled, so no ticket was issued and it is being refunded in full${payment.testMode ? " (test)" : ""}.`);
+  await recordAuditEvent({ action: "PAYMENT_CANCELLED_EVENT_REFUNDED", organisationId: payment.organisationId, targetType: "Payment", targetId: payment.id, client: tx });
   return { outcome: "refunding", refundIds: [refund.id] };
 }

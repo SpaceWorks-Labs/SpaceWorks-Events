@@ -15,6 +15,7 @@ import { DEFAULT_CURRENCY, formatMoney, providerMinimumMinor } from "./money";
 import { priceOrder, PricingError, type AddOnItem, type OrderItem } from "./pricing";
 import { isValidPromoCode, lockPromoCode, promoCodeDigest, PromoCodeError } from "./promo";
 import { lockSellable, passesTaken, type OrderTarget, type Slot } from "./targets";
+import { addOnsTaken } from "./addOnStock";
 import { ticketSalesState } from "./tickets";
 import { OrderError } from "./orderError";
 import { placeTeamOrderRegistration, planTeamOrder } from "./teamOrders";
@@ -191,8 +192,7 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   for (const line of priced.lines.filter((candidate) => candidate.kind === "ADD_ON")) {
     const addOn = addOnTypes.find((candidate) => candidate.id === line.addOnId)!;
     if (addOn.capacity == null) continue;
-    const sold = await tx.orderLine.aggregate({ _sum: { quantity: true }, where: { addOnId: addOn.id, order: { OR: [{ status: OrderStatus.CONFIRMED }, { status: OrderStatus.PENDING, holdExpiresAt: { gt: now } }] } } });
-    const left = addOn.capacity - (sold._sum.quantity ?? 0);
+    const left = addOn.capacity - await addOnsTaken(tx, addOn.id, now);
     if (line.quantity > left) throw new OrderError(left <= 0 ? `${addOn.name} is sold out.` : `Only ${left} ${addOn.name} left.`);
   }
   // A pass needs a place on every date it covers.

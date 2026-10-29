@@ -270,6 +270,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
     if (result === "full") {
       return { ok: false, error: "Event is still at capacity.", code: "CAPACITY_FULL" };
     }
+    if (result === "closed") return { ok: false, error: "This event was cancelled, so nobody can be promoted." };
     if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
     await recordAuditEvent({ action: "RSVP_WAITLIST_PROMOTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
     revalidateRsvpPaths({
@@ -292,6 +293,7 @@ export async function promoteFromWaitlist(input: unknown): Promise<ActionResult>
   if (result === "full") {
     return { ok: false, error: "This occurrence is still at capacity.", code: "CAPACITY_FULL" };
   }
+  if (result === "closed") return { ok: false, error: "This occurrence was cancelled, so nobody can be promoted." };
   if (result !== "confirmed") return { ok: false, error: "This RSVP was changed by another organiser." };
   await recordAuditEvent({ action: "RSVP_WAITLIST_PROMOTED", actorUserId: session.user.id, organisationId: org.id, targetType: "RSVP", targetId: rsvp.id });
   revalidateRsvpPaths({
