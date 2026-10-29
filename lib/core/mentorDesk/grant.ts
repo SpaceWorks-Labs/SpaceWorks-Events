@@ -10,7 +10,10 @@ import "server-only";
  * Fencing: a grant change locks the EventCollaborator row FOR UPDATE
  * (lockCollaborator) before it cleans up, and every mentor command reads the
  * grant FOR SHARE (liveMentor), so a command either finishes before the
- * removal or sees the grant gone.
+ * removal or sees the grant gone. The Event comes first (FOR KEY SHARE), as
+ * in every Mentor Desk command (docs/MENTOR_DESK.md "Lock order"): granting
+ * MENTOR creates a profile referencing the Event, which would otherwise wait
+ * for an assignment holding the Event while it waits for this grant.
  */
 
 import { EventPermission, HelpRequestStatus, MentorAssignmentStatus, OfficeHourBookingStatus, Prisma } from "@prisma/client";
@@ -18,7 +21,7 @@ import { helpDeadline } from "@/lib/mentorDesk/rules";
 import { OFFICE_HOUR_CANCELLED_KIND } from "@/lib/outbox/mentor";
 import { notifyBooking, scheduleOf } from "./officeHourMail";
 import { lockHelpRow, releaseLocked } from "./helpShared";
-import { refuse } from "./shared";
+import { refuse, shareEvent } from "./shared";
 import { revokeMentoringCertificatesLocked } from "@/lib/volunteer/mentoring";
 
 /** Creates the profile for a MENTOR grant (on invite acceptance or a grant change). Idempotent. */
@@ -27,12 +30,14 @@ export async function ensureMentorProfile(tx: Prisma.TransactionClient, eventId:
 }
 
 /**
- * Finds a collaborator row, locks it FOR UPDATE and re-reads it, so a grant
- * change never races a mentor command holding the grant FOR SHARE.
+ * Finds a collaborator row, locks its event (FOR KEY SHARE) and then the row
+ * FOR UPDATE, and re-reads it, so a grant change never races a mentor command
+ * holding the grant FOR SHARE. A collaborator never moves between events.
  */
 export async function lockCollaborator(tx: Prisma.TransactionClient, where: Prisma.EventCollaboratorWhereInput) {
-  const found = await tx.eventCollaborator.findFirst({ where, select: { id: true } });
+  const found = await tx.eventCollaborator.findFirst({ where, select: { id: true, eventId: true } });
   if (!found) return null;
+  if (found.eventId) await shareEvent(tx, found.eventId);
   await tx.$queryRaw`SELECT "id" FROM "EventCollaborator" WHERE "id" = ${found.id} FOR UPDATE`;
   return tx.eventCollaborator.findFirst({ where: { AND: [where, { id: found.id }] }, select: { id: true, eventId: true, userId: true, permissions: true } });
 }

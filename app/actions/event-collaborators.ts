@@ -99,7 +99,7 @@ export async function revokeEventCollaborator(input: unknown): Promise<ActionRes
       : { eventSeriesId: parsed.data.eventSeriesId, series: { organisationId: org.id } }),
   };
   // A revoked MENTOR grant ends its assignments and claims (docs/MENTOR_DESK.md).
-  // The row is locked first, so a mentor command in flight finishes before the cleanup (or sees the grant gone).
+  // The Event and then the row are locked first (lockCollaborator), so a mentor command in flight finishes before the cleanup (or sees the grant gone).
   const outcome = await mentorGrantChange(() => prisma.$transaction(async (tx) => {
     const existing = await lockCollaborator(tx, where);
     if (existing?.eventId) {

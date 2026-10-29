@@ -6,7 +6,10 @@ import "server-only";
  * assign and reopen (organisers). Claims are leases: claimId + generation +
  * expiry, one live claim per mentor (partial unique index as the last word).
  * A mentor's renew, release and resolve are fenced by the held claimId and
- * generation; organisers act on the version alone.
+ * generation; organisers act on the version alone. Claim and assign take the
+ * Event lock first: taking a claim releases the mentor's lapsed claims on
+ * other requests, so two of them crossing (A to M2 while B goes to M1) would
+ * otherwise each hold one request and wait for the other's.
  */
 
 import { HelpRequestOrigin, HelpRequestStatus, Prisma } from "@prisma/client";
@@ -18,7 +21,7 @@ import { HELP_CLAIMED_KIND, enqueueMentorMessages } from "@/lib/outbox/mentor";
 import { deskEvent, liveMentor, type DeskOrganiserContext, type LockedEvent, type MentorContext } from "./access";
 import { visitEligible } from "./eligibility";
 import { changeHelp, claimValues, CLEARED_CLAIM, clearMentorClaims, type HelpRow, lockHelpRow, requireBeforeDeadline, requireLive, requireStatus } from "./helpShared";
-import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockTeam, refuse } from "./shared";
+import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockEvent, lockTeam, refuse } from "./shared";
 
 export type HelpAction = "claim" | "renew" | "release" | "resolve" | "assign" | "reopen";
 
@@ -91,9 +94,11 @@ async function apply(tx: Prisma.TransactionClient, actor: Actor, input: Input): 
   if ((input.action === "assign" || input.action === "reopen") && !isOrganiser) refuse(COPY.notFound);
   if ((input.action === "claim" || input.action === "renew") && isOrganiser) refuse(COPY.notFound);
   const now = new Date();
+  // Claims change several requests (clearMentorClaims): one at a time per event, before any grant or request lock.
+  if (input.action === "claim" || input.action === "assign") await lockEvent(tx, event.id);
   // Mentors act only while on shift (policy.mentor_for in every command).
   const self = isOrganiser ? null : await liveMentor(tx, event.id, actor.userId, { at: now });
-  // Locks in one order everywhere: the grant (FOR SHARE) and the team or registration before the request row.
+  // Locks in one order everywhere: the Event, the grant (FOR SHARE) and the team or registration before the request row.
   if (input.action === "assign" && input.mentorUserId) await liveMentor(tx, event.id, input.mentorUserId, { at: now });
   if (input.action === "reopen") await lockRequestScope(tx, event.id, input.requestId);
   const row = await lockHelpRow(tx, event.id, input.requestId);

@@ -47,8 +47,10 @@ declared conflicts and nominations work off shift.
 
 **Grant lifecycle.** Accepting a `MENTOR` invite creates the profile
 (`syncMentorGrantLocked`, `lib/core/mentorDesk/grant.ts`). Every grant change
-first locks the `EventCollaborator` row `FOR UPDATE` (`lockCollaborator`), so
-a mentor command in flight finishes first or sees the grant gone. Removing
+(invite acceptance, a permission change, revoking the collaborator) first
+locks the event (`FOR KEY SHARE`) and then the `EventCollaborator` row
+`FOR UPDATE` (`lockCollaborator`), so a mentor command in flight finishes
+first or sees the grant gone (see [Lock order](#lock-order)). Removing
 the grant is refused while one of the mentor's booked office hours is under
 way ("Work is in progress: a booked office hour with this mentor has
 started. …", Space Works `work_locked`). Otherwise removing it (a permission
@@ -123,7 +125,10 @@ A claim is a **lease**: `claimId` (UUID), `claimGeneration` and
 `claimExpiresAt` (CHECK `HelpRequest_claim_shape`). A mentor holds at most one
 claim per event (partial unique index `HelpRequest_one_claim_per_mentor`); two
 mentors claiming at once are serialised by the row lock, and the loser gets a
-version refusal. Every command checks `expectedVersion`. A lapsed claim is
+version refusal. Claim and assign also take the Event lock first, because
+taking a claim releases the mentor's lapsed claims on other requests: two
+crossed reassignments run one after the other, and the second gets a version
+refusal. Every command checks `expectedVersion`. A lapsed claim is
 refused as "This help claim expired. Refresh the queue."
 
 **Eligibility** (`visitEligible`): only a CONFIRMED team or a CONFIRMED solo
@@ -224,12 +229,13 @@ conflicts stay, so turning the desk off never clears mentoring that happened.
 availability, no overlap with their other slots, capacity 1–50, booking
 deadline before the start (CHECK `OfficeHourSlot_shape`). Mentors open their
 own; organisers open, cancel and reschedule anyone's. Creating or
-rescheduling a slot locks the mentor's grant FOR UPDATE as its first lock
-(`liveMentor(..., { exclusive: true })`), before any team or slot, so two
-schedule changes for one mentor run one after the other and the second sees
-the first's slot in its overlap check ("This overlaps another of the
-mentor's slots."). Booking keeps the shared grant lock, and a grant removal
-still takes the grant before the slots.
+rescheduling a slot locks the event (`FOR KEY SHARE`), the mentor's person
+lock, then the mentor's grant FOR UPDATE (`liveMentor(..., { exclusive: true })`),
+before any team or slot, so two schedule changes for one mentor run one after
+the other and the second sees the first's slot in its overlap check ("This
+overlaps another of the mentor's slots."). Booking takes the same event and
+person locks, then the shared grant lock; a grant removal still takes the
+grant before the slots.
 
 Booking (teams only: a team member signed in, or the management link) locks
 the team, then the slot: open, before the start and the deadline; the mentor
@@ -241,7 +247,9 @@ the mentor not booked elsewhere at the time; capacity counted under the slot
 lock ("This slot is full."); one live booking per slot and team (partial
 unique index). A cancellation is a conditional update of a still-BOOKED row
 under the slot lock, so concurrent cancels email once. A reschedule must start
-in the future and keep every booked team free of overlaps and conflicts. Teams
+in the future and keep every booked team free of overlaps and conflicts, and a
+booked slot cannot move onto the mentor's approved volunteer shift ("The
+mentor has an approved volunteer shift at that time."). Teams
 cancel until the slot starts ("Ask an organiser to cancel
 a started slot."); organisers cancel any time. Every reschedule or
 cancellation is logged with a reason in the append-only `OfficeHourChange`:
@@ -282,6 +290,36 @@ participants or the public.
 and `teamsThatTookPartInRound` (`lib/core/mentorDesk/rounds.ts`): a team took
 part when it has a non-away check-in in that round; a registration took part
 when its team did. For later eligibility rules (e.g. per-stage reimbursements).
+
+## Lock order
+
+Every Mentor Desk transaction takes its row locks in one order, so two
+commands queue on the same row instead of deadlocking:
+
+1. The `Event` row: `FOR UPDATE` (`lockEvent`) for assignment runs and hand
+   edits, configuration, rounds, and the help commands claim and assign;
+   `FOR KEY SHARE` (`shareEvent`) for office-hour creation, rescheduling and
+   booking, and for grant changes (`lockCollaborator`, invite acceptance).
+   Key share waits for (and holds off) `FOR UPDATE` but not other key-share
+   holders, so office hours for different mentors still run side by side.
+   A slot or a mentor profile references the Event, so creating one under
+   the grant lock alone would wait for an assignment that holds the Event
+   while it waits for that grant.
+2. The **person lock**: the mentor's `User` row `FOR NO KEY UPDATE`
+   (`lib/personLock.ts`), taken by office-hour creation, rescheduling and
+   booking, and by the volunteer commands that can approve a place
+   ([VOLUNTEERS.md](VOLUNTEERS.md#shifts-and-sign-ups)). A crew place belongs to a
+   person through `EventCrewMember.userId` or through
+   `MentorProfile.crewMemberId` (a mentor crew place not yet linked to the
+   account). Because both sides hold it, a booked office hour and an approved
+   volunteer shift never overlap: booking and rescheduling check approved
+   shifts, and approval, automatic approval, promotion and shift time changes
+   check booked office hours ("This volunteer has a booked office hour at the
+   same time.").
+3. The mentor's grant (`EventCollaborator`): `FOR SHARE` in mentor commands
+   (`liveMentor`), `FOR UPDATE` in schedule changes and grant changes.
+4. The team (or the solo registration), then the request, slot, visit or
+   assignment rows.
 
 ## Email
 
@@ -346,4 +384,9 @@ earlier visits are not shown to other mentors.
   locks, closed rounds, skipped covered teams, off-shift preview, seed
   fingerprint, volunteer-shift clashes, cancellation reasons), and
   `mentor-desk-office-overlap` (concurrent overlapping slot creations and a
-  reschedule racing a creation: exactly one succeeds; booking unaffected).
+  reschedule racing a creation: exactly one succeeds; booking unaffected),
+  `lock-order-mentor-desk` (forced interleavings: slot creation and
+  rescheduling, grant changes and crossed help reassignments against
+  assignments, none deadlocking) and `lock-order-volunteers` (booked office
+  hours against volunteer approvals, promotion and shift edits, both
+  directions, through a profile-linked crew place).

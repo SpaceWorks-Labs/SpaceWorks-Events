@@ -84,6 +84,16 @@ export async function lockEvent(tx: Prisma.TransactionClient, eventId: string) {
   await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
 }
 
+/**
+ * The Event FOR KEY SHARE, for commands that only need it to come first: it
+ * waits for (and holds off) lockEvent's FOR UPDATE, but not other key-share
+ * holders. It is the lock a new row referencing the Event takes anyway, taken
+ * up front so the order stays Event -> person -> grant (docs/MENTOR_DESK.md).
+ */
+export async function shareEvent(tx: Prisma.TransactionClient, eventId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR KEY SHARE`;
+}
+
 export async function lockTeam(tx: Prisma.TransactionClient, teamId: string) {
   await tx.$queryRaw`SELECT "id" FROM "Team" WHERE "id" = ${teamId} FOR UPDATE`;
 }

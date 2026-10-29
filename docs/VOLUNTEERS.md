@@ -72,14 +72,27 @@ history and certificates through the cascades.
 
 Cores: `lib/volunteer/shifts.ts`, `lib/volunteer/signups.ts`.
 
-- **Locks.** Every place decision locks the shift row, then the crew member
-  row (`lockShift`, `lockCrewMember`), so places are counted and overlaps
-  checked under the lock. Concurrent sign-ups never exceed `capacity`. A
-  withdrawal locks the withdrawer and everyone waiting on the shift, and a
-  promotion everyone waiting, in one id-ordered statement
-  (`lockCrewMembers`), so withdrawals on two shifts with crossed waitlists
-  wait for each other instead of deadlocking. No path locks a crew member
-  before a shift.
+- **Locks.** Every place decision locks the shift
+  row, then the crew member row (`lockShift`, `lockCrewMember`), so places
+  are counted and overlaps checked under the lock. Concurrent sign-ups never
+  exceed `capacity`. A command that can approve a place (apply with
+  automatic approval, approve, withdraw or reopen with promotion, and every
+  shift edit) first takes the **person lock** of everyone it may approve:
+  their `User` rows `FOR NO KEY UPDATE`, in id order in one statement
+  (`lib/personLock.ts`), found through the crew place's own account link or
+  a mentor profile's `crewMemberId`. Office-hour booking and rescheduling
+  take the same lock ([MENTOR_DESK.md](MENTOR_DESK.md#lock-order)), so an
+  approved shift never overlaps the person's booked office hour as a mentor
+  ("This volunteer has a booked office hour at the same time."). The links
+  can only change before the crew rows are locked; if a crew place gained a
+  person the command had not locked, it rolls back and runs again (three
+  tries, then "The crew changed while this was saved. Try again."). A
+  withdrawal locks the withdrawer and everyone waiting on the shift, and an
+  edit everyone with a place and everyone waiting, once, in one id-ordered
+  statement (`lockCrewMembers`), so withdrawals or edits on two shifts with
+  crossed rosters wait for each other instead of deadlocking; promotion then
+  takes no new lock. The order is: person locks, shift, crew members. No path
+  locks a crew member before a shift.
 - **Apply** (volunteer, from their crew ticket): shifts on, event not
   cancelled, shift open and not closed, before `signupDeadline`, crew ticket
   confirmed. One sign-up per shift; someone who withdrew may sign up again
@@ -89,19 +102,22 @@ Cores: `lib/volunteer/shifts.ts`, `lib/volunteer/signups.ts`.
 - **Approve** (organiser): `APPLIED`/`WAITLISTED` only, before the shift
   starts and while open. Refused when the volunteer holds an approved place
   on an overlapping shift (half-open intervals, so back-to-back shifts are
-  fine). When full, the sign-up joins the waitlist instead.
+  fine), or a booked office hour as a mentor at the time (automatic approval
+  too). When full, the sign-up joins the waitlist instead.
 - **Decline** (organiser): `APPLIED`/`WAITLISTED` → `DECLINED`.
 - **Withdraw** (volunteer) or **Cancel place** (organiser): before any
   attendance (`SCHEDULED`); otherwise "Work has started on this shift".
 - **FIFO promotion** (`promoteLocked`): while the shift is open and has not
   started, waitlisted sign-ups are approved by `queuedAt`, then id, while
-  places are left, skipping anyone whose crew ticket no longer works or who
-  now has an overlapping approved shift. Runs after a place is freed, after
+  places are left, skipping anyone whose crew ticket no longer works, who
+  now has an overlapping approved shift or a booked office hour at the time.
+  Runs after a place is freed, after
   places are added or the shift is edited, and when a closed shift reopens.
 - **Edit**: places never below the approved count; the window and grace are
   fixed once anyone has attendance; a new window is refused when it would
-  give volunteers with a place overlapping approved shifts (it names how
-  many; checked under the id-ordered crew locks). **Close/reopen**. **Delete** only while
+  give volunteers with a place overlapping approved shifts or booked office
+  hours (it names how many; checked under the person and id-ordered crew
+  locks). **Close/reopen**. **Delete** only while
   every sign-up is still `SCHEDULED`; volunteers with a place or on the
   waitlist are told it is cancelled. At most 200 shifts per event.
 
