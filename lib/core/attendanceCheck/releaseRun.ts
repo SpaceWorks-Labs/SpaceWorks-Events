@@ -11,6 +11,7 @@ import { PaymentOperationError } from "@/lib/payments/operations/shared";
 import { cancelOrderAsBuyer } from "@/lib/payments/operations/refund";
 import { ATTENDANCE_RELEASE_OUTCOME_LABELS, type AttendanceReleaseOutcome } from "@/lib/attendanceCheck";
 import { ATTENDANCE_AUDIT } from "./shared";
+import type { AttendanceNo } from "@/lib/attendanceGuard";
 import type { ReleasePlan } from "./release";
 
 /** What the guest reads when their "No" did not release the place. */
@@ -58,9 +59,9 @@ export type CheckForRelease = {
   event: { title: string; organisationId: string; };
 };
 
-async function recordOutcome(checkId: string, outcome: AttendanceReleaseOutcome) {
-  // Only while the answer is still No (the guest may have changed it meanwhile).
-  await prisma.attendanceCheck.updateMany({ where: { id: checkId, response: "NOT_ATTENDING" }, data: { releaseOutcome: outcome } });
+async function recordOutcome(no: AttendanceNo, outcome: AttendanceReleaseOutcome) {
+  // Only while this exact No is still the answer (a newer Yes, or a newer No, keeps its own outcome).
+  await prisma.attendanceCheck.updateMany({ where: { id: no.checkId, response: "NOT_ATTENDING", respondedAt: no.respondedAt }, data: { releaseOutcome: outcome } });
 }
 
 async function released(check: CheckForRelease, paid: boolean) {
@@ -71,8 +72,8 @@ async function released(check: CheckForRelease, paid: boolean) {
   return { released: true as const };
 }
 
-async function failed(check: CheckForRelease, message: string) {
-  await recordOutcome(check.id, "failed");
+async function failed(no: AttendanceNo, message: string) {
+  await recordOutcome(no, "failed");
   return { released: false as const, message };
 }
 
@@ -82,27 +83,29 @@ async function failed(check: CheckForRelease, message: string) {
  * been decided or withdrawn, organisers are told instead (once).
  */
 async function refundRequestOnce(check: CheckForRelease, orderId: string, note: string, guestName: string, now: Date) {
+  const no = { checkId: check.id, respondedAt: now };
   if (check.refundRequestOpenedAt) {
     const request = check.refundRequestId ? await prisma.refundRequest.findUnique({ where: { id: check.refundRequestId }, select: { status: true } }) : null;
-    await recordOutcome(check.id, "refundRequested");
+    await recordOutcome(no, "refundRequested");
     if (request?.status === RefundRequestStatus.OPEN) return { released: false as const, message: keptMessage("refundRequested") };
     await prisma.$transaction(async (tx) => {
-      const first = await tx.attendanceCheck.updateMany({ where: { id: check.id, organisersNotifiedAt: null }, data: { organisersNotifiedAt: now } });
+      const first = await tx.attendanceCheck.updateMany({ where: { id: check.id, organisersNotifiedAt: null, response: "NOT_ATTENDING", respondedAt: now }, data: { organisersNotifiedAt: now } });
       if (first.count === 1) await notifyOrganisersOfKeptPlace(tx, { organisationId: check.event.organisationId, eventId: check.eventId, eventTitle: check.event.title, rsvpId: check.rsvpId, guestName, outcome: "refundRequested" });
     });
     return { released: false as const, message: HANDLED_REQUEST };
   }
   // The guest's note goes to the organisers with the request (Finance).
   const reason = `Answered No to attendance confirmation for ${check.event.title}${note ? `: ${note}` : "."}`.slice(0, 1000);
-  const result = await requestRefundForOrder(orderId, reason, (tx, requestId) => tx.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestId: requestId, refundRequestOpenedAt: now } }));
+  // Opened only while this No is still the answer (checked under the order and check locks).
+  const result = await requestRefundForOrder(orderId, reason, (tx, requestId) => tx.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestId: requestId, refundRequestOpenedAt: now } }), no);
   // An open request on the order (the buyer's own) already reaches the organisers.
-  if (!result.ok && result.error !== ALREADY_REQUESTED) return failed(check, result.error);
+  if (!result.ok && result.error !== ALREADY_REQUESTED) return failed(no, result.error);
   if (!result.ok) {
     // The buyer's own open request stands for this check: a later No or Yes follows that one.
     const open = await prisma.refundRequest.findFirst({ where: { orderId, status: RefundRequestStatus.OPEN }, select: { id: true } });
-    await prisma.attendanceCheck.updateMany({ where: { id: check.id }, data: { refundRequestOpenedAt: now, refundRequestId: open?.id ?? null } });
+    await prisma.attendanceCheck.updateMany({ where: { id: check.id, response: "NOT_ATTENDING", respondedAt: now }, data: { refundRequestOpenedAt: now, refundRequestId: open?.id ?? null } });
   }
-  await recordOutcome(check.id, "refundRequested");
+  await recordOutcome(no, "refundRequested");
   return { released: false as const, message: keptMessage("refundRequested") };
 }
 
@@ -117,21 +120,23 @@ async function refundRequestOnce(check: CheckForRelease, orderId: string, note: 
  */
 export async function carryOutRelease(params: { check: CheckForRelease; plan: ReleasePlan; note: string; guestName: string; now: Date; }): Promise<{ released: true; } | { released: false; message: string; }> {
   const { check, plan } = params;
+  // `now` is when this No was recorded: every step acts only while it is still the answer.
+  const no: AttendanceNo = { checkId: check.id, respondedAt: params.now };
   switch (plan.kind) {
     case "hold":
       return { released: false, message: keptMessage(plan.outcome) };
     case "none":
-      return failed(check, plan.reason);
+      return failed(no, plan.reason);
     case "free": {
-      const result = await cancelRegistrationByToken(check.rsvp.userId, check.rsvp.checkInToken, { revalidate: false });
-      return result.ok ? released(check, false) : failed(check, result.error);
+      const result = await cancelRegistrationByToken(check.rsvp.userId, check.rsvp.checkInToken, { revalidate: false, attendanceNo: no });
+      return result.ok ? released(check, false) : failed(no, result.error);
     }
     case "paid": {
       try {
-        await cancelOrderAsBuyer({ orderId: plan.orderId, now: params.now });
+        await cancelOrderAsBuyer({ orderId: plan.orderId, now: params.now, attendanceNo: no });
       } catch (error) {
         if (!(error instanceof PaymentOperationError)) console.error("[attendance check] paid release failed");
-        return failed(check, error instanceof PaymentOperationError ? error.message : "Your order could not be cancelled automatically.");
+        return failed(no, error instanceof PaymentOperationError ? error.message : "Your order could not be cancelled automatically.");
       }
       return released(check, true);
     }
@@ -147,9 +152,18 @@ export async function carryOutRelease(params: { check: CheckForRelease; plan: Re
  * guest's current answer beside it.
  */
 export async function withdrawRefundRequestOnYes(check: CheckForRelease, guestName: string, now: Date) {
-  if (!check.refundRequestId) return;
-  const requestId = check.refundRequestId;
+  // Read again: a No answered just before this Yes may have opened a request since.
+  const current = await prisma.attendanceCheck.findUnique({ where: { id: check.id }, select: { refundRequestId: true, refundRequest: { select: { orderId: true } } } });
+  if (!current?.refundRequestId || !current.refundRequest) return;
+  const requestId = current.refundRequestId;
+  const orderId = current.refundRequest.orderId;
   await prisma.$transaction(async (tx) => {
+    // The order, then the check (docs/PAYMENTS.md), and only while this Yes
+    // (recorded at `now`) is still the answer: a newer No keeps its request.
+    await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "AttendanceCheck" WHERE "id" = ${check.id} FOR UPDATE`;
+    const locked = await tx.attendanceCheck.findUnique({ where: { id: check.id }, select: { response: true, respondedAt: true, refundRequestId: true } });
+    if (locked?.response !== "ATTENDING" || locked.respondedAt?.getTime() !== now.getTime() || locked.refundRequestId !== requestId) return;
     const withdrawn = await tx.refundRequest.updateMany({
       where: { id: requestId, status: RefundRequestStatus.OPEN },
       data: { status: RefundRequestStatus.WITHDRAWN, decisionNote: "Withdrawn: the guest said they're coming after all.", decidedAt: now },

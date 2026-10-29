@@ -199,6 +199,9 @@ create, edit, close (**Close to new claims**) and delete them
   approved, so two approvals never refund twice. Or they **decline**
   with a reason the buyer sees. Audited `REFUND_REQUESTED`,
   `REFUND_REQUEST_APPROVED`, `REFUND_REQUEST_DECLINED`.
+- **Failed refunds**: a refund the provider refused is listed by order on the
+  Finance tab (and the series page) for owners and admins to retry once,
+  after a recent sign-in. See [Refused refunds in PAYMENTS.md](PAYMENTS.md#after-the-sale).
 
 ## Summary, budget and export
 

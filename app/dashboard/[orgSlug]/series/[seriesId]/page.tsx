@@ -10,7 +10,8 @@ import { TicketTypesManager } from "@/components/event-dashboard/settings/Ticket
 import { AddOnsManager } from "@/components/event-dashboard/settings/AddOnsManager";
 import { PromoCodesManager, RefundPolicyControl, TransfersControl } from "@/components/event-dashboard/settings/PromoCodesManager";
 import { EventReportDownloadButton } from "@/components/reports/EventReportDownloadButton";
-import { Card, PageHeader } from "@/components/ui/display";
+import { Card, CardHeader, PageHeader } from "@/components/ui/display";
+import { FailedRefundsList } from "@/components/payments/FailedRefundsList";
 import { formatDayTime } from "@/lib/format/datetime";
 import type { Metadata } from "next";
 import { cachedDateTimeFormat } from "@/lib/format/intlCache";
@@ -27,7 +28,7 @@ function eventDateInput(date: Date, timeZone: string) {
 }
 
 export default async function SeriesManagePage({ params }: Props) {
-  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, tickets, revenue } = await loadSeriesManageView({ params });
+  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, tickets, revenue, failedRefunds } = await loadSeriesManageView({ params });
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title={series.title} description="Manage this recurring event and its upcoming occurrences." />
@@ -86,6 +87,13 @@ export default async function SeriesManagePage({ params }: Props) {
       ) : null}
 
       {revenue && hasRevenue(revenue) ? <MoneyCard revenue={revenue} title="Money across the series" exportHref={`/api/exports/series/${series.id}/orders`} /> : null}
+
+      {failedRefunds.length > 0 ? (
+        <Card as="section" aria-labelledby="series-failed-refunds-title">
+          <CardHeader title={<span id="series-failed-refunds-title">Failed refunds</span>} description="Refunds the payment provider refused. Check your balance with the provider, then retry." />
+          <FailedRefundsList target={{ organisationSlug: organisation.slug, seriesId: series.id }} refunds={failedRefunds} timezone={series.timezone} />
+        </Card>
+      ) : null}
 
       {canDownloadReports ? (
         <section aria-labelledby="series-reports-title" className="flex flex-col gap-3">

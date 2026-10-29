@@ -8,6 +8,7 @@ import { enqueuePaymentEmail } from "./email";
 import { fillFromWaitlist } from "./operations";
 import { lockOrderTargets, seatTargetOf } from "./targets";
 import { submitPendingRefund } from "./refunds";
+import { reconcileProviderRefunds } from "./refundReconcile";
 import { releaseUnpaidTeam } from "./teamOrders";
 
 const BATCH = 25;
@@ -92,7 +93,8 @@ async function sendPaymentReminders(now: Date) {
 
 /**
  * One pass of payment housekeeping, run by the one-minute outbox scheduler:
- * release ended holds, and submit or re-check refunds left pending.
+ * release ended holds, submit or re-check refunds left pending, and ask the
+ * provider about refunds it accepted but never finished.
  */
 export async function runPaymentMaintenance(now = new Date()) {
   let expired = 0;
@@ -132,5 +134,7 @@ export async function runPaymentMaintenance(now = new Date()) {
   for (const { id } of refunds) {
     if ((await submitPendingRefund(id).catch(() => "skipped" as const)) === "submitted") refundsSubmitted += 1;
   }
-  return { expired, settled, refundsSubmitted, reminded };
+  // Refunds the provider accepted but never reported finished (docs/PAYMENTS.md).
+  const refundsReconciled = await reconcileProviderRefunds(now).catch(() => 0);
+  return { expired, settled, refundsSubmitted, refundsReconciled, reminded };
 }

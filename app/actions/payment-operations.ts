@@ -10,7 +10,9 @@ import { prisma } from "@/lib/db";
 import { canAccessEvent } from "@/lib/eventAccess";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { parseMoneyToMinor } from "@/lib/payments/money";
-import { AdmissionManagedError, amendOfflinePayment, PaymentOperationError, refundOrder, sendPaymentLink, settleOrderByHand } from "@/lib/payments/operations";
+import { AdmissionManagedError, amendOfflinePayment, PaymentOperationError, refundOrder, retryFailedRefund, sendPaymentLink, settleOrderByHand } from "@/lib/payments/operations";
+import { getMembership } from "@/lib/permissions";
+import { hasRecentAuthentication } from "@/lib/reauth";
 import { submitManualTicketOrderCore } from "@/lib/rsvpCore";
 import { attendeeNameSchema } from "@/lib/validators";
 
@@ -85,6 +87,25 @@ export async function refundPaidOrder(input: unknown): Promise<ActionResult> {
     orderId: order.id, organisationId: context.organisation.id, actorUserId: context.userId,
     amountMinor, reason: parsed.data.reason, cancelTickets: parsed.data.cancelTickets,
   }));
+}
+
+const retrySchema = z.object({ ...target, refundId: z.string().trim().min(1).max(64) }).strict();
+
+/**
+ * Retry a refund the provider refused (docs/PAYMENTS.md). Owners and admins
+ * only (MANAGE_REGISTRATIONS collaborators can't), after a fresh sign-in.
+ */
+export async function retryFailedRefundAction(input: unknown): Promise<ActionResult> {
+  const parsed = retrySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Choose a refund." };
+  const context = await access(parsed.data);
+  if ("error" in context) return { ok: false, error: context.error ?? "Event not found." };
+  const membership = await getMembership(context.userId, context.organisation.id);
+  if (membership?.role !== "OWNER" && membership?.role !== "ADMIN") return { ok: false, error: "Only the organisation's owners and admins can retry refunds." };
+  if (!(await hasRecentAuthentication())) return { ok: false, error: "For security, sign in again before retrying a refund." };
+  const refund = await prisma.paymentRefund.findFirst({ where: { id: parsed.data.refundId, payment: { organisationId: context.organisation.id, order: context.scope } }, select: { id: true } });
+  if (!refund) return { ok: false, error: "Refund not found." };
+  return run(context.path, () => retryFailedRefund({ refundId: refund.id, organisationId: context.organisation.id, actorUserId: context.userId }));
 }
 
 const settleSchema = z.object({

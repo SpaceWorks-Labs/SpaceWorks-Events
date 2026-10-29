@@ -22,6 +22,7 @@ const tx = {
   team: { count: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn(), delete: vi.fn() },
   rSVP: { count: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
   teamJoinRequest: { updateMany: vi.fn() },
+  event: { count: vi.fn() },
 };
 
 const event = { id: "event_1", title: "Jam", capacity: 2, privacyType: EventPrivacyType.PUBLIC };
@@ -84,6 +85,13 @@ describe("setTeamStatusTx", () => {
 describe("promoteOldestWaitlistedUnit", () => {
   it("does nothing on approval-required events", async () => {
     await expect(promoteOldestWaitlistedUnit(tx as never, { ...event, privacyType: EventPrivacyType.APPROVAL_REQUIRED })).resolves.toBeNull();
+    expect(tx.team.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("does nothing on a cancelled event", async () => {
+    tx.event.count.mockResolvedValue(1);
+    await expect(promoteOldestWaitlistedUnit(tx as never, event)).resolves.toBeNull();
+    expect(tx.event.count).toHaveBeenCalledWith({ where: { id: "event_1", status: "CANCELLED" } });
     expect(tx.team.findFirst).not.toHaveBeenCalled();
   });
 

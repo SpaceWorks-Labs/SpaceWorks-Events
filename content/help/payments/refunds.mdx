@@ -33,13 +33,37 @@ Tickets can't be cancelled once anyone on the order has checked in.
 
 Online refunds are sent to the provider straight away and usually show as "on its way" until the provider confirms them. Card and UPI refunds can take 5 to 10 working days to reach the buyer.
 
-If the provider refuses a refund, for example because your account balance is too low, the owners and admins are emailed so they can try again or refund another way.
+If the provider refuses a refund, for example because your account balance is too low, the owners and admins are emailed so they can retry it or refund another way. See [Retrying a failed refund](#retrying-a-failed-refund).
+
+If the provider accepts a refund but never confirms it finished, the app asks the provider about it again after an hour, and keeps asking until it has an answer. A refund is never marked as failed just because the provider didn't answer in time.
 
 <Callout kind="note">
 
 If someone pays after their time to pay ran out and their place has gone, the payment is refunded in full automatically, and they're told by email.
 
 </Callout>
+
+## Retrying a failed refund
+
+A refund the provider refused stays on record as failed. Once you've fixed the cause (usually topping up your provider balance), send it again:
+
+<Steps>
+
+1. Open the event's **Finance** tab (for a series, the series page).
+2. Under **Failed refunds**, find the order. Each refused refund is listed with the buyer, the order reference and the amount, even when the order's tickets were already cancelled.
+3. Choose **Retry refund**.
+
+</Steps>
+
+The app sends a new refund for the same amount, and it shows as "on its way" until the provider confirms it. The failed one stays on the order's record, so you can always see what happened.
+
+<Callout kind="permission">
+
+Retrying a refund: owners and admins only, after an authenticator check. If you signed in more than a few minutes ago, you're asked to sign in again first.
+
+</Callout>
+
+Each failed refund can be retried once. If the retry fails too, it's listed again so you can retry that one, or refund the buyer another way. A retry is refused if it would return more than is left on the payment.
 
 ## The refund policy
 
@@ -77,9 +101,17 @@ From a paid order's page, a buyer can ask for a refund outside your policy, with
 
 Registration closes, the event page shows it's cancelled, every paid order is refunded in full, orders still being paid for are released, and waiting paid requests are declined. Everyone is emailed. This can't be undone.
 
+Nobody on the waitlist is offered a place on a cancelled event, even when cancelling frees places.
+
+### Payments that arrive after you cancel
+
+A buyer may have paid just before you cancelled, or the provider may tell the app about a payment late. That payment never becomes a ticket. The app records it, cancels the order, and refunds the whole amount automatically. The buyer is emailed that their refund is on its way, and your team chat is told if you've connected one. The same happens for a team place (no team is created) and a hackathon entry fee (the project stays a draft), and for a pass when one of its dates was cancelled.
+
+You can't settle an order by hand for a cancelled event or date either; the app refuses it.
+
 The message afterwards says how many orders were refunded, and how many need settling by hand, such as an order where someone had already checked in. Settle those from the guest list. If the provider later refuses a refund, the owners and admins are emailed. See [Cloning, cancelling and deleting](/help/events/clone-cancel-delete).
 
-To cancel one date of a series instead, use **Cancel date** under **Upcoming dates** on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share. See [Passes](/help/payments/passes#cancelling-a-date).
+To cancel one date of a series instead, use **Cancel date** under **Upcoming dates** on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share, once, even if the date is cancelled twice. A pass whose holder already checked in to that date is left for you to settle by hand. See [Passes](/help/payments/passes#cancelling-a-date).
 
 ## Good to know
 

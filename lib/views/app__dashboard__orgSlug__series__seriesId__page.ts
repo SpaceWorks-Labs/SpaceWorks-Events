@@ -8,6 +8,7 @@ import { percentOf } from "@/components/event-dashboard/analytics/metrics";
 import { seatTakingWhere } from "@/lib/payments/holds";
 import { loadTicketSettings } from "@/lib/payments/ticketSettings";
 import { loadRevenue } from "@/lib/payments/revenue";
+import { listFailedRefunds } from "@/lib/payments/operations/retryRefund";
 import { listAttendeesPage } from "@/lib/eventDashboard/attendees";
 type Props = { params: Promise<{ orgSlug: string; seriesId: string; }>; };
 export async function loadSeriesManageView({ params }: Props) {
@@ -90,5 +91,7 @@ export async function loadSeriesManageView({ params }: Props) {
   }
   // Takings across every date and pass, for those who manage registrations.
   const revenue = canManageRegistrations ? await loadRevenue({ eventSeriesId: series.id }, series.timezone, now) : null;
-  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendeesPage, rollup, dates, tickets, revenue };
+  // Refunds the provider refused, for owners and admins to retry (docs/PAYMENTS.md).
+  const failedRefunds = isAdmin ? await listFailedRefunds({ eventSeriesId: series.id }, organisation.id) : [];
+  return { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, canManageRegistrations, now, attendeesPage, rollup, dates, tickets, revenue, failedRefunds };
 }

@@ -174,7 +174,9 @@ export async function releaseTeamPlacesForCancelledOrder(tx: Prisma.TransactionC
   if (order.teamName != null && order.teamId && event.teamTicketMode === TeamTicketMode.PER_TEAM) {
     const members = await tx.rSVP.findMany({ where: { teamId: order.teamId, eventId: order.eventId, OR: [{ orderId: null }, { orderId: { not: order.id } }] }, select: CANCELLED_SELECT });
     if (members.some((member) => member.checkedInAt)) return { error: "Someone in this team has checked in, so its team ticket can't be cancelled." };
-    await tx.rSVP.deleteMany({ where: { id: { in: members.map((member) => member.id) } } });
+    // The caller locked these rows (lockOrderRegistrations); a mismatch rolls the whole cancellation back.
+    const deleted = await tx.rSVP.deleteMany({ where: { id: { in: members.map((member) => member.id) }, checkedInAt: null } });
+    if (deleted.count !== members.length) throw new Error("The team changed while its ticket was being cancelled.");
     await tx.team.deleteMany({ where: { id: order.teamId } });
     const emails = [...new Set(members.flatMap((member) => personEmail(member) ?? []))];
     await noticeEach(tx, emails, {
@@ -188,6 +190,21 @@ export async function releaseTeamPlacesForCancelledOrder(tx: Prisma.TransactionC
     if (rsvp.teamId) await settleTeamAfterMemberLeft(tx, { teamId: rsvp.teamId, eventId: order.eventId, leftRsvpId: rsvp.id });
   }
   return [];
+}
+
+/**
+ * Lock, by id, every registration that cancelling this order removes: its
+ * own, and for a team leader's order the whole team (a PER_TEAM ticket takes
+ * its members with it). Called after the order's payments are locked
+ * (docs/PAYMENTS.md), so a check-in either commits first and is seen, or
+ * waits and finds the registration gone.
+ */
+export async function lockOrderRegistrations(tx: Prisma.TransactionClient, order: { id: string; eventId: string | null; teamId: string | null; teamName: string | null; }) {
+  if (order.teamName != null && order.teamId && order.eventId) {
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "orderId" = ${order.id} OR ("teamId" = ${order.teamId} AND "eventId" = ${order.eventId}) ORDER BY "id" FOR UPDATE`;
+  } else {
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "orderId" = ${order.id} ORDER BY "id" FOR UPDATE`;
+  }
 }
 
 /** Whether any of these registrations came from an order that cost money (team actions can't delete those: they are cancelled as an order, with a refund). */
