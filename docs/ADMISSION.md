@@ -246,7 +246,11 @@ rate limited), or an organiser answers for them (audited):
 - A hold that ends unpaid: the beat puts the order back to REQUESTED and the
   registrations to pending while `respondBy` is in the future (the offer
   stands); after it, the application EXPIRES and the order is CANCELLED. An
-  applying team is never deleted with its expired hold.
+  applying team is never deleted with its expired hold. A request counts as
+  using its promo code, so the order goes back only while its code still has a
+  use left (`promoStillFits`, under the Order lock); otherwise it stays
+  EXPIRED and accepting again is refused until the code frees up or the offer
+  ends.
 - Decline (OFFERED) and withdraw (IN_REVIEW, WAITLISTED, OFFERED) close the
   application, cancel an unpaid order and offer the freed place onwards. Both
   are refused while a payment hold is live. An accepted applicant cancels

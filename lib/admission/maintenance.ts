@@ -40,7 +40,7 @@ async function settleOffer(applicationId: string, now: Date, webhooks: WebhookEm
     if (!event || !app || app.status !== AdmissionStatus.OFFERED) return null;
     const members = await unitMembers(tx, app);
     if (members.some((member) => member.status === RsvpStatus.PENDING_PAYMENT && member.holdExpiresAt && member.holdExpiresAt > now)) return null;
-    if (app.respondBy && app.respondBy > now) return event.status !== EventStatus.CANCELLED && (await reopenEndedHold(tx, app)) ? "reopened" : null;
+    if (app.respondBy && app.respondBy > now) return event.status !== EventStatus.CANCELLED && (await reopenEndedHold(tx, app)) === "reopened" ? "reopened" : null;
     webhooks.push(...(await closeApplication({ tx, event, app, now }, AdmissionStatus.EXPIRED)));
     return "expired";
   }, { timeout: 20_000, maxWait: 10_000 });
