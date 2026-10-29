@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   mobileSessions: vi.fn(),
   idempotencyKeys: vi.fn(),
   applicationEvents: vi.fn(),
+  offlineCheckIns: vi.fn(),
   crewPhotos: vi.fn(),
 }));
 
@@ -32,6 +33,7 @@ vi.mock("@/lib/db", () => ({ prisma: {
   mobileSession: { deleteMany: mocks.mobileSessions },
   mobileIdempotencyKey: { deleteMany: mocks.idempotencyKeys },
   admissionStatusEvent: { deleteMany: mocks.applicationEvents },
+  offlineCheckInMutation: { deleteMany: mocks.offlineCheckIns },
 } }));
 
 import { purgeExpiredOperationalData } from "@/lib/retention";
@@ -42,7 +44,7 @@ describe("operational retention", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OUTBOX_RETENTION_DAYS = "30";
-    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries, mocks.mobileSessions, mocks.idempotencyKeys, mocks.applicationEvents]) {
+    for (const mock of [mocks.verification, mocks.session, mocks.orgInvite, mocks.collaboratorInvite, mocks.undo, mocks.outbox, mocks.webhooks, mocks.webhookDeliveries, mocks.mobileSessions, mocks.idempotencyKeys, mocks.applicationEvents, mocks.offlineCheckIns]) {
       mock.mockResolvedValue({ count: 1 });
     }
     mocks.crewPhotos.mockResolvedValue(2);
@@ -69,6 +71,7 @@ describe("operational retention", () => {
       mobileSessions: 1,
       idempotencyKeys: 1,
       applicationStatusEvents: 1,
+      offlineCheckInRecords: 1,
       unusedCrewPhotos: 2,
     });
     expect(mocks.crewPhotos).toHaveBeenCalledWith(now);
@@ -78,6 +81,8 @@ describe("operational retention", () => {
     expect(mocks.outbox).toHaveBeenNthCalledWith(2, { where: { status: OutboxStatus.FAILED, createdAt: { lt: new Date("2030-01-30T00:00:00.000Z") } } });
     expect(mocks.webhooks).toHaveBeenCalledWith({ where: { processedAt: { lt: new Date("2029-12-01T00:00:00.000Z") } } });
     expect(mocks.applicationEvents).toHaveBeenCalledWith({ where: { emittedAt: { not: null, lt: new Date("2030-01-30T00:00:00.000Z") } } });
+    // Eight days: one past the seven-day acceptance window for offline check-ins.
+    expect(mocks.offlineCheckIns).toHaveBeenCalledWith({ where: { checkedInAt: { lt: new Date("2030-02-21T00:00:00.000Z") } } });
     expect(mocks.webhookDeliveries).toHaveBeenCalledWith({ where: { createdAt: { lt: new Date("2030-01-30T00:00:00.000Z") }, status: { not: "PROCESSING" } } });
   });
 });

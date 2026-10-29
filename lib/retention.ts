@@ -6,6 +6,8 @@ import { purgeUnusedCrewPhotos } from "@/lib/core/crew/photos";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEBHOOK_EVENT_RETENTION_DAYS = 90;
+/** A day past the 7 days an offline check-in is accepted, so a deleted record can never be replayed. */
+const OFFLINE_CHECK_IN_RECORD_DAYS = 8;
 
 /** Remove expired operational records without deleting business/audit data. */
 export async function purgeExpiredOperationalData(now = new Date()) {
@@ -15,7 +17,7 @@ export async function purgeExpiredOperationalData(now = new Date()) {
   );
   const sentBefore = new Date(now.getTime() - outboxRetentionDays * DAY_MS);
   const webhookBefore = new Date(now.getTime() - 30 * DAY_MS);
-  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents, webhookDeliveries, mobileSessions, idempotencyKeys, applicationEvents] = await prisma.$transaction([
+  const [tokens, sessions, organisationInvites, collaboratorInvites, undoSnapshots, sentMessages, failedMessages, webhookEvents, webhookDeliveries, mobileSessions, idempotencyKeys, applicationEvents, offlineCheckIns] = await prisma.$transaction([
     prisma.verificationToken.deleteMany({ where: { expires: { lt: now } } }),
     prisma.session.deleteMany({ where: { expires: { lt: now } } }),
     prisma.organisationInvite.deleteMany({ where: { usedAt: null, expiresAt: { lt: now } } }),
@@ -44,6 +46,8 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     prisma.mobileIdempotencyKey.deleteMany({ where: { expiresAt: { lt: now } } }),
     // Application status changes already sent as webhooks (docs/ADMISSION.md): 30 days.
     prisma.admissionStatusEvent.deleteMany({ where: { emittedAt: { not: null, lt: webhookBefore } } }),
+    // Offline check-in replay records (app/actions/checkin/offline.ts): past the acceptance window.
+    prisma.offlineCheckInMutation.deleteMany({ where: { checkedInAt: { lt: new Date(now.getTime() - OFFLINE_CHECK_IN_RECORD_DAYS * DAY_MS) } } }),
   ]);
   // Crew photos nobody saved within a day (docs/CREW.md); objects too, so outside the transaction.
   const unusedCrewPhotos = await purgeUnusedCrewPhotos(now);
@@ -60,6 +64,7 @@ export async function purgeExpiredOperationalData(now = new Date()) {
     mobileSessions: mobileSessions.count,
     idempotencyKeys: idempotencyKeys.count,
     applicationStatusEvents: applicationEvents.count,
+    offlineCheckInRecords: offlineCheckIns.count,
     unusedCrewPhotos,
   };
 }

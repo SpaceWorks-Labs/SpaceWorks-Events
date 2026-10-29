@@ -83,6 +83,10 @@ beforeEach(() => {
   mocks.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback({
     rSVP: { updateMany: mocks.updateMany, findUnique: mocks.rsvpFindUnique },
     checkInEvent: { create: mocks.checkInEventCreate },
+    // Offline sync: a fresh claim of the mutation id, the row lock, and the stored outcome.
+    $executeRaw: vi.fn().mockResolvedValue(1),
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    offlineCheckInMutation: { update: vi.fn().mockResolvedValue({}), findUnique: vi.fn() },
   }));
 });
 
@@ -144,7 +148,7 @@ describe("check-in paths publish only on transition", () => {
   it("offline sync replay", async () => {
     const checkedInAt = new Date(Date.now() - 5 * 60_000).toISOString();
     const input = { organisationSlug: "org", eventId: "event_1", checkIns: [{ rsvpId: "rsvp_1", clientMutationId: "mutation-1", checkedInAt }] };
-    transition(true);
+    transition(true, { checkedInAt: null, status: "CONFIRMED" });
     const result = await syncOfflineCheckIns(input);
     expect(result).toMatchObject({ ok: true, data: { syncedIds: ["rsvp_1"] } });
     expect(mocks.publish).toHaveBeenCalledExactlyOnceWith({ rsvpId: "rsvp_1", checkedInAt: new Date(checkedInAt) });

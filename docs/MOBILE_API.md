@@ -700,7 +700,13 @@ with a member's `rsvpId` for contact details).
   `UNAUTHENTICATED`.
 - `POST …/check-in/sync` `{ "checkIns": [{ "rsvpId", "checkedInAt", "force", "clientMutationId"? }] }` (1–500)
   → `{ "syncedIds", "alreadyCheckedInIds", "failed": [{ "rsvpId", "error" }] }`
-  (as `syncOfflineCheckIns`, same operating-window rule).
+  (as `syncOfflineCheckIns`, same operating-window rule; check-ins older than
+  7 days are refused). Send each queue entry's own `clientMutationId` and keep
+  it across retries: the first sync stores its outcome per event, and a retry
+  returns that outcome without checking the guest in again (even after an
+  undo), while the same id with another `rsvpId`, time or `force` is refused.
+  Without an id the server makes one up, so only the request's
+  `Idempotency-Key` protects a retry.
 
 All check-in writes go through `commitCheckInProjection` /
 `commitUndoCheckInProjection`, so the live ticket tears off exactly as for web

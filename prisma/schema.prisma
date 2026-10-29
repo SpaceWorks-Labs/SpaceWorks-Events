@@ -890,6 +890,7 @@ model Event {
   shortLinkClickDays ShortLinkClickDay[]
   promoCodes       PromoCode[]
   checkInLists     CheckInList[]
+  offlineCheckInMutations OfflineCheckInMutation[]
   savedViews       SavedView[]
   attendanceChecks AttendanceCheck[]
   crewMembers      EventCrewMember[]
@@ -2059,6 +2060,29 @@ model CheckInEvent {
 
   @@index([rsvpId, occurredAt])
   @@index([actorUserId, occurredAt])
+}
+
+/// One offline check-in a desk sent (its queue entry's clientMutationId),
+/// claimed in the check-in transaction: a retry with the same id returns this
+/// stored outcome instead of checking in again (after an undo, too), and the
+/// same id with another registration, time or override is refused. Offline
+/// check-ins older than 7 days are not accepted, and rows go 8 days after
+/// `checkedInAt` (lib/retention.ts), so a deleted row can never be replayed.
+model OfflineCheckInMutation {
+  id               String   @id @default(cuid())
+  eventId          String
+  clientMutationId String
+  rsvpId           String
+  checkedInAt      DateTime
+  force            Boolean
+  /// The CheckInCommitResult of the first attempt; null only inside that transaction.
+  outcome          Json?
+  createdAt        DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, clientMutationId])
+  @@index([checkedInAt])
 }
 
 /// An organiser-defined check-in list beyond venue entry ("Swag collection",

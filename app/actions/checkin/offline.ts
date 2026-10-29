@@ -3,7 +3,7 @@ import { gateCheckInForStatus } from "@/lib/checkIn";
 import { prisma } from "@/lib/db";
 import { offlineCheckInRosterSchema, syncOfflineCheckInsSchema } from "@/lib/validators";
 import type { ActionResult } from "../org";
-import { commitCheckInProjection } from "@/lib/checkInMutations";
+import { commitOfflineCheckIn } from "@/lib/checkInMutations";
 import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
 import { deskAttendanceState } from "@/lib/attendanceCheck";
 import { attendeeLabel, requireOrgMemberForEvent, revalidatePath } from "./access";
@@ -78,6 +78,9 @@ export async function downloadOfflineCheckInRoster(
   };
 }
 
+/** Offline check-ins older than this are refused (docs/SECURITY.md); their replay records are kept a day longer. */
+export const OFFLINE_CHECK_IN_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
+
 export async function syncOfflineCheckIns(
   input: unknown,
 ): Promise<ActionResult<{ syncedIds: string[]; alreadyCheckedInIds: string[]; failed: { rsvpId: string; error: string; }[]; }>> {
@@ -92,7 +95,7 @@ export async function syncOfflineCheckIns(
 
   const rsvps = await prisma.rSVP.findMany({
     where: { eventId: ctx.event.id, id: { in: checkIns.map((checkIn) => checkIn.rsvpId) } },
-    select: { id: true, status: true, checkedInAt: true },
+    select: { id: true },
   });
   const rsvpById = new Map(rsvps.map((rsvp) => [rsvp.id, rsvp]));
   const syncedIds: string[] = [];
@@ -111,11 +114,6 @@ export async function syncOfflineCheckIns(
       failed.push({ rsvpId: checkIn.rsvpId, error: "RSVP not found for this event." });
       continue;
     }
-    const gate = gateCheckInForStatus(rsvp.status, checkIn.force);
-    if (!gate.ok) {
-      failed.push({ rsvpId: checkIn.rsvpId, error: gate.reason });
-      continue;
-    }
     const checkedInAt = new Date(checkIn.checkedInAt);
     const earliest = ctx.event.startDateTime.getTime() - 24 * 60 * 60_000;
     const latest = Math.min(Date.now() + 5 * 60_000, ctx.event.endDateTime.getTime() + 60 * 60_000);
@@ -123,17 +121,26 @@ export async function syncOfflineCheckIns(
       failed.push({ rsvpId: checkIn.rsvpId, error: "Offline check-in time is outside the event operating window." });
       continue;
     }
-    if (rsvp.checkedInAt) {
-      alreadyCheckedInIds.push(rsvp.id);
+    if (checkedInAt.getTime() < Date.now() - OFFLINE_CHECK_IN_MAX_AGE_MS) {
+      failed.push({ rsvpId: checkIn.rsvpId, error: "Offline check-ins older than 7 days are no longer accepted." });
       continue;
     }
-    const committed = await commitCheckInProjection({
+    // Claimed with its outcome in the check-in transaction: a retry returns
+    // the first outcome, whatever happened since (an undo included).
+    const commit = await commitOfflineCheckIn({
+      eventId: ctx.event.id,
+      clientMutationId: checkIn.clientMutationId,
       rsvpId: rsvp.id,
       actorUserId: ctx.actorUserId,
       source: "offline-sync",
       checkedInAt,
       force: checkIn.force,
     });
+    if (commit.kind === "mismatch") {
+      failed.push({ rsvpId: rsvp.id, error: "This offline check-in was already sent with different details." });
+      continue;
+    }
+    const committed = commit.result;
     if (committed.state === "checked-in") {
       syncedIds.push(rsvp.id);
     } else if (committed.state === "already-checked-in") {
