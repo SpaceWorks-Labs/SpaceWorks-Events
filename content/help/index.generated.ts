@@ -219,7 +219,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Create an account with email",
         "anchor": "create-an-account-with-email",
-        "text": "Choose Sign in in the site header and open the Create account tab. Enter your Name, Email and a Password, then choose Create account. Open the verification email and follow its link. On the Confirm your email page, choose Confirm email. You're taken back to the sign-in page with \"Email verified. You can now sign in.\" The page always answers \"If this email can be registered, check your inbox for a verification link\", so nobody can use the form to find out who has an account. If you already have an account with that address, no new one is made; sign in or reset your password instead. Password rules 12 to 128 characters. Long passwords with accented letters or non-Latin scripts can hit a lower limit; if so, the app asks you to use fewer characters. Not a password found in a known data breach. The app checks a public list of breached passwords without ever sending your password, and tells you if yours \"has appeared in a data breach\". The same rules apply when you reset or change your password. The verification link works once and expires after one hour. If it has expired, sign in with your email and password: the app asks you to verify first and shows Resend verification email."
+        "text": "Choose Sign in in the site header and open the Create account tab. Enter your Name, Email and a Password, then choose Create account. Open the verification email and follow its link. On the Confirm your email page, choose Confirm email. You're taken back to the sign-in page with \"Email verified. You can now sign in.\" The page always answers \"If this email can be registered, check your inbox for a verification link\", so nobody can use the form to find out who has an account. If you already have an account with that address, no new one is made; sign in or reset your password instead. Sign-ups are also limited to a few an hour for each address and network; past that the page gives the same answer but sends nothing, so if no email arrives, wait an hour and try again. Password rules 12 to 128 characters. Long passwords with accented letters or non-Latin scripts can hit a lower limit; if so, the app asks you to use fewer characters. Not a password found in a known data breach. The app checks a public list of breached passwords without ever sending your password, and tells you if yours \"has appeared in a data breach\". The same rules apply when you reset or change your password. The verification link works once and expires after one hour. If it has expired, sign in with your email and password: the app asks you to verify first and shows Resend verification email."
       },
       {
         "heading": "Sign in",
@@ -310,7 +310,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Signing in with a code",
         "anchor": "signing-in-with-a-code",
-        "text": "After you enter your email and password, the app shows Verify it's you. Open your authenticator app and find the Space Works Events entry. Type the current six-digit code into Authenticator or recovery code. Choose Verify and sign in. Codes change every 30 seconds. If one is rejected, wait for the next code and try again, and check that your phone sets its clock automatically. To sign in as someone else, choose Use a different account. After signing in with Google Google sign-in follows your Google account's own security, so it doesn't ask for a code at sign-in. If you're organisation staff, the app then shows Confirm it's you before your dashboards open. Enter the current code from your authenticator app in Six-digit authenticator code. Choose Verify and continue. You're asked again after 12 hours, and after you sign out everywhere or reset your password. This page only takes a code from the app, not a recovery code."
+        "text": "After you enter your email and password, the app shows Verify it's you. Open your authenticator app and find the Space Works Events entry. Type the current six-digit code into Authenticator or recovery code. Choose Verify and sign in. Codes change every 30 seconds. If one is rejected, wait for the next code and try again, and check that your phone sets its clock automatically. To sign in as someone else, choose Use a different account. After signing in with Google Google sign-in follows your Google account's own security, so it doesn't ask for a code at sign-in. If you're organisation staff, the app then shows Confirm it's you before your dashboards open. Enter the current code from your authenticator app in Six-digit authenticator code. Choose Verify and continue. You're asked again after 12 hours, each time you sign in again, and after you sign out everywhere or reset your password. This page only takes a code from the app, not a recovery code."
       },
       {
         "heading": "Recovery codes",
@@ -675,7 +675,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Opening and sharing the form",
         "anchor": "opening-and-sharing-the-form",
-        "text": "The form is closed until you open it. When you're ready, usually at the end of the event: Make sure the form has at least one question. Turn the switch at the top of the Feedback tab to Open. Choose Copy feedback link. Share the link with your guests. Space Works Events never sends the feedback link by itself. Opening the form doesn't email anyone. Share the link yourself: paste it into a chat group or onto a slide, or send the Thank you and feedback email template from the Emails tab. See Emailing your guests. The form only works while the event is published. Turn the switch back to Closed to stop taking responses."
+        "text": "The form is closed until you open it. When you're ready, usually at the end of the event: Make sure the form has at least one question. Turn the switch at the top of the Feedback tab to Open. Choose Copy feedback link. Share the link with your guests. Space Works Events never sends the feedback link by itself. Opening the form doesn't email anyone. Share the link yourself: paste it into a chat group or onto a slide, or send the Thank you and feedback email template from the Emails tab. See Emailing your guests. The form only works while the event is published and its website is live, and only for people who can open the event page: for an invite-only event, that means invited guests signed in with the invited address. Turn the switch back to Closed to stop taking responses."
       },
       {
         "heading": "Anonymous or verified",
@@ -843,7 +843,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Reviewing an application",
         "anchor": "reviewing-an-application",
-        "text": "Open the event from your dashboard. Your review list is shown (organisers find it under Applications → My reviews). Choose Open next to an application marked To review. Read the guidance and the answers. On a blind stage you won't see names, email addresses, phone numbers or team names. Score each criterion from 1 (weakest) to 5 (strongest), add notes for the organisers if you like, and choose Submit review. A review can't be changed once submitted. If the applicant changes their answers afterwards, the application comes back to your list so you can review the new answers."
+        "text": "Open the event from your dashboard. Your review list is shown (organisers find it under Applications → My reviews). Choose Open next to an application marked To review. Read the guidance and the answers. On a blind stage you won't see names, email addresses, phone numbers or team names. Score each criterion from 1 (weakest) to 5 (strongest), add notes for the organisers if you like, and choose Submit review. A review can't be changed once submitted. If the applicant changes their answers while you have the application open, Submit review is refused with \"The answers changed. Reload to see them.\": choose Open again to read the new answers, then score them. If they change their answers after you've submitted, the application comes back to your list so you can review the new answers."
       },
       {
         "heading": "Conflicts of interest",
@@ -853,7 +853,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Good to know",
         "anchor": "good-to-know",
-        "text": "You can review only while the stage is Open and the application is still in review there. Your notes are for the organisers. Applicants never see reviews or scores."
+        "text": "You can review only while the stage is Open and the application is still in review there. If you're taken off a stage's panel, that stage's applications leave your list; so does an application you have a conflict with. Your notes are for the organisers. Applicants never see reviews or scores."
       }
     ]
   },
@@ -909,7 +909,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Assigning reviewers",
         "anchor": "assigning-reviewers",
-        "text": "Open Applications → Reviewers and choose the stage. Set Reviewers per application. Choose Balanced (even workloads, the same plan every time) or Random (even workloads, shuffled). Choose whether to Keep existing assignments and add more, or Start over (assignments already reviewed always stay). Untick anyone who shouldn't get work this time, then choose Preview. Check the workloads and any applications that can't reach the target. With Random, choose Re-roll for a different shuffle. Choose Apply. A random assignment is drawn from a stored seed, so the same seed always gives the same plan, and every applied run is recorded. If anything changed between the preview and Apply (a new application, a reviewer removed), Apply is refused: preview again."
+        "text": "Open Applications → Reviewers and choose the stage. Set Reviewers per application. Choose Balanced (even workloads, the same plan every time) or Random (even workloads, shuffled). Choose whether to Keep existing assignments and add more, or Start over (assignments already reviewed always stay). Untick anyone who shouldn't get work this time, then choose Preview. Check the workloads and any applications that can't reach the target. With Random, choose Re-roll for a different shuffle. Choose Apply. A random assignment is drawn from a stored seed, so the same seed always gives the same plan, and every applied run is recorded. If anything changed between the preview and Apply (a new application, a reviewer removed), Apply is refused: preview again. Once anyone has submitted a review in the stage, Reviewers per application is fixed, here as in the stage settings: Apply is refused with a different number. Keep the current number; to release a decision short of it, give a reason."
       },
       {
         "heading": "Conflicts of interest",
@@ -1107,7 +1107,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Find the feedback form",
         "anchor": "find-the-feedback-form",
-        "text": "Organisers share the feedback link themselves, usually by email after the event, or on screen at the end of the day. Space Works Events doesn't send it automatically, and it isn't shown on the event page. The form only works while the organisers have it open. If the link shows \"not found\", the form hasn't opened yet or has closed; check with the organisers."
+        "text": "Organisers share the feedback link themselves, usually by email after the event, or on screen at the end of the day. Space Works Events doesn't send it automatically, and it isn't shown on the event page. The form only works while the organisers have it open. If the link shows \"not found\", the form hasn't opened yet or has closed; check with the organisers. The form follows the event page: if you can't open the event page, you can't open its form either. For an invite-only event, sign in with the invited email address first."
       },
       {
         "heading": "Give feedback",
@@ -1391,7 +1391,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Emails about your order",
         "anchor": "emails-about-your-order",
-        "text": "Email When \"Complete your payment\" Your places are held and waiting for payment. A reminder follows for a payment link. \"Receipt\" with your order reference Your payment arrived and your tickets are confirmed. \"Reserved, pay at the desk\" You chose to pay in person. \"Your held tickets were released\" The time to pay ran out. Nothing was charged. \"Refund\" or \"Order cancelled\" Money was refunded, or the order was cancelled."
+        "text": "Email When \"Complete your payment\" Your places are held and waiting for payment. A reminder follows for a payment link. \"Receipt\" with your order reference Your payment arrived and your tickets are confirmed. \"Reserved, pay at the desk\" You chose to pay in person. \"Your held tickets were released\" The time to pay ran out. Nothing was charged. \"Refund\" or \"Order cancelled\" Money was refunded, or the order was cancelled. \"Refund on its way\" Your payment arrived after the event (or the date) was cancelled. No ticket was issued, and the whole amount is being refunded. Card and UPI refunds can take 5 to 10 working days to appear."
       },
       {
         "heading": "Good to know",
@@ -1720,7 +1720,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Edit or withdraw",
         "anchor": "edit-or-withdraw",
-        "text": "While submissions are open you can keep improving a submitted project: make your changes and choose Save changes. It stays submitted. To take it out of judging, choose Withdraw… and confirm with Withdraw. A withdrawn project isn't judged. You can bring it back with Submit again while submissions are still open."
+        "text": "While submissions are open you can keep improving a submitted project: make your changes and choose Save changes. It stays submitted. To take it out of judging, choose Withdraw… and confirm with Withdraw. A withdrawn project isn't judged. You can bring it back with Submit again while submissions are still open. Once the organisers publish the results, projects are final, even if submissions haven't closed yet: you can't edit, submit or withdraw yours. If they unpublish the results, you can make changes again while submissions are open."
       },
       {
         "heading": "The submission window",
@@ -4016,7 +4016,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Following the replies",
         "anchor": "following-the-replies",
-        "text": "Answers from a link you shared yourself show up in exactly the same places as answers from the email. The card shows how many guests were asked, when and by whom the last email went, and counts for Coming, Not coming, No reply and Newly confirmed, not asked. If places were released, it says how many. Guests → People shows each guest's answer as a chip (Said No · paid when a paid place was kept) and any note under their row. A drop-down filters the list by answer, with counts, and saved views keep it. See The guest list. The check-in desk shows the answer chip for guests who were asked, never their note. See The check-in desk. The Overview tab adds a line such as \"Attendance: 12 coming · 3 not coming · 5 no reply\" once anyone has been asked. The guest CSV has Attendance confirmation and Attendance note columns. See Exporting guest data. Guests can change their answer until the event starts. After that, the replies are final."
+        "text": "Answers from a link you shared yourself show up in exactly the same places as answers from the email. The card shows how many guests were asked, when and by whom the last email went, and counts for Coming, Not coming, No reply and Newly confirmed, not asked. If places were released, it says how many. Guests → People shows each guest's answer as a chip (Said No · paid when a paid place was kept) and any note under their row. A drop-down filters the list by answer, with counts, and saved views keep it. See The guest list. The check-in desk shows the answer chip for guests who were asked, never their note. See The check-in desk. The Overview tab adds a line such as \"Attendance: 12 coming · 3 not coming · 5 no reply\" once anyone has been asked. The guest CSV has Attendance confirmation and Attendance note columns. See Exporting guest data. Guests can change their answer until the event starts. After that, the replies are final. If a guest says No and then quickly Yes (in two windows, say), the Yes wins: the place is only freed while No is still their latest answer."
       },
       {
         "heading": "Good to know",
@@ -4385,7 +4385,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "What's in the guest CSV",
         "anchor": "what-s-in-the-guest-csv",
-        "text": "Columns appear in this order: Name, Email and Status. Team and Team role (Leader, Member or Solo), on team events only. Registration Date and Checked In At. Ticket URL: each guest's private ticket link. Ticket, Order, Order status and Order total: the ticket type, order number, order state and total with its currency. Empty for registrations without an order. One column for each question on your registration form, headed with the question. One column for each custom check-in list, headed \"Check-in:\" and the list name, with the time the guest was checked into it. A few things to know when you open it: Status uses the stored names: CONFIRMED (going), WAITLISTED, PENDINGAPPROVAL (to approve), REJECTED (declined) and PENDINGPAYMENT (unpaid). Dates and times are in UTC in a standard format, for example 2026-10-14T09:30:00.000Z. Most spreadsheets can convert them to your time zone. Yes / no answers show as Yes or No. The Ticket URL column contains working ticket links. Anyone with a link can open that guest's ticket and QR code, so store and share the file carefully, and delete the column before sending the file outside your team."
+        "text": "Columns appear in this order: Name, Email and Status. Team and Team role (Leader, Member or Solo), on team events only. Registration Date and Checked In At. Ticket URL: each guest's private ticket link. Ticket, Order, Order status and Order total: the ticket type, order number, order state and total with its currency. Empty for registrations without an order. One column for each question on your registration form, headed with the question. One column for each custom check-in list, headed \"Check-in:\" and the list name, with the time the guest was checked into it. A few things to know when you open it: Status uses the stored names: CONFIRMED (going), WAITLISTED, PENDINGAPPROVAL (to approve), REJECTED (declined) and PENDINGPAYMENT (unpaid). Dates and times are in UTC in a standard format, for example 2026-10-14T09:30:00.000Z. Most spreadsheets can convert them to your time zone. Yes / no answers show as Yes or No. A question where guests can tick several choices shows every choice in one cell, separated by semicolons, in the order the choices appear on your form. Anything typed into Other comes last. The Ticket URL column contains working ticket links. Anyone with a link can open that guest's ticket and QR code, so store and share the file carefully, and delete the column before sending the file outside your team."
       },
       {
         "heading": "The email list",
@@ -5490,7 +5490,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "The submission window",
         "anchor": "the-submission-window",
-        "text": "Set the window in Judging → Setup, in the Project submissions card: Opens and Closes are in the event's time zone. The app checks the time every time an entrant saves, so nobody can sneak a change in after the deadline. Choose Save settings after changing them. Only confirmed entrants can submit. On a team event, that's a confirmed team. On an individual event, or for a solo registrant at a team event, it's a confirmed registration. Entrants reach the form from their ticket or team page while the event is live. A project has a title (up to 120 characters), a plain-text summary (up to 4,000 characters), and optional links to the code, a demo and a video. Entrants can save a draft, submit, edit while the window is open, and withdraw. If you charge an entry fee, the project is only submitted once the fee is paid; see Project entry fees. The entrants' side is covered in Submitting a hackathon project."
+        "text": "Set the window in Judging → Setup, in the Project submissions card: Opens and Closes are in the event's time zone. The app checks the time every time an entrant saves, so nobody can sneak a change in after the deadline. Choose Save settings after changing them. Only confirmed entrants can submit. On a team event, that's a confirmed team. On an individual event, or for a solo registrant at a team event, it's a confirmed registration. Entrants reach the form from their ticket or team page while the event is live. A project has a title (up to 120 characters), a plain-text summary (up to 4,000 characters), and optional links to the code, a demo and a video. Entrants can save a draft, submit, edit while the window is open, and withdraw. Publishing the results freezes every project, even before the window closes; unpublishing lifts the freeze. If you charge an entry fee, the project is only submitted once the fee is paid; see Project entry fees. The entrants' side is covered in Submitting a hackathon project."
       },
       {
         "heading": "Submission receipts",
@@ -6033,7 +6033,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Who can open it",
         "anchor": "who-can-open-it",
-        "text": "The app lets you in only when all of these are true: SUPERADMINEMAIL is set on the server, and you're signed in with the account whose email matches it (capital letters don't matter). That account's email address is verified. A signed-out visitor to /super-admin is sent to the sign-in page. Anyone else who is signed in sees an ordinary \"not found\" page, so the area's existence isn't revealed. Every super admin page checks this again on its own, including when you move between sections. There's no separate authenticator step-up: once you're signed in with the right account, the area opens. To change who the super admin is, change SUPERADMINEMAIL on the server and restart, then set that account's password as described below. There's no link to the super admin area in the app's menus. Bookmark /super-admin on your server's address. Once you're signed in as the super admin, the Instance administration and Installing and maintaining sections of this guide also appear."
+        "text": "The app lets you in only when all of these are true: SUPERADMINEMAIL is set on the server, and you're signed in with the account whose email matches it (capital letters don't matter). You signed in with that account's password, not with Google. That account's email address is verified. A signed-out visitor to /super-admin is sent to the sign-in page. Anyone else who is signed in sees an ordinary \"not found\" page, so the area's existence isn't revealed. Every super admin page checks this again on its own, including when you move between sections. There's no separate authenticator step-up: once you're signed in with the right account, the area opens. Continue with Google is refused for the super admin's address, even if a Google account was linked to it before. To change who the super admin is, change SUPERADMINEMAIL on the server and restart, then set that account's password as described below. There's no link to the super admin area in the app's menus. Bookmark /super-admin on your server's address. Once you're signed in as the super admin, the Instance administration and Installing and maintaining sections of this guide also appear."
       },
       {
         "heading": "Setting the password",
@@ -6946,7 +6946,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Cancelling a date",
         "anchor": "cancelling-a-date",
-        "text": "Owners and admins can cancel one date of a series from Upcoming dates on the series page, with Cancel date. When they do: tickets for that date alone are refunded in full; each pass is refunded that date's share of what's left on it, and keeps its other dates; everyone on that date is emailed. For example, a pass that cost 1,000 and covers five dates gets back 200 when one of them is cancelled, as long as nothing has been refunded on it yet. See Refunds and cancellations."
+        "text": "Owners and admins can cancel one date of a series from Upcoming dates on the series page, with Cancel date. When they do: tickets for that date alone are refunded in full; each pass is refunded that date's share of what's left on it, and keeps its other dates; everyone on that date is emailed. For example, a pass that cost 1,000 and covers five dates gets back 200 when one of them is cancelled, as long as nothing has been refunded on it yet. Cancelling the same date again never refunds a pass twice. If the pass holder already checked in to that date, the pass is left as it is for you to settle by hand. See Refunds and cancellations."
       },
       {
         "heading": "Refunding a pass",
@@ -7054,6 +7054,11 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "level": 2
       },
       {
+        "id": "retrying-a-failed-refund",
+        "title": "Retrying a failed refund",
+        "level": 2
+      },
+      {
         "id": "the-refund-policy",
         "title": "The refund policy",
         "level": 2
@@ -7067,6 +7072,11 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
         "id": "cancelling-an-event",
         "title": "Cancelling an event",
         "level": 2
+      },
+      {
+        "id": "payments-that-arrive-after-you-cancel",
+        "title": "Payments that arrive after you cancel",
+        "level": 3
       },
       {
         "id": "good-to-know",
@@ -7093,7 +7103,12 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "When refunds arrive",
         "anchor": "when-refunds-arrive",
-        "text": "Online refunds are sent to the provider straight away and usually show as \"on its way\" until the provider confirms them. Card and UPI refunds can take 5 to 10 working days to reach the buyer. If the provider refuses a refund, for example because your account balance is too low, the owners and admins are emailed so they can try again or refund another way. If someone pays after their time to pay ran out and their place has gone, the payment is refunded in full automatically, and they're told by email."
+        "text": "Online refunds are sent to the provider straight away and usually show as \"on its way\" until the provider confirms them. Card and UPI refunds can take 5 to 10 working days to reach the buyer. If the provider refuses a refund, for example because your account balance is too low, the owners and admins are emailed so they can retry it or refund another way. See Retrying a failed refund. If the provider accepts a refund but never confirms it finished, the app asks the provider about it again after an hour, and keeps asking until it has an answer. A refund is never marked as failed just because the provider didn't answer in time. If someone pays after their time to pay ran out and their place has gone, the payment is refunded in full automatically, and they're told by email."
+      },
+      {
+        "heading": "Retrying a failed refund",
+        "anchor": "retrying-a-failed-refund",
+        "text": "A refund the provider refused stays on record as failed. Once you've fixed the cause (usually topping up your provider balance), send it again: Open the event's Finance tab (for a series, the series page). Under Failed refunds, find the order. Each refused refund is listed with the buyer, the order reference and the amount, even when the order's tickets were already cancelled. Choose Retry refund. The app sends a new refund for the same amount, and it shows as \"on its way\" until the provider confirms it. The failed one stays on the order's record, so you can always see what happened. Retrying a refund: owners and admins only, after an authenticator check. If you signed in more than a few minutes ago, you're asked to sign in again first. Each failed refund can be retried once. If the retry fails too, it's listed again so you can retry that one, or refund the buyer another way. A retry is refused if it would return more than is left on the payment."
       },
       {
         "heading": "The refund policy",
@@ -7108,7 +7123,7 @@ export const helpIndex: Readonly<Record<string, HelpIndexEntry>> = {
       {
         "heading": "Cancelling an event",
         "anchor": "cancelling-an-event",
-        "text": "Open the event's Settings tab. Under Cancel event, choose Cancel event…. Read the summary and choose Cancel event and refund. Registration closes, the event page shows it's cancelled, every paid order is refunded in full, orders still being paid for are released, and waiting paid requests are declined. Everyone is emailed. This can't be undone. The message afterwards says how many orders were refunded, and how many need settling by hand, such as an order where someone had already checked in. Settle those from the guest list. If the provider later refuses a refund, the owners and admins are emailed. See Cloning, cancelling and deleting. To cancel one date of a series instead, use Cancel date under Upcoming dates on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share. See Passes."
+        "text": "Open the event's Settings tab. Under Cancel event, choose Cancel event…. Read the summary and choose Cancel event and refund. Registration closes, the event page shows it's cancelled, every paid order is refunded in full, orders still being paid for are released, and waiting paid requests are declined. Everyone is emailed. This can't be undone. Nobody on the waitlist is offered a place on a cancelled event, even when cancelling frees places. Payments that arrive after you cancel A buyer may have paid just before you cancelled, or the provider may tell the app about a payment late. That payment never becomes a ticket. The app records it, cancels the order, and refunds the whole amount automatically. The buyer is emailed that their refund is on its way, and your team chat is told if you've connected one. The same happens for a team place (no team is created) and a hackathon entry fee (the project stays a draft), and for a pass when one of its dates was cancelled. You can't settle an order by hand for a cancelled event or date either; the app refuses it. The message afterwards says how many orders were refunded, and how many need settling by hand, such as an order where someone had already checked in. Settle those from the guest list. If the provider later refuses a refund, the owners and admins are emailed. See Cloning, cancelling and deleting. To cancel one date of a series instead, use Cancel date under Upcoming dates on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share, once, even if the date is cancelled twice. A pass whose holder already checked in to that date is left for you to settle by hand. See Passes."
       },
       {
         "heading": "Good to know",
