@@ -26,7 +26,7 @@ vi.mock("@/lib/payments/occurrences", async (original) => {
 import { prisma } from "@/lib/db";
 import { cancelEvent, deleteEvent } from "@/app/actions/event";
 import { deleteOrganisation } from "@/app/actions/membership";
-import { updateEventSeriesMeta } from "@/app/actions/series";
+import { deleteEventSeries, updateEventSeriesMeta } from "@/app/actions/series";
 import { refundEndedOrderAction } from "@/app/actions/payment-operations";
 import { listRefundableOrders, refundOrder } from "@/lib/payments/operations";
 import { cancelOccurrence } from "@/lib/payments/occurrences";
@@ -117,6 +117,55 @@ describe.sequential("durable cancellation obligations before a refund exists", (
     await assertGap(s, "date", () => updateEventSeriesMeta({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id, title: "Course", timezone: "UTC", privacyType: "PUBLIC", status: EventStatus.CANCELLED }));
   });
 
+  it.each(["series", "organisation"])("marks upcoming dates atomically but retains attended non-cancelled dates without refund obligations for %s deletion", async (target) => {
+    const s = await setup(true);
+    const past = await prisma.eventInstance.create({ data: {
+      eventSeriesId: s.course!.id, startDateTime: new Date(Date.now() - 90_000_000), endDateTime: new Date(Date.now() - 86_400_000),
+    } });
+    const earlier: string[] = [];
+    // Both a date order and a pass covering only an earlier, attended date.
+    for (const eventInstanceId of [past.id, null]) {
+      const order = await prisma.order.create({ data: {
+        organisationId: s.org.id, eventSeriesId: s.course!.id, eventInstanceId, reference: newOrderReference(),
+        buyerEmail: "earlier@example.test", buyerName: "Earlier guest", status: OrderStatus.CONFIRMED,
+        currency: "INR", subtotalMinor: BigInt(50000), totalMinor: BigInt(50000),
+      }, select: { id: true } });
+      earlier.push(order.id);
+      await prisma.payment.create({ data: {
+        organisationId: s.org.id, orderId: order.id, amountMinor: BigInt(50000), currency: "INR", provider: "OFFLINE",
+        status: PaymentStatus.PAID_OFFLINE, offlineMethod: "CASH", description: "Earlier date", paidAt: new Date(),
+      } });
+      await prisma.rSVP.create({ data: {
+        eventInstanceId: past.id, orderId: order.id, guestEmail: `earlier-${order.id}@example.test`,
+        attendeeKey: `earlier-${order.id}`, checkedInAt: new Date(Date.now() - 88_000_000),
+      } });
+    }
+    const gate = barrier();
+    pause.date = gate.wait;
+    const cancelling = updateEventSeriesMeta({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id, title: "Course", timezone: "UTC", privacyType: "PUBLIC", status: EventStatus.CANCELLED });
+    void cancelling.catch(() => {});
+    try {
+      await Promise.race([gate.ready, cancelling.then(() => { throw new Error("Missed the cancellation barrier."); })]);
+      expect(await prisma.eventSeries.findUnique({ where: { id: s.course!.id }, select: { status: true } })).toEqual({ status: EventStatus.CANCELLED });
+      expect(await prisma.eventInstance.findUnique({ where: { id: s.date!.id }, select: { cancelledAt: true } })).toEqual({ cancelledAt: expect.any(Date) });
+      expect(await prisma.eventInstance.findUnique({ where: { id: past.id }, select: { cancelledAt: true } })).toEqual({ cancelledAt: null });
+      expect(await prisma.paymentRefund.count({ where: { payment: { organisationId: s.org.id } } })).toBe(0);
+      expect((await listRefundableOrders({ eventSeriesId: s.course!.id }, s.org.id)).map((row) => row.id)).toEqual([s.order.id]);
+      expect(await deletionBehindFence(s)).toMatchObject({ ok: false, error: expect.stringContaining("money to refund") });
+      expect(await deleteEventSeries({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id })).toMatchObject({ ok: false });
+    } finally {
+      pause.date = null;
+      gate.release();
+      await cancelling;
+    }
+    expect(await listRefundableOrders({ eventSeriesId: s.course!.id }, s.org.id)).toEqual([]);
+    expect(await prisma.paymentRefund.count({ where: { payment: { orderId: { in: earlier } } } })).toBe(0);
+    expect(await prisma.rSVP.count({ where: { orderId: { in: earlier }, checkedInAt: { not: null } } })).toBe(2);
+    expect(await prisma.$transaction((tx) => organisationMoneyBlocker(tx, s.org.id, new Date()))).toBeNull();
+    if (target === "series") expect(await deleteEventSeries({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id })).toEqual({ ok: true });
+    expect(await s.deleting()).toEqual({ ok: true });
+  });
+
   it("keeps a checked-in cancelled event's obligation until the owner refunds it without removing the ticket", async () => {
     const s = await setup();
     const checkedInAt = new Date();
@@ -127,9 +176,19 @@ describe.sequential("durable cancellation obligations before a refund exists", (
     expect((await listRefundableOrders({ eventId: s.event!.id }, s.org.id)).map((row) => row.id)).toEqual([s.order.id]);
     // An unresolved cancellation still blocks after its event has ended.
     expect(await prisma.$transaction((tx) => organisationMoneyBlocker(tx, s.org.id, new Date(Date.now() + 7 * 86_400_000)))).toContain("money to refund");
+    const deletingEvent = () => deleteEvent({ organisationSlug: s.org.slug, eventId: s.event!.id });
+    const pending = await prisma.paymentRefund.create({ data: { paymentId: s.payment.id, amountMinor: BigInt(50000), reason: "Cancellation" }, select: { id: true } });
+    expect(await listRefundableOrders({ eventId: s.event!.id }, s.org.id)).toEqual([]);
+    expect(await deletingEvent()).toMatchObject({ ok: false });
+    expect(await s.deleting()).toMatchObject({ ok: false, error: expect.stringContaining("still on their way") });
+    await prisma.paymentRefund.update({ where: { id: pending.id }, data: { status: PaymentRefundStatus.FAILED, settledAt: new Date() } });
+    expect(await deletingEvent()).toMatchObject({ ok: false });
     expect(await s.refunding()).toEqual({ ok: true });
-    expect(await prisma.paymentRefund.findFirst({ where: { paymentId: s.payment.id }, select: { status: true, offline: true, amountMinor: true } })).toEqual({ status: PaymentRefundStatus.SUCCEEDED, offline: true, amountMinor: BigInt(50000) });
+    expect(await prisma.paymentRefund.findFirst({ where: { paymentId: s.payment.id, status: PaymentRefundStatus.SUCCEEDED }, select: { status: true, offline: true, amountMinor: true } })).toEqual({ status: PaymentRefundStatus.SUCCEEDED, offline: true, amountMinor: BigInt(50000) });
+    expect(await listRefundableOrders({ eventId: s.event!.id }, s.org.id)).toEqual([]);
+    expect(await prisma.order.findUnique({ where: { id: s.order.id }, select: { status: true } })).toEqual({ status: OrderStatus.CONFIRMED });
     expect(await prisma.rSVP.findUnique({ where: { id: s.rsvp.id }, select: { checkedInAt: true } })).toEqual({ checkedInAt });
+    expect(await deletingEvent()).toEqual({ ok: true });
     expect(await s.deleting()).toEqual({ ok: true });
   });
 
@@ -148,6 +207,7 @@ describe.sequential("durable cancellation obligations before a refund exists", (
     expect(await prisma.paymentRefund.findFirst({ where: { payment: { orderId: order.id } }, select: { status: true, offline: true, amountMinor: true } })).toEqual({ status: PaymentRefundStatus.SUCCEEDED, offline: false, amountMinor: BigInt(49900) });
     expect(await prisma.rSVP.count({ where: { id: rsvp.id, checkedInAt: { not: null } } })).toBe(1);
     expect(await prisma.$transaction((tx) => organisationMoneyBlocker(tx, paid.organisationId, new Date()))).toBeNull();
+    expect(await deleteEvent({ organisationSlug: paid.orgSlug, eventId: event.id })).toEqual({ ok: true });
   });
 
   it("keeps a checked-in cancelled pass date discoverable and refundable from the series page", async () => {
@@ -161,6 +221,7 @@ describe.sequential("durable cancellation obligations before a refund exists", (
     expect(await s.refunding()).toEqual({ ok: true });
     expect(await prisma.rSVP.count({ where: { id: s.rsvp.id, checkedInAt: { not: null } } })).toBe(1);
     expect(await listRefundableOrders({ eventSeriesId: s.course!.id }, s.org.id)).toEqual([]);
+    expect(await deleteEventSeries({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id })).toEqual({ ok: true });
     expect(await s.deleting()).toEqual({ ok: true });
   });
 

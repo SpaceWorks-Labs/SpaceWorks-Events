@@ -158,13 +158,16 @@ registering is seen. Organisers can still add any guest by hand.
   failed, and owners and admins refund what is left from there, by order,
   after an authenticator check and a recent sign-in (`refundEndedOrderAction`).
   It works after the order's tickets are gone and refunds money only. It also
-  lists confirmed orders on cancelled events, series or dates, including orders
+  lists confirmed orders on cancelled events or cancelled dates, including orders
   with checked-in guests: refund them here without cancelling their tickets or
   removing attendance records. Return cash yourself before recording an in-person
   refund. For a pass, enter the cancelled date's share; leaving the amount blank
   returns the whole remaining balance. While a checked-in place remains on a
   cancelled date, any remaining pass balance still blocks organisation deletion;
-  refund the rest before deleting. Other confirmed orders use the guest list.
+  refund the rest before deleting. Cancelling a series affects only dates marked
+  cancelled: earlier, non-cancelled dates and passes covering only those dates
+  keep their legitimate payments and do not appear here or block deletion of
+  the cancelled series or organisation. Other confirmed orders use the guest list.
   Balances are calculated before the newest 100 refundable orders are selected,
   so fully refunded orders never hide older money. After refunding these orders,
   the list refreshes to show the next ones, independently of guest registrations.
@@ -227,6 +230,10 @@ the check-in preview shows what is owed.
   deletion, even before the first refund is recorded and after the event ends.
   Resolve them from **Refundable orders**, including checked-in orders. Cancelled
   events and series with such balances cannot be deleted separately either.
+  A confirmed order on a cancelled target is resolved when successful refunds
+  cover all its collected payments in full and no refund is pending; attendance
+  need not be removed. Earlier, non-cancelled series dates
+  do not create refund obligations when the series is cancelled.
   Nothing is announced or removed when deletion is refused.
 
 ## Locks and races (developers)
@@ -282,18 +289,24 @@ Rules that go with it:
 - Promo code limits are read under the event or series lock that every order
   on the code takes first (`promoStillFits` in `lib/payments/promo.ts`).
 - Cancellation takes the organisation fence before the event or series and date
-  locks. The saved CANCELLED status (or a date's cancelledAt) together with its
+  locks. The event's saved CANCELLED status (or a date's cancelledAt) together with its
   collected balance is the durable refund obligation, committed atomically with
   cancellation; no separate refund row is needed for deletion to see it. A pass's
   date registrations stay attached until their refund share and removal commit
   together. Checked-in places stay attached for money-only manual refunds.
+  Series cancellation marks all upcoming, non-cancelled dates under the ordered
+  date locks in the same transaction as its status change, including their
+  notices, before processing refunds. The series status alone never creates a
+  historical order's refund obligation.
 - Organisation deletion is one transaction: the Organisation row
   `FOR UPDATE`, then what is still owed (`organisationMoneyBlocker` in
   `lib/payments/obligations.ts`), then the notices, the audit record, the
   storage queue and the delete. A reservation that holds the fence first
   commits and is seen; one that comes after waits and finds the organisation
   gone. Event and series deletion take the fence and the event or series
-  lock, then check paid orders again.
+  lock, then check paid orders again. Series deletion locks its dates and orders
+  by id and clears both order target links together before deleting, preserving
+  payment history without violating the date-requires-series constraint.
 - Other Event-locked paths can later write Organisation-referencing rows
   (for example Mentor Desk audits or outbox messages) without taking the
   Organisation fence first. These can deadlock with concurrent organisation

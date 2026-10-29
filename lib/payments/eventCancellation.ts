@@ -77,18 +77,22 @@ export async function notifyEventCancelled(tx: Prisma.TransactionClient, params:
 }
 
 /**
- * Whether people have paid for (or are paying for) this event or series, so
- * it must be cancelled rather than deleted. Deletion asks again inside its
- * transaction, under the locks reservations take.
+ * Active paid places require cancellation first. On cancelled targets only
+ * unresolved balances or in-flight refunds block deletion; completed dates of
+ * a cancelled series keep their payments. Deletion rechecks under target locks.
  */
 export async function hasPaidOrders(owner: { eventId: string; } | { eventSeriesId: string; }, client: Prisma.TransactionClient = prisma) {
-  if ((await client.order.count({ where: { ...owner, totalMinor: { gt: 0 }, status: { in: [OrderStatus.CONFIRMED, OrderStatus.PENDING, OrderStatus.REQUESTED] } } })) > 0) return true;
   // Keep the cancelled target attached until its balance is resolved: deleting
   // it would otherwise orphan the order and remove its refund UI and blocker.
   const scope = "eventId" in owner ? Prisma.sql`o."eventId" = ${owner.eventId}` : Prisma.sql`o."eventSeriesId" = ${owner.eventSeriesId}`;
   const owed = await client.$queryRaw<Array<{ id: string }>>`SELECT o."id" FROM "Order" o
     WHERE ${scope} AND (
-      (${cancelledTargetSql} AND ${refundableBalanceSql} > 0)
+      (o."totalMinor" > 0 AND o."status" IN ('PENDING', 'REQUESTED'))
+      OR (o."totalMinor" > 0 AND o."status" = 'CONFIRMED' AND NOT ${cancelledTargetSql} AND (
+        EXISTS (SELECT 1 FROM "Event" e WHERE e."id" = o."eventId" AND e."status" <> 'CANCELLED')
+        OR EXISTS (SELECT 1 FROM "EventSeries" s WHERE s."id" = o."eventSeriesId" AND s."status" <> 'CANCELLED')
+      ))
+      OR (${cancelledTargetSql} AND ${refundableBalanceSql} > 0)
       OR EXISTS (SELECT 1 FROM "Payment" p JOIN "PaymentRefund" r ON r."paymentId" = p."id"
         WHERE p."orderId" = o."id" AND (r."status" = 'PENDING'
           OR (r."status" = 'FAILED' AND ${refundableBalanceSql} > 0)))
