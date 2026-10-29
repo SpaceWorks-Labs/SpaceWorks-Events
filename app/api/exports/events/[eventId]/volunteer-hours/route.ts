@@ -3,7 +3,7 @@ import { recordAuditEvent } from "@/lib/audit";
 import { resolveOrganiserEvent } from "@/lib/core/teams";
 import { csvStreamResponse, exportFilename, exportNotFound } from "@/lib/csvExport";
 import { prisma } from "@/lib/db";
-import { VOLUNTEER_HOURS_HEADER, volunteerHoursRows } from "@/lib/volunteer/export";
+import { VOLUNTEER_HOURS_HEADER, volunteerHoursBatches } from "@/lib/volunteer/export";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,13 +27,24 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!event) return exportNotFound();
   const ctx = await resolveOrganiserEvent(userId, event.organisation.slug, event.id);
   if (!ctx) return exportNotFound();
-  const rows = await volunteerHoursRows(ctx.eventId);
-  await recordAuditEvent({ action: "VOLUNTEER_HOURS_EXPORTED", actorUserId: userId, organisationId: ctx.organisationId, targetType: "Event", targetId: ctx.eventId, metadata: { rows: rows.length } });
   return csvStreamResponse({
     header: [...VOLUNTEER_HOURS_HEADER],
     filename: exportFilename("volunteer-hours", event.title),
     errorMessage: "Unable to export volunteer hours.",
-    // One bounded batch: at most 200 shifts of at most 500 crew each, read above.
-    batches: async function* batches() { yield rows; },
+    // Every sign-up, a page at a time. The audit counts the rows actually sent,
+    // and records a stopped or failed download too (`complete: false`).
+    batches: async function* batches() {
+      let rows = 0;
+      let complete = false;
+      try {
+        for await (const batch of volunteerHoursBatches(ctx.eventId)) {
+          rows += batch.length;
+          yield batch;
+        }
+        complete = true;
+      } finally {
+        await recordAuditEvent({ action: "VOLUNTEER_HOURS_EXPORTED", actorUserId: userId, organisationId: ctx.organisationId, targetType: "Event", targetId: ctx.eventId, metadata: { rows, complete } });
+      }
+    },
   });
 }
