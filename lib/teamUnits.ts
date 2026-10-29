@@ -159,6 +159,15 @@ export async function setTeamStatusTx(
 }
 
 /**
+ * Nobody is confirmed onto a cancelled event: automatic promotion and the
+ * organiser's whole-team approval and promotion ask this under their Event
+ * lock, so the read is current.
+ */
+export async function isEventCancelled(tx: Prisma.TransactionClient, eventId: string) {
+  return (await tx.event.count({ where: { id: eventId, status: EventStatus.CANCELLED } })) > 0;
+}
+
+/**
  * Auto-promotion after a unit was freed on a TEAM event: the oldest
  * waitlisted unit (team or solo RSVP) becomes confirmed, but only when the
  * event is not approval-required and a unit is actually free. `webhooks`
@@ -173,8 +182,8 @@ export async function promoteOldestWaitlistedUnit(
   | null
 > {
   if (event.privacyType === EventPrivacyType.APPROVAL_REQUIRED) return null;
-  // A cancelled event promotes nobody; every caller holds its Event lock, so this read is current.
-  if ((await tx.event.count({ where: { id: event.id, status: EventStatus.CANCELLED } })) > 0) return null;
+  // A cancelled event promotes nobody.
+  if (await isEventCancelled(tx, event.id)) return null;
   if (event.capacity != null && (await countConfirmedUnits(tx, event.id)) >= event.capacity) return null;
   const team = await tx.team.findFirst({
     where: { eventId: event.id, status: RsvpStatus.WAITLISTED },

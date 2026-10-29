@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
 import { retireSoloSubmissionForTeamTx } from "@/lib/core/submissionLifecycle";
-import { countConfirmedUnits, promoteOldestWaitlistedUnit, setTeamStatusTx, settleTeamAfterMemberLeft, teamPlacesTaken } from "@/lib/teamUnits";
+import { countConfirmedUnits, isEventCancelled, promoteOldestWaitlistedUnit, setTeamStatusTx, settleTeamAfterMemberLeft, teamPlacesTaken } from "@/lib/teamUnits";
 import { refundWholeOrderTx, submitRefunds } from "@/lib/payments/operations";
 import { leadsPaidTeam, paidOrdersOfTeam } from "@/lib/payments/teamOrders";
 import { teamNameSchema } from "@/lib/validators";
@@ -33,7 +33,7 @@ export type TeamTransition = "approve" | "reject" | "promote";
 /**
  * Approve, reject, or promote a whole team as one unit. Approval needs the
  * event to be open and the team to reach `teamMinSize`; approval and
- * promotion need a free unit. All member RSVPs change in the same
+ * promotion need a free unit and refuse a cancelled event. All member RSVPs change in the same
  * transaction and each member gets the usual status email naming the team.
  */
 export async function transitionTeamStatus(
@@ -70,6 +70,8 @@ export async function transitionTeamStatus(
     } else if (team.status !== RsvpStatus.WAITLISTED) {
       return fail("Only waitlisted teams can be promoted.");
     }
+    // The same guard as automatic promotion (lib/teamUnits.ts), under the Event lock above.
+    if (await isEventCancelled(tx, event.id)) return fail("This event has been cancelled, so no team can be confirmed.");
     if (event.capacity != null && (await countConfirmedUnits(tx, event.id)) >= event.capacity) {
       return fail(action === "approve" ? "Event is at capacity. Free a spot or promote from waitlist first." : "Event is still at capacity.", "CAPACITY_FULL");
     }
@@ -95,6 +97,8 @@ export async function organiserMoveMember(
     const event = await lockEvent(tx, ctx.eventId);
     if (!event || event.organisationId !== ctx.organisationId) return fail("Event not found.");
     if (event.registrationMode !== RegistrationMode.TEAM) return fail(NOT_A_TEAM_EVENT);
+    // Locked before its check-in state is read: check-in takes only this row lock, not the Event's.
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${parsed.data.rsvpId} AND "eventId" = ${event.id} FOR UPDATE`;
     const rsvp = await tx.rSVP.findFirst({
       // Crew tickets (docs/CREW.md) never join a team.
       where: { id: parsed.data.rsvpId, eventId: event.id, isCrew: false },
@@ -125,7 +129,7 @@ export async function organiserMoveMember(
       if (!retired.ok) return fail(retired.error);
     }
     const moved = await tx.rSVP.updateMany({
-      where: { id: rsvp.id, eventId: event.id, teamId: rsvp.teamId, status: rsvp.status },
+      where: { id: rsvp.id, eventId: event.id, teamId: rsvp.teamId, status: rsvp.status, checkedInAt: rsvp.checkedInAt },
       data: { teamId: target.id, status: target.status },
     });
     if (moved.count !== 1) return fail("This registration was changed by another organiser.");
