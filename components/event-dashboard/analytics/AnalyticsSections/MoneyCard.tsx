@@ -31,9 +31,9 @@ export function MoneyCard({ revenue, title = "Money", exportHref }: { revenue: R
     <section aria-labelledby="analytics-money-title" className={card}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="analytics-money-title" className="text-h4 text-ink">{title}{revenue.testOnly ? " (test payments)" : ""}</h2>
+          <h2 id="analytics-money-title" className="text-h4 text-ink">{title}</h2>
           <p className="text-caption text-ink-muted">
-            {revenue.testOnly ? "Every payment so far was a test, so no real money moved." : "Money taken for tickets, after refunds."}
+            Money taken for tickets, after refunds.{revenue.test.payments > 0 ? " Test payments moved no real money and are counted apart." : ""}
           </p>
         </div>
         {exportHref ? <a href={exportHref} className="text-body-ui font-semibold text-accent-text hover:underline">Download orders (CSV)</a> : null}
@@ -51,6 +51,7 @@ export function MoneyCard({ revenue, title = "Money", exportHref }: { revenue: R
         revenue.orders.complimentary > 0 ? { label: `Complimentary (${revenue.orders.complimentary})`, value: money(revenue.complimentaryValueMinor) } : null,
         revenue.orders.requested > 0 ? { label: "Requests waiting", value: String(revenue.orders.requested) } : null,
         revenue.automaticRefundMinor > 0 ? { label: "Late or duplicate, refunded", value: money(revenue.automaticRefundMinor) } : null,
+        revenue.test.payments > 0 ? { label: `Test payments, not counted (${revenue.test.payments})`, value: money(revenue.test.collectedMinor - revenue.test.refundedMinor) } : null,
       ]} />
       {revenue.disputes.open > 0 || revenue.disputes.lost > 0 ? (
         <p className="rounded-lg bg-danger-bg px-3 py-2 text-body-ui text-danger-fg">

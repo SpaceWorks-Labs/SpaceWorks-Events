@@ -322,8 +322,13 @@ Paid places are paid **up front**, never requested first:
   is confirmed, or waits for approval (`PENDING_APPROVAL`) on an
   approval-required event; a joining member takes the team's status. The
   leader's team page link is emailed then. If the place was lost (the hold
-  ended and the unit or team place was taken, or the team was rejected or
-  removed), the payment is refunded in full instead.
+  ended and the unit or team place was taken, its ticket type sold out, its
+  promo code was used up, or the team was rejected or removed), the payment
+  is refunded in full instead, checked before the team changes.
+- A paid solo place waiting for approval is approved from the guest list like
+  any request: under the Event lock its order must be confirmed with a settled
+  payment, and it takes a unit only if one is free (`confirmRsvpWithinCapacity`).
+  An unpaid order is never confirmed this way.
 - A paid team or solo place never waits on the waitlist: a full event refuses
   it, and a member can't pay to join a waitlisted team. Free tickets keep the
   usual waitlist and promotion of whole units.

@@ -3,6 +3,10 @@
  * Amounts are integer minor units of one currency. "Collected" is money
  * actually taken (online or recorded in person); refunds count once they
  * are on their way; complimentary and free tickets bring in nothing.
+ * Payments taken online with test keys moved no real money: they, their
+ * refunds and chargebacks are kept out of every live figure and totalled
+ * apart (`test`). Money recorded as collected in person is always real, even
+ * on an order placed while the account was in test mode.
  */
 
 import { cachedDateTimeFormat } from "@/lib/format/intlCache";
@@ -30,8 +34,8 @@ export type RevenueOrder = {
 
 export type RevenueSummary = {
   currency: string;
-  /** Every collected payment was a test: no real money moved. */
-  testOnly: boolean;
+  /** Payments taken with test keys, kept out of every other figure. */
+  test: { payments: number; collectedMinor: number; refundedMinor: number; };
   orders: { paid: number; complimentary: number; atDesk: number; awaiting: number; requested: number; cancelled: number; };
   collectedMinor: number;
   refundedMinor: number;
@@ -86,8 +90,7 @@ export function summariseRevenue(orders: RevenueOrder[], options: { now: Date; t
   let complimentaryValue = ZERO;
   let owedAtDesk = ZERO;
   let held = ZERO;
-  let anyReal = false;
-  let anyCollected = false;
+  const test = { payments: 0, collected: ZERO, refunded: ZERO };
   const counts = { paid: 0, complimentary: 0, atDesk: 0, awaiting: 0, requested: 0, cancelled: 0 };
   const byTicket = new Map<string, { name: string; tickets: number; revenue: bigint; }>();
   const byMethod = new Map<string, { label: string; payments: number; amount: bigint; }>();
@@ -95,7 +98,15 @@ export function summariseRevenue(orders: RevenueOrder[], options: { now: Date; t
   const perDay = new Map<string, bigint>();
 
   for (const order of orders) {
-    const taken = order.payments.filter((payment) => COLLECTED.has(payment.status));
+    const collectedHere = order.payments.filter((payment) => COLLECTED.has(payment.status));
+    const isTest = (payment: RevenueOrder["payments"][number]) => payment.testMode && payment.status === "PAID_ONLINE";
+    for (const payment of collectedHere.filter(isTest)) {
+      test.payments += 1;
+      test.collected += payment.amountMinor;
+      test.refunded += payment.refunds.filter((refund) => refund.status !== "FAILED").reduce((sum, refund) => sum + refund.amountMinor, ZERO);
+    }
+    // Live money only, for every figure below.
+    const taken = collectedHere.filter((payment) => !isTest(payment));
     const waived = order.payments.some((payment) => payment.status === "WAIVED");
     if (order.status === "CANCELLED") counts.cancelled += 1;
     if (order.status === "REQUESTED") counts.requested += 1;
@@ -113,7 +124,6 @@ export function summariseRevenue(orders: RevenueOrder[], options: { now: Date; t
       complimentaryValue += order.totalMinor;
     }
     if (taken.length === 0) continue;
-    anyCollected = true;
     // Payments that bought tickets (an automatic refund returned a late or duplicate one).
     const kept = taken.filter((payment) => !payment.refunds.some((refund) => refund.automatic && refund.status !== "FAILED"));
     if (kept.length > 0) {
@@ -132,9 +142,8 @@ export function summariseRevenue(orders: RevenueOrder[], options: { now: Date; t
       }
     }
     for (const payment of taken) {
-      if (!payment.testMode) anyReal = true;
       collected += payment.amountMinor;
-      const label = payment.provider === "OFFLINE" ? OFFLINE_LABELS[payment.offlineMethod ?? "OTHER"] ?? "In person" : payment.provider === "RAZORPAY" ? "Razorpay" : "Stripe";
+      const label = payment.provider === "OFFLINE" || payment.status === "PAID_OFFLINE" ? OFFLINE_LABELS[payment.offlineMethod ?? "OTHER"] ?? "In person" : payment.provider === "RAZORPAY" ? "Razorpay" : "Stripe";
       const method = byMethod.get(label) ?? { label, payments: 0, amount: ZERO };
       method.payments += 1;
       method.amount += payment.amountMinor;
@@ -168,7 +177,7 @@ export function summariseRevenue(orders: RevenueOrder[], options: { now: Date; t
   const totalRefunds = refunded + refundPending;
   return {
     currency,
-    testOnly: anyCollected && !anyReal,
+    test: { payments: test.payments, collectedMinor: n(test.collected), refundedMinor: n(test.refunded) },
     orders: counts,
     collectedMinor: n(collected),
     refundedMinor: n(refunded),
@@ -190,5 +199,5 @@ export function summariseRevenue(orders: RevenueOrder[], options: { now: Date; t
 
 /** Whether there's any money to report: something collected, owed, held or given away. */
 export function hasRevenue(summary: RevenueSummary) {
-  return summary.collectedMinor > 0 || summary.owedAtDeskMinor > 0 || summary.heldMinor > 0 || summary.orders.complimentary > 0 || summary.orders.requested > 0;
+  return summary.collectedMinor > 0 || summary.owedAtDeskMinor > 0 || summary.heldMinor > 0 || summary.orders.complimentary > 0 || summary.orders.requested > 0 || summary.test.payments > 0;
 }

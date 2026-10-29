@@ -4,7 +4,8 @@ import { CheckoutAttemptStatus, OrderStatus, PaymentStatus, RsvpStatus, type Pri
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { enqueueOrderEmail, enqueuePaymentEmail, organisationOwnerEmails } from "./email";
-import { hasFreeSeats, lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject, orderTargetCancelled } from "./targets";
+import { fenceOrganisation, hasFreeSeats, lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject, orderTargetCancelled, ticketTypesFit } from "./targets";
+import { promoStillFits } from "./promo";
 import { addOnsFit } from "./addOnStock";
 import type { OnlineProvider } from "./http";
 import type { PaidNotification } from "./providers/types";
@@ -64,7 +65,11 @@ async function findPayment(tx: Prisma.TransactionClient, context: { organisation
  * - A payment for a cancelled event, series or date is recorded, its order
  *   cancelled without tickets, and refunded in full automatically.
  *
- * Lock order matches registration: the event row, the order, then the payment.
+ * Lock order matches registration: the organisation fence, the event row,
+ * the order, then the payment. `now` stamps the payment; whether the hold is
+ * still live, and so whether places must be counted again, is decided with
+ * the time read once those locks are held, so a reservation that already
+ * counted an ended hold's places as free is never oversold.
  */
 export async function settlePaidNotification(
   tx: Prisma.TransactionClient,
@@ -82,6 +87,7 @@ export async function settlePaidNotification(
   const located = await tx.payment.findUniqueOrThrow({ where: { id: found.paymentId }, select: { externalPaymentId: true, orderId: true, order: { select: { id: true, eventId: true, eventSeriesId: true } } } });
   if (located.externalPaymentId === paid.paymentId) return { outcome: "already-settled", refundIds: [] };
 
+  if (!(await fenceOrganisation(tx, context.organisationId))) return { outcome: "unmatched", refundIds: [] };
   await lockOrderTargets(tx, located.order, now);
   await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${located.orderId} FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${found.paymentId} FOR UPDATE`;
@@ -91,7 +97,7 @@ export async function settlePaidNotification(
       id: true, organisationId: true, status: true, amountMinor: true, currency: true, testMode: true, description: true, externalPaymentId: true,
       order: {
         select: {
-          id: true, status: true, holdExpiresAt: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, teamJoin: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
+          id: true, status: true, holdExpiresAt: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, teamJoin: true, submissionId: true, promoCodeId: true, ...ORDER_SUBJECT_SELECT,
           rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true, status: true, holdExpiresAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } },
         },
       },
@@ -131,12 +137,16 @@ export async function settlePaidNotification(
   }
 
   const held = order.rsvps.filter((rsvp) => rsvp.status === RsvpStatus.PENDING_PAYMENT);
-  const holdActive = order.status === OrderStatus.PENDING && Boolean(order.holdExpiresAt && order.holdExpiresAt > now);
-  // After the hold ended, its extras were released too: only taken back if still in stock.
-  const stocked = holdActive || await addOnsFit(tx, order.id, now);
+  // Read under the locks: a timestamp from before them may predate the hold's end.
+  const at = new Date();
+  const holdActive = order.status === OrderStatus.PENDING && Boolean(order.holdExpiresAt && order.holdExpiresAt > at);
+  // After the hold ended, its extras, its ticket types' places and its promo
+  // code's use were released too: taken back only if still there, checked
+  // before anything (a team place) changes.
+  const stocked = holdActive || (await addOnsFit(tx, order.id, at) && await ticketTypesFit(tx, held, at) && await promoStillFits(tx, order, at));
   // TEAM events place the one registration in its team or unit (docs/TEAMS.md).
-  const team = stocked && held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, now) : null;
-  const seats = stocked && (team ? team !== "gone" : held.length > 0 && (holdActive || await hasFreeSeats(tx, held, now)));
+  const team = stocked && held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, at) : null;
+  const seats = stocked && (team ? team !== "gone" : held.length > 0 && (holdActive || await hasFreeSeats(tx, held, at)));
   const placed = team && team !== "gone" ? team : null;
   const status = placed?.status ?? RsvpStatus.CONFIRMED;
   await tx.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.PAID_ONLINE, externalPaymentId: paid.paymentId, paidAt: now } });

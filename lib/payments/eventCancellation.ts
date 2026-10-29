@@ -75,7 +75,14 @@ export async function notifyEventCancelled(tx: Prisma.TransactionClient, params:
   });
 }
 
-/** Whether people have paid for (or are paying for) this event, so it must be cancelled rather than deleted. */
-export async function hasPaidOrders(owner: { eventId: string; } | { eventSeriesId: string; }) {
-  return (await prisma.order.count({ where: { ...owner, totalMinor: { gt: 0 }, status: { in: [OrderStatus.CONFIRMED, OrderStatus.PENDING, OrderStatus.REQUESTED] } } })) > 0;
+/**
+ * Whether people have paid for (or are paying for) this event or series, so
+ * it must be cancelled rather than deleted. Deletion asks again inside its
+ * transaction, under the locks reservations take.
+ */
+export async function hasPaidOrders(owner: { eventId: string; } | { eventSeriesId: string; }, client: Prisma.TransactionClient = prisma) {
+  return (await client.order.count({ where: { ...owner, totalMinor: { gt: 0 }, status: { in: [OrderStatus.CONFIRMED, OrderStatus.PENDING, OrderStatus.REQUESTED] } } })) > 0;
 }
+
+export const PAID_EVENT_REFUSAL = "People have paid for this event. Cancel it instead, which refunds them in full.";
+export const PAID_SERIES_REFUSAL = "People have paid for this series. Cancel its dates instead, which refunds them.";
