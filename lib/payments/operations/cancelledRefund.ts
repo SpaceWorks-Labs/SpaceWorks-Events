@@ -44,13 +44,17 @@ export type RefundableOrderRow = Awaited<ReturnType<typeof listRefundableOrders>
  * Refund money left on an ended order or a cancelled target: balance only, its
  * tickets (if any are left) untouched. The same locks and ledger as every
  * refund: the organisation fence, the event (or series and dates), the order,
- * then its payments; the database guard refuses anything over what is left.
+ * then its payments and registrations. Re-read eligibility after these locks:
+ * unchecked-in cancelled dates belong to automatic refunds, including retries.
+ * The database guard refuses anything over what is left.
  * Online refunds go to the provider after commit.
  */
 export async function refundEndedOrder(params: { orderId: string; organisationId: string; actorUserId: string; amountMinor: bigint | null; reason: string; now?: Date; }) {
   const now = params.now ?? new Date();
   const outcome = await prisma.$transaction(async (tx) => {
     await lockOrder(tx, params.orderId);
+    await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "orderId" = ${params.orderId} ORDER BY "id" FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "orderId" = ${params.orderId} ORDER BY "id" FOR UPDATE`;
     const eligible = await tx.$queryRaw<Array<{ id: string }>>`SELECT o."id" FROM "Order" o
       WHERE o."id" = ${params.orderId} AND o."organisationId" = ${params.organisationId} AND ${refundableOrderSql}`;
     const order = await tx.order.findFirst({
@@ -58,7 +62,7 @@ export async function refundEndedOrder(params: { orderId: string; organisationId
       select: { id: true, status: true, reference: true, buyerEmail: true, currency: true, payments: { where: { status: { in: COLLECTED } }, orderBy: { paidAt: "asc" }, select: { id: true, status: true, amountMinor: true } } },
     });
     if (!order) throw new PaymentOperationError("Order not found.");
-    if (!eligible.length) throw new PaymentOperationError("Only cancelled or expired orders, or orders on cancelled events or dates, are refunded here. Refund other confirmed orders from the guest list.");
+    if (!eligible.length) throw new PaymentOperationError("Only cancelled or expired orders, or checked-in orders on cancelled events or dates with no automatic cancellation refund outstanding, are refunded here. Resume cancellation for unchecked-in places. Refund other confirmed orders from the guest list.");
     if (params.amountMinor === ZERO) throw new PaymentOperationError("Enter an amount to refund.");
     const { wanted, onlineRefundIds, refundedPaymentId } = await recordRefundsTx(tx, order.payments, { wanted: params.amountMinor, currency: order.currency, reason: params.reason, actorUserId: params.actorUserId, now });
     if (wanted === ZERO || !refundedPaymentId) throw new PaymentOperationError("There is nothing left to refund on this order.");

@@ -74,12 +74,14 @@ A cancelled order can still have money on it, for example when the buyer cancell
 <Steps>
 
 1. Open the event's **Finance** tab (for a series, the series page).
-2. Under **Refundable orders**, find the order. Cancelled and expired orders with money left are listed with the buyer, the order reference and how much is left, even when their tickets are gone. Confirmed orders on cancelled events or cancelled dates also appear, including checked-in guests.
+2. Under **Refundable orders**, find the order. Cancelled and expired orders with money left are listed with the buyer, the order reference and how much is left, even when their tickets are gone. Confirmed orders on cancelled events or cancelled dates appear only when a guest has checked in on the cancelled event or date, preventing its automatic refund.
 3. Choose **Refund…**, enter an amount (or leave it blank to refund everything left) and a reason, then choose **Refund**.
 
 </Steps>
 
 This only returns money; it keeps any tickets and attendance records. Other confirmed orders are refunded from the guest list instead. Return money collected in person yourself before recording its refund.
+
+Unchecked-in places on a cancelled event or date are refunded automatically and do not appear here. If cancellation was interrupted, resume it to finish those refunds. For a pass, any cancelled date still awaiting its automatic share keeps the order out of this list, even if someone checked in on another cancelled date. The order still blocks organisation deletion until the cancellation refunds are resolved.
 
 Cancelling a series cancels its upcoming dates. Payments for earlier dates that were not cancelled stay with you: those date orders, and passes covering only those dates, do not appear here. Retaining that revenue prevents deleting the series, so leave it cancelled as a record with its finance, exports and refund controls available. These payments alone do not block organisation deletion. To refund attended orders, use the date's guest list.
 
@@ -141,7 +143,7 @@ To cancel one date of a series instead, use **Cancel date** under **Upcoming dat
 
 ## Good to know
 
-- You cannot delete an organisation while cancelled events, series or dates still have money to refund, even before their first refund is recorded. Use **Refundable orders** to resolve these, then wait for online refunds to finish. Cancelled events and series with money left cannot be deleted separately either.
+- You cannot delete an organisation while cancelled events, series or dates still have money to refund, even before their first refund is recorded. Resume cancellation for unchecked-in places. Use **Refundable orders** for checked-in places once no automatic share remains, then wait for online refunds to finish. Cancelled events and series with money left cannot be deleted separately either.
 - You cannot delete an event or series while it holds any collected money, including revenue for attended dates, or has unpaid orders or pending refunds to resolve. Keep it as a record if you are retaining revenue. A failed refund that has been retried is not a separate obligation; the retry's own outcome counts.
 - Once every collected payment has been fully refunded, unpaid orders resolved and no refund is on its way, those orders allow deletion. You do not need to remove checked-in attendance first.
 - Before deleting, download your orders CSV. Fully refunded orders, payments and refunds stay in the database and organisation totals, and buyers can still open their receipts, but organisers lose finance access and order exports. There is no organisation order ledger to replace them. Receipts keep line items and amounts but lose the event or series title, date and time zone. Keep the event or series instead if you need that context.

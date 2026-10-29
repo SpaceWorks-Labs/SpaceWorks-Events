@@ -163,10 +163,17 @@ registering is seen. Organisers can still add any guest by hand.
   failed, and owners and admins refund what is left from there, by order,
   after an authenticator check and a recent sign-in (`refundEndedOrderAction`).
   It works after the order's tickets are gone and refunds money only. It also
-  lists confirmed orders on cancelled events or cancelled dates, including orders
-  with checked-in guests: refund them here without cancelling their tickets or
+  lists confirmed orders on cancelled events or cancelled dates only when a
+  guest has checked in on the cancelled target, preventing its automatic refund:
+  refund them here without cancelling their tickets or
   removing attendance records. Return cash yourself before recording an in-person
-  refund. For a pass, enter the cancelled date's share; leaving the amount blank
+  refund. Unchecked-in cancelled places stay with automatic cancellation refunds,
+  including when cancellation processing resumes after an interruption. For a pass,
+  every still-attached cancelled date must have a checked-in guest before this
+  manual path is available; otherwise an automatic share is still outstanding.
+  These outstanding orders continue to block organisation deletion even though
+  they do not appear in **Refundable orders**. Resume cancellation to process them.
+  For a checked-in pass, enter the cancelled date's share; leaving the amount blank
   returns the whole remaining balance. While a checked-in place remains on a
   cancelled date, any remaining pass balance still blocks organisation deletion;
   refund the rest before deleting. Cancelling a series affects only dates marked
@@ -254,7 +261,8 @@ the check-in preview shows what is owed.
   order's state: deleting would erase the payment records and settings those
   need. Cancelled events, series and dates with a collected balance also block
   deletion, even before the first refund is recorded and after the event ends.
-  Resolve them from **Refundable orders**, including checked-in orders. Cancelled
+  Resume cancellation for unchecked-in places; use **Refundable orders** for
+  checked-in orders once no automatic cancelled-date share remains. Cancelled
   events and series with such balances cannot be deleted separately either.
   A confirmed order on a cancelled target is resolved when successful refunds
   cover all its collected payments in full and no refund is pending; attendance
@@ -302,6 +310,12 @@ Rules that go with it:
 - Cancelling a pass's date is one transaction per order: the share is worked
   out, recorded and the date's places removed together, so a retry finds
   nothing left to refund.
+- Money-only refunds through **Refundable orders** re-check their predicate after
+  locking the organisation, event/series and dates, order, payments and RSVPs in
+  that order. A confirmed order qualifies only with a check-in on its cancelled
+  target and no attached cancelled date still eligible for automatic processing.
+  This prevents a manual refund followed by an automatic share of the reduced
+  balance. The deletion obligation predicate stays broader than this manual gate.
 - Extending a hold takes the event (or series and dates) locks before the
   order and reads the time after them. Settlement (provider notifications,
   the return page, maintenance closing a paid page) and settling by hand do

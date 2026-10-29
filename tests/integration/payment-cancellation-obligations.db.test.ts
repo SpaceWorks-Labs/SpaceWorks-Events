@@ -150,7 +150,7 @@ describe.sequential("durable cancellation obligations before a refund exists", (
       expect(await prisma.eventInstance.findUnique({ where: { id: s.date!.id }, select: { cancelledAt: true } })).toEqual({ cancelledAt: expect.any(Date) });
       expect(await prisma.eventInstance.findUnique({ where: { id: past.id }, select: { cancelledAt: true } })).toEqual({ cancelledAt: null });
       expect(await prisma.paymentRefund.count({ where: { payment: { organisationId: s.org.id } } })).toBe(0);
-      expect((await listRefundableOrders({ eventSeriesId: s.course!.id }, s.org.id)).map((row) => row.id)).toEqual([s.order.id]);
+      expect(await listRefundableOrders({ eventSeriesId: s.course!.id }, s.org.id)).toEqual([]);
       expect(await deletionBehindFence(s)).toMatchObject({ ok: false, error: expect.stringContaining("money to refund") });
       expect(await deleteEventSeries({ organisationSlug: s.org.slug, eventSeriesId: s.course!.id })).toMatchObject({ ok: false });
     } finally {
