@@ -4,6 +4,7 @@ import "server-only";
 
 import { EventStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { evaluateEligibility, loadClaimant } from "@/lib/claims/policies/eligibility";
 import { windowState } from "@/lib/claims/policies/math";
 import { sendReimbursementAvailableEmail } from "@/lib/email/reimbursement";
@@ -49,8 +50,8 @@ async function deliver(payload: ReimbursementAvailablePayload, messageId: string
   if (!policy || !event || event.organisationId !== payload.organisationId || event.status !== EventStatus.PUBLISHED || !policy.active || !policy.notifyWhenAvailable || windowState(policy, new Date()) !== "open") return "dropped";
   const claimant = await loadClaimant(prisma, payload.rsvpId, event.id);
   if (!claimant || !(await evaluateEligibility(prisma, claimant, policy)).eligible) return "dropped";
-  const rsvp = await prisma.rSVP.findUnique({ where: { id: payload.rsvpId }, select: { checkInToken: true, guestName: true, user: { select: { name: true } } } });
-  if (!rsvp) return "dropped";
+  const rsvp = await prisma.rSVP.findUnique({ where: { id: payload.rsvpId }, select: { checkInToken: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } } } });
+  if (!rsvp || !isCurrentHolderRecipient(rsvp, payload.to)) return "dropped";
   await sendReimbursementAvailableEmail({
     to: payload.to,
     eventTitle: event.title,

@@ -20,7 +20,8 @@ export async function getCurrentRsvp(checkInToken: string) {
     select: {
       status: true,
       guestName: true,
-      user: { select: { name: true } },
+      guestEmail: true,
+      user: { select: { name: true, email: true } },
       event: { select: { startDateTime: true, endDateTime: true, timezone: true, location: true, admissionEnabled: true } },
       eventInstance: { select: { startDateTime: true, endDateTime: true, series: { select: { timezone: true } } } },
     },

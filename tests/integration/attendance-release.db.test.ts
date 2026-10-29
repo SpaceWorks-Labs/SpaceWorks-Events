@@ -125,14 +125,15 @@ describe("outbox delivery", () => {
     expect(await queuedFor(event.id)).toHaveLength(0);
   });
 
-  it("sends to the registration's current address, not the one queued", async () => {
+  it("drops a queued question whose recipient no longer matches the registration", async () => {
     const event = await makeEvent();
     const rsvp = await guest(event.id);
     await sendAttendanceChecksForUser(att.ownerId, ref(event));
     const moved = `moved-${att.suffix}@example.test`;
     await prisma.rSVP.update({ where: { id: rsvp.id }, data: { guestEmail: moved } });
     await deliverEventAttendance(event.id, deliverOutboxBatch);
-    expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ to: moved }));
+    expect(mocks.send.mock.calls.length).toBe(0);
+    expect(await queuedFor(event.id)).toHaveLength(0);
   });
 
   it("says a No releases the place only when the switch is on at delivery", async () => {
@@ -152,7 +153,7 @@ describe("outbox delivery", () => {
     await respondToAttendanceCheck({ token: await tokenFor(answered.id), response: "ATTENDING" });
     await prisma.attendanceCheck.update({ where: { rsvpId: rotated.id }, data: { tokenHash: generateAttendanceToken().hash } });
     await deliverEventAttendance(event.id, deliverOutboxBatch);
-    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.send.mock.calls.length).toBe(0);
     expect(await queuedFor(event.id)).toHaveLength(0);
 
     const cancelled = await makeEvent();
@@ -170,7 +171,7 @@ describe("outbox delivery", () => {
     await sendAttendanceChecksForUser(att.ownerId, ref(event));
     await prisma.event.update({ where: { id: event.id }, data: { startDateTime: new Date(Date.now() - 60_000) } });
     expect(await deliverEventAttendance(event.id, deliverOutboxBatch)).toBeGreaterThanOrEqual(1);
-    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.send.mock.calls.length).toBe(0);
     expect(await queuedFor(event.id)).toHaveLength(0);
   });
 });

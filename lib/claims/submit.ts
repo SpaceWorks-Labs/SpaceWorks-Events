@@ -78,10 +78,13 @@ export async function submitStaffClaim(ctx: StaffClaimContext, input: unknown, f
   const stored = await storeReceipts(ctx.organisationId, files);
   if ("error" in stored) return fail(stored.error);
   try {
-    const claimId = await prisma.$transaction((tx) => createClaim(tx, {
-      organisationId: ctx.organisationId, event, kind: ExpenseClaimKind.STAFF, submittedByUserId: ctx.userId, rsvpId: null, payee,
-      category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
-    }, stored.keys));
+    const claimId = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
+      return createClaim(tx, {
+        organisationId: ctx.organisationId, event, kind: ExpenseClaimKind.STAFF, submittedByUserId: ctx.userId, rsvpId: null, payee,
+        category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
+      }, stored.keys);
+    });
     emitWebhookEvent({ type: "expense_claim.status_changed", claimId, status: ExpenseClaimStatus.SUBMITTED, previousStatus: null });
     return ok({ claimId });
   } catch (error) {
@@ -134,7 +137,18 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
     const result = await prisma.$transaction(async (tx): Promise<ClaimResult<{ claimId: string; }>> => {
       // The cap is checked under the event lock so two claims can't both slip under it.
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
-      const name = rsvp.user?.name?.trim() || rsvp.guestName?.trim() || email;
+      await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${rsvp.id} FOR UPDATE`;
+      const currentHolder = await tx.rSVP.findUnique({
+        where: { id: rsvp.id },
+        select: { eventId: true, checkInToken: true, userId: true, status: true, isCrew: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } } },
+      });
+      if (!currentHolder || currentHolder.eventId !== event.id || currentHolder.checkInToken !== holder.ticketToken) return fail("Registration not found.");
+      if (currentHolder.userId && currentHolder.userId !== holder.actorUserId) return fail("Sign in with the account this ticket belongs to.");
+      if (currentHolder.status !== RsvpStatus.CONFIRMED) return fail("Only confirmed participants can claim expenses.");
+      const crew = currentHolder.isCrew;
+      const email = currentHolder.user?.email?.trim() || currentHolder.guestEmail;
+      if (!email) return fail("Your registration needs an email address to claim expenses.");
+      const name = currentHolder.user?.name?.trim() || currentHolder.guestName?.trim() || email;
       const claim = {
         organisationId: event.organisationId, event, kind: crew ? ExpenseClaimKind.CREW : ExpenseClaimKind.PARTICIPANT, submittedByUserId: holder.actorUserId, rsvpId: rsvp.id,
         payee: { name, email }, category: parsed.data.category, description: parsed.data.description, amountMinor, currency,
@@ -148,7 +162,7 @@ export async function submitParticipantClaim(holder: { ticketToken: string; acto
         return ok({ claimId: await createClaim(tx, { ...claim, policy: { id: checked.data.policyId, name: checked.data.policyName, snapshot: checked.data.snapshot } }, stored.keys) });
       }
       const current = await tx.event.findUnique({ where: { id: event.id }, select: { participantClaimsEnabled: true, participantClaimCapMinor: true, crewClaimsEnabled: true } });
-      if (!current || !(crew ? current.crewClaimsEnabled : current.participantClaimsEnabled)) return fail(closed);
+      if (!current || !(crew ? current.crewClaimsEnabled : current.participantClaimsEnabled)) return fail(crew ? "This event doesn't take expense claims from crew." : "This event doesn't take expense claims from participants.");
       // Crew claims have no cap: owners and admins decide each one.
       const cap = crew ? null : current.participantClaimCapMinor;
       if (cap != null) {
@@ -179,9 +193,12 @@ export async function withdrawClaim(claimId: string, scope: WithdrawScope): Prom
     ? { id: claimId, rsvpId: scope.rsvpId }
     : { id: claimId, submittedByUserId: scope.userId, organisationId: scope.organisationId, eventId: scope.eventId };
   const result = await prisma.$transaction(async (tx): Promise<ClaimResult<undefined>> => {
-    const claim = await tx.expenseClaim.findFirst({ where, select: { id: true, organisationId: true } });
+    const claim = await tx.expenseClaim.findFirst({ where, select: { id: true, organisationId: true, eventId: true } });
     if (!claim) return fail("Claim not found.");
-    const updated = await tx.expenseClaim.updateMany({ where: { id: claim.id, status: ExpenseClaimStatus.SUBMITTED }, data: { status: ExpenseClaimStatus.WITHDRAWN } });
+    if (claim.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${claim.eventId} FOR UPDATE`;
+    // A holder change may have detached the claim while Event was awaited.
+    if (!await tx.expenseClaim.findFirst({ where, select: { id: true } })) return fail("Claim not found.");
+    const updated = await tx.expenseClaim.updateMany({ where: { ...where, status: ExpenseClaimStatus.SUBMITTED }, data: { status: ExpenseClaimStatus.WITHDRAWN } });
     if (updated.count !== 1) return fail("Only claims waiting for a decision can be withdrawn.");
     await recordAuditEvent({ action: "EXPENSE_CLAIM_WITHDRAWN", actorUserId: "userId" in scope ? scope.userId : null, organisationId: claim.organisationId, targetType: "ExpenseClaim", targetId: claim.id, client: tx });
     return ok(undefined);

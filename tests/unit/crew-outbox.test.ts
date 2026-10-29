@@ -36,7 +36,7 @@ describe("crew ticket outbox kind", () => {
   });
 
   it("sends the crew ticket, read from the row at send time, with the designed ticket", async () => {
-    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.CONFIRMED, isCrew: true, crewMember: { name: "Asha", role: "Stage" }, event });
+    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.CONFIRMED, guestEmail: payload.to, user: null, isCrew: true, crewMember: { name: "Asha", role: "Stage" }, event });
     mocks.attachment.mockResolvedValue({ filename: "launch-ticket.pdf", content: Buffer.from("pdf") });
     await expect(deliverCrewMessage(payload, "<m@outbox.invalid>")).resolves.toBe("sent");
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ to: payload.to, eventTitle: "Launch", recipientName: "Asha", role: "Stage", checkInToken: payload.checkInToken, ticketPdf: expect.objectContaining({ filename: "launch-ticket.pdf" }) }));

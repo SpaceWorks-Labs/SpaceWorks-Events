@@ -10,7 +10,7 @@ import { BULK_OUTBOX_KINDS } from "@/lib/outbox/due";
 
 /* The volunteer-notice outbox kind (docs/VOLUNTEERS.md). */
 
-const base = { to: "crew@example.test", organisationId: "org_1", crewMemberId: "crew_1" };
+const base = { to: "asha.now@example.test", organisationId: "org_1", crewMemberId: "crew_1" };
 const member = { name: "Asha", email: "asha.now@example.test", rsvp: { status: "CONFIRMED", checkInToken: "ticket-token" }, event: { organisationId: "org_1", title: "Launch", status: "PUBLISHED", timezone: "UTC" } };
 const shift = { title: "Doors", zone: "Hall A", startsAt: new Date("2035-01-01T10:00:00Z"), endsAt: new Date("2035-01-01T12:00:00Z") };
 

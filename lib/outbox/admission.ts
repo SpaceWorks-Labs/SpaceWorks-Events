@@ -16,6 +16,7 @@ import "server-only";
 
 import { AdmissionStatus, EventStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { sendAdmissionNoticeEmail, type AdmissionNoticeKind } from "@/lib/email/admission";
 import { getBaseUrl } from "@/lib/email";
 import { formatDayTime } from "@/lib/format/datetime";
@@ -72,8 +73,8 @@ export async function deliverAdmissionNotice(value: Prisma.JsonValue, messageId:
       event: { select: { title: true, timezone: true, status: true } },
     },
   });
-  const rsvp = await prisma.rSVP.findUnique({ where: { id: payload.rsvpId }, select: { id: true, teamId: true, checkInToken: true, order: { select: { totalMinor: true } } } });
-  if (!app || !rsvp || app.status !== NEEDS[payload.notice] || app.decisionRevision !== payload.revision) return "dropped";
+  const rsvp = await prisma.rSVP.findUnique({ where: { id: payload.rsvpId }, select: { id: true, teamId: true, checkInToken: true, guestEmail: true, user: { select: { email: true } }, order: { select: { totalMinor: true } } } });
+  if (!app || !rsvp || !isCurrentHolderRecipient(rsvp, payload.to) || app.status !== NEEDS[payload.notice] || app.decisionRevision !== payload.revision) return "dropped";
   if (app.event.status === EventStatus.CANCELLED && OBSOLETE_WHEN_CANCELLED.has(payload.notice)) return "dropped";
   // The recipient must still be this application's registration (or one of its team).
   if (app.rsvpId ? app.rsvpId !== rsvp.id : app.teamId !== rsvp.teamId) return "dropped";

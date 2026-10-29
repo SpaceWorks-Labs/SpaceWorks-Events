@@ -236,7 +236,11 @@ No offer is made once the event has started (release, promotion and AUTO
 all stop). Organiser payment links and approvals refuse application orders
 (`AdmissionManagedError`, code `ADMISSION_MANAGED`).
 The applicant answers from their ticket page (the ticket token is the bearer,
-rate limited), or an organiser answers for them (audited):
+rate limited), or an organiser answers for them (audited). Applicant responses
+and answer edits re-read ticket authority after the Event lock: a holder
+change invalidates even requests already waiting for that lock. Responses
+also recheck the current application association and team leader. Each
+member may still edit their own answers while the application allows it:
 
 - **Free place** (no order, or an order totalling zero, including a free
   ticket type on a paid event): Accept confirms at once under the Event lock
@@ -319,7 +323,8 @@ per person of the application: offer, reminder (once, a day before the
 offer ends, by the beat), extended, expired, waitlisted, rejected, and
 stage-advanced. The payload carries ids and the decision revision only; the
 ticket link is added at send time, and a notice is dropped when the
-application moved on. `stage-advanced` is queued only when the organiser
+application moved on or the queued recipient is no longer the current
+holder. `stage-advanced` is queued only when the organiser
 turned `emailApplicantsOnStageAdvance` on; every other notice always goes
 out (each carries a decision or a deadline). Once the event is cancelled,
 offer, reminder, extended, waitlisted and stage-advanced notices still

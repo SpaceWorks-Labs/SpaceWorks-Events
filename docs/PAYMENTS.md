@@ -57,15 +57,20 @@ On an event or series dashboard → **Tickets**:
   The policy is shown before payment and fixed on each order.
 - **Transfers:** optionally let buyers hand a ticket to someone else until a
   cut-off before the start. A ticket whose holder has expense claims waiting,
-  approved or paid ([Finance](FINANCE.md)) stays with them, since claims
-  belong to the registration. The new holder gets a new ticket link, and
+  approved or paid ([Finance](FINANCE.md)) stays with them while those
+  financial commitments remain. The new holder gets a new ticket link, and
   every link the previous holder had for that registration stops working:
   the ticket, the attendance question (reset, so the next send asks the new
   holder), the solo submission link (the project stays with the
   registration; the new holder requests a new link) and, for a team leader,
   the team page link (a new one is emailed to the new holder). An organiser
   changing a guest's email in **Edit registration** does the same
-  (`retireHolderCapabilities`, `lib/rsvpHolder.ts`).
+  (`retireHolderCapabilities`, `lib/rsvpHolder.ts`). Claims retain their
+  original payee and financial history for organisers but are detached from
+  the transferable registration. Queued capability emails (including
+  broadcasts, reminders, application and reimbursement notices) are dropped
+  if their queued recipient differs from the current holder's email;
+  replacement ticket links are never sent to the former holder.
 
 At checkout the seats are held for 30 minutes while the buyer pays. Approval
 requests and waitlist places get a payment link that holds the seats for 24
