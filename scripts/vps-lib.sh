@@ -480,3 +480,26 @@ compose() {
     *) sh "$SWE_REPO_DIR/scripts/vps-compose.sh" "$@" ;;
   esac
 }
+
+# Release compatibility follows the migrations: a release can run against this
+# database only if its prisma/migrations has every migration the database has
+# recorded (applied, or started and failed; not rolled back). An older release
+# lacks the newer ones, and is never started against them.
+applied_migrations() {
+  compose exec postgres psql -U swevents -d swevents -AtX -v ON_ERROR_STOP=1 \
+    -c 'SELECT DISTINCT migration_name FROM _prisma_migrations WHERE rolled_back_at IS NULL ORDER BY 1'
+}
+
+# The names from stdin (applied_migrations) that the release in DIR lacks, one per line.
+missing_migrations() {
+  local dir=$1 name
+  while IFS= read -r name; do
+    [[ -z "$name" || -d "$dir/prisma/migrations/$name" ]] || printf '%s\n' "$name"
+  done
+}
+
+# The newest local backup directory, if any.
+newest_backup() {
+  [[ -d "$SWE_CONFIG_DIR/backups" ]] || return 0
+  find "$SWE_CONFIG_DIR/backups" -mindepth 1 -maxdepth 1 -type d -name '2*Z' | sort | tail -n 1
+}

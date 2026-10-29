@@ -76,8 +76,8 @@ month.
 1. In the Cloudflare dashboard open **R2 Object Storage** and create a bucket,
    e.g. `spaceworks-events`. Leave **Public access** disabled and do not attach
    a custom domain: the app serves every image through its own access-checked
-   route. Don't turn on object versioning or keep deleted objects: the app's
-   deletions must really remove files
+   route. Don't add an object lock or retention rule that keeps deleted
+   objects: the app's deletions must really remove files
    ([storage contract](CONFIGURATION.md#storage-contract-and-the-deletion-queue)).
 2. **R2 → Manage API tokens → Create API token**: permission
    **Object Read & Write**, **Apply to specific buckets only** → your bucket.

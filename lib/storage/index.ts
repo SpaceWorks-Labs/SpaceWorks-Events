@@ -1,9 +1,10 @@
 import "server-only";
 
-import { DeleteObjectsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { client, storageConfigured } from "./objects";
 import { uploadObject } from "./uploads";
+import { queueAssetDeletions } from "./deletionQueue";
 
 export { client, storageConfigured };
 
@@ -104,34 +105,14 @@ export async function downloadFile(key: string) {
 }
 
 /**
- * Remove stored derivatives (object and Asset row). Keys that aren't
+ * Remove stored derivatives (Asset row and queued object deletion). Keys that aren't
  * application derivatives are ignored. Callers treat this as best effort:
  * the database row that referenced the file is already gone.
  */
 export async function deleteFiles(keys: string[]) {
   const valid = [...new Set(keys.filter(isPublicDerivativeKey))];
   if (valid.length === 0) return;
-  const stored = await prisma.asset.findMany({
-    where: { key: { in: valid }, provider: "s3" },
-    select: { key: true },
-  });
-  if (stored.length > 0) {
-    if (!storageConfigured())
-      throw new Error("Private object storage is not configured.");
-    const s3 = client();
-    for (let start = 0; start < stored.length; start += 1000) {
-      await s3.send(
-        new DeleteObjectsCommand({
-          Bucket: process.env.S3_BUCKET!,
-          Delete: {
-            Objects: stored.slice(start, start + 1000).map(({ key }) => ({ Key: key })),
-            Quiet: true,
-          },
-        }),
-      );
-    }
-  }
-  await prisma.asset.deleteMany({ where: { key: { in: valid } } });
+  await queueAssetDeletions(valid);
 }
 
 export function getPublicUrl(key: string): string {

@@ -37,7 +37,7 @@ export default async function SuperAdminOperationsPage() {
         <Callout tone="warning" title="Stored files are waiting to be deleted" role="status" className="rounded-xl">
           <ul className="list-disc pl-5">
             {storageDeletions.misplaced > 0 ? <li>{storageDeletions.misplaced} file{storageDeletions.misplaced === 1 ? " belongs" : "s belong"} to a storage bucket that is no longer configured. They are kept and never deleted from the current bucket; restore the earlier storage settings or remove them there by hand.</li> : null}
-            {storageDeletions.stillPresent > 0 ? <li>{storageDeletions.stillPresent} deleted file{storageDeletions.stillPresent === 1 ? " was" : "s were"} still there when checked twice. The private bucket may have versioning turned on, which keeps deleted files: turn it off.</li> : null}
+            {storageDeletions.stillPresent > 0 ? <li>{storageDeletions.stillPresent} deleted file{storageDeletions.stillPresent === 1 ? " was" : "s were"} still there when checked twice. Something keeps deleted files in the private bucket, such as an object lock or retention rule: remove it.</li> : null}
             {storageDeletions.failing > 0 ? <li>{storageDeletions.failing} file{storageDeletions.failing === 1 ? "" : "s"} could not be deleted after several attempts. Check the storage credentials and bucket permissions.</li> : null}
           </ul>
         </Callout>

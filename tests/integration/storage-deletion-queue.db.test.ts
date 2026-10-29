@@ -18,6 +18,8 @@ const store = vi.hoisted(() => ({
   failAfterDelete: false,
   pageSize: 1000,
   poison: null as string | null,
+  /** The next listing is computed, then waits here until released (a worker stalled past its lease). */
+  stall: null as null | { reached: () => void; release: Promise<void> },
 }));
 
 vi.mock("@/lib/storage/objects", async (importOriginal) => ({
@@ -39,13 +41,19 @@ vi.mock("@/lib/storage/objects", async (importOriginal) => ({
     }
     return new Map<string, string>();
   }),
-  objectExists: vi.fn(async (key: string) => store.objects.has(key)),
+  objectRemains: vi.fn(async (key: string) => store.objects.has(key)),
   listObjectsPage: vi.fn(async (prefix: string, token: string | null) => {
     const all = [...store.objects].filter((key) => key.startsWith(prefix)).sort();
     if (store.poison?.startsWith(prefix)) all.push(store.poison);
     // Like S3, a page continues after the last key returned, whatever was deleted meanwhile.
     const rest = token ? all.filter((key) => key > token) : all;
     const keys = rest.slice(0, store.pageSize);
+    const stall = store.stall;
+    store.stall = null;
+    if (stall) {
+      stall.reached();
+      await stall.release;
+    }
     return { keys, next: rest.length > store.pageSize ? keys.at(-1)! : null };
   }),
 }));
@@ -234,6 +242,30 @@ describe.sequential("storage deletion queue", () => {
     await processStorageDeletions(later(new Date(), HOUR));
     expect(await rowFor(`${prefix}c.webp`)).not.toBeNull();
     expect(await prisma.storageDeletion.count({ where: { key: prefix } })).toBe(0);
+  });
+
+  it("ignores the completion of a worker delayed past its lease once another worker has claimed the row", async () => {
+    const prefix = `organisations/${randomUUID()}/`;
+    await prisma.storageDeletion.create({ data: { kind: "PREFIX", location: currentStorageLocation()!, key: prefix, reason: "LEGACY_PREFIX", notBefore: new Date() } });
+    for (const name of ["a", "b", "c", "d", "e"]) store.objects.add(`${prefix}${name}.webp`);
+    store.pageSize = 2;
+    let reached!: () => void;
+    let release!: () => void;
+    const stalled = new Promise<void>((resolve) => { reached = resolve; });
+    store.stall = { reached, release: new Promise<void>((resolve) => { release = resolve; }) };
+    const start = new Date();
+    const delayed = processStorageDeletions(start); // claims the row and lists the first page, then stalls
+    await stalled;
+    // The lease runs out; a second worker claims the row and gets two pages further.
+    const afterLease = later(start, 11 * 60_000);
+    await processStorageDeletions(afterLease);
+    await processStorageDeletions(afterLease);
+    const progressed = await prisma.storageDeletion.findFirstOrThrow({ where: { key: prefix } });
+    expect(progressed).toMatchObject({ continuationToken: `${prefix}d.webp`, attempts: 3 });
+    release();
+    await delayed;
+    // The stalled worker's first page would have set the token back to "b".
+    expect(await prisma.storageDeletion.findFirstOrThrow({ where: { key: prefix } })).toMatchObject({ continuationToken: `${prefix}d.webp`, attempts: 3, notBefore: progressed.notBefore });
   });
 
   it("keeps and reports a row whose storage location is no longer configured", async () => {

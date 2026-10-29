@@ -209,6 +209,13 @@ describe("event broadcast delivery", () => {
     expect(mocks.deleteMany).not.toHaveBeenCalled();
   });
 
+  it("delivers a broadcast whose body names inherited properties, keeping them literal", async () => {
+    mocks.broadcastFind.mockResolvedValue({ subject: "{{toString}}", body: "<p>{{constructor}} {{name}}</p>", statuses: [RsvpStatus.CONFIRMED], attendance: "ANY", eventId: "event_1", event: broadcastEvent });
+    mocks.findMany.mockResolvedValue([message({ kind: "event-broadcast", payload: { to: "priya@example.test", broadcastId: "broadcast_1", rsvpId: "rsvp_1" } })]);
+    await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 1, failed: 0 });
+    expect(mocks.broadcast.mock.calls[0]?.[0]).toMatchObject({ subject: "{{toString}}", bodyText: "{{constructor}} Priya" });
+  });
+
   it("does not expose a ticket link to registrations that are not confirmed", async () => {
     mocks.broadcastFind.mockResolvedValue({
       subject: "Waitlist update",
