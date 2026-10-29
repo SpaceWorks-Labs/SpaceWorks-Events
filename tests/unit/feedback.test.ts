@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
   responseCreate: vi.fn(),
   transaction: vi.fn(),
   query: vi.fn(),
+  access: vi.fn(),
 }));
+vi.mock("@/lib/publicEventAccess", () => ({ resolvePublicEventAccess: mocks.access }));
 
 vi.mock("@/lib/db", () => ({ prisma: {
   event: { findFirst: mocks.eventFind },
@@ -30,13 +32,20 @@ const commentField = { id: "field_1", key: "comment", label: "Comment", type: Re
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.eventFind.mockResolvedValue({ id: "event_1", feedbackForm: { id: "form_1" } });
-  tx.event.findUnique.mockResolvedValue({ status: EventStatus.PUBLISHED });
+  tx.event.findUnique.mockResolvedValue({ organisationId: "org_1", status: EventStatus.PUBLISHED, privacyType: "INVITE_ONLY", page: { isPublished: true } });
+  mocks.access.mockResolvedValue({ allowed: true, preview: false });
   mocks.formFind.mockResolvedValue({ id: "form_1", isOpen: true, certificateEnabled: false, fields: [commentField] });
   mocks.responseCreate.mockResolvedValue({ id: "response_1" });
   mocks.transaction.mockImplementation(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx));
 });
 
 describe("feedback privacy and validation", () => {
+  it("applies the event page's access rule to the state read in the transaction", async () => {
+    mocks.access.mockResolvedValue({ allowed: false, preview: false });
+    await expect(submitFeedback({ orgSlug: "org", eventSlug: "event", answers: { comment: "Useful" } })).resolves.toEqual({ ok: false, error: "Feedback is not open for this event." });
+    expect(mocks.access).toHaveBeenCalledWith({ organisationId: "org_1", eventId: "event_1", status: EventStatus.PUBLISHED, privacyType: "INVITE_ONLY", websiteReleased: true }, tx);
+    expect(mocks.responseCreate).not.toHaveBeenCalled();
+  });
   it("snapshots the certificate design in the locked submission transaction", async () => {
     const certificateTemplate = { backgroundKey: "organisations/org/certificate-backgrounds/example.webp", font: "serif" };
     mocks.formFind.mockResolvedValue({ id: "form_1", isOpen: true, certificateEnabled: true, certificateTemplate, fields: [commentField] });

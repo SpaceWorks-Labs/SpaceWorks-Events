@@ -341,10 +341,12 @@ paths:
     get:
       tags: [Public]
       summary: The open feedback form
+      description: Follows the event page's access rule; an invite-only event's form needs the invited guest's bearer.
       security: [{}, { bearerAuth: [] }]
       parameters: [{ $ref: "#/components/parameters/orgSlug" }, { $ref: "#/components/parameters/eventSlug" }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FeedbackFormResponse" } } } }
+        "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
@@ -2185,7 +2187,8 @@ paths:
     post:
       tags: [Reused web endpoints]
       summary: Submit feedback (not enveloped like the mobile API)
-      security: []
+      description: Optional bearer, so an invited guest can answer an invite-only event's form; the event page's access rule applies.
+      security: [{}, { bearerAuth: [] }]
       requestBody:
         required: true
         content:
@@ -2210,6 +2213,7 @@ paths:
                   ok: { const: true }
                   data: { type: object, properties: { certificateToken: { type: [string, "null"] } } }
         "400": { description: "`{ ok: false, error: string }`." }
+        "401": { description: "A bearer was sent but does not sign in: `{ ok: false, error: string }`." }
         "413": { description: Body over 128 KiB. }
         "429": { description: Rate limited. }
         default: { $ref: "#/components/responses/Error" }
