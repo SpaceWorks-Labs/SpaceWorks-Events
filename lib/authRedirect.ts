@@ -5,7 +5,10 @@ export function safeAuthRedirect(value: string | null | undefined) {
   try {
     const base = "https://auth.invalid";
     const url = new URL(path, base);
-    return url.origin === base ? `${url.pathname}${url.search}${url.hash}` : "/dashboard";
+    // Dot segments are resolved here, so `/x/..//host` becomes `//host`: check
+    // the normalised result, which a browser would read as another origin.
+    const result = `${url.pathname}${url.search}${url.hash}`;
+    return url.origin === base && result.startsWith("/") && !/^\/[/\\]/.test(result) ? result : "/dashboard";
   } catch {
     return "/dashboard";
   }
