@@ -77,7 +77,7 @@ describe.sequential("claims under a reimbursement policy", () => {
     expect(await claim(bob.checkInToken, "10", later)).toMatchObject({ ok: false, error: expect.stringContaining("aren't open yet") });
     expect(await claim(bob.checkInToken, "10", closed)).toMatchObject({ ok: false, error: expect.stringContaining("isn't open") });
     expect(await claim(waiting.checkInToken, "10", open)).toMatchObject({ ok: false });
-    const view = await loadTicketClaims({ id: bob.id, eventId: event.id, status: bob.status });
+    const view = await loadTicketClaims({ id: bob.id, eventId: event.id, status: bob.status, isCrew: bob.isCrew });
     expect(view?.general).toBe(false);
     expect(view?.policies.map((row) => row.id)).toEqual([open]);
     expect(view?.policies[0]).toMatchObject({ left: expect.stringContaining("1,000") });
@@ -192,7 +192,7 @@ describe.sequential("claims under a reimbursement policy", () => {
     const row = await prisma.expenseClaim.findFirstOrThrow({ where: { rsvpId: gina.id } });
     expect(row).toMatchObject({ policyId: null, eligibilitySnapshot: null, kind: "PARTICIPANT" });
     expect(await approveClaim(approver(), { claimId: row.id, amount: "800" })).toMatchObject({ ok: true });
-    expect(await loadTicketClaims({ id: gina.id, eventId: event.id, status: gina.status })).toMatchObject({ general: true, policies: [], cap: expect.stringContaining("1,000") });
+    expect(await loadTicketClaims({ id: gina.id, eventId: event.id, status: gina.status, isCrew: gina.isCrew })).toMatchObject({ general: true, policies: [], cap: expect.stringContaining("1,000") });
   });
 
   it("serves the mobile reimbursements and organiser policy list from the same rules", async () => {

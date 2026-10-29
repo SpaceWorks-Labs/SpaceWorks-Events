@@ -21,8 +21,8 @@ import { checkIn, claimInput, ctx, finalsRound, freeEvent, mentoringRound, perso
  */
 
 const claim = (token: string, amount: string, policyId: string) => submitParticipantClaim({ ticketToken: token, actorUserId: null }, claimInput(amount, policyId), []);
-const offered = async (rsvp: { id: string; eventId: string | null; status: "CONFIRMED" | string }) =>
-  ((await loadTicketClaims({ id: rsvp.id, eventId: rsvp.eventId, status: rsvp.status as "CONFIRMED" }))?.policies ?? []).map((row) => row.id);
+const offered = async (rsvp: { id: string; eventId: string | null; status: "CONFIRMED" | string; isCrew: boolean }) =>
+  ((await loadTicketClaims({ id: rsvp.id, eventId: rsvp.eventId, status: rsvp.status as "CONFIRMED", isCrew: rsvp.isCrew }))?.policies ?? []).map((row) => row.id);
 
 beforeAll(() => setUpReimbursements("ReimbElig"));
 afterAll(() => tearDownReimbursements());

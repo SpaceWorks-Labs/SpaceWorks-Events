@@ -15,11 +15,11 @@ import { CATEGORY_LABELS, financeCurrency } from "./shared";
  * policies open to this registration now, with what is left under each.
  * Null when there is nothing to claim and nothing claimed.
  */
-export async function loadTicketClaims(rsvp: { id: string; eventId: string | null; status: RsvpStatus; isCrew?: boolean; }) {
+export async function loadTicketClaims(rsvp: { id: string; eventId: string | null; status: RsvpStatus; isCrew: boolean; }) {
   if (!rsvp.eventId || rsvp.status !== RsvpStatus.CONFIRMED) return null;
   const event = await prisma.event.findUnique({ where: { id: rsvp.eventId }, select: { organisationId: true, currency: true, participantClaimsEnabled: true, participantClaimCapMinor: true, crewClaimsEnabled: true } });
   if (!event) return null;
-  const crew = rsvp.isCrew === true;
+  const crew = rsvp.isCrew;
   const general = crew ? event.crewClaimsEnabled : event.participantClaimsEnabled;
   const claimant = await loadClaimant(prisma, rsvp.id, rsvp.eventId);
   const open = claimant ? await availablePolicies(prisma, claimant) : [];

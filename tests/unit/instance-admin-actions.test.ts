@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   closeTransport: vi.fn(),
   reportOpsAlert: vi.fn(),
   allowedWebhook: vi.fn(),
+  postWebhook: vi.fn(),
 }));
 
 vi.mock("@/lib/permissions", () => ({ requireSuperAdminMfa: mocks.requireSuperAdminMfa }));
@@ -31,7 +32,7 @@ vi.mock("@/lib/instanceConfigSecrets", async (importOriginal) => ({
   encryptInstanceConfigSecret: mocks.encrypt, decryptInstanceConfigSecret: mocks.decrypt,
 }));
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
-vi.mock("@/lib/opsWebhookAddress", () => ({ isAllowedOpsWebhook: mocks.allowedWebhook, PRIVATE_WEBHOOK_ERROR: "That webhook address points to a private or local network." }));
+vi.mock("@/lib/opsWebhookAddress", () => ({ isAllowedOpsWebhook: mocks.allowedWebhook, postOpsWebhook: mocks.postWebhook, PRIVATE_WEBHOOK_ERROR: "That webhook address points to a private or local network." }));
 vi.mock("@/lib/outbox", () => ({ deliverOutboxBatch: mocks.deliver }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("@/lib/email/transporter", async (importOriginal) => ({
@@ -148,18 +149,13 @@ describe("super-admin alert webhook settings", () => {
   });
 
   it("sends a test message to the saved URL and reports HTTP failures without echoing the URL", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
-    vi.stubGlobal("fetch", fetchMock);
-    try {
-      mocks.findSetting.mockResolvedValue({ opsWebhookUrlEncrypted: "encrypted:saved" });
-      mocks.decrypt.mockReturnValue(url);
-      const result = await sendOpsWebhookTest({});
-      expect(fetchMock).toHaveBeenCalledWith(url, expect.objectContaining({ method: "POST" }));
-      expect(result).toEqual({ ok: false, error: "The webhook responded with HTTP 404." });
-      expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain("secret-hook-key");
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    mocks.postWebhook.mockResolvedValue({ status: 404 });
+    mocks.findSetting.mockResolvedValue({ opsWebhookUrlEncrypted: "encrypted:saved" });
+    mocks.decrypt.mockReturnValue(url);
+    const result = await sendOpsWebhookTest({});
+    expect(mocks.postWebhook).toHaveBeenCalledWith(url, expect.stringContaining("Test alert"), expect.any(Number));
+    expect(result).toEqual({ ok: false, error: "The webhook responded with HTTP 404." });
+    expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain("secret-hook-key");
   });
 });
 

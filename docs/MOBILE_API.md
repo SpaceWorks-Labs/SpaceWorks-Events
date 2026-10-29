@@ -134,15 +134,16 @@ new boundary. The same key on another path or with another body, or while the
 first is still running, is `CONFLICT`; it never replays another resource's
 answer.
 
-- Only definitive answers are kept. A 5xx, `RATE_LIMITED`, `UNAUTHENTICATED`
-  or a staff authenticator refusal is not, so retry it with the same key
-  (after signing in or confirming the code).
+- Only definitive answers are kept. `RATE_LIMITED`, `UNAUTHENTICATED` or a
+  staff authenticator refusal is not, so retry it with the same key (after
+  signing in or confirming the code).
 - Use a new key only after a definitive 4xx answer, which the same key would
   replay.
-- `IDEMPOTENCY_STALE` (409): an earlier request with this key started over a
-  minute ago and never finished, so its outcome is unknown and it is never run
-  again under that key. Re-read the record; if the change is not there, send
-  the action again with a new key.
+- `IDEMPOTENCY_STALE` (409): an earlier request with this key answered a 5xx
+  (or failed on the server), or started over a minute ago and never finished.
+  Either may have happened after the change was saved, so its outcome is
+  unknown and it is never run again under that key. Re-read the record; if the
+  change is not there, send the action again with a new key.
 - A replayed answer never carries a ticket token: every `ticketToken` is kept
   as `null` (re-read the registration or order for it). Keys and bodies are
   kept only as HMACs, and kept answers are deleted after a day.
@@ -281,8 +282,9 @@ Account creation and password reset happen on the website.
 `{ "user": User, "organisations": [OrgSummary], "collaborations": [{ "organisation": { "slug", "name" }, "eventId", "eventTitle", "permissions": ["CHECK_IN", …] }], "judging": [JudgingEvent] }`
 
 `OrgSummary = { "id", "slug", "name", "logoUrl|null", "role": "OWNER|ADMIN|MEMBER" }`.
-Collaborations list standalone-event grants only; `JUDGE` is never listed in
-`permissions`, and a `JUDGE`-only grant is not a collaboration.
+Collaborations list standalone-event grants only; `JUDGE`, `MENTOR` and
+`REVIEW_APPLICATIONS` open their own workspaces, so they are never listed in
+`permissions`, and a grant of only those is not a collaboration.
 
 `JudgingEvent = { "organisation": { "slug", "name" }, "eventId", "eventTitle", "startDateTime", "endDateTime", "timezone", "judgingStatus": "NOT_STARTED|OPEN|CLOSED" }`:
 events the caller judges through a `JUDGE` grant, once the event takes
@@ -505,7 +507,9 @@ their orders by id, and anyone else's are `NOT_FOUND`.
   `policyId` are open: show the general form only when true), cap and
   categories, or `null` when nothing is open and nothing was claimed. `POST` the same path as `multipart/form-data` (`category`,
   `description`, `amount`, an optional `policyId`, up to three `receipts`
-  photos) to file one;
+  photos) to file one (201 with the claim list; if the claim was filed but
+  the list could not be read back, 201 with only `{ "claimId" }`, so GET the
+  list again);
   `POST …/claims/:claimId/withdraw` before it is decided. Receipt photos of the
   caller's own claims: `GET /me/claims/:claimId/receipts/:receiptId`. Each
   claim carries `policy` (the reimbursement policy's name, or null).

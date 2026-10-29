@@ -1,10 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ findSetting: vi.fn(), decrypt: vi.fn(), allowed: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findSetting: vi.fn(), decrypt: vi.fn(), allowed: vi.fn(), fetch: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: { instanceSetting: { findUnique: mocks.findSetting } } }));
 vi.mock("@/lib/instanceConfigSecrets", () => ({ decryptInstanceConfigSecret: mocks.decrypt }));
-vi.mock("@/lib/opsWebhookAddress", () => ({ isAllowedOpsWebhook: mocks.allowed, PRIVATE_WEBHOOK_ERROR: "private" }));
+// The real post checks the host and connects over a pinned socket (tests/unit/ops-webhook-address.test.ts); here it goes through a fetch-shaped mock.
+vi.mock("@/lib/opsWebhookAddress", () => ({
+  PRIVATE_WEBHOOK_ERROR: "private",
+  postOpsWebhook: async (url: string, json: string) => (await mocks.allowed(url))
+    ? { status: ((await mocks.fetch(url, { method: "POST", body: json })) as Response).status }
+    : { error: "blocked" },
+}));
 
 import {
   deliverOpsAlert,
@@ -20,7 +26,7 @@ import {
 } from "@/lib/opsAlerts";
 
 const WEBHOOK = "https://chat.example.test/hooks/abc123";
-const fetchMock = vi.fn();
+const fetchMock = mocks.fetch;
 
 function resetAlertState() {
   delete (globalThis as Record<symbol, unknown>)[Symbol.for("swe.opsAlerts.state")];
@@ -37,7 +43,6 @@ beforeEach(() => {
   mocks.findSetting.mockResolvedValue({ opsWebhookUrlEncrypted: "enc", opsWebhookEnabled: true, opsWebhookIncludeWarnings: true });
   mocks.decrypt.mockReturnValue(WEBHOOK);
   fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
-  vi.stubGlobal("fetch", fetchMock);
   mocks.allowed.mockResolvedValue(true);
 });
 

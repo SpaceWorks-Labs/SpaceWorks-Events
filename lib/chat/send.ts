@@ -1,7 +1,9 @@
 import "server-only";
 
 import { request } from "node:https";
-import { resolvePublicAddress } from "@/lib/net/publicAddress";
+import type { LookupFunction } from "node:net";
+import { resolvePublicAddresses } from "@/lib/net/publicAddress";
+import { pinnedLookup } from "@/lib/webhooks/urlSafety";
 import type { ChatConfig } from "./config";
 import type { ChatKind } from "./events";
 
@@ -34,12 +36,13 @@ async function postJson(url: string, body: unknown, headers: Record<string, stri
 
 /**
  * An organisation's own server (Mattermost): connected only by the public
- * address its name resolves to, checked first and pinned for the request, with
+ * addresses its name resolves to, checked first and pinned for the request
+ * (the webhooks' lookup, which also answers Node's `all: true` requests), with
  * TLS checked against the name, so DNS can't be switched in between.
  */
 async function postJsonToOwnServer(url: string, body: unknown) {
   const target = new URL(url);
-  const address = await resolvePublicAddress(target.hostname);
+  const addresses = await resolvePublicAddresses(target.hostname);
   const payload = Buffer.from(JSON.stringify(body));
   await new Promise<void>((resolve, reject) => {
     const req = request({
@@ -48,7 +51,7 @@ async function postJsonToOwnServer(url: string, body: unknown) {
       path: `${target.pathname}${target.search}`,
       method: "POST",
       servername: target.hostname,
-      lookup: (_hostname, _options, callback) => callback(null, address, address.includes(":") ? 6 : 4),
+      lookup: pinnedLookup(addresses) as unknown as LookupFunction,
       headers: { "Content-Type": "application/json", "Content-Length": payload.length },
       timeout: TIMEOUT_MS,
     }, (response) => {

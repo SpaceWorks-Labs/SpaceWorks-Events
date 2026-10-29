@@ -18,10 +18,10 @@ import { myPrizesDtoSchema, myReimbursementsDtoSchema, mySubmissionsDtoSchema, p
  * drive the website's own code and never returned.
  */
 
-/** The caller's own registration and its ticket token, or null. */
+/** The caller's own registration, its ticket token and whether it is a crew ticket, or null. */
 export async function ownRegistration(userId: string, rsvpId: string) {
   if (!rsvpId || rsvpId.length > 128) return null;
-  return prisma.rSVP.findFirst({ where: { id: rsvpId, userId }, select: { id: true, eventId: true, status: true, checkInToken: true } });
+  return prisma.rSVP.findFirst({ where: { id: rsvpId, userId }, select: { id: true, eventId: true, status: true, isCrew: true, checkInToken: true } });
 }
 
 /** This registration's claims, cap and categories; null when the event takes no participant claims. */
