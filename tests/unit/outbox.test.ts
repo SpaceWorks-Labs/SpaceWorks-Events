@@ -57,7 +57,7 @@ describe("outbox delivery", () => {
     // stale-claim recovery, then per-message claim/finalization
     mocks.updateMany.mockResolvedValue({ count: 1 });
     mocks.deleteMany.mockResolvedValue({ count: 1 });
-    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.CONFIRMED });
+    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.CONFIRMED, guestEmail: "attendee@example.test", user: null });
   });
 
   it("deletes ticket-bearing rows immediately after delivery and reuses a stable Message-ID", async () => {
@@ -89,7 +89,7 @@ describe("outbox delivery", () => {
   });
 
   it("drops a stale RSVP confirmation instead of sending an out-of-date status", async () => {
-    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.CONFIRMED });
+    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.CONFIRMED, guestEmail: "attendee@example.test", user: null });
     mocks.findMany.mockResolvedValue([message({
       kind: "rsvp-confirmation",
       payload: { to: "attendee@example.test", eventTitle: "Event", status: RsvpStatus.PENDING_APPROVAL, checkInToken: "ticket-secret" },
@@ -190,7 +190,7 @@ describe("event broadcast delivery", () => {
       eventId: "event_1",
       event: broadcastEvent,
     });
-    mocks.rsvpFind.mockResolvedValue({ eventId: "event_1", status: RsvpStatus.CONFIRMED, checkedInAt: null, checkInToken: "ticket-secret", guestName: "Priya", user: null });
+    mocks.rsvpFind.mockResolvedValue({ eventId: "event_1", status: RsvpStatus.CONFIRMED, checkedInAt: null, checkInToken: "ticket-secret", guestName: "Priya", guestEmail: "priya@example.test", user: null });
   });
 
   it("renders the template per recipient at send time and keeps a sent row without capabilities", async () => {
@@ -225,7 +225,7 @@ describe("event broadcast delivery", () => {
       eventId: "event_1",
       event: broadcastEvent,
     });
-    mocks.rsvpFind.mockResolvedValue({ eventId: "event_1", status: RsvpStatus.WAITLISTED, checkedInAt: null, checkInToken: "ticket-secret", guestName: null, user: { name: "Asha" } });
+    mocks.rsvpFind.mockResolvedValue({ eventId: "event_1", status: RsvpStatus.WAITLISTED, checkedInAt: null, checkInToken: "ticket-secret", guestName: null, user: { name: "Asha", email: "asha@example.test" } });
     mocks.findMany.mockResolvedValue([message({ kind: "event-broadcast", payload: { to: "asha@example.test", broadcastId: "broadcast_1", rsvpId: "rsvp_1" } })]);
 
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 1, failed: 0 });
@@ -235,7 +235,7 @@ describe("event broadcast delivery", () => {
   });
 
   it("drops a recipient whose registration left the audience after queuing", async () => {
-    mocks.rsvpFind.mockResolvedValue({ eventId: "event_1", status: RsvpStatus.REJECTED, checkedInAt: null, checkInToken: "ticket-secret", guestName: "Priya", user: null });
+    mocks.rsvpFind.mockResolvedValue({ eventId: "event_1", status: RsvpStatus.REJECTED, checkedInAt: null, checkInToken: "ticket-secret", guestName: "Priya", guestEmail: "priya@example.test", user: null });
     mocks.findMany.mockResolvedValue([message({ kind: "event-broadcast", payload: { to: "priya@example.test", broadcastId: "broadcast_1", rsvpId: "rsvp_1" } })]);
 
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 0, failed: 0 });
@@ -244,7 +244,7 @@ describe("event broadcast delivery", () => {
   });
 
   it("drops a recipient whose registration belongs to a different event than the broadcast", async () => {
-    mocks.rsvpFind.mockResolvedValue({ eventId: "event_other", status: RsvpStatus.CONFIRMED, checkedInAt: null, checkInToken: "ticket-secret", guestName: "Priya", user: null });
+    mocks.rsvpFind.mockResolvedValue({ eventId: "event_other", status: RsvpStatus.CONFIRMED, checkedInAt: null, checkInToken: "ticket-secret", guestName: "Priya", guestEmail: "priya@example.test", user: null });
     mocks.findMany.mockResolvedValue([message({ kind: "event-broadcast", payload: { to: "priya@example.test", broadcastId: "broadcast_1", rsvpId: "rsvp_1" } })]);
 
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 0, failed: 0 });

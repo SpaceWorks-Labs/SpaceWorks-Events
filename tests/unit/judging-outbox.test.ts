@@ -124,7 +124,7 @@ describe("judging outbox delivery", () => {
 
   it("sends the current submission link and deletes the capability row", async () => {
     mocks.findMany.mockResolvedValue([message("submission-link", { to: "a@example.test", rsvpId: "rsvp_1", token })]);
-    mocks.linkFind.mockResolvedValue({ tokenHash: hashSubmissionLinkToken(token), rsvp: { teamId: null, guestName: "Ada", user: null, event: { title: "Jam" } } });
+    mocks.linkFind.mockResolvedValue({ tokenHash: hashSubmissionLinkToken(token), rsvp: { teamId: null, guestName: "Ada", guestEmail: "a@example.test", user: null, event: { title: "Jam" } } });
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 1, failed: 0 });
     expect(mocks.link).toHaveBeenCalledWith(expect.objectContaining({ to: "a@example.test", submitPath: `/submit/${token}` }));
     expect(mocks.deleteMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "msg_1", status: OutboxStatus.PROCESSING }) });

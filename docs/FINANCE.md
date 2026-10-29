@@ -48,8 +48,16 @@ matter, like prize payouts and payment settings. Every step is audited.
   approved; rejected and withdrawn ones don't count. The cap is checked under
   the event row lock, so two claims can't both slip under it. The ticket token
   is the proof; an account-owned ticket also needs that account signed in.
-  Claims belong to the registration, so a ticket with claims waiting,
-  approved or paid can't be transferred ([Paid tickets](PAYMENTS.md)).
+  The Event lock is followed by the RSVP lock: the supplied ticket token,
+  account ownership, confirmed status and crew classification are rechecked,
+  and payee details come from that locked registration, after receipt uploads.
+  A ticket with claims waiting, approved or paid can't be transferred by its
+  buyer ([Paid tickets](PAYMENTS.md)). On any holder change, including an
+  organiser's guest-email edit, claims are detached from the registration;
+  their original payee, amounts, decisions, receipts and payouts remain for
+  organisers. The replacement holder never sees that person's claims or
+  decision notes. A detached policy claim cannot be approved using the new
+  holder's eligibility; organisers can still reject it and retain its history.
 - **Crew** ([Event crew](CREW.md)) claim from their crew ticket page when
   the event turns on *Let crew claim expenses* (`Event.crewClaimsEnabled`,
   off by default), as kind `CREW`, with no cap; the participant switch and

@@ -4,6 +4,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { sendResultsPublishedEmail, sendSubmissionLinkEmail, sendSubmissionReceivedEmail } from "@/lib/email";
 import { hashSubmissionLinkToken, isSubmissionTokenShape, resultsPath, submissionLinkPath } from "@/lib/submissionToken";
 import type { OutboxClient } from "./enqueue";
@@ -113,10 +114,10 @@ export async function deliverJudgingMessage(kind: string, value: Prisma.JsonValu
     if (!payload) return null;
     const link = await prisma.submissionLink.findUnique({
       where: { rsvpId: payload.rsvpId },
-      select: { tokenHash: true, rsvp: { select: { teamId: true, guestName: true, user: { select: { name: true } }, event: { select: { title: true } } } } },
+      select: { tokenHash: true, rsvp: { select: { teamId: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } }, event: { select: { title: true } } } } },
     });
     // Regenerated, removed, or the registrant joined a team since: never send a link that no longer works.
-    if (!link || link.tokenHash !== hashSubmissionLinkToken(payload.token) || !link.rsvp.event || link.rsvp.teamId) return "dropped";
+    if (!link || !isCurrentHolderRecipient(link.rsvp, payload.to) || link.tokenHash !== hashSubmissionLinkToken(payload.token) || !link.rsvp.event || link.rsvp.teamId) return "dropped";
     await sendSubmissionLinkEmail({
       to: payload.to,
       eventTitle: link.rsvp.event.title,

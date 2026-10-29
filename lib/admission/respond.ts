@@ -42,7 +42,7 @@ export async function respondAsApplicant(token: string, action: RespondAction, n
   const app = await prisma.admissionApplication.findFirst({ where: rsvp.teamId ? { teamId: rsvp.teamId } : { rsvpId: rsvp.id }, select: { id: true } });
   if (!app) return fail("This ticket has no application.");
   if (rsvp.teamId && rsvp.team?.leaderRsvpId !== rsvp.id) return fail("Only the team leader can answer for the team.");
-  return respond(rsvp.eventId, app.id, action, null, now);
+  return respond(rsvp.eventId, app.id, action, null, now, undefined, { rsvpId: rsvp.id, token });
 }
 
 /** An organiser answers for the applicant (they asked by email, say). Audited. */
@@ -52,7 +52,7 @@ export async function respondForApplicant(ctx: AdmissionContext, applicationId: 
   return result;
 }
 
-async function respond(eventId: string, applicationId: string, action: RespondAction, actorUserId: string | null, now: Date, organisationId?: string): Promise<RespondResult> {
+async function respond(eventId: string, applicationId: string, action: RespondAction, actorUserId: string | null, now: Date, organisationId?: string, applicant?: { rsvpId: string; token: string }): Promise<RespondResult> {
   // A paid acceptance needs the organisation's payment account (read before the transaction).
   let account: Awaited<ReturnType<typeof onlineAccount>> | null = null;
   if (action === "accept") {
@@ -74,6 +74,12 @@ async function respond(eventId: string, applicationId: string, action: RespondAc
       if (!event?.admissionEnabled) return fail("Applications are closed for this event.");
       const app = await tx.admissionApplication.findFirst({ where: { id: applicationId, eventId }, select: applicationSelect });
       if (!app) return fail("Application not found.");
+      if (applicant) {
+        const current = await tx.rSVP.findUnique({ where: { id: applicant.rsvpId }, select: { eventId: true, checkInToken: true, isCrew: true, teamId: true, team: { select: { leaderRsvpId: true } } } });
+        if (!current || current.eventId !== eventId || current.isCrew || current.checkInToken !== applicant.token) return fail("This ticket has no application.");
+        if (app.rsvpId ? app.rsvpId !== applicant.rsvpId || current.teamId !== null : app.teamId !== current.teamId) return fail("This ticket has no application.");
+        if (current.teamId && current.team?.leaderRsvpId !== applicant.rsvpId) return fail("Only the team leader can answer for the team.");
+      }
       const members = await unitMembers(tx, app);
       const paying = members.some((member) => member.status === RsvpStatus.PENDING_PAYMENT && member.holdExpiresAt && member.holdExpiresAt > now);
       if (action === "accept") {

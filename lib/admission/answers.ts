@@ -119,10 +119,12 @@ export async function editApplicationAnswers(token: string, input: Record<string
   try {
     return await prisma.$transaction(async (tx) => {
       await lockAdmissionEvent(tx, rsvp.eventId!);
-      const app = await tx.admissionApplication.findFirst({ where: rsvp.teamId ? { teamId: rsvp.teamId } : { rsvpId: rsvp.id }, select: { status: true, answersLockedAt: true } });
+      const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, select: { id: true, eventId: true, checkInToken: true, isCrew: true, teamId: true, attendeeKey: true } });
+      if (!current || current.eventId !== rsvp.eventId || current.checkInToken !== token || current.isCrew || current.teamId !== rsvp.teamId) return { ok: false as const, error: "This ticket has no application." };
+      const app = await tx.admissionApplication.findFirst({ where: current.teamId ? { teamId: current.teamId } : { rsvpId: current.id }, select: { status: true, answersLockedAt: true } });
       if (!app) return { ok: false as const, error: "This ticket has no application." };
       if (app.status !== AdmissionStatus.IN_REVIEW || app.answersLockedAt) return { ok: false as const, error: DECIDED };
-      await replaceRegistrationAnswers(tx, rsvp, validated.rows, DECIDED);
+      await replaceRegistrationAnswers(tx, current, validated.rows, DECIDED);
       return { ok: true as const };
     });
   } catch (error) {

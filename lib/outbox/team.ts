@@ -4,6 +4,7 @@ import "server-only";
 
 import { Prisma, type RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { sendTeamCreatedEmail, sendTeamMemberAddedEmail } from "@/lib/email";
 import { hashTeamManageToken, isTeamTokenShape, teamJoinPath, teamManagePath } from "@/lib/teamToken";
 import type { OutboxClient } from "./enqueue";
@@ -95,11 +96,11 @@ export async function deliverTeamMessage(kind: string, value: Prisma.JsonValue, 
         joinToken: true,
         manageTokenHash: true,
         event: { select: { title: true, slug: true, organisation: { select: { slug: true } } } },
-        leaderRsvp: { select: { guestName: true, user: { select: { name: true } } } },
+        leaderRsvp: { select: { guestName: true, guestEmail: true, user: { select: { name: true, email: true } } } },
       },
     });
     // Never send a link that no longer works.
-    if (!team || team.manageTokenHash !== hashTeamManageToken(payload.manageToken)) return "dropped";
+    if (!team || !isCurrentHolderRecipient(team.leaderRsvp, payload.to) || team.manageTokenHash !== hashTeamManageToken(payload.manageToken)) return "dropped";
     await sendTeamCreatedEmail({
       to: payload.to,
       eventTitle: team.event.title,
@@ -116,9 +117,9 @@ export async function deliverTeamMessage(kind: string, value: Prisma.JsonValue, 
   if (!payload) return null;
   const rsvp = await prisma.rSVP.findUnique({
     where: { checkInToken: payload.checkInToken },
-    select: { status: true, guestName: true, user: { select: { name: true } }, event: { select: { title: true } }, team: { select: { name: true } } },
+    select: { status: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } }, event: { select: { title: true } }, team: { select: { name: true } } },
   });
-  if (!rsvp?.event || !rsvp.team) return "dropped";
+  if (!rsvp?.event || !rsvp.team || !isCurrentHolderRecipient(rsvp, payload.to)) return "dropped";
   await sendTeamMemberAddedEmail({
     to: payload.to,
     eventTitle: rsvp.event.title,

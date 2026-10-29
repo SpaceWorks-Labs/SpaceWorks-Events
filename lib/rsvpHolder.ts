@@ -25,9 +25,14 @@ export function newTicketToken() {
  * - a team leader's management link is rotated and the new link emailed to
  *   the new holder (`assignTeamLeaderTx`).
  *
+ * Personal expense claims are detached from the transferable registration;
+ * their payee snapshots, decisions, receipts and payouts stay for organisers.
  * The caller rotates the ticket token itself.
  */
 export async function retireHolderCapabilities(tx: Prisma.TransactionClient, rsvpId: string) {
+  // Claims belong to their original payee, never to the replacement holder.
+  // Keep the financial records for organisers, without transferable ticket authority.
+  await tx.expenseClaim.updateMany({ where: { rsvpId }, data: { rsvpId: null } });
   await tx.attendanceCheck.deleteMany({ where: { rsvpId } });
   await tx.submissionLink.deleteMany({ where: { rsvpId } });
   const led = await tx.team.findUnique({ where: { leaderRsvpId: rsvpId }, select: { id: true } });

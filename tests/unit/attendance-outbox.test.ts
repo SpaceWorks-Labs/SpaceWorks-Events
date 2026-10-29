@@ -47,7 +47,7 @@ describe("attendance outbox payload", () => {
 
   it("validates the capability payload shape", () => {
     expect(asAttendanceCheckPayload({ to: "a@example.test", rsvpId: "rsvp_1", token })).not.toBeNull();
-    expect(asAttendanceCheckPayload({ to: "a@example.test", rsvpId: "rsvp_1", token, reminder: true })).not.toBeNull();
+    expect(asAttendanceCheckPayload({ to: "ada-now@example.test", rsvpId: "rsvp_1", token, reminder: true })).not.toBeNull();
     for (const bad of [
       { to: "a@example.test", rsvpId: "rsvp_1", token, reminder: "yes" },
       { to: "a@example.test", rsvpId: "rsvp_1", token: "short" },
@@ -97,11 +97,11 @@ describe("attendance outbox delivery", () => {
   });
 
   it("sends the current question and deletes the capability row", async () => {
-    mocks.findMany.mockResolvedValue([message({ to: "a@example.test", rsvpId: "rsvp_1", token, reminder: true })]);
+    mocks.findMany.mockResolvedValue([message({ to: "ada-now@example.test", rsvpId: "rsvp_1", token, reminder: true })]);
     mocks.checkFind.mockResolvedValue(check());
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 1, failed: 0 });
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({
-      // Sent to the registration's address at delivery, not the one queued.
+      // The queued recipient must still match the current registration's address.
       to: "ada-now@example.test", eventTitle: "Launch", organisationName: "Acme", timezone: "Europe/London", location: "Hall",
       attendPath: `/attend/${token}`, recipientName: "Ada", reminder: true, releaseKind: null, releaseRefund: null,
     }));
@@ -110,7 +110,7 @@ describe("attendance outbox delivery", () => {
   });
 
   it("tells the email what a No would release for this registration, computed at delivery", async () => {
-    mocks.findMany.mockResolvedValue([message({ to: "a@example.test", rsvpId: "rsvp_1", token })]);
+    mocks.findMany.mockResolvedValue([message({ to: "ada-now@example.test", rsvpId: "rsvp_1", token })]);
     mocks.checkFind.mockResolvedValue(check({ event: { ...check().event, attendanceCheckReleaseOnDecline: true } }));
     mocks.release.mockResolvedValue({ kind: "paid", refund: "₹499.00" });
     await deliverOutboxBatch();
@@ -119,7 +119,7 @@ describe("attendance outbox delivery", () => {
   });
 
   it("says Online for an online event", async () => {
-    mocks.findMany.mockResolvedValue([message({ to: "a@example.test", rsvpId: "rsvp_1", token })]);
+    mocks.findMany.mockResolvedValue([message({ to: "ada-now@example.test", rsvpId: "rsvp_1", token })]);
     mocks.checkFind.mockResolvedValue(check({ event: { ...check().event, isOnline: true } }));
     await deliverOutboxBatch();
     expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ location: "Online", reminder: false }));
@@ -132,7 +132,7 @@ describe("attendance outbox delivery", () => {
     ["the guest is no longer eligible", check(), false],
     ["the event was cancelled", check({ event: { ...check().event, status: "CANCELLED" } }), true],
   ])("drops the question silently when %s", async (_label, row, eligible) => {
-    mocks.findMany.mockResolvedValue([message({ to: "a@example.test", rsvpId: "rsvp_1", token })]);
+    mocks.findMany.mockResolvedValue([message({ to: "ada-now@example.test", rsvpId: "rsvp_1", token })]);
     mocks.checkFind.mockResolvedValue(row);
     mocks.eligible.mockResolvedValue(eligible);
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 0, failed: 0 });
@@ -141,7 +141,7 @@ describe("attendance outbox delivery", () => {
   });
 
   it("expires the question once the event has started", async () => {
-    mocks.findMany.mockResolvedValue([message({ to: "a@example.test", rsvpId: "rsvp_1", token })]);
+    mocks.findMany.mockResolvedValue([message({ to: "ada-now@example.test", rsvpId: "rsvp_1", token })]);
     mocks.checkFind.mockResolvedValue(check({ event: { ...check().event, startDateTime: new Date(Date.now() - 1000) } }));
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 0, failed: 1 });
     expect(mocks.send).not.toHaveBeenCalled();

@@ -59,7 +59,7 @@ const team = {
   joinToken: "j".repeat(43),
   manageTokenHash: hashTeamManageToken(manageToken),
   event: { title: "Jam", slug: "jam", organisation: { slug: "org" } },
-  leaderRsvp: { guestName: "Lead", user: null },
+  leaderRsvp: { guestName: "Lead", guestEmail: "lead@example.test", user: null },
 };
 
 describe("team outbox payloads", () => {
@@ -132,7 +132,7 @@ describe("team outbox delivery", () => {
 
   it("emails an added member their own ticket while the registration still exists", async () => {
     mocks.findMany.mockResolvedValue([message({ kind: "team-member-added", payload: { to: "m@example.test", checkInToken: "ticket-token", addedByName: "Lead" } })]);
-    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.WAITLISTED, guestName: "Member", user: null, event: { title: "Jam" }, team: { name: "Byte Me" } });
+    mocks.rsvpFind.mockResolvedValue({ status: RsvpStatus.WAITLISTED, guestName: "Member", guestEmail: "m@example.test", user: null, event: { title: "Jam" }, team: { name: "Byte Me" } });
     await expect(deliverOutboxBatch()).resolves.toEqual({ sent: 1, failed: 0 });
     expect(mocks.memberAdded).toHaveBeenCalledWith(expect.objectContaining({
       to: "m@example.test",

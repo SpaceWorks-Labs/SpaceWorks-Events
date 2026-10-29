@@ -11,7 +11,7 @@ import { newTicketToken, retireHolderCapabilities } from "@/lib/rsvpHolder";
 
 const HOUR = 3_600_000;
 
-/** The holder's expense claims go with their registration; a ticket with claims in play stays with them (`code` for API clients). */
+/** A buyer cannot transfer a ticket with claims in play; closed claims stay with the original payee (`code` for API clients). */
 export class OpenClaimsError extends PaymentOperationError {
   readonly code = "OPEN_CLAIMS";
   constructor() {
@@ -61,7 +61,7 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     await lockOrderTargets(tx, order, now);
     const ticket = await tx.rSVP.findFirst({ where: { id: params.rsvpId, orderId: order.id }, select: { attendeeKey: true, guestEmail: true, user: { select: { email: true } } } });
     if (!ticket) throw new PaymentOperationError("Ticket not found.");
-    // Claims are read and withdrawn by registration, so the new holder would see the previous holder's (docs/FINANCE.md).
+    // Keep a buyer from moving a ticket while its holder has financial commitments (docs/FINANCE.md).
     const claims = await tx.expenseClaim.count({ where: { rsvp: { orderId: order.id, attendeeKey: ticket.attendeeKey }, status: { in: [ExpenseClaimStatus.SUBMITTED, ExpenseClaimStatus.APPROVED, ExpenseClaimStatus.PAID] } } });
     if (claims > 0) throw new OpenClaimsError();
     // The same person's tickets in this order (every date of a pass) move
