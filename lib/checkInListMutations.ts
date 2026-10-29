@@ -17,6 +17,17 @@ function isUniqueViolation(error: unknown) {
 }
 
 /**
+ * The registration's order (an extra's quantity is shared by the order's
+ * guests), then the registration: the same order as refunds and
+ * cancellations, which delete the RSVP and with it its list records.
+ */
+async function lockRegistration(tx: Prisma.TransactionClient, rsvpId: string) {
+  const owner = await tx.rSVP.findUnique({ where: { id: rsvpId }, select: { orderId: true } });
+  if (owner?.orderId) await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${owner.orderId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${rsvpId} FOR UPDATE`;
+}
+
+/**
  * Checks one registration into one custom list. Eligibility, the record and
  * its immutable history are one transaction: the RSVP row is locked (so a
  * status change or a parallel scan cannot slip between the check and the
@@ -36,11 +47,7 @@ export async function commitListCheckIn(params: {
 }): Promise<ListCheckInCommitResult> {
   try {
     return await prisma.$transaction(async (tx): Promise<ListCheckInCommitResult> => {
-      // An extra's quantity is shared by the order's guests: lock the order
-      // first (the same order as refunds), then the registration.
-      const owner = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { orderId: true } });
-      if (owner?.orderId) await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${owner.orderId} FOR UPDATE`;
-      await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${params.rsvpId} FOR UPDATE`;
+      await lockRegistration(tx, params.rsvpId);
       await tx.$queryRaw`SELECT "id" FROM "CheckInList" WHERE "id" = ${params.listId} FOR SHARE`;
       const [rsvp, list, existing] = await Promise.all([
         tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { status: true, checkedInAt: true, eventId: true, orderId: true, ...applicationStatusSelect } }),
@@ -90,9 +97,15 @@ async function addOnAllowance(tx: Prisma.TransactionClient, addOn: { id: string;
 
 export type ListUndoCommitResult = "undone" | "not-checked-in" | "archived" | "missing";
 
-/** Removes one list check-in and records the undo. Archived lists are read-only. */
+/**
+ * Removes one list check-in and records the undo. Archived lists are
+ * read-only. Locks as the check-in does (order, registration, then the list)
+ * before deleting the record: its history row references the registration,
+ * so deleting first would wait for a cancellation that waits for the record.
+ */
 export function commitUndoListCheckIn(params: { listId: string; rsvpId: string; actorUserId: string | null; source: CheckInListSource }): Promise<ListUndoCommitResult> {
   return prisma.$transaction(async (tx): Promise<ListUndoCommitResult> => {
+    await lockRegistration(tx, params.rsvpId);
     await tx.$queryRaw`SELECT "id" FROM "CheckInList" WHERE "id" = ${params.listId} FOR SHARE`;
     const list = await tx.checkInList.findUnique({ where: { id: params.listId }, select: { archived: true } });
     if (!list) return "missing";
