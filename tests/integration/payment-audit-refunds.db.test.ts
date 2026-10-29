@@ -47,7 +47,7 @@ describe.sequential("retrying a failed refund", () => {
     const { order, refund } = await failedRefund();
     expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: OrderStatus.CANCELLED });
     const retry = () => retryFailedRefund({ refundId: refund.id, organisationId: paid.organisationId, actorUserId: owner.id });
-    const results = await whileLocked((tx) => tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${refund.paymentId} FOR UPDATE`, () => Promise.allSettled([retry(), retry()]));
+    const results = await whileLocked((tx) => tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${refund.paymentId} FOR UPDATE`, () => Promise.allSettled([retry(), retry()]), { waiters: 2 });
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: expect.any(PaymentOperationError) });
     const rows = await prisma.paymentRefund.findMany({ where: { paymentId: refund.paymentId }, orderBy: { createdAt: "asc" } });

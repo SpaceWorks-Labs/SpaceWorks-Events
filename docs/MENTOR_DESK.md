@@ -102,6 +102,12 @@ lock, or the solo registration's; a reopen takes the same lock before the
 request row). `expiresAt` = min(now + expiry minutes, event end); the **deadline** is
 min(expiresAt, event end) and is checked inside every command.
 
+Help creation takes `FOR KEY SHARE` on Event before locking a solo RSVP or
+team. Participant, mentor and round-trigger callers take it before any grant
+or round locks too. This matches the insert's Event foreign-key lock and is
+compatible with non-key Event updates; assignment and answer editors taking
+`FOR UPDATE` wait at Event, before holding any registration that help needs.
+
 States: `OPEN → CLAIMED → RESOLVED`, or `CANCELLED` (the team) or `EXPIRED`.
 `HelpRequest.claimedByUserId` is `ON DELETE NO ACTION`: an account cannot be
 deleted while it holds a claim (at most an hour, the longest claim); once the

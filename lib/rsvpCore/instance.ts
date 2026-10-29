@@ -5,7 +5,7 @@ import type { ActionResult } from "@/app/actions/org";
 import { reserveRsvp } from "./reserve";
 import { publicCountField } from "@/lib/publicRegistrationCount";
 import { sellsTickets, seriesOrderTarget, submitTicketOrder } from "./orders";
-import { isRsvpTargetClosedError, requestedItems, resolveAttendeeEmail, type OrderRequest } from "./shared";
+import { isRsvpTargetClosedError, requestedItems, resolveAttendeeEmail, RsvpInviteRequiredError, type OrderRequest } from "./shared";
 
 export async function submitInstanceRsvp(params: {
   org: { id: string; slug: string };
@@ -156,6 +156,7 @@ export async function submitInstanceRsvp(params: {
     };
   } catch (e: unknown) {
     if (isRsvpTargetClosedError(e)) return { ok: false, error: "This event is not open for RSVP." };
+    if (e instanceof RsvpInviteRequiredError) return { ok: false, error: e.message };
     if (
       typeof e === "object" &&
       e !== null &&

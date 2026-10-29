@@ -10,7 +10,7 @@ import { lockSeriesDates } from "@/lib/payments/targets";
 import { publicRegistrationCount } from "@/lib/publicRegistrationCount";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
-import { RsvpTargetClosedError } from "./shared";
+import { RsvpInviteRequiredError, RsvpTargetClosedError } from "./shared";
 import { admissionRegistrationRefusal } from "@/lib/admission/registration";
 import { placeTeamRegistration, TeamRegistrationError, type TeamEventSettings } from "./team";
 
@@ -32,6 +32,19 @@ export function decideRsvpStatus(params: {
 }
 
 export type RsvpTarget = { eventId: string } | { eventInstanceId: string };
+
+/**
+ * Public registration on an invite-only event or series, under the target's
+ * lock: only a signed-in account whose email is on the current invitation
+ * list, for its own single place. Organiser adds (`enforceOpen: false`) skip it.
+ */
+async function requireInvitation(tx: Prisma.TransactionClient, owner: { eventId: string } | { eventSeriesId: string }, userId: string | null | undefined, email: string) {
+  if (!userId) throw new RsvpInviteRequiredError(false);
+  const invited = "eventId" in owner
+    ? await tx.eventInvite.count({ where: { eventId: owner.eventId, email } })
+    : await tx.seriesInvite.count({ where: { eventSeriesId: owner.eventSeriesId, email } });
+  if (invited === 0) throw new RsvpInviteRequiredError(true);
+}
 
 /**
  * Locks the event/occurrence row before counting confirmed attendees. This
@@ -65,6 +78,7 @@ export async function reserveRsvp(params: {
       if (params.enforceOpen !== false && (current.status !== EventStatus.PUBLISHED || current.page?.isPublished !== true || current.endDateTime <= new Date() || isRegistrationClosed(current))) throw new RsvpTargetClosedError();
       capacity = current.capacity;
       privacyType = current.privacyType;
+      if (params.enforceOpen !== false && privacyType === EventPrivacyType.INVITE_ONLY) await requireInvitation(tx, params.target, params.data.userId, params.notification.to);
       if (current.registrationMode === RegistrationMode.TEAM) teamEvent = current;
       // A crew member already holds a free crew ticket (docs/CREW.md); a second registration would take a place.
       if (await hasCrewEmail(tx, params.target.eventId, [params.notification.to])) throw new TeamRegistrationError(CREW_EMAIL_REFUSED);
@@ -81,6 +95,7 @@ export async function reserveRsvp(params: {
       if (params.enforceOpen !== false && (current.series.status !== EventStatus.PUBLISHED || current.endDateTime <= new Date() || current.cancelledAt)) throw new RsvpTargetClosedError();
       capacity = current.capacity ?? current.series.capacity;
       privacyType = current.series.privacyType;
+      if (params.enforceOpen !== false && privacyType === EventPrivacyType.INVITE_ONLY) await requireInvitation(tx, { eventSeriesId: date.eventSeriesId }, params.data.userId, params.notification.to);
     }
 
     const intent = params.team;

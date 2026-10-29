@@ -11,6 +11,20 @@ export function isRsvpTargetClosedError(error: unknown): error is RsvpTargetClos
   return error instanceof RsvpTargetClosedError;
 }
 
+/**
+ * Invite-only public registration (docs/SECURITY.md): one place, for the
+ * signed-in invitee. Re-checked under the reservation's lock, so an audience
+ * switched to invite-only (or an invitation withdrawn) while a registration
+ * waits on that lock is refused.
+ */
+export class RsvpInviteRequiredError extends Error {
+  constructor(signedIn: boolean) {
+    super(signedIn
+      ? "This event is invite-only. Use the email you were invited with."
+      : "This event is invite-only. Sign in with the invited account to register.");
+  }
+}
+
 export type AnswerRow = { fieldId: string; valueText?: string | null; valueBool?: boolean | null; valueNumber?: number | null; valueDate?: Date | null; };
 
 export type OrderRequest = {

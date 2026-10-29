@@ -58,7 +58,14 @@ On an event or series dashboard → **Tickets**:
 - **Transfers:** optionally let buyers hand a ticket to someone else until a
   cut-off before the start. A ticket whose holder has expense claims waiting,
   approved or paid ([Finance](FINANCE.md)) stays with them, since claims
-  belong to the registration.
+  belong to the registration. The new holder gets a new ticket link, and
+  every link the previous holder had for that registration stops working:
+  the ticket, the attendance question (reset, so the next send asks the new
+  holder), the solo submission link (the project stays with the
+  registration; the new holder requests a new link) and, for a team leader,
+  the team page link (a new one is emailed to the new holder). An organiser
+  changing a guest's email in **Edit registration** does the same
+  (`retireHolderCapabilities`, `lib/rsvpHolder.ts`).
 
 At checkout the seats are held for 30 minutes while the buyer pays. Approval
 requests and waitlist places get a payment link that holds the seats for 24
@@ -277,6 +284,17 @@ Rules that go with it:
 - A release started by an attendance "No" (free cancellation, paid
   cancellation, refund request) runs only while that exact No is still the
   answer (`lockCurrentNo` in `lib/attendanceGuard.ts`, the last lock taken).
+- A transfer locks the holder's registrations (by id, after the event or
+  dates) before reading their check-in, and each write still expects an
+  unused, confirmed ticket: a scan either commits first and the transfer is
+  refused, or waits for it. The attendance check is deleted in the same
+  transaction, so a "No" the old holder answered before the transfer finds
+  no current answer and releases nothing. Organiser email changes and the
+  buyer's attendee edits take the same event-then-registrations order.
+- Ticket-token cancellation rechecks the supplied token and the caller's
+  account ownership under the registration lock. Its writes retain those
+  conditions, so a cancellation waiting behind a holder change cannot remove
+  the replacement holder's place, including a free ticket on an order.
 
 ## Applications
 

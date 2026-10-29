@@ -16,6 +16,7 @@ import { DeskError } from "@/lib/core/mentorDesk/shared";
 import { visitCommand } from "@/lib/core/mentorDesk/visits";
 import { createTeam, organiserId, orgSlug, setUpJudgingSuite, tearDownJudgingSuite } from "./helpers/judging";
 import { addCategory, addMentor, createDeskEvent, goLive, heldClaim, HOUR, local, organiserOf, requestVersion, teamParticipant } from "./helpers/mentorDesk";
+import { whileLocked } from "./helpers/lockWait";
 
 // docs/MENTOR_DESK.md "Tests": final-audit fixes (grant fencing, crew, help email and limits, rounds, eligibility).
 describe.sequential("mentor desk audit fixes", () => {
@@ -30,26 +31,16 @@ describe.sequential("mentor desk audit fixes", () => {
     await addCategory(event, { key: "general", openLimit: 1 });
     return { event, teamIds, organiser: await organiserOf(event) };
   }
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   it("makes a grant removal wait for a mentor command holding the grant", async () => {
     const { event } = await setup(0);
     const mentor = await addMentor(event, "fenced");
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const command = prisma.$transaction(async (tx) => { await liveMentor(tx, event.id, mentor.userId); await gate; }, { timeout: 15_000 });
-    await wait(150);
     let removed = false;
-    const removal = prisma.$transaction(async (tx) => {
+    await whileLocked((tx) => liveMentor(tx, event.id, mentor.userId), () => prisma.$transaction(async (tx) => {
       const row = await lockCollaborator(tx, { eventId: event.id, userId: mentor.userId });
       await syncMentorGrantLocked(tx, event.id, mentor.userId, row!.permissions, [], organiserId);
       await tx.eventCollaborator.delete({ where: { id: row!.id } });
-    }, { timeout: 15_000 }).then(() => { removed = true; });
-    await wait(400);
-    expect(removed).toBe(false);
-    release();
-    await command;
-    await removal;
+    }, { timeout: 15_000 }).then(() => { removed = true; }), { beforeRelease: async () => { expect(removed).toBe(false); } });
     expect(removed).toBe(true);
     await expect(prisma.$transaction((tx) => liveMentor(tx, event.id, mentor.userId))).rejects.toThrow(DeskError);
   });

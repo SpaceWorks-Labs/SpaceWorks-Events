@@ -198,17 +198,22 @@ type SoloRsvpRow = Prisma.RSVPGetPayload<{ select: typeof soloRsvpSelect }>;
  * other pending invitations and requests are cancelled, and when its solo
  * unit was confirmed the freed unit promotes the oldest waitlisted unit. A
  * checked-in person can only join a confirmed team: otherwise their unit
- * would go to the waitlist while they are already inside. Status webhooks
- * (the moved registration's, and any promotion's) go into `webhooks`.
+ * would go to the waitlist while they are already inside. The registration
+ * is locked and read again first (check-in takes only its row lock), and the
+ * move expects the check-in state it was decided on. Status webhooks (the
+ * moved registration's, and any promotion's) go into `webhooks`.
  */
 async function moveSoloRsvpIntoTeamTx(
   tx: Prisma.TransactionClient,
   event: LockedEvent,
-  rsvp: SoloRsvpRow,
+  read: SoloRsvpRow,
   team: { id: string; name: string; status: RsvpStatus },
   webhooks: WebhookEmission[],
   opts: { acceptedRequestId?: string } = {},
 ): Promise<TeamResult<{ status: RsvpStatus }>> {
+  await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "id" = ${read.id} FOR UPDATE`;
+  const rsvp = await tx.rSVP.findUnique({ where: { id: read.id }, select: soloRsvpSelect });
+  if (!rsvp) return fail("Registration not found.");
   if (rsvp.teamId) return fail("This registration is already in a team.");
   if (team.status === RsvpStatus.REJECTED) return fail("This team can no longer take new members.");
   if (team.status === RsvpStatus.PENDING_PAYMENT) return fail(LEADER_STILL_PAYING);
@@ -223,7 +228,7 @@ async function moveSoloRsvpIntoTeamTx(
   const retired = await retireSoloSubmissionForTeamTx(tx, { rsvpId: rsvp.id, eventId: event.id, by: "entrant" });
   if (!retired.ok) return fail(retired.error);
   const moved = await tx.rSVP.updateMany({
-    where: { id: rsvp.id, eventId: event.id, teamId: null, status: rsvp.status },
+    where: { id: rsvp.id, eventId: event.id, teamId: null, status: rsvp.status, checkedInAt: rsvp.checkedInAt },
     data: { teamId: team.id, status: team.status },
   });
   if (moved.count !== 1) return fail("This registration was changed. Try again.");
