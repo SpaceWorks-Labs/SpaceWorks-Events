@@ -179,6 +179,8 @@ Release 0.11.0 reserves the organisation addresses `/attend`, `/crew`, `/help`, 
 1. Stop every instance of the previous release (web, worker and beat; this aborts their uploads in progress) **within one hour** of the migration. Docker Compose, the Helm rolling update, Render and the VPS updater all finish replacing instances within minutes; a canary or blue-green setup must not keep the old release serving longer.
 2. **Never run an older image against this database again**, including for a rollback. Roll back by restoring the pre-migration backup instead.
 
+The queue deletes every version and delete marker of a file, so versioning may stay on (bundled Silo keeps it on). Before upgrading an installation on Amazon S3 or another service with a versions API, give the application's access key `s3:ListBucketVersions` and `s3:DeleteObjectVersion` as well; without them its deletions fail with `AccessDenied` until they are granted, and **Super admin → Operations** reports them. Bundled Silo's policy is updated on the next start of the storage setup container. Cloudflare R2 needs nothing extra ([storage contract](CONFIGURATION.md#storage-contract-and-the-deletion-queue)).
+
 The migration records when it ran (`StorageProtocol.enabledAt`). The listing of a deleted organisation's legacy prefix starts no earlier than 27 hours after that (the one-hour drain plus the 26-hour late-write bound), so an old upload still in flight during the rollout has settled before the listing looks for it.
 
 #### Lock checklist

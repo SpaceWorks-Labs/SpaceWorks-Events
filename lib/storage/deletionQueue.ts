@@ -3,13 +3,16 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { sqlUtcTimestamp, SQL_UTC_NOW } from "@/lib/sqlTimestamp";
-import { currentStorageLocation, deleteObjects, listObjectsPage, objectExists } from "./objects";
+import { currentStorageLocation, deleteObjects, listObjectsPage, objectRemains } from "./objects";
 
 /*
  * The storage deletion queue's worker and producers (StorageDeletion in
  * prisma/schema.prisma; docs/CONFIGURATION.md "Object storage"). Every step is
  * safe to repeat: deleting an object twice is harmless, and a row goes only
- * after a later HEAD finds its object gone.
+ * after a later check finds no version of its object left. Each claim
+ * increments `attempts`, and every write that finishes a claimed row requires
+ * that value, so a worker delayed past its lease cannot overwrite the progress
+ * of the worker that claimed the row after it.
  */
 
 const BATCH = 100;
@@ -99,7 +102,7 @@ function backoff(attempts: number) {
 async function retryLater(row: Row, now: Date, code: string) {
   await prisma.$executeRaw`
     UPDATE "StorageDeletion" SET "notBefore" = ${sqlUtcTimestamp(new Date(now.getTime() + backoff(row.attempts)))}, "lastErrorCode" = ${code}
-    WHERE "id" = ${row.id}`;
+    WHERE "id" = ${row.id} AND "attempts" = ${row.attempts}`;
 }
 
 /**
@@ -136,29 +139,32 @@ async function deleteClaimed(rows: Row[], now: Date) {
     if (failure) await retryLater(row, now, errorCode({ Code: failure }));
     else await prisma.$executeRaw`
       UPDATE "StorageDeletion" SET "state" = 'VERIFYING', "notBefore" = ${verifyAt}, "lastErrorCode" = NULL
-      WHERE "id" = ${row.id} AND "state" = 'CLAIMED'`;
+      WHERE "id" = ${row.id} AND "state" = 'CLAIMED' AND "attempts" = ${row.attempts}`;
   }
   return rows.length - failures.size;
 }
 
 async function verify(row: Row, now: Date) {
-  if (!(await objectExists(row.key))) {
-    await prisma.$executeRaw`DELETE FROM "StorageDeletion" WHERE "id" = ${row.id} AND "state" = 'VERIFYING'`;
+  if (!(await objectRemains(row.key))) {
+    await prisma.$executeRaw`DELETE FROM "StorageDeletion" WHERE "id" = ${row.id} AND "state" = 'VERIFYING' AND "attempts" = ${row.attempts}`;
     return true;
   }
-  // Still there: a late write, or a versioned bucket keeping it. Delete again and look again later.
+  // Still there: a late write, or a retention setting keeping it. Delete again and look again later.
   const failure = (await deleteObjects([row.key])).get(row.key);
   const code = failure ? errorCode({ Code: failure }) : row.lastErrorCode?.startsWith("STILL_PRESENT") ? "STILL_PRESENT_REPEATED" : "STILL_PRESENT";
   await prisma.$executeRaw`
     UPDATE "StorageDeletion" SET "notBefore" = ${sqlUtcTimestamp(new Date(now.getTime() + VERIFY_AFTER_MS))}, "lastErrorCode" = ${code}
-    WHERE "id" = ${row.id}`;
+    WHERE "id" = ${row.id} AND "attempts" = ${row.attempts}`;
   return false;
 }
 
-/** One page of a prefix listing: its keys queued and the next token saved together. */
+/** One page of a prefix listing: its keys queued and the next token saved together, unless another worker has claimed the row since. */
 async function listPrefixPage(row: Row, now: Date) {
   const page = await listObjectsPage(row.key, row.continuationToken);
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
+    const owned = await tx.$queryRaw<unknown[]>`
+      SELECT 1 FROM "StorageDeletion" WHERE "id" = ${row.id} AND "attempts" = ${row.attempts} FOR UPDATE`;
+    if (owned.length === 0) return 0;
     if (page.keys.length > 0) {
       await tx.$executeRaw`
         INSERT INTO "StorageDeletion" ("id", "kind", "location", "key", "organisationId", "reason", "notBefore", "createdAt")
@@ -171,8 +177,8 @@ async function listPrefixPage(row: Row, now: Date) {
     else await tx.$executeRaw`
       UPDATE "StorageDeletion" SET "continuationToken" = ${page.next}, "notBefore" = ${sqlUtcTimestamp(now)}, "lastErrorCode" = NULL
       WHERE "id" = ${row.id}`;
+    return page.keys.length;
   });
-  return page.keys.length;
 }
 
 /** The beat job: one batch of due deletions, verifications and listing pages. */
@@ -188,7 +194,7 @@ export async function processStorageDeletions(now = new Date()) {
       result.misplaced += 1;
       await prisma.$executeRaw`
         UPDATE "StorageDeletion" SET "notBefore" = ${sqlUtcTimestamp(new Date(now.getTime() + VERIFY_AFTER_MS))}, "lastErrorCode" = 'LOCATION_MISMATCH'
-        WHERE "id" = ${row.id}`;
+        WHERE "id" = ${row.id} AND "attempts" = ${row.attempts}`;
     } else if (row.kind === "OBJECT" && row.state === "CLAIMED") {
       toDelete.push(row);
     } else {

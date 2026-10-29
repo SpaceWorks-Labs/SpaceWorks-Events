@@ -146,8 +146,10 @@ region (`auto` for R2), bucket, access key and secret (hidden). The application
 reads and writes the bucket itself; browsers never talk to it, so no CORS is
 needed. With external storage (`SWE_STORAGE='external'`) the Silo services do
 not run and `vps-backup.sh` copies the database and configuration only: back
-the bucket up with your provider. Leave versioning off on the bucket: deleted files
-must really go ([storage contract](CONFIGURATION.md#storage-contract-and-the-deletion-queue)).
+the bucket up with your provider. Versioning may be on: the app deletes every version
+of a deleted file, so on Amazon S3 the key also needs `s3:ListBucketVersions` and
+`s3:DeleteObjectVersion`, and no object lock or retention rule may keep deleted versions
+([storage contract](CONFIGURATION.md#storage-contract-and-the-deletion-queue)).
 To change the bucket later, copy every object to the new bucket first, then edit
 `S3_*` in `app.env` and recreate the app (`scripts/vps-compose.sh up -d`).
 
