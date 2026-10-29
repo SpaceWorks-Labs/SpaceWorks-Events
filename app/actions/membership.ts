@@ -24,6 +24,7 @@ import { peopleWithPlaces } from "@/lib/payments/eventCancellation";
 import { organisationMoneyBlocker } from "@/lib/payments/obligations";
 import { noticeEach, noticeSubject, uniqueEmails } from "@/lib/notices";
 import { queueOrganisationStorage } from "@/lib/storage/deletionQueue";
+import { retryOrganisationDeletion } from "@/lib/organisationDeletionRetry";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -185,16 +186,18 @@ export async function deleteOrganisation(input: unknown): Promise<ActionResult> 
     return { ok: false, error: "For security, sign in again before deleting an organisation." };
   }
 
-  const now = new Date();
   const slug = org.slug;
   const actorUserId = session.user.id;
   // One transaction, the Organisation row first: every path that creates an
   // order or a payment takes its key-share fence (docs/PAYMENTS.md), so it
   // either committed before this check or waits and then finds nothing.
-  // Nothing is announced, audited or queued unless the check passes.
-  const refusal = await prisma.$transaction(async (tx) => {
+  // Other Event-locked commands can deadlock through an Organisation FK.
+  // Retry the entire transaction, including obligations and queued effects;
+  // nothing escapes an aborted attempt (docs/PAYMENTS.md).
+  const refusal = await retryOrganisationDeletion(() => prisma.$transaction(async (tx) => {
     const locked = await tx.$queryRaw<Array<{ id: string; }>>`SELECT "id" FROM "Organisation" WHERE "id" = ${org.id} FOR UPDATE`;
     if (locked.length === 0) return "Organisation not found.";
+    const now = new Date();
     // Deleting would erase payment records and refunds still owed or in flight.
     const blocker = await organisationMoneyBlocker(tx, org.id, now);
     if (blocker) return blocker;
@@ -219,7 +222,7 @@ export async function deleteOrganisation(input: unknown): Promise<ActionResult> 
     await queueOrganisationStorage(tx, org.id);
     await tx.organisation.delete({ where: { id: org.id } });
     return null;
-  }, { timeout: 60_000 });
+  }, { timeout: 60_000 }));
   if (refusal) return { ok: false, error: refusal };
 
   revalidatePath("/dashboard");

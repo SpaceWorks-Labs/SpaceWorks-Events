@@ -304,8 +304,13 @@ when its team did. For later eligibility rules (e.g. per-stage reimbursements).
 
 ## Lock order
 
-Every Mentor Desk transaction takes its row locks in one order, so two
-commands queue on the same row instead of deadlocking:
+Mentor Desk commands take their row locks in the order below, so competing
+commands queue on the same row instead of deadlocking.
+
+Event-locked commands that later write Organisation-referencing rows (including
+help assignment and conflict audits) can still deadlock with organisation
+deletion; PostgreSQL aborts one transaction and deletion retries its whole
+transaction up to three attempts (see [Payments lock order](PAYMENTS.md#locks-and-races-developers)).
 
 1. The `Event` row: `FOR UPDATE` (`lockEvent`) for assignment runs and hand
    edits, configuration, rounds, and the help commands claim and assign;

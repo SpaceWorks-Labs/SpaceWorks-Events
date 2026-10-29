@@ -227,7 +227,8 @@ one order, so two of them never wait on each other:
    orders through `lockSellable`, entry fees, settlement, everything through
    `lockOrder`, accepting an application's paid offer through
    `lockAdmissionEvent`) and in event and series deletion. Key-share locks
-   never block each other; organisation deletion takes the row `FOR UPDATE`;
+   never block each other; within this order/payment lock protocol,
+   organisation deletion is the only operation taking Organisation `FOR UPDATE`;
 1. the event row, or the series row;
 2. the series' dates, by id;
 3. the order;
@@ -274,6 +275,15 @@ Rules that go with it:
   commits and is seen; one that comes after waits and finds the organisation
   gone. Event and series deletion take the fence and the event or series
   lock, then check paid orders again.
+- Other Event-locked paths can later write Organisation-referencing rows
+  (for example Mentor Desk audits or outbox messages) without taking the
+  Organisation fence first. These can deadlock with concurrent organisation
+  deletion's cascade. PostgreSQL resolves the cycle by aborting one transaction;
+  deletion retries the whole transaction, including the obligations check,
+  up to three attempts in total on Prisma `P2034` or PostgreSQL `40P01`/`40001`.
+  Notices, audit and storage queue writes all stay inside that transaction,
+  so aborted attempts leave no duplicate side effects; cache revalidation
+  runs only after a successful deletion.
 - Membership role changes and removals serialise on the Organisation row
   (`FOR NO KEY UPDATE`, which never blocks the fence, and waits for leaving,
   which takes `FOR UPDATE`), re-read both people's roles under it, and
