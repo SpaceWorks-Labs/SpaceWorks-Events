@@ -4,6 +4,7 @@ import "server-only";
 
 import { OutboxStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { sendApprovalNotification, sendCollaboratorInvitation, sendEventInvitation, sendReminder, sendRSVPConfirmation } from "@/lib/email";
 import { broadcastTicketUrl } from "@/lib/eventBroadcast";
 import { sendPasswordResetEmail } from "@/lib/email/passwordReset";
@@ -75,7 +76,7 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         const payload = asRsvpConfirmationPayload(message.payload);
         if (!payload) throw new PermanentOutboxError();
         const rsvp = await getCurrentRsvp(payload.checkInToken);
-        if (rsvp?.status !== payload.status) {
+        if (rsvp?.status !== payload.status || !isCurrentHolderRecipient(rsvp, payload.to)) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }
@@ -86,7 +87,7 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         if (!payload) throw new PermanentOutboxError();
         if (payload.approved) {
           const rsvp = await getCurrentRsvp(payload.checkInToken!);
-          if (rsvp?.status !== RsvpStatus.CONFIRMED) {
+          if (rsvp?.status !== RsvpStatus.CONFIRMED || !isCurrentHolderRecipient(rsvp, payload.to)) {
             await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
             continue;
           }
@@ -160,7 +161,7 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
         const rsvp = await prisma.rSVP.findUnique({
           where: { id: payload.rsvpId },
           select: {
-            status: true, checkInToken: true,
+            status: true, checkInToken: true, guestEmail: true, user: { select: { email: true } },
             event: { select: { title: true, startDateTime: true, timezone: true, location: true, isOnline: true, status: true } },
             eventInstance: { select: { startDateTime: true, cancelledAt: true, series: { select: { title: true, timezone: true, status: true } } } },
           },
@@ -171,7 +172,7 @@ export async function deliverOutboxBatchWithCount(limit = 20) {
             ? { title: rsvp.eventInstance.series.title, start: rsvp.eventInstance.startDateTime, timezone: rsvp.eventInstance.series.timezone, location: undefined, live: rsvp.eventInstance.series.status === "PUBLISHED" && !rsvp.eventInstance.cancelledAt }
             : null;
         // Cancelled, moved into the past, or no longer confirmed: a reminder would be wrong.
-        if (!rsvp || !occasion || rsvp.status !== RsvpStatus.CONFIRMED || !occasion.live || occasion.start <= new Date()) {
+        if (!rsvp || !isCurrentHolderRecipient(rsvp, payload.to) || !occasion || rsvp.status !== RsvpStatus.CONFIRMED || !occasion.live || occasion.start <= new Date()) {
           await prisma.outboxMessage.deleteMany({ where: { id: message.id, status: OutboxStatus.PROCESSING, lockedAt: claimTime } });
           continue;
         }

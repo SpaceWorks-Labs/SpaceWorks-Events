@@ -290,3 +290,19 @@ skipped in that mode.
 
 The CI `hosting` matrix runs both deployment browser suites on Node.js 22 with
 disposable containers; it needs no production hosting credentials.
+
+## Holder retirement regressions
+
+`holder-outbox.db.test.ts` queues broadcast/reminder messages, changes the
+holder through the buyer and organiser paths, and verifies silent drops;
+it also checks reimbursement notices. `holder-admission.db.test.ts` covers
+queued application notices and uses PostgreSQL lock waits to put applicant
+responses and answer edits behind a real organiser holder change, plus a
+leadership change with an unchanged ticket token.
+
+`holder-claims.db.test.ts` checks detached personal financial records and
+forces claim submissions (general and policy, including uploaded receipts)
+to wait behind a real transfer. It also covers account, status, crew and
+payee changes under Event. The unit
+`outbox-holder.test.ts` checks mismatched recipients on every token-bearing
+delivery path.

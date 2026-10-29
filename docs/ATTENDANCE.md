@@ -75,8 +75,10 @@ it**) that open the form with that answer preselected. Links use the absolute
 `NEXT_PUBLIC_BASE_URL`. At delivery a question is dropped if its link was
 replaced, the guest already answered, is no longer eligible, or the event was
 cancelled, and it expires when the event starts. The email goes to the
-registration's address at delivery (the account's current email, or the
-guest's), not the one it was queued for.
+registration's current address (the account's email, or the guest's) only
+while it still matches the queued recipient, ignoring case and surrounding
+whitespace. A changed address drops the message; a former holder never gets
+the replacement holder's capabilities.
 
 The email says a No gives up the place **only when release is on and that
 registration would actually be released right now** (computed at delivery by

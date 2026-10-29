@@ -54,7 +54,7 @@ export async function deliverVolunteerNotice(value: Prisma.JsonValue, messageId:
     where: { id: payload.crewMemberId },
     select: { name: true, email: true, rsvp: { select: { status: true, checkInToken: true } }, event: { select: { organisationId: true, title: true, status: true, timezone: true } } },
   });
-  if (!member || member.rsvp.status !== RsvpStatus.CONFIRMED || member.event.organisationId !== payload.organisationId || member.event.status === "CANCELLED") return "dropped";
+  if (!member || member.email.trim().toLowerCase() !== payload.to.trim().toLowerCase() || member.rsvp.status !== RsvpStatus.CONFIRMED || member.event.organisationId !== payload.organisationId || member.event.status === "CANCELLED") return "dropped";
   let shift: { title: string; zone: string; startsAt: Date; endsAt: Date } | undefined;
   if (payload.notice === "approved" || payload.notice === "promoted") {
     const signup = payload.signupId
@@ -69,7 +69,7 @@ export async function deliverVolunteerNotice(value: Prisma.JsonValue, messageId:
     return "dropped";
   }
   await sendVolunteerNoticeEmail({
-    // The crew member's address now, not when the notice was queued (an organiser may have corrected it).
+    // The current crew address has been checked against the queued recipient.
     to: member.email,
     notice: payload.notice,
     eventTitle: member.event.title,

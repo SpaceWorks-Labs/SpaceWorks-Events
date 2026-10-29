@@ -4,6 +4,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { sendAttendanceCheckEmail } from "@/lib/email/attendance";
 import { attendancePath, hashAttendanceToken, isAttendanceTokenShape } from "@/lib/attendanceToken";
 import { attendanceCheckOpen } from "@/lib/attendanceCheck";
@@ -15,8 +16,8 @@ export const ATTENDANCE_CHECK_KIND = "attendance-check";
 
 /**
  * "Are you still coming?" for one eligible registration. `to` is where it
- * was addressed when queued; delivery sends to the registration's current
- * address. Queued only by an
+ * was addressed when queued; delivery drops it if the registration's current
+ * address no longer matches. Queued only by an
  * organiser's explicit send or reminder, never by the worker. Carries the raw
  * `/attend/{token}` token (a capability), which exists nowhere else; dropped
  * when the token was rotated, the guest already replied or is no longer
@@ -72,7 +73,7 @@ export async function deliverAttendanceCheck(value: Prisma.JsonValue, messageId:
   if (!attendanceCheckOpen(check.event.startDateTime)) return "expired";
   // The registration's address now (an account email may have changed since the send).
   const to = (check.rsvp.user?.email ?? check.rsvp.guestEmail ?? "").trim();
-  if (!to) return "dropped";
+  if (!to || !isCurrentHolderRecipient(check.rsvp, payload.to)) return "dropped";
   // Loaded on demand: the release rules pull in the payment operations.
   const release = await (await import("@/lib/core/attendanceCheck/release")).releaseFor(payload.rsvpId, check.event.attendanceCheckReleaseOnDecline);
   await sendAttendanceCheckEmail({
