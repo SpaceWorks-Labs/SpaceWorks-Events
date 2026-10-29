@@ -4,12 +4,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 const session = vi.hoisted(() => ({ value: null as null | { user: { id: string; }; mfaVerified?: boolean; }, proof: undefined as string | undefined, token: undefined as string | undefined }));
 vi.mock("@/lib/auth", () => ({ auth: async () => session.value }));
-vi.mock("next/headers", () => ({ cookies: async () => ({
+vi.mock("next/headers", () => ({ headers: async () => new Headers(), cookies: async () => ({
   get: () => (session.proof ? { value: session.proof } : undefined),
   getAll: () => (session.token ? [{ name: "swe.session-token.v1", value: session.token }] : []),
 }) }));
 
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { verifyPasswordSignIn } from "@/lib/credentialsAuth";
 import {
   accountUnderAttack, consumeSignInCode, deviceHash, isAddressBlocked, knownDevice, noteFailedSignIn, rememberSignIn, sendSignInCode,
 } from "@/lib/loginSecurity";
@@ -62,6 +64,26 @@ describe("sign-in protections", () => {
     // Only a hash of the browser's id is kept.
     expect(device).toMatchObject({ userAgent: "Safari on iOS", lastIp: "203.0.113.9" });
     expect(device!.deviceHash).not.toContain("b".repeat(64));
+  });
+
+  it("audits and alerts a password sign-in that sends no usable device id", async () => {
+    await prisma.user.update({ where: { id: users.attendee! }, data: { passwordHash: await bcrypt.hash("correct horse battery", 4) } });
+    await rememberSignIn({ userId: users.attendee!, email: email("attendee"), hash: deviceHash("c".repeat(64)), ip: "203.0.113.5", userAgent: "Chrome/130.0", firstDevice: true });
+    const audits = () => prisma.auditEvent.count({ where: { action: "SIGN_IN_NEW_DEVICE", actorUserId: users.attendee! } });
+    const alerts = () => prisma.outboxMessage.count({ where: { kind: "operator-notice", payload: { path: ["to"], equals: email("attendee") } } });
+    expect([await audits(), await alerts()]).toEqual([1, 0]);
+
+    const context = { ip: "198.51.100.20", userAgent: "curl/8.0" };
+    const withoutDevice = await verifyPasswordSignIn({ email: email("attendee"), password: "correct horse battery" }, context);
+    expect(withoutDevice.ok).toBe(true);
+    expect([await audits(), await alerts()]).toEqual([2, 1]);
+    // A malformed id is no better than none, and neither is remembered.
+    const malformed = await verifyPasswordSignIn({ email: email("attendee"), password: "correct horse battery", device: "not-a-device-id" }, context);
+    expect(malformed.ok).toBe(true);
+    expect([await audits(), await alerts()]).toEqual([3, 2]);
+    expect(await prisma.userDevice.count({ where: { userId: users.attendee! } })).toBe(1);
+    await prisma.userDevice.deleteMany({ where: { userId: users.attendee! } });
+    await prisma.user.update({ where: { id: users.attendee! }, data: { passwordHash: null } });
   });
 
   it("emails a code that works once, and never stores the code itself", async () => {

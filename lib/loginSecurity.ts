@@ -106,19 +106,23 @@ export function newSignInAdvice(email: string): string {
 
 /**
  * Remember the device this sign-in came from. A device the account hasn't
- * used before (other than its very first) sends a "new sign-in" alert.
+ * used before (other than its very first) sends a "new sign-in" alert. A
+ * missing or malformed device id counts as an unknown device: it is audited
+ * and alerted every time, and only remembering it needs a usable hash.
  */
 export async function rememberSignIn(params: { userId: string; email: string; hash: string | null; ip: string; userAgent: string; firstDevice: boolean; }) {
-  if (!params.hash) return;
   const userAgent = describeBrowser(params.userAgent);
   const lastIp = params.ip === "unknown" ? null : params.ip.slice(0, 64);
-  const existing = await prisma.userDevice.findUnique({ where: { userId_deviceHash: { userId: params.userId, deviceHash: params.hash } }, select: { id: true } });
-  if (existing) {
-    await prisma.userDevice.update({ where: { id: existing.id }, data: { lastSeenAt: new Date(), lastIp, userAgent } });
-    return;
+  const hash = params.hash;
+  if (hash) {
+    const existing = await prisma.userDevice.findUnique({ where: { userId_deviceHash: { userId: params.userId, deviceHash: hash } }, select: { id: true } });
+    if (existing) {
+      await prisma.userDevice.update({ where: { id: existing.id }, data: { lastSeenAt: new Date(), lastIp, userAgent } });
+      return;
+    }
   }
   await prisma.$transaction(async (tx) => {
-    await tx.userDevice.create({ data: { userId: params.userId, deviceHash: params.hash!, userAgent, lastIp } });
+    if (hash) await tx.userDevice.create({ data: { userId: params.userId, deviceHash: hash, userAgent, lastIp } });
     await tx.auditEvent.create({ data: { action: "SIGN_IN_NEW_DEVICE", actorUserId: params.userId, targetType: "User", targetId: params.userId } });
     if (!params.firstDevice) {
       await enqueueOperatorNotice(tx, {
