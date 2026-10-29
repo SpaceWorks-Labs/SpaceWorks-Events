@@ -2222,6 +2222,65 @@ model InstanceSetting {
 
 /// Tracks stored files (S3/R2/MinIO/etc.) for per-org storage accounting.
 /// This is optional for runtime today but enables accurate “bytes stored” metrics.
+enum StorageDeletionKind {
+  OBJECT
+  PREFIX
+}
+
+enum StorageDeletionState {
+  PENDING
+  CLAIMED
+  VERIFYING
+}
+
+enum StorageDeletionReason {
+  UPLOAD_PENDING
+  ORG_DELETED
+  LEGACY_PREFIX
+  UNATTACHED
+}
+
+/// The object-storage deletion queue (lib/storage/deletionQueue.ts,
+/// docs/CONFIGURATION.md "Object storage"). Every object-storage upload
+/// registers a PENDING row before its PUT and removes it only when it
+/// publishes its Asset, so a failed, abandoned or uncertain PUT is deleted
+/// later. Organisation deletion, abandoned receipts and legacy prefixes queue
+/// rows too. No foreign key: rows outlive the organisation. The beat claims a
+/// due row (CLAIMED, which can never be published) before any DELETE, then
+/// re-checks it a day later (VERIFYING) and removes the row only once the
+/// object is gone. `location` is the storage location the key belongs to; a
+/// row for another location is kept and reported, never deleted elsewhere.
+model StorageDeletion {
+  id                String                @id @default(cuid())
+  kind              StorageDeletionKind
+  state             StorageDeletionState  @default(PENDING)
+  location          String
+  key               String
+  organisationId    String?
+  reason            StorageDeletionReason
+  /// Uploads only: the PUT is refused from, and aborted at, this time.
+  deadline          DateTime?
+  notBefore         DateTime
+  attempts          Int                   @default(0)
+  lastErrorCode     String?
+  /// PREFIX rows: where the paginated listing continues.
+  continuationToken String?
+  createdAt         DateTime              @default(now())
+
+  @@unique([location, key, kind])
+  @@index([state, notBefore])
+  @@index([notBefore])
+}
+
+/// When this database started tracking every upload (the storage deletion
+/// queue's migration). Prefix listings start no earlier than 27 hours after
+/// it, past the old-writer drain and the late-write bound
+/// (docs/production-operations.md).
+model StorageProtocol {
+  id        Int      @id
+  enabledAt DateTime
+}
+
 model Asset {
   id             String   @id @default(cuid())
   organisationId String?

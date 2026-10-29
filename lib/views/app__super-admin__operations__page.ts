@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 import { BEAT_HEARTBEAT_KEY, OUTBOX_SCHEDULER_HEARTBEAT_KEY } from "@/lib/operationalHeartbeat";
 import { getEmailSettingsStatus, INSTANCE_SETTINGS_ID, resolveBackupPosture } from "@/lib/instanceSettings";
 import { backupProblem, readVpsBackupStatus } from "@/lib/vpsBackupStatus";
+import { storageDeletionProblems } from "@/lib/storage/deletionQueue";
 export async function loadSuperAdminOperationsView() {
   await requireSuperAdminMfa();
   const now = new Date();
@@ -65,5 +66,7 @@ export async function loadSuperAdminOperationsView() {
   // The VPS installer's own backups, when this runs from it (null elsewhere).
   const serverBackup = await readVpsBackupStatus();
   const serverBackupProblem = backupProblem(serverBackup, now);
-  return { prerequisites, backupProvider, backupFresh, backupRetentionDays, reportedBackupAt, lastRestoreDrill, outbox, failedCount, expiredTokens, schedulerFresh, schedulerHeartbeat, beatFresh, beatHeartbeat, oldestPending, failedMessages, serverBackup, serverBackupProblem };
+  // Stored files waiting to be deleted that need a look (docs/CONFIGURATION.md "Object storage").
+  const storageDeletions = await storageDeletionProblems();
+  return { storageDeletions, prerequisites, backupProvider, backupFresh, backupRetentionDays, reportedBackupAt, lastRestoreDrill, outbox, failedCount, expiredTokens, schedulerFresh, schedulerHeartbeat, beatFresh, beatHeartbeat, oldestPending, failedMessages, serverBackup, serverBackupProblem };
 }

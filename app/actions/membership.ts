@@ -22,6 +22,7 @@ import { hasRecentAuthentication } from "@/lib/reauth";
 import { EventStatus, OrderStatus } from "@prisma/client";
 import { peopleWithPlaces } from "@/lib/payments/eventCancellation";
 import { noticeEach, noticeSubject, uniqueEmails } from "@/lib/notices";
+import { queueOrganisationStorage } from "@/lib/storage/deletionQueue";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
@@ -199,7 +200,14 @@ export async function deleteOrganisation(input: unknown): Promise<ActionResult> 
     targetType: "organisation",
     targetId: org.id,
   });
-  await prisma.organisation.delete({ where: { id: org.id } });
+  // Its stored files are queued in the same transaction (lib/storage/deletionQueue.ts):
+  // the queue has no foreign key, so it outlives the cascade, and the lock
+  // orders this against an upload publishing its Asset.
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "Organisation" WHERE "id" = ${org.id} FOR UPDATE`;
+    await queueOrganisationStorage(tx, org.id);
+    await tx.organisation.delete({ where: { id: org.id } });
+  }, { timeout: 60_000 });
 
   revalidatePath("/dashboard");
   revalidatePath(`/${slug}`);

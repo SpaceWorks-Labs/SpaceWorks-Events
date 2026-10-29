@@ -1,12 +1,11 @@
 import "server-only";
 
-import {
-  DeleteObjectsCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
+import { client, storageConfigured } from "./objects";
+import { uploadObject } from "./uploads";
+
+export { client, storageConfigured };
 
 export type UploadInput = {
   key: string;
@@ -23,23 +22,6 @@ const USER_DERIVATIVE_KEY =
 
 export function isPublicDerivativeKey(key: string) {
   return ORGANISATION_DERIVATIVE_KEY.test(key) || USER_DERIVATIVE_KEY.test(key);
-}
-
-export function storageConfigured() {
-  return Boolean(process.env.S3_BUCKET && process.env.S3_REGION);
-}
-
-export function client() {
-  const accessKeyId = process.env.S3_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
-  return new S3Client({
-    region: process.env.S3_REGION!,
-    ...(process.env.S3_ENDPOINT ? { endpoint: process.env.S3_ENDPOINT } : {}),
-    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "1",
-    ...(accessKeyId && secretAccessKey
-      ? { credentials: { accessKeyId, secretAccessKey } }
-      : {}),
-  });
 }
 
 async function bytes(input: UploadInput["body"]) {
@@ -60,31 +42,13 @@ export async function uploadFile(input: UploadInput): Promise<{ key: string }> {
   }
   const uploadBody = await bytes(input.body);
   if (storageConfigured()) {
-    await client().send(
-      new PutObjectCommand({
-        Bucket: process.env.S3_BUCKET!,
-        Key: input.key,
-        Body: uploadBody,
-        ContentType: input.contentType || "application/octet-stream",
-        CacheControl: "public, max-age=31536000, immutable",
-      }),
-    );
-    await prisma.asset.upsert({
-      where: { key: input.key },
-      create: {
-        key: input.key,
-        contentType: input.contentType || "application/octet-stream",
-        byteSize: BigInt(uploadBody.length),
-        provider: "s3",
-        organisationId: input.organisationId || null,
-      },
-      update: {
-        contentType: input.contentType || "application/octet-stream",
-        byteSize: BigInt(uploadBody.length),
-        provider: "s3",
-        fileData: null,
-        organisationId: input.organisationId || null,
-      },
+    // Tracked from before the PUT until the Asset exists (lib/storage/uploads.ts).
+    await uploadObject({
+      key: input.key,
+      organisationId: input.organisationId || null,
+      body: uploadBody,
+      contentType: input.contentType,
+      cacheControl: "public, max-age=31536000, immutable",
     });
     return { key: input.key };
   }

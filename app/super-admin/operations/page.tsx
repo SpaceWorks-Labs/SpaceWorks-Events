@@ -27,12 +27,21 @@ function safeErrorSummary(value: string | null) {
 
 export default async function SuperAdminOperationsPage() {
   await requireSuperAdminMfa();
-  const { prerequisites, backupProvider, backupFresh, backupRetentionDays, reportedBackupAt, lastRestoreDrill, outbox, failedCount, expiredTokens, schedulerFresh, schedulerHeartbeat, beatFresh, beatHeartbeat, oldestPending, failedMessages, serverBackup, serverBackupProblem } = await loadSuperAdminOperationsView();
+  const { storageDeletions, prerequisites, backupProvider, backupFresh, backupRetentionDays, reportedBackupAt, lastRestoreDrill, outbox, failedCount, expiredTokens, schedulerFresh, schedulerHeartbeat, beatFresh, beatHeartbeat, oldestPending, failedMessages, serverBackup, serverBackupProblem } = await loadSuperAdminOperationsView();
   const time = (value: string | null) => (value ? `${new Date(value).toLocaleString()} (${ageLabel(new Date(value))})` : "none yet");
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Operations" description="Backup posture, queue health, retention jobs, and safe maintenance controls for this deployment." />
 
+      {storageDeletions.misplaced + storageDeletions.stillPresent + storageDeletions.failing > 0 ? (
+        <Callout tone="warning" title="Stored files are waiting to be deleted" role="status" className="rounded-xl">
+          <ul className="list-disc pl-5">
+            {storageDeletions.misplaced > 0 ? <li>{storageDeletions.misplaced} file{storageDeletions.misplaced === 1 ? " belongs" : "s belong"} to a storage bucket that is no longer configured. They are kept and never deleted from the current bucket; restore the earlier storage settings or remove them there by hand.</li> : null}
+            {storageDeletions.stillPresent > 0 ? <li>{storageDeletions.stillPresent} deleted file{storageDeletions.stillPresent === 1 ? " was" : "s were"} still there when checked twice. The private bucket may have versioning turned on, which keeps deleted files: turn it off.</li> : null}
+            {storageDeletions.failing > 0 ? <li>{storageDeletions.failing} file{storageDeletions.failing === 1 ? "" : "s"} could not be deleted after several attempts. Check the storage credentials and bucket permissions.</li> : null}
+          </ul>
+        </Callout>
+      ) : null}
       {serverBackup ? (
         <AdminPanel title="Server backups" description="Made by the VPS installer on this server. Change them by running the installer again and choosing Backups.">
           <div className="flex flex-col gap-3">

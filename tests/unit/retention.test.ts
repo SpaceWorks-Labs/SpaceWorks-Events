@@ -16,9 +16,11 @@ const mocks = vi.hoisted(() => ({
   applicationEvents: vi.fn(),
   offlineCheckIns: vi.fn(),
   crewPhotos: vi.fn(),
+  receipts: vi.fn(),
 }));
 
 vi.mock("@/lib/core/crew/photos", () => ({ purgeUnusedCrewPhotos: mocks.crewPhotos }));
+vi.mock("@/lib/storage/deletionQueue", () => ({ purgeUnattachedReceipts: mocks.receipts }));
 
 vi.mock("@/lib/db", () => ({ prisma: {
   $transaction: mocks.transaction,
@@ -48,6 +50,7 @@ describe("operational retention", () => {
       mock.mockResolvedValue({ count: 1 });
     }
     mocks.crewPhotos.mockResolvedValue(2);
+    mocks.receipts.mockResolvedValue(3);
     mocks.transaction.mockImplementation((operations: Array<Promise<unknown>>) => Promise.all(operations));
   });
 
@@ -73,7 +76,9 @@ describe("operational retention", () => {
       applicationStatusEvents: 1,
       offlineCheckInRecords: 1,
       unusedCrewPhotos: 2,
+      unattachedReceipts: 3,
     });
+    expect(mocks.receipts).toHaveBeenCalledWith(now);
     expect(mocks.crewPhotos).toHaveBeenCalledWith(now);
     expect(mocks.orgInvite).toHaveBeenCalledWith({ where: { usedAt: null, expiresAt: { lt: now } } });
     expect(mocks.collaboratorInvite).toHaveBeenCalledWith({ where: { usedAt: null, expiresAt: { lt: now } } });
