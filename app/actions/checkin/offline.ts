@@ -6,6 +6,7 @@ import type { ActionResult } from "../org";
 import { commitOfflineCheckIn } from "@/lib/checkInMutations";
 import { getCheckInDetails, getRegistrationDetails } from "@/lib/checkInDetails";
 import { deskAttendanceState } from "@/lib/attendanceCheck";
+import { recordAuditEvent } from "@/lib/audit";
 import { attendeeLabel, requireOrgMemberForEvent, revalidatePath } from "./access";
 import type { OfflineCheckInRosterRow } from "../checkin";
 
@@ -52,30 +53,31 @@ export async function downloadOfflineCheckInRoster(
     else answersByRsvp.set(answer.rsvpId, [answer]);
   }
 
-  return {
-    ok: true,
-    data: {
-      generatedAt: new Date().toISOString(),
-      rows: rsvps.map((r) => {
-        const user = r.userId ? { name: r.userName, email: r.userEmail } : null;
-        const rsvpAnswers = answersByRsvp.get(r.id) ?? [];
-        return {
-          rsvpId: r.id,
-          ticketToken: r.checkInToken,
-          displayName: attendeeLabel({ user, guestName: r.guestName, guestEmail: r.guestEmail }),
-          email: user?.email ?? r.guestEmail,
-          status: r.status,
-          checkedInAt: r.checkedInAt?.toISOString() ?? null,
-          checkInDetails: getCheckInDetails(rsvpAnswers, r.crewFood != null ? { foodPreference: r.crewFood } : null),
-          registrationDetails: getRegistrationDetails(rsvpAnswers),
-          teamName: r.teamName,
-          // The attendance reply only (docs/ATTENDANCE.md); never the note.
-          attendance: deskAttendanceState(r.attendanceAsked ? { response: r.attendanceResponse } : null),
-          isCrew: r.isCrew,
-        };
-      }),
-    },
-  };
+  const rows = rsvps.map((r): OfflineCheckInRosterRow => {
+    const user = r.userId ? { name: r.userName, email: r.userEmail } : null;
+    const rsvpAnswers = answersByRsvp.get(r.id) ?? [];
+    return {
+      rsvpId: r.id,
+      ticketToken: r.checkInToken,
+      displayName: attendeeLabel({ user, guestName: r.guestName, guestEmail: r.guestEmail }),
+      email: user?.email ?? r.guestEmail,
+      status: r.status,
+      checkedInAt: r.checkedInAt?.toISOString() ?? null,
+      checkInDetails: getCheckInDetails(rsvpAnswers, r.crewFood != null ? { foodPreference: r.crewFood } : null),
+      registrationDetails: getRegistrationDetails(rsvpAnswers),
+      teamName: r.teamName,
+      // The attendance reply only (docs/ATTENDANCE.md); never the note.
+      attendance: deskAttendanceState(r.attendanceAsked ? { response: r.attendanceResponse } : null),
+      isCrew: r.isCrew,
+    };
+  });
+  // The roster carries ticket links, contacts and answers: who took one is
+  // recorded (web and mobile alike), with the row count only in metadata.
+  await recordAuditEvent({
+    action: "CHECK_IN_ROSTER_DOWNLOADED", actorUserId: ctx.actorUserId, organisationId: ctx.event.organisationId,
+    targetType: "Event", targetId: ctx.event.id, metadata: { rows: rows.length },
+  });
+  return { ok: true, data: { generatedAt: new Date().toISOString(), rows } };
 }
 
 /** Offline check-ins older than this are refused (docs/SECURITY.md); their replay records are kept a day longer. */
