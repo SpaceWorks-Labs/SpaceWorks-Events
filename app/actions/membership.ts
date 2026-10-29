@@ -19,12 +19,29 @@ import type { ActionResult } from "./org";
 import { flattenZodErrors } from "./utils";
 import { recordAuditEvent } from "@/lib/audit";
 import { hasRecentAuthentication } from "@/lib/reauth";
-import { EventStatus, OrderStatus } from "@prisma/client";
+import { EventStatus, type Prisma } from "@prisma/client";
 import { peopleWithPlaces } from "@/lib/payments/eventCancellation";
+import { organisationMoneyBlocker } from "@/lib/payments/obligations";
 import { noticeEach, noticeSubject, uniqueEmails } from "@/lib/notices";
 import { queueOrganisationStorage } from "@/lib/storage/deletionQueue";
 
 const revalidatePath = trackedRevalidation(nextRevalidatePath);
+
+/**
+ * Membership changes run one at a time per organisation, on its row lock (as
+ * leaving does), and re-read both people's roles under it: a promotion and a
+ * removal can't both act on what they read before the other committed. FOR
+ * NO KEY UPDATE serialises them without blocking the payment paths' key-share
+ * fence (docs/PAYMENTS.md).
+ */
+async function lockMembers(tx: Prisma.TransactionClient, organisationId: string, actorUserId: string, targetUserId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "Organisation" WHERE "id" = ${organisationId} FOR NO KEY UPDATE`;
+  const [actor, target] = await Promise.all([
+    tx.membership.findUnique({ where: { userId_organisationId: { userId: actorUserId, organisationId } }, select: { id: true, role: true } }),
+    tx.membership.findUnique({ where: { userId_organisationId: { userId: targetUserId, organisationId } }, select: { id: true, role: true } }),
+  ]);
+  return { actor, target };
+}
 
 export async function updateMemberRole(
   input: unknown,
@@ -57,24 +74,26 @@ export async function updateMemberRole(
     return { ok: false, error: "For security, sign in again before changing member roles." };
   }
 
-  const target = await getMembership(targetUserId, org.id);
-  if (!target) return { ok: false, error: "Member not found." };
-  if (target.role === "OWNER") {
-    return { ok: false, error: "The owner role cannot be changed here." };
-  }
-
-  await prisma.membership.update({
-    where: { id: target.id },
-    data: { role },
+  const actorUserId = session.user.id;
+  const refusal = await prisma.$transaction(async (tx) => {
+    const { actor: current, target } = await lockMembers(tx, org.id, actorUserId, targetUserId);
+    if (current?.role !== "OWNER") return "Only the organisation owner can change roles.";
+    if (!target) return "Member not found.";
+    if (target.role === "OWNER") return "The owner role cannot be changed here.";
+    const updated = await tx.membership.updateMany({ where: { id: target.id, organisationId: org.id, role: { not: "OWNER" } }, data: { role } });
+    if (updated.count !== 1) return "Member not found.";
+    await recordAuditEvent({
+      action: "MEMBERSHIP_ROLE_CHANGED",
+      actorUserId,
+      organisationId: org.id,
+      targetType: "membership",
+      targetId: target.id,
+      metadata: { role },
+      client: tx,
+    });
+    return null;
   });
-  await recordAuditEvent({
-    action: "MEMBERSHIP_ROLE_CHANGED",
-    actorUserId: session.user.id,
-    organisationId: org.id,
-    targetType: "membership",
-    targetId: target.id,
-    metadata: { role },
-  });
+  if (refusal) return { ok: false, error: refusal };
 
   revalidatePath(`/dashboard/${org.slug}/members`);
   revalidatePath(`/dashboard/${org.slug}`);
@@ -111,23 +130,27 @@ export async function removeMember(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "You do not have permission to remove members." };
   }
 
-  const target = await getMembership(targetUserId, org.id);
-  if (!target) return { ok: false, error: "Member not found." };
-  if (target.role === "OWNER") {
-    return { ok: false, error: "Cannot remove the organisation owner." };
-  }
-  if (actor.role === "ADMIN" && target.role !== "MEMBER") {
-    return { ok: false, error: "Admins can only remove members." };
-  }
-
-  await prisma.membership.delete({ where: { id: target.id } });
-  await recordAuditEvent({
-    action: "MEMBER_REMOVED",
-    actorUserId: session.user.id,
-    organisationId: org.id,
-    targetType: "membership",
-    targetId: target.id,
+  const actorUserId = session.user.id;
+  const refusal = await prisma.$transaction(async (tx) => {
+    const { actor: current, target } = await lockMembers(tx, org.id, actorUserId, targetUserId);
+    if (!current || !isOrgAdmin(current.role)) return "You do not have permission to remove members.";
+    if (!target) return "Member not found.";
+    if (target.role === "OWNER") return "Cannot remove the organisation owner.";
+    if (current.role === "ADMIN" && target.role !== "MEMBER") return "Admins can only remove members.";
+    // Constrained to the role checked above, so a change committed meanwhile can't be swept away.
+    const removed = await tx.membership.deleteMany({ where: { id: target.id, organisationId: org.id, role: current.role === "OWNER" ? { not: "OWNER" } : "MEMBER" } });
+    if (removed.count !== 1) return "Member not found.";
+    await recordAuditEvent({
+      action: "MEMBER_REMOVED",
+      actorUserId,
+      organisationId: org.id,
+      targetType: "membership",
+      targetId: target.id,
+      client: tx,
+    });
+    return null;
   });
+  if (refusal) return { ok: false, error: refusal };
 
   revalidatePath(`/dashboard/${org.slug}/members`);
   revalidatePath(`/dashboard/${org.slug}`);
@@ -162,24 +185,20 @@ export async function deleteOrganisation(input: unknown): Promise<ActionResult> 
     return { ok: false, error: "For security, sign in again before deleting an organisation." };
   }
 
-  // Deleting would erase the tickets and payment records of people who paid
-  // for something still to come: cancelling those events refunds them first.
   const now = new Date();
-  const paidUpcoming = await prisma.order.count({
-    where: {
-      organisationId: org.id,
-      totalMinor: { gt: 0 },
-      status: { in: [OrderStatus.CONFIRMED, OrderStatus.PENDING, OrderStatus.REQUESTED] },
-      OR: [{ event: { endDateTime: { gt: now }, status: { not: EventStatus.CANCELLED } } }, { series: { status: { not: EventStatus.CANCELLED }, instances: { some: { endDateTime: { gt: now }, cancelledAt: null } } } }],
-    },
-  });
-  if (paidUpcoming > 0) {
-    return { ok: false, error: "People have paid for upcoming events. Cancel those events (or their dates) first, which refunds them." };
-  }
-
   const slug = org.slug;
-  // Guests of upcoming events and dates are told they won't go ahead.
-  await prisma.$transaction(async (tx) => {
+  const actorUserId = session.user.id;
+  // One transaction, the Organisation row first: every path that creates an
+  // order or a payment takes its key-share fence (docs/PAYMENTS.md), so it
+  // either committed before this check or waits and then finds nothing.
+  // Nothing is announced, audited or queued unless the check passes.
+  const refusal = await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string; }>>`SELECT "id" FROM "Organisation" WHERE "id" = ${org.id} FOR UPDATE`;
+    if (locked.length === 0) return "Organisation not found.";
+    // Deleting would erase payment records and refunds still owed or in flight.
+    const blocker = await organisationMoneyBlocker(tx, org.id, now);
+    if (blocker) return blocker;
+    // Guests of upcoming events and dates are told they won't go ahead.
     const [events, dates] = await Promise.all([
       tx.event.findMany({ where: { organisationId: org.id, status: EventStatus.PUBLISHED, endDateTime: { gt: now } }, select: { id: true, title: true } }),
       tx.eventInstance.findMany({ where: { series: { organisationId: org.id, status: EventStatus.PUBLISHED }, endDateTime: { gt: now }, cancelledAt: null }, select: { id: true, series: { select: { title: true } } } }),
@@ -191,23 +210,17 @@ export async function deleteOrganisation(input: unknown): Promise<ActionResult> 
     for (const [title, emails] of people) {
       await noticeEach(tx, emails, { subject: noticeSubject("Cancelled", title), lines: [`${title} has been cancelled: ${org.name} closed its account.`] });
     }
-  }, { timeout: 60_000 });
-  // Deliberately omit organisationId: deleting the organisation cascades its
-  // scoped records, while this event must survive as an instance-level record.
-  await recordAuditEvent({
-    action: "ORGANISATION_DELETED",
-    actorUserId: session.user.id,
-    targetType: "organisation",
-    targetId: org.id,
-  });
-  // Its stored files are queued in the same transaction (lib/storage/deletionQueue.ts):
-  // the queue has no foreign key, so it outlives the cascade, and the lock
-  // orders this against an upload publishing its Asset.
-  await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT 1 FROM "Organisation" WHERE "id" = ${org.id} FOR UPDATE`;
+    // Deliberately omit organisationId: deleting the organisation cascades its
+    // scoped records, while this event must survive as an instance-level record.
+    await recordAuditEvent({ action: "ORGANISATION_DELETED", actorUserId, targetType: "organisation", targetId: org.id, client: tx });
+    // Its stored files are queued here too (lib/storage/deletionQueue.ts): the
+    // queue has no foreign key, so it outlives the cascade, and the row lock
+    // orders this against an upload publishing its Asset.
     await queueOrganisationStorage(tx, org.id);
     await tx.organisation.delete({ where: { id: org.id } });
+    return null;
   }, { timeout: 60_000 });
+  if (refusal) return { ok: false, error: refusal };
 
   revalidatePath("/dashboard");
   revalidatePath(`/${slug}`);
