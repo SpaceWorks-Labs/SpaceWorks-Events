@@ -7,10 +7,11 @@ import { eligibilityChanges } from "@/lib/claims/policies/claims";
 import { listPolicies, policyAdminRows, policyStageOptions } from "@/lib/claims/policies/view";
 import { safeTimeZone } from "@/lib/timeZone";
 import { formatMoney } from "@/lib/payments/money";
+import { listFailedRefunds } from "@/lib/payments/operations/retryRefund";
 
 /**
  * The Finance tab (docs/FINANCE.md). Owners and admins see the event's money,
- * every claim, payouts and refund requests; everyone else on the dashboard
+ * every claim, payouts, refund requests and failed refunds; everyone else on the dashboard
  * files and follows their own claims.
  */
 export async function loadFinancePanel({ ctx }: { ctx: EventDashboardContext; }) {
@@ -21,15 +22,17 @@ export async function loadFinancePanel({ ctx }: { ctx: EventDashboardContext; })
   if (ctx.permissions.isAdmin) {
     const finance = await loadEventFinance(ctx.event.id, ctx.organisation.id);
     if (!finance) return null;
-    const [policies, stageOptions, changed] = await Promise.all([
+    const [policies, stageOptions, changed, failedRefunds] = await Promise.all([
       listPolicies(prisma, ctx.event.id),
       policyStageOptions(prisma, ctx.event.id),
       // Waiting policy claims whose person no longer qualifies, flagged for approvers.
       prisma.expenseClaim.findMany({ where: { id: { in: finance.claims.map((claim) => claim.id) }, status: "SUBMITTED", policyId: { not: null } }, select: { id: true, status: true, eventId: true, rsvpId: true, policyId: true, eligibilitySnapshot: true } }).then((rows) => eligibilityChanges(prisma, rows)),
+      // Refunds the provider refused, by order (docs/PAYMENTS.md).
+      listFailedRefunds({ eventId: ctx.event.id }, ctx.organisation.id),
     ]);
     const claims = finance.claims.map((claim) => ({ ...claim, eligibilityChanged: changed.get(claim.id) ?? null }));
     return {
-      admin: true as const, scope, categories, currency, finance: { ...finance, claims }, userId: ctx.userId, exportHref: `/api/exports/events/${ctx.event.id}/finance`,
+      admin: true as const, scope, categories, currency, finance: { ...finance, claims }, failedRefunds, userId: ctx.userId, exportHref: `/api/exports/events/${ctx.event.id}/finance`,
       policies: policyAdminRows(policies, currency, safeTimeZone(ctx.event.timezone)),
       policyOptions: { ...stageOptions, categories },
     };
