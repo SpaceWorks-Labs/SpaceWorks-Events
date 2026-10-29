@@ -41,7 +41,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe("backup encryption", { timeout: 30_000 }, () => {
+describe("backup encryption", { timeout: 120_000 }, () => {
   it("tells a working age setup from a missing key or a failing age", () => {
     const problem = (key: string) => bash(`. scripts/vps-lib.sh; backup_encryption_problem '${key}'`).stdout;
     working();

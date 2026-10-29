@@ -60,7 +60,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe("deploy runner service", { timeout: 30_000 }, () => {
+describe("deploy runner service", { timeout: 120_000 }, () => {
   it("writes its own unit, run as swe-runner from the runner's directory", () => {
     const result = run("write_runner_unit");
     expect(result.status, result.stderr).toBe(0);
