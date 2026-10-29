@@ -1,6 +1,6 @@
 "use server";
 
-import { EventStatus, RsvpStatus } from "@prisma/client";
+import { EventStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { buildRecurrenceIcs, materializeInstances } from "@/lib/recurrence";
@@ -19,6 +19,7 @@ import { hasPaidOrders, peopleWithPlaces } from "@/lib/payments/eventCancellatio
 import { noticeEach, noticeSubject, uniqueEmails } from "@/lib/notices";
 import { cancelOccurrence, setOccurrenceCapacity } from "@/lib/payments/occurrences";
 import { PaymentOperationError } from "@/lib/payments/operations";
+import { seatTakingWhere } from "@/lib/payments/holds";
 import { cancelDateSchema, capacitySchema, dateAccess, revalidateAllSeriesPaths, revalidatePath } from "./series/helpers";
 
 export async function createEventSeries(
@@ -175,10 +176,12 @@ export async function updateEventSeriesMeta(
   const saved = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "EventSeries" WHERE "id" = ${series.id} FOR UPDATE`;
     if (data.capacity != null) {
+      // Taken seats (confirmed, and paid holds still live), counted under the
+      // series lock every reservation takes first, with the time read after it.
       const counts = await tx.rSVP.groupBy({
         by: ["eventInstanceId"],
         // Dates with their own capacity aren't bound by the series one.
-        where: { eventInstance: { eventSeriesId: series.id, capacity: null }, status: RsvpStatus.CONFIRMED },
+        where: { eventInstance: { eventSeriesId: series.id, capacity: null }, ...seatTakingWhere(new Date()) },
         _count: { _all: true },
       });
       if (counts.some((row) => row._count._all > data.capacity!)) return false;
@@ -196,7 +199,7 @@ export async function updateEventSeriesMeta(
     });
     return true;
   });
-  if (!saved) return { ok: false, error: "Capacity cannot be lower than confirmed attendance for an occurrence." };
+  if (!saved) return { ok: false, error: "Capacity cannot be lower than the places already taken (or being paid for) on an occurrence." };
 
   // Cancelling the series cancels each upcoming date: refunds, and an email to everyone on it.
   if (data.status === EventStatus.CANCELLED && series.status !== EventStatus.CANCELLED) {
