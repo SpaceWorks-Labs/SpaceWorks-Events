@@ -11,10 +11,13 @@ type Page = { provider: "razorpay" | "stripe"; id: string; reference: string; am
 
 export function createFakeProvider() {
   const pages = new Map<string, Page>();
-  const requests: Array<{ provider: string; method: string; path: string; body: string; }> = [];
-  const refunds: Array<{ id: string; paymentId: string; amount: number; reference: string; }> = [];
+  const requests: Array<{ provider: string; method: string; path: string; body: string; headers: Record<string, string>; }> = [];
+  const refunds: Array<{ id: string; paymentId: string; amount: number; reference: string; status: string; }> = [];
   let sequence = 0;
   let failNext: number | null = null;
+  let unreachableNext = false;
+  /** The provider's status for refunds it creates: "processed"/"succeeded" unless a test says "pending". */
+  let newRefundStatus: "done" | "pending" = "done";
   const id = (prefix: string) => `${prefix}_${(sequence += 1).toString(36)}${crypto.randomBytes(3).toString("hex")}`;
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -24,7 +27,11 @@ export function createFakeProvider() {
     const path = `/${rest.join("/")}`;
     const method = init.method ?? "GET";
     const body = typeof init.body === "string" ? init.body : "";
-    requests.push({ provider, method, path: `${path}${url.search}`, body });
+    requests.push({ provider, method, path: `${path}${url.search}`, body, headers: Object.fromEntries(new Headers(init.headers).entries()) });
+    if (unreachableNext) {
+      unreachableNext = false;
+      throw new TypeError("fetch failed");
+    }
     if (failNext) {
       const status = failNext;
       failNext = null;
@@ -50,14 +57,24 @@ export function createFakeProvider() {
         }
         return json(200, { id: page.id, status: page.status === "open" ? "created" : page.status === "paid" ? "paid" : "cancelled", currency: page.currency, payments: page.paymentId ? [{ payment_id: page.paymentId, amount: page.amount, status: "captured" }] : [] });
       }
+      const one = path.match(/^\/v1\/payments\/(\w+)\/refunds\/(\w+)$/);
+      if (one && method === "GET") {
+        const found = refunds.find((item) => item.paymentId === one[1] && item.id === one[2]);
+        return found ? json(200, { id: found.id, status: found.status }) : json(404, { error: { code: "BAD_REQUEST_ERROR" } });
+      }
       const refund = path.match(/^\/v1\/payments\/(\w+)\/refunds?$/);
       if (refund && method === "POST") {
         const data = JSON.parse(body);
-        const created = { id: id("rfnd"), paymentId: refund[1]!, amount: data.amount, reference: data.notes?.refund_id };
+        const created = { id: id("rfnd"), paymentId: refund[1]!, amount: data.amount, reference: data.notes?.refund_id, status: newRefundStatus === "pending" ? "pending" : "processed" };
         refunds.push(created);
-        return json(200, { id: created.id, status: "processed" });
+        return json(200, { id: created.id, status: created.status });
       }
-      if (refund) return json(200, { items: refunds.filter((item) => item.paymentId === refund[1]).map((item) => ({ id: item.id, status: "processed", notes: { refund_id: item.reference } })) });
+      if (refund) {
+        const count = Number(url.searchParams.get("count") ?? 10);
+        const skip = Number(url.searchParams.get("skip") ?? 0);
+        const items = refunds.filter((item) => item.paymentId === refund[1]).slice(skip, skip + count);
+        return json(200, { items: items.map((item) => ({ id: item.id, status: item.status, notes: { refund_id: item.reference } })) });
+      }
     } else {
       const form = new URLSearchParams(body);
       if (method === "GET" && path === "/v1/balance") return json(200, {});
@@ -83,11 +100,23 @@ export function createFakeProvider() {
       const intent = path.match(/^\/v1\/payment_intents\/(\w+)$/);
       if (method === "GET" && intent) return json(200, { id: intent[1], latest_charge: { payment_method_details: { type: "upi", upi: { vpa: "buyer@okicici" } } } });
       if (method === "POST" && path === "/v1/refunds") {
-        const created = { id: id("re"), paymentId: form.get("payment_intent")!, amount: Number(form.get("amount")), reference: form.get("metadata[refund_id]")! };
+        const created = { id: id("re"), paymentId: form.get("payment_intent")!, amount: Number(form.get("amount")), reference: form.get("metadata[refund_id]")!, status: newRefundStatus === "pending" ? "pending" : "succeeded" };
         refunds.push(created);
-        return json(200, { id: created.id, status: "succeeded" });
+        return json(200, { id: created.id, status: created.status });
       }
-      if (method === "GET" && path === "/v1/refunds") return json(200, { data: refunds.filter((item) => item.paymentId === url.searchParams.get("payment_intent")).map((item) => ({ id: item.id, status: "succeeded", metadata: { refund_id: item.reference } })) });
+      if (method === "GET" && path === "/v1/refunds") {
+        const all = refunds.filter((item) => item.paymentId === url.searchParams.get("payment_intent"));
+        const after = url.searchParams.get("starting_after");
+        const from = after ? all.findIndex((item) => item.id === after) + 1 : 0;
+        const limit = Number(url.searchParams.get("limit") ?? 10);
+        const page = all.slice(from, from + limit);
+        return json(200, { data: page.map((item) => ({ id: item.id, status: item.status, metadata: { refund_id: item.reference } })), has_more: from + limit < all.length });
+      }
+      const stripeRefund = path.match(/^\/v1\/refunds\/(\w+)$/);
+      if (method === "GET" && stripeRefund) {
+        const found = refunds.find((item) => item.id === stripeRefund[1]);
+        return found ? json(200, { id: found.id, status: found.status }) : json(404, { error: { code: "resource_missing" } });
+      }
     }
     return json(404, { error: { code: "NOT_FOUND" } });
   }
@@ -98,6 +127,10 @@ export function createFakeProvider() {
     refunds,
     /** The next provider call answers with this HTTP status. */
     failNextWith(status: number) { failNext = status; },
+    /** The next provider call never gets an answer (a timeout or a dropped connection). */
+    dropNext() { unreachableNext = true; },
+    /** Refunds created from now on stay pending at the provider ("done" settles them at once). */
+    refundsSettle(mode: "done" | "pending") { newRefundStatus = mode; },
     /** The buyer pays a page; returns the provider payment id. */
     pay(pageId: string) {
       const page = pages.get(pageId)!;

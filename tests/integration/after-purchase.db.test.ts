@@ -200,7 +200,7 @@ describe.sequential("after purchase", { timeout: 30_000 }, () => {
     await buy(event.slug, "cancel-held", ticket.id);
 
     identity.id = owner;
-    expect(await deleteEvent({ organisationSlug: orgSlug, eventId: event.id })).toMatchObject({ ok: false, error: expect.stringContaining("Cancel it instead") });
+    expect(await deleteEvent({ organisationSlug: orgSlug, eventId: event.id })).toMatchObject({ ok: false, error: expect.stringContaining("still holds money") });
     expect(await cancelEvent({ organisationSlug: orgSlug, eventId: event.id, reason: "Venue closed" })).toMatchObject({ ok: true, data: { refunded: 1, failed: 0, notified: 3 } });
     // Running it again finishes nothing new.
     expect(await cancelEvent({ organisationSlug: orgSlug, eventId: event.id })).toMatchObject({ ok: true, data: { refunded: 0, notified: 0 } });

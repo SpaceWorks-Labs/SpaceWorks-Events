@@ -1,11 +1,12 @@
 import "server-only";
 
-import { OrderStatus, RsvpStatus, type Prisma } from "@prisma/client";
+import { OrderStatus, Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { notifyChat } from "@/lib/chat/notify";
 import { noticeEach, noticeSubject, personEmail, uniqueEmails } from "@/lib/notices";
 import { PaymentOperationError, refundOrder } from "./operations";
+import { refundableBalanceSql } from "./refundableBalance";
 
 /**
  * An event was cancelled: every paid order is refunded in full and its
@@ -75,7 +76,27 @@ export async function notifyEventCancelled(tx: Prisma.TransactionClient, params:
   });
 }
 
-/** Whether people have paid for (or are paying for) this event, so it must be cancelled rather than deleted. */
-export async function hasPaidOrders(owner: { eventId: string; } | { eventSeriesId: string; }) {
-  return (await prisma.order.count({ where: { ...owner, totalMinor: { gt: 0 }, status: { in: [OrderStatus.CONFIRMED, OrderStatus.PENDING, OrderStatus.REQUESTED] } } })) > 0;
+/**
+ * Keep the organiser's ledger reachable while any money is held or in flight,
+ * including legitimate retained revenue on dates that have already happened.
+ * Deletion rechecks under target locks; only fully refunded paid orders can go.
+ */
+export async function hasPaidOrders(owner: { eventId: string; } | { eventSeriesId: string; }, client: Prisma.TransactionClient = prisma) {
+  // Keep the target attached until its balance is resolved: deleting
+  // it would otherwise orphan the order and remove its refund UI and blocker.
+  const scope = "eventId" in owner ? Prisma.sql`o."eventId" = ${owner.eventId}` : Prisma.sql`o."eventSeriesId" = ${owner.eventSeriesId}`;
+  const owed = await client.$queryRaw<Array<{ id: string }>>`SELECT o."id" FROM "Order" o
+    WHERE ${scope} AND (
+      (o."totalMinor" > 0 AND o."status" IN ('PENDING', 'REQUESTED'))
+      OR ${refundableBalanceSql} > 0
+      OR EXISTS (SELECT 1 FROM "Payment" p JOIN "PaymentRefund" r ON r."paymentId" = p."id"
+        WHERE p."orderId" = o."id" AND (r."status" = 'PENDING'
+          OR (r."status" = 'FAILED'
+            AND NOT EXISTS (SELECT 1 FROM "PaymentRefund" retry WHERE retry."retryOfRefundId" = r."id")
+            AND ${refundableBalanceSql} > 0)))
+    ) LIMIT 1`;
+  return owed.length > 0;
 }
+
+export const PAID_EVENT_REFUSAL = "This event still holds money or has payments or refunds to resolve. Keep it as a record if you are retaining revenue. To delete it, resolve unpaid orders, refund all collected money (including attended tickets), retry Failed refunds in Finance and wait for pending refunds to finish. Use the guest list for attended tickets and Refundable orders for cancelled orders.";
+export const PAID_SERIES_REFUSAL = "This series still holds money or has payments or refunds to resolve, including payments for earlier dates. Keep it cancelled as a record if you are retaining revenue. To delete it, resolve unpaid orders, refund all collected money, retry Failed refunds on the series page and wait for pending refunds to finish. Use each date's guest list for attended tickets and Refundable orders for cancelled orders.";

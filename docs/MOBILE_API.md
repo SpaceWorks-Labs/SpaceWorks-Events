@@ -134,15 +134,16 @@ new boundary. The same key on another path or with another body, or while the
 first is still running, is `CONFLICT`; it never replays another resource's
 answer.
 
-- Only definitive answers are kept. A 5xx, `RATE_LIMITED`, `UNAUTHENTICATED`
-  or a staff authenticator refusal is not, so retry it with the same key
-  (after signing in or confirming the code).
+- Only definitive answers are kept. `RATE_LIMITED`, `UNAUTHENTICATED` or a
+  staff authenticator refusal is not, so retry it with the same key (after
+  signing in or confirming the code).
 - Use a new key only after a definitive 4xx answer, which the same key would
   replay.
-- `IDEMPOTENCY_STALE` (409): an earlier request with this key started over a
-  minute ago and never finished, so its outcome is unknown and it is never run
-  again under that key. Re-read the record; if the change is not there, send
-  the action again with a new key.
+- `IDEMPOTENCY_STALE` (409): an earlier request with this key answered a 5xx
+  (or failed on the server), or started over a minute ago and never finished.
+  Either may have happened after the change was saved, so its outcome is
+  unknown and it is never run again under that key. Re-read the record; if the
+  change is not there, send the action again with a new key.
 - A replayed answer never carries a ticket token: every `ticketToken` is kept
   as `null` (re-read the registration or order for it). Keys and bodies are
   kept only as HMACs, and kept answers are deleted after a day.
@@ -177,7 +178,9 @@ was copied). Each session is
 bound to the user's `sessionVersion`: a password change, password reset, MFA
 enable/disable, "sign out everywhere" or operator recovery bumps it and
 invalidates every mobile session together with web sessions (the rows are also
-marked revoked).
+marked revoked). Sign-out, authenticator checks and refresh-token reuse lock
+the user row before the session row, as "sign out everywhere" does, so the
+two never deadlock.
 Sign-in, sign-out, authenticator checks and refresh-token reuse are audited
 (`MOBILE_SIGNED_IN`, `MOBILE_SIGNED_OUT`, `MOBILE_MFA_VERIFIED`,
 `MOBILE_REFRESH_TOKEN_REUSED`)
@@ -278,16 +281,25 @@ Account creation and password reset happen on the website.
 
 ### `GET /me` (auth)
 
-`{ "user": User, "organisations": [OrgSummary], "collaborations": [{ "organisation": { "slug", "name" }, "eventId", "eventTitle", "permissions": ["CHECK_IN", …] }], "judging": [JudgingEvent] }`
+`{ "user": User, "organisations": [OrgSummary], "collaborations": [{ "organisation": { "slug", "name" }, "eventId", "eventTitle", "permissions": ["CHECK_IN", …] }], "judging": [JudgingEvent], "mentoring": [WorkspaceEvent], "reviewing": [WorkspaceEvent], "staffMfa" }`
 
 `OrgSummary = { "id", "slug", "name", "logoUrl|null", "role": "OWNER|ADMIN|MEMBER" }`.
-Collaborations list standalone-event grants only; `JUDGE` is never listed in
-`permissions`, and a `JUDGE`-only grant is not a collaboration.
+Collaborations list standalone-event grants only; `JUDGE`, `MENTOR` and
+`REVIEW_APPLICATIONS` open their own workspaces, so they are never listed in
+`permissions`, and a grant of only those is not a collaboration.
 
 `JudgingEvent = { "organisation": { "slug", "name" }, "eventId", "eventTitle", "startDateTime", "endDateTime", "timezone", "judgingStatus": "NOT_STARTED|OPEN|CLOSED" }`:
 events the caller judges through a `JUDGE` grant, once the event takes
 submissions. Organisation owners and admins judge through their role: they
 find their events through `myPermissions.judge` on the organiser event list.
+
+`WorkspaceEvent = { "organisation": { "slug", "name" }, "eventId", "eventTitle", "startDateTime", "endDateTime", "timezone" }`
+(`MentoringEvent` in the OpenAPI file). `mentoring`: events the caller
+mentors through a `MENTOR` grant while the Mentor Desk is on. `reviewing`:
+events whose applications the caller reviews through a `REVIEW_APPLICATIONS`
+grant while applications are on, so a review-only collaborator can open
+`…/applications/reviews` from here. Review grants still open no organiser
+tools; owners and admins find these events on the organiser event list.
 
 ### `PATCH /me` (auth)
 
@@ -505,7 +517,9 @@ their orders by id, and anyone else's are `NOT_FOUND`.
   `policyId` are open: show the general form only when true), cap and
   categories, or `null` when nothing is open and nothing was claimed. `POST` the same path as `multipart/form-data` (`category`,
   `description`, `amount`, an optional `policyId`, up to three `receipts`
-  photos) to file one;
+  photos) to file one (201 with the claim list; if the claim was filed but
+  the list could not be read back, 201 with only `{ "claimId" }`, so GET the
+  list again);
   `POST …/claims/:claimId/withdraw` before it is decided. Receipt photos of the
   caller's own claims: `GET /me/claims/:claimId/receipts/:receiptId`. Each
   claim carries `policy` (the reimbursement policy's name, or null).
@@ -526,9 +540,12 @@ their orders by id, and anyone else's are `NOT_FOUND`.
 ### `GET /public/events/:orgSlug/:eventSlug/feedback`
 
 `{ "title", "intro": null, "thankYouMessage", "open": true, "certificatesEnabled", "fields": [RegistrationField] }`
-or `NOT_FOUND` unless the event is published and its form is open (as the web
-feedback page). Submit with the existing `POST /api/feedback`; its response
-contains the certificate token when one is issued.
+or `NOT_FOUND` unless the event is published, its form is open and the caller
+may open the event page (as the web feedback page): nothing while the website
+is unreleased, and an invite-only event's form only with the bearer of a
+signed-in invited guest. Submit with the existing `POST /api/feedback`, sending
+the same bearer for an invite-only event (a bearer that does not sign in gets
+`401`); its response contains the certificate token when one is issued.
 
 ### Existing web endpoints reused unchanged
 
@@ -601,14 +618,21 @@ REVIEW_APPLICATIONS (with JUDGE or MENTOR) gets no organiser routes, like a judg
 - Reviewers (REVIEW_APPLICATIONS or OWNER/ADMIN, behind the staff
   authenticator; anyone else, or an event not taking applications, is `NOT_FOUND`):
   - `GET .../applications/reviews` → `{ "reviews": [{ "assignmentId", "stageName", "stagePosition", "stageOpen", "label", "status", "reviewedCurrent" }] }`
-    (the caller's own assignments, open stages first; `label` is "Application n" on a blind stage).
-  - `GET .../applications/reviews/:assignmentId` → `{ "assignmentId", "stageName", "stageOpen", "blind", "criteria", "guidance", "teamName|null", "people": [{ "name", "email|null", "isLeader", "answers": [{ "label", "value" }] }], "reviewed|null", "canReview" }`.
+    (the caller's own assignments that they may still read, open stages first;
+    `label` is "Application n" on a blind stage). Assignments on a stage
+    whose panel no longer includes the caller, or with a conflict of interest,
+    are left out.
+  - `GET .../applications/reviews/:assignmentId` → `{ "assignmentId", "answersRevision", "stageName", "stageOpen", "blind", "criteria", "guidance", "teamName|null", "people": [{ "name", "email|null", "isLeader", "answers": [{ "label", "value" }] }], "reviewed|null", "canReview" }`.
     A blind stage has no names, emails, phone or email answers, or team name.
     Another reviewer's, a recused one, or one the caller may no longer review
     (off the stage's panel, a conflict of interest) is `NOT_FOUND`.
-  - `POST .../applications/reviews/:assignmentId` `{ "scores": { criterion: 1..5 }, "notes" }`
+  - `POST .../applications/reviews/:assignmentId` `{ "answersRevision", "scores": { criterion: 1..5 }, "notes" }`
     (Idempotency-Key) → `{ "assignmentId", "outcome": "SUBMITTED", "replaced": null }`.
-    Final once submitted; only while the stage is open.
+    Final once submitted; only while the stage is open. `answersRevision` is
+    the one `GET` returned: when the applicant has changed their answers since,
+    the review is refused with `CONFLICT` ("The answers changed. Reload to see
+    them."). Reload, then submit with a new Idempotency-Key: the refused
+    request's key is spent.
   - `POST .../applications/reviews/:assignmentId/recuse` (Idempotency-Key)
     → `{ "assignmentId", "outcome": "RECUSED", "replaced" }`: a conflict of
     interest is recorded and the least-loaded panel reviewer takes it.
@@ -700,7 +724,13 @@ with a member's `rsvpId` for contact details).
   `UNAUTHENTICATED`.
 - `POST …/check-in/sync` `{ "checkIns": [{ "rsvpId", "checkedInAt", "force", "clientMutationId"? }] }` (1–500)
   → `{ "syncedIds", "alreadyCheckedInIds", "failed": [{ "rsvpId", "error" }] }`
-  (as `syncOfflineCheckIns`, same operating-window rule).
+  (as `syncOfflineCheckIns`, same operating-window rule; check-ins older than
+  7 days are refused). Send each queue entry's own `clientMutationId` and keep
+  it across retries: the first sync stores its outcome per event, and a retry
+  returns that outcome without checking the guest in again (even after an
+  undo), while the same id with another `rsvpId`, time or `force` is refused.
+  Without an id the server makes one up, so only the request's
+  `Idempotency-Key` protects a retry.
 
 All check-in writes go through `commitCheckInProjection` /
 `commitUndoCheckInProjection`, so the live ticket tears off exactly as for web
@@ -933,7 +963,11 @@ Events judge in rounds ([Hackathon judging](HACKATHON.md) "Rounds"). Every
 judging read above takes an optional `?roundId=` and otherwise shows the
 current round (the one judges score now). Scores and reviews are written to
 the current round only: a `?roundId=` naming any other round answers
-`JUDGING_CLOSED`.
+`JUDGING_CLOSED`. A scoring write pins one round at its start (the
+`?roundId=`, else the current round) and every write and read of that request
+uses it; the round is compared again under the Event lock, so if an organiser
+switches rounds mid-request the request answers `JUDGING_CLOSED` and nothing
+is written to the new round.
 
 - `GET …/judging/rounds` → `{ "rounds": [JudgeRound], "currentRoundId", "onPanel" }`:
   the rounds this judge may open (rounds that have opened, and the current

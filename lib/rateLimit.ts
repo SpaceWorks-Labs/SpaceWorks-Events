@@ -29,6 +29,7 @@ export type Bucket =
   | "apiRead"
   | "apiWrite"
   | "dataExport"
+  | "report"
   | "ticketStatus"
   | "ticketEvents"
   | "shortLink"
@@ -89,6 +90,9 @@ const limits: Record<Bucket, { max: number; windowMs: number; }> = {
   apiRead: { max: 600, windowMs: 60_000 },
   apiWrite: { max: 60, windowMs: 60_000 },
   dataExport: { max: 5, windowMs: 60 * 60_000 },
+  // Event and date report PDFs, per account and address: each one reads the
+  // whole event, so the allowance is checked before anything is loaded.
+  report: { max: 20, windowMs: 10 * 60_000 },
   // Public ticket check-in state. Attendees at one venue often share a NAT
   // address, so these stay generous while still bounding polling/reconnects.
   ticketStatus: { max: 120, windowMs: 60_000 },

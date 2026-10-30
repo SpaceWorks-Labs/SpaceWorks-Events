@@ -2,9 +2,11 @@
 # Deploy a published release without questions. The Release workflow's deploy
 # job runs it on this server through the runner from install-runner.sh:
 #   vps-deploy.sh v0.9.2-main.42.a1b2c3d4e5f6
-# It downloads that release's source like install.sh, then runs its updater:
-# backup, new images, migrations, health checks, and the previous release
-# restored automatically if the new one is unhealthy.
+# It downloads that release's source like install.sh, refuses it (changing
+# nothing) if it lacks a migration this database already has, then runs its
+# updater: backup, new images, migrations, health checks, and the previous
+# release restored automatically if the new one is unhealthy and the previous
+# one can still run against the database.
 set -euo pipefail
 set +x
 source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -40,4 +42,16 @@ github "https://codeload.github.com/$repository/tar.gz/$revision" | tar -xz -C "
 printf '%s\n' "$revision" > "$stage/source/.release"
 printf '%s\n' "$version" > "$stage/source/.release-version"
 [[ -f "$stage/source/scripts/update-vps.sh" ]] || die "Release $tag has no updater."
+# Checked here, by the installed release, before the requested release's own
+# (possibly older) updater runs: a release missing a migration this database
+# already has is refused, and the running release is left exactly as it is.
+load_config_dir
+SWE_REPO_DIR=$source_dir
+# Keep the compatibility decision valid through the complete child update.
+# Older updaters already honour SWE_LOCK_HELD and inherit fd 9, so their
+# take_lock is re-entrant without dropping the lock or opening a new fd.
+take_lock
+applied=$(applied_migrations) || die "Could not read this database's migrations; $tag was not deployed and the running release is unchanged."
+missing=$(missing_migrations "$stage/source" <<< "$applied")
+[[ -z "$missing" ]] || die "$tag cannot run against this database: it lacks migrations already applied ($(paste -sd ' ' <<< "$missing")). It was not deployed and the running release is unchanged. An older release needs the backup from before those migrations restored (docs/DEPLOYMENT_VPS.md, Upgrades and rollback)."
 SWE_STAGED=1 SWE_REPOSITORY="$repository" bash "$stage/source/scripts/update-vps.sh" --yes </dev/null

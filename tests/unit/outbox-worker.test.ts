@@ -140,7 +140,7 @@ describe("beat", () => {
     await runScheduledJobs({ now: new Date(start.getTime() + 61 * 60_000), lastRun });
     expect(mocks.purge).toHaveBeenCalledTimes(2);
     expect(mocks.reminders).toHaveBeenCalledTimes(2);
-    expect(SCHEDULED_JOBS.map((job) => job.name)).toEqual(["payments", "waitlists", "admission", "event-reminders", "webhooks", "help-queue-expiry", "reimbursement-notices", "backup-alerts", "retention"]);
+    expect(SCHEDULED_JOBS.map((job) => job.name)).toEqual(["payments", "waitlists", "admission", "event-reminders", "webhooks", "help-queue-expiry", "reimbursement-notices", "backup-alerts", "storage-deletions", "retention"]);
   });
 
   it("delivers organisation webhooks as a beat job that never stops the others", async () => {

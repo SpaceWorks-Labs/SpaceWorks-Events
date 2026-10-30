@@ -83,15 +83,15 @@ The super admin signs in with email and password; there is no separate authentic
 
 | Method and route | Authentication | Purpose |
 | --- | --- | --- |
-| `POST /api/rsvp` | Optional session | Submit an event or instance RSVP; on a team event the optional `team` field creates a team, joins one by join token, or registers solo |
+| `POST /api/rsvp` | Optional session, 128 KiB body cap (`413`) | Submit an event or instance RSVP; on a team event the optional `team` field creates a team, joins one by join token, or registers solo. The response carries the registration `count` only when the event shows it, and then the same number as the event page |
 | `POST /api/feedback` | Public, rate-limited | Submit feedback; email is used only for certificate-enabled forms |
 | `GET /api/exports/member-ids/:programmeId/cards/:memberId` | Session; programme organisation OWNER/ADMIN | One approved member's card: `format=pdf` (two pages, front and back) or `format=png&side=front|back` (300 dpi); audited, `no-store` |
 | `GET /api/exports/member-ids/:programmeId/cards` | Session; programme organisation OWNER/ADMIN | Every approved card as one PDF (up to 500) or `format=zip` with one PDF per member (up to 200); one bulk render per process; audited |
 | `GET /api/exports/account/ids/:memberId` | Session; the card's own holder | The signed-in user's own approved card as PDF or PNG |
-| `POST /api/check-in/station` | PIN-scoped station session, rate-limited | Open and operate a venue check-in station |
+| `POST /api/check-in/station` | PIN-scoped station session, rate-limited, 128 KiB body cap (`413`) | Open and operate a venue check-in station |
 | `GET /api/search?q=...` | Public, rate-limited | Return matching public events |
 | `GET /api/help/search-index` | Optional session, global API rate limit | Plain text of every guide article the viewer may read, searched in the browser; restricted sections only for owners/admins or the super admin; `private, no-store` |
-| `POST /api/client-errors` | Public, same-origin, rate-limited per IP (`clientError`, 10/min), 4 KB body cap | Browser crash report from the app error boundaries; forwarded (redacted) to the alert webhook when configured. Always an empty `204` |
+| `POST /api/client-errors` | Public, same-origin, rate-limited per IP (`clientError`, 10/min), 4 KiB body cap, read with a hard limit even when chunked | Browser crash report from the app error boundaries; forwarded (redacted) to the alert webhook when configured. Always an empty `204` |
 | `GET /api/ticket/:token/download` | Opaque token | Download the attendee ticket |
 | `POST /api/ticket/:token/checkout` | Opaque token, rate-limited per IP (`ticketCheckout`, 20/min) | "Pay now" for a held ticket: opens (or reuses) the hosted checkout for its whole order and returns only that address (`no-store`) |
 | `POST /api/orders/:token/checkout` | Opaque order access token, rate-limited per IP (`ticketCheckout`) | "Pay now" on the buyer's order page |

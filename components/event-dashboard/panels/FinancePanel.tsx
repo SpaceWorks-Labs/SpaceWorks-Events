@@ -10,6 +10,8 @@ import { ClaimPayoutsList, FinanceSettingsForm, RefundRequestsList } from "@/com
 import { ReimbursementPolicies } from "@/components/event-dashboard/finance/ReimbursementPolicies";
 import { NoPermission } from "./shared";
 import { HelpLink } from "@/components/help/HelpLink";
+import { FailedRefundsList } from "@/components/payments/FailedRefundsList";
+import { RefundableOrdersList } from "@/components/payments/RefundableOrdersList";
 
 /**
  * The event dashboard's Finance tab (docs/FINANCE.md): money in and out
@@ -54,6 +56,11 @@ export async function FinancePanel({ ctx }: { ctx: EventDashboardContext; }) {
         <StatTile label="Prize money paid" value={summary.prizesPaid} />
         <StatTile label="Net" value={summary.net} tone={summary.negative ? "attention" : "default"} hint="Income less expenses and prizes paid" />
       </div>
+      {summary.test ? (
+        <Callout tone="info" title="Test payments not counted">
+          {summary.test.payments} {summary.test.payments === 1 ? "payment was" : "payments were"} taken with test keys ({summary.test.amount} after refunds). No real money moved, so they are left out of income and net.
+        </Callout>
+      ) : null}
       {summary.budget ? (
         <Callout tone={summary.budget.over ? "danger" : "info"} title={summary.budget.over ? "Over budget" : `Budget ${summary.budget.total}`}>
           {summary.budget.committed} spent or approved; {summary.budget.over ? `over by ${summary.budget.left}` : `${summary.budget.left} left`}.
@@ -70,6 +77,16 @@ export async function FinancePanel({ ctx }: { ctx: EventDashboardContext; }) {
       <Card as="section" className="rounded-xl" aria-labelledby="refund-requests-title">
         <CardHeader title={<span id="refund-requests-title">Refund requests</span>} description="Buyers asking for money back outside your refund policy, from their order page." />
         <RefundRequestsList scope={data.scope} requests={finance.refundRequests} timezone={timezone} currency={data.currency} />
+      </Card>
+      {data.failedRefunds.length > 0 ? (
+        <Card as="section" className="rounded-xl" aria-labelledby="failed-refunds-title">
+          <CardHeader title={<span id="failed-refunds-title" className="inline-flex items-center gap-1">Failed refunds<HelpLink article="payments/refunds" section="retrying-a-failed-refund" /></span>} description="Refunds the payment provider refused. Check your balance with the provider, then retry." />
+          <FailedRefundsList target={data.scope} refunds={data.failedRefunds} timezone={timezone} />
+        </Card>
+      ) : null}
+      <Card as="section" className="rounded-xl" aria-labelledby="refundable-orders-title">
+        <CardHeader title={<span id="refundable-orders-title" className="inline-flex items-center gap-1">Refundable orders<HelpLink article="payments/refunds" section="refunding-a-cancelled-order" /></span>} description="Cancelled or expired orders with money left on them. Confirmed orders are refunded from the guest list." />
+        <RefundableOrdersList target={data.scope} orders={data.refundableOrders} timezone={timezone} />
       </Card>
       <Card as="section" className="rounded-xl" aria-labelledby="claim-payouts-title">
         <CardHeader title={<span id="claim-payouts-title">Claim payments</span>} description="Every payment stays on record. A mistake is reversed, never edited." />

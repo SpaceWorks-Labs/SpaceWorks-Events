@@ -6,7 +6,7 @@ import { authedMobileRoute } from "@/lib/mobile/route";
 
 type Params = { orgSlug: string; eventId: string; assignmentId: string };
 const POST_ROUTE = "POST /api/mobile/v1/orgs/:orgSlug/events/:eventId/applications/reviews/:assignmentId";
-const bodySchema = z.object({ scores: z.record(z.string().max(60), z.number()), notes: z.string().max(2000) }).strict();
+const bodySchema = z.object({ answersRevision: z.number().int().min(1), scores: z.record(z.string().max(60), z.number()), notes: z.string().max(2000) }).strict();
 
 /**
  * One assigned application, as the stage allows: a blind stage shows no
@@ -23,8 +23,10 @@ export const GET = authedMobileRoute<Params>("GET /api/mobile/v1/orgs/:orgSlug/e
 /**
  * Submit the review: every criterion scored 1 to 5 and optional notes for
  * the organisers. Reviews are final once submitted. Only while the stage is
- * open and the application is in review there. Needs an Idempotency-Key,
- * scoped to this assignment.
+ * open and the application is in review there. `answersRevision` is the
+ * one GET returned: answers changed since are CONFLICT ("The answers
+ * changed. Reload to see them."), and the reloaded submission needs a new
+ * Idempotency-Key, scoped to this assignment.
  */
 export const POST = authedMobileRoute<Params>(POST_ROUTE, async (request, { orgSlug, eventId, assignmentId }, { auth }) => {
   const ctx = await resolveMobileReviewer(auth.userId, orgSlug, eventId);

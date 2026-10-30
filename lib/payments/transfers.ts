@@ -1,27 +1,22 @@
 import "server-only";
 
 import { CREW_EMAIL_REFUSED, hasCrewEmail } from "@/lib/core/crew/shared";
-import crypto from "node:crypto";
 import { ExpenseClaimStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueOperatorNotice, enqueueRsvpConfirmation } from "@/lib/outbox";
 import { AdmissionManagedError, PaymentOperationError } from "./operations";
 import { lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
+import { newTicketToken, retireHolderCapabilities } from "@/lib/rsvpHolder";
 
 const HOUR = 3_600_000;
 
-/** The holder's expense claims go with their registration; a ticket with claims in play stays with them (`code` for API clients). */
+/** A buyer cannot transfer a ticket with claims in play; closed claims stay with the original payee (`code` for API clients). */
 export class OpenClaimsError extends PaymentOperationError {
   readonly code = "OPEN_CLAIMS";
   constructor() {
     super("This ticket has expense claims waiting, approved or paid, so it can't be transferred. Withdraw a waiting claim first, or ask the organisers.");
   }
-}
-
-/** A new ticket link: the old one stops working once a ticket changes hands. */
-function newTicketToken() {
-  return crypto.randomBytes(18).toString("base64url");
 }
 
 /**
@@ -39,7 +34,11 @@ export function transferWindow(settings: { allowTransfers: boolean; transferCuto
  * The buyer passes one person's tickets to someone else (for a pass, every
  * date still ahead). The tickets get new links, so the old ones stop working;
  * the new holder is emailed their ticket and the old address is told. A
- * ticket that has been used to check in stays where it is.
+ * ticket that has been used to check in stays where it is. The registrations
+ * are locked (by id, after the event or dates) before their check-in state is
+ * read, and each write still expects an unused, confirmed ticket, so a
+ * concurrent check-in and transfer never both succeed. The previous holder's
+ * attendance, submission and team links stop working (lib/rsvpHolder.ts).
  */
 export async function transferTicket(params: { orderToken: string; rsvpId: string; name: string; email: string; now?: Date; }) {
   const now = params.now ?? new Date();
@@ -62,14 +61,19 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     await lockOrderTargets(tx, order, now);
     const ticket = await tx.rSVP.findFirst({ where: { id: params.rsvpId, orderId: order.id }, select: { attendeeKey: true, guestEmail: true, user: { select: { email: true } } } });
     if (!ticket) throw new PaymentOperationError("Ticket not found.");
-    // Claims are read and withdrawn by registration, so the new holder would see the previous holder's (docs/FINANCE.md).
+    // Keep a buyer from moving a ticket while its holder has financial commitments (docs/FINANCE.md).
     const claims = await tx.expenseClaim.count({ where: { rsvp: { orderId: order.id, attendeeKey: ticket.attendeeKey }, status: { in: [ExpenseClaimStatus.SUBMITTED, ExpenseClaimStatus.APPROVED, ExpenseClaimStatus.PAID] } } });
     if (claims > 0) throw new OpenClaimsError();
-    // The same person's tickets in this order (every date of a pass) move together.
-    const seats = await tx.rSVP.findMany({
-      where: { orderId: order.id, attendeeKey: ticket.attendeeKey, status: RsvpStatus.CONFIRMED, checkedInAt: null },
-      select: { id: true, eventInstance: { select: { startDateTime: true } } },
+    // The same person's tickets in this order (every date of a pass) move
+    // together. Their rows are locked before check-in state is read: a
+    // check-in either lands first (that ticket stays) or waits for this.
+    await tx.$queryRaw`SELECT "id" FROM "RSVP" WHERE "orderId" = ${order.id} AND "attendeeKey" = ${ticket.attendeeKey} ORDER BY "id" FOR UPDATE`;
+    const confirmed = await tx.rSVP.findMany({
+      where: { orderId: order.id, attendeeKey: ticket.attendeeKey, status: RsvpStatus.CONFIRMED },
+      select: { id: true, checkedInAt: true, eventInstance: { select: { startDateTime: true } } },
     });
+    const seats = confirmed.filter((seat) => seat.checkedInAt == null);
+    if (confirmed.length > 0 && seats.length === 0) throw new PaymentOperationError("This ticket has already been used to check in, so it can't be transferred.");
     const movable = seats.filter((seat) => {
       const start = seat.eventInstance?.startDateTime ?? order.event?.startDateTime ?? null;
       return transferWindow(settings, start, now) != null;
@@ -85,10 +89,12 @@ export async function transferTicket(params: { orderToken: string; rsvpId: strin
     for (const seat of movable) {
       const token = newTicketToken();
       firstToken ??= token;
-      await tx.rSVP.update({
-        where: { id: seat.id },
+      const moved = await tx.rSVP.updateMany({
+        where: { id: seat.id, status: RsvpStatus.CONFIRMED, checkedInAt: null },
         data: { userId: null, guestEmail: email, guestName: params.name.trim(), attendeeKey: `guest:${email}`, checkInToken: token },
       });
+      if (moved.count !== 1) throw new PaymentOperationError("This ticket was changed meanwhile. Refresh and try again.");
+      await retireHolderCapabilities(tx, seat.id);
     }
     await enqueueRsvpConfirmation(tx, { to: email, eventTitle: subject?.title ?? "your event", status: RsvpStatus.CONFIRMED, checkInToken: firstToken! });
     if (previous) {

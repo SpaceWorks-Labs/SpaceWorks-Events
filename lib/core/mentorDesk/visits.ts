@@ -16,7 +16,7 @@ import { OVERRIDE_REASON_MAX_LENGTH, visitLeaseExpiry } from "@/lib/mentorDesk/r
 import { firedTriggers, parseRoundForm, parseTriggerRules, validateRoundAnswers } from "@/lib/mentorDesk/roundForm";
 import { deskEvent, liveMentor, teamMemberUserIds, type MentorContext } from "./access";
 import { createHelpLocked } from "./help";
-import { COPY, checkVersion, type DeskResult, fail, inTransaction, refuse } from "./shared";
+import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockHelpEvent, refuse } from "./shared";
 
 const schema = z.object({
   roundId: z.string().min(1).max(128),
@@ -53,6 +53,7 @@ export async function visitCommand(m: MentorContext, input: unknown): Promise<De
   if (!parsed.success) return fail(COPY.invalid);
   const data = parsed.data;
   return inTransaction(async (tx) => {
+    await lockHelpEvent(tx, m.eventId);
     const event = await deskEvent(tx, m);
     const now = new Date();
     await liveMentor(tx, event.id, m.userId, { at: now });

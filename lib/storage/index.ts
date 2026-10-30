@@ -1,12 +1,12 @@
 import "server-only";
 
-import {
-  DeleteObjectsCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
+import { client, storageConfigured } from "./objects";
+import { uploadObject } from "./uploads";
+import { queueAssetDeletions } from "./deletionQueue";
+
+export { client, storageConfigured };
 
 export type UploadInput = {
   key: string;
@@ -23,23 +23,6 @@ const USER_DERIVATIVE_KEY =
 
 export function isPublicDerivativeKey(key: string) {
   return ORGANISATION_DERIVATIVE_KEY.test(key) || USER_DERIVATIVE_KEY.test(key);
-}
-
-export function storageConfigured() {
-  return Boolean(process.env.S3_BUCKET && process.env.S3_REGION);
-}
-
-export function client() {
-  const accessKeyId = process.env.S3_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
-  return new S3Client({
-    region: process.env.S3_REGION!,
-    ...(process.env.S3_ENDPOINT ? { endpoint: process.env.S3_ENDPOINT } : {}),
-    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "1",
-    ...(accessKeyId && secretAccessKey
-      ? { credentials: { accessKeyId, secretAccessKey } }
-      : {}),
-  });
 }
 
 async function bytes(input: UploadInput["body"]) {
@@ -60,31 +43,13 @@ export async function uploadFile(input: UploadInput): Promise<{ key: string }> {
   }
   const uploadBody = await bytes(input.body);
   if (storageConfigured()) {
-    await client().send(
-      new PutObjectCommand({
-        Bucket: process.env.S3_BUCKET!,
-        Key: input.key,
-        Body: uploadBody,
-        ContentType: input.contentType || "application/octet-stream",
-        CacheControl: "public, max-age=31536000, immutable",
-      }),
-    );
-    await prisma.asset.upsert({
-      where: { key: input.key },
-      create: {
-        key: input.key,
-        contentType: input.contentType || "application/octet-stream",
-        byteSize: BigInt(uploadBody.length),
-        provider: "s3",
-        organisationId: input.organisationId || null,
-      },
-      update: {
-        contentType: input.contentType || "application/octet-stream",
-        byteSize: BigInt(uploadBody.length),
-        provider: "s3",
-        fileData: null,
-        organisationId: input.organisationId || null,
-      },
+    // Tracked from before the PUT until the Asset exists (lib/storage/uploads.ts).
+    await uploadObject({
+      key: input.key,
+      organisationId: input.organisationId || null,
+      body: uploadBody,
+      contentType: input.contentType,
+      cacheControl: "public, max-age=31536000, immutable",
     });
     return { key: input.key };
   }
@@ -140,34 +105,14 @@ export async function downloadFile(key: string) {
 }
 
 /**
- * Remove stored derivatives (object and Asset row). Keys that aren't
+ * Remove stored derivatives (Asset row and queued object deletion). Keys that aren't
  * application derivatives are ignored. Callers treat this as best effort:
  * the database row that referenced the file is already gone.
  */
 export async function deleteFiles(keys: string[]) {
   const valid = [...new Set(keys.filter(isPublicDerivativeKey))];
   if (valid.length === 0) return;
-  const stored = await prisma.asset.findMany({
-    where: { key: { in: valid }, provider: "s3" },
-    select: { key: true },
-  });
-  if (stored.length > 0) {
-    if (!storageConfigured())
-      throw new Error("Private object storage is not configured.");
-    const s3 = client();
-    for (let start = 0; start < stored.length; start += 1000) {
-      await s3.send(
-        new DeleteObjectsCommand({
-          Bucket: process.env.S3_BUCKET!,
-          Delete: {
-            Objects: stored.slice(start, start + 1000).map(({ key }) => ({ Key: key })),
-            Quiet: true,
-          },
-        }),
-      );
-    }
-  }
-  await prisma.asset.deleteMany({ where: { key: { in: valid } } });
+  await queueAssetDeletions(valid);
 }
 
 export function getPublicUrl(key: string): string {

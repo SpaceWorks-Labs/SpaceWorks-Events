@@ -1,13 +1,16 @@
+import net from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/net/publicAddress", () => ({
-  resolvePublicAddress: async () => { throw new (class PrivateAddressError extends Error {})("private"); },
-}));
+const resolved = vi.hoisted(() => ({ addresses: vi.fn() }));
+vi.mock("@/lib/net/publicAddress", () => ({ resolvePublicAddresses: resolved.addresses }));
 
 import { describeChatTarget, parseChatConfig } from "@/lib/chat/config";
 import { ChatDeliveryError, sendChatMessage } from "@/lib/chat/send";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 const ok = () => new Response(null, { status: 200 });
 
@@ -60,9 +63,68 @@ describe("sending", () => {
   });
 
   it("never connects to a Mattermost server on a private address", async () => {
+    resolved.addresses.mockRejectedValue(new (class PrivateAddressError extends Error {})("private"));
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     await expect(sendChatMessage("MATTERMOST", { url: "https://chat.internal.example/hooks/abc" }, "x")).rejects.toThrow("private");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("connects a Mattermost host name to its vetted address when Node asks the lookup for every address", async () => {
+    // Node's default family autoselection calls the lookup with `all: true`, which needs an array answer.
+    expect(net.getDefaultAutoSelectFamily()).toBe(true);
+    const connections: string[] = [];
+    const server = net.createServer((socket) => {
+      connections.push(socket.remoteAddress ?? "");
+      socket.destroy();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as net.AddressInfo;
+    resolved.addresses.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+    try {
+      // A plain TCP server: reaching it proves the pinned lookup answered (the name itself never resolves); TLS then fails.
+      await expect(sendChatMessage("MATTERMOST", { url: `https://chat.example.test:${port}/hooks/abc` }, "x")).rejects.toBeInstanceOf(ChatDeliveryError);
+      expect(connections).toHaveLength(1);
+      expect(resolved.addresses).toHaveBeenCalledWith("chat.example.test");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("gives up on a Mattermost host whose DNS answer never comes, at the ten-second deadline", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    resolved.addresses.mockReturnValue(new Promise(() => {}));
+    const sending = sendChatMessage("MATTERMOST", { url: "https://chat.example.test/hooks/abc" }, "x");
+    const outcome = expect(sending).rejects.toMatchObject({ message: "The chat service did not answer in time.", permanent: false });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await outcome;
+  });
+
+  it("gives up on a Mattermost server that never completes the connection, closing the socket", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    let closed!: () => void;
+    let greeted!: () => void;
+    const socketClosed = new Promise<void>((resolve) => { closed = resolve; });
+    const handshakeStarted = new Promise<void>((resolve) => { greeted = resolve; });
+    // A plain TCP server that takes the TLS greeting and never answers it.
+    const server = net.createServer((socket) => {
+      socket.once("data", () => greeted());
+      socket.on("error", () => {});
+      socket.on("close", () => closed());
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as net.AddressInfo;
+    resolved.addresses.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+    try {
+      const sending = sendChatMessage("MATTERMOST", { url: `https://chat.example.test:${port}/hooks/abc` }, "x");
+      const outcome = expect(sending).rejects.toMatchObject({ message: "The chat service did not answer in time." });
+      await handshakeStarted;
+      await vi.advanceTimersByTimeAsync(10_000);
+      await outcome;
+      vi.useRealTimers();
+      await socketClosed;
+    } finally {
+      server.close();
+    }
   });
 });

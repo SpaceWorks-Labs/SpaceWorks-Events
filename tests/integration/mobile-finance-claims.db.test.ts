@@ -91,4 +91,18 @@ describe.sequential("staff claims from isolated grants", () => {
     expect((await withdraw(post("/x", {}, sessions.mentor!.accessToken), at(ids.event, { claimId: claim.id }))).status).not.toBe(200);
     expect(await prisma.expenseClaim.findUniqueOrThrow({ where: { id: claim.id } })).toMatchObject({ status: ExpenseClaimStatus.SUBMITTED });
   });
+
+  it("never withdraws a claim on another event through this event's route", async () => {
+    const judgeId = users[Object.keys(grants).indexOf("judge")]!;
+    const token = sessions.judge!.accessToken;
+    // Filed on the other event while the judge had a grant there; the grant is then removed.
+    const grant = await prisma.eventCollaborator.create({ data: { userId: judgeId, eventId: ids.otherEvent, permissions: [EventPermission.JUDGE] } });
+    expect((await fileClaim(claimForm(token, ids.otherEvent), at(ids.otherEvent))).status).toBe(201);
+    await prisma.eventCollaborator.delete({ where: { id: grant.id } });
+    const elsewhere = await prisma.expenseClaim.findFirstOrThrow({ where: { eventId: ids.otherEvent, submittedByUserId: judgeId, status: ExpenseClaimStatus.SUBMITTED } });
+
+    const refused = await withdraw(post("/x", {}, token), at(ids.event, { claimId: elsewhere.id }));
+    expect(refused.status).not.toBe(200);
+    expect(await prisma.expenseClaim.findUniqueOrThrow({ where: { id: elsewhere.id } })).toMatchObject({ status: ExpenseClaimStatus.SUBMITTED });
+  });
 });

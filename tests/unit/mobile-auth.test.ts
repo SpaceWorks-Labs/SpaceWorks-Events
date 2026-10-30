@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   audit: vi.fn(),
   transaction: vi.fn(),
+  queryRaw: vi.fn(),
 }));
 
 vi.mock("@/lib/audit", () => ({ recordAuditEvent: mocks.audit }));
@@ -34,7 +35,7 @@ const request = (token: string) => new Request("https://events.example.test/api/
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({ mobileSession: { updateMany: mocks.updateMany } }));
+  mocks.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => callback({ mobileSession: { updateMany: mocks.updateMany }, $queryRaw: mocks.queryRaw }));
   mocks.updateMany.mockResolvedValue({ count: 1 });
 });
 
@@ -97,6 +98,8 @@ describe("refreshMobileSession", () => {
     mocks.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "ms_1", userId: "user_1", revokedAt: null, rotatedAt: new Date(Date.now() - REFRESH_REUSE_GRACE_MS - 1_000), deviceHash: DEVICE, previousRefreshTokenHashes: [hashMobileToken(REFRESH)] });
     await expect(refreshMobileSession(REFRESH, DEVICE)).resolves.toEqual({ ok: false, reason: "reused" });
     expect(mocks.updateMany).toHaveBeenCalledWith({ where: { id: "ms_1", revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    // The account row is locked before the session row, as "sign out everywhere" does.
+    expect(mocks.queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateMany.mock.invocationCallOrder[0]!);
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "MOBILE_REFRESH_TOKEN_REUSED" }));
     expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain(REFRESH);
   });

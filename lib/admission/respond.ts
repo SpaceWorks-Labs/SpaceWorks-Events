@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AdmissionStatus, RsvpStatus } from "@prisma/client";
+import { AdmissionStatus, EventStatus, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpStatusNotification } from "@/lib/outbox";
@@ -12,7 +12,7 @@ import { holdPaidPlace } from "./payment";
 import { promoteWaitlisted } from "./promotion";
 import { extensionRefusal } from "./rules";
 import { AdmissionError, applicationSelect, isPaid, lockAdmissionEvent, personEmailOf, placesTaken, setUnitStatus, ticketTypeHasRoom, unitMembers, unitOrder, updateApplication } from "./state";
-import { closeApplication } from "./transitions";
+import { closeApplication, EVENT_CANCELLED } from "./transitions";
 import { queueNotice } from "./notify";
 
 /*
@@ -24,6 +24,7 @@ import { queueNotice } from "./notify";
  *   lock) with the usual ticket email.
  * - Accept, paid place: the place is held while the order is paid (see
  *   payment.ts); the payment confirms it. Never confirmed unpaid.
+ * - Accept is refused once the event is cancelled (checked under the lock).
  * - Decline (an offer) or withdraw (in review, waitlisted or offered): closed
  *   for good, any unpaid order cancelled, and the next waitlisted application
  *   is offered the place.
@@ -41,7 +42,7 @@ export async function respondAsApplicant(token: string, action: RespondAction, n
   const app = await prisma.admissionApplication.findFirst({ where: rsvp.teamId ? { teamId: rsvp.teamId } : { rsvpId: rsvp.id }, select: { id: true } });
   if (!app) return fail("This ticket has no application.");
   if (rsvp.teamId && rsvp.team?.leaderRsvpId !== rsvp.id) return fail("Only the team leader can answer for the team.");
-  return respond(rsvp.eventId, app.id, action, null, now);
+  return respond(rsvp.eventId, app.id, action, null, now, undefined, { rsvpId: rsvp.id, token });
 }
 
 /** An organiser answers for the applicant (they asked by email, say). Audited. */
@@ -51,7 +52,7 @@ export async function respondForApplicant(ctx: AdmissionContext, applicationId: 
   return result;
 }
 
-async function respond(eventId: string, applicationId: string, action: RespondAction, actorUserId: string | null, now: Date, organisationId?: string): Promise<RespondResult> {
+async function respond(eventId: string, applicationId: string, action: RespondAction, actorUserId: string | null, now: Date, organisationId?: string, applicant?: { rsvpId: string; token: string }): Promise<RespondResult> {
   // A paid acceptance needs the organisation's payment account (read before the transaction).
   let account: Awaited<ReturnType<typeof onlineAccount>> | null = null;
   if (action === "accept") {
@@ -73,12 +74,19 @@ async function respond(eventId: string, applicationId: string, action: RespondAc
       if (!event?.admissionEnabled) return fail("Applications are closed for this event.");
       const app = await tx.admissionApplication.findFirst({ where: { id: applicationId, eventId }, select: applicationSelect });
       if (!app) return fail("Application not found.");
+      if (applicant) {
+        const current = await tx.rSVP.findUnique({ where: { id: applicant.rsvpId }, select: { eventId: true, checkInToken: true, isCrew: true, teamId: true, team: { select: { leaderRsvpId: true } } } });
+        if (!current || current.eventId !== eventId || current.isCrew || current.checkInToken !== applicant.token) return fail("This ticket has no application.");
+        if (app.rsvpId ? app.rsvpId !== applicant.rsvpId || current.teamId !== null : app.teamId !== current.teamId) return fail("This ticket has no application.");
+        if (current.teamId && current.team?.leaderRsvpId !== applicant.rsvpId) return fail("Only the team leader can answer for the team.");
+      }
       const members = await unitMembers(tx, app);
       const paying = members.some((member) => member.status === RsvpStatus.PENDING_PAYMENT && member.holdExpiresAt && member.holdExpiresAt > now);
       if (action === "accept") {
         if (app.status === AdmissionStatus.ACCEPTED) return { ok: true, status: app.status, paying: false };
         if (app.status !== AdmissionStatus.OFFERED) return fail("There's no offer to accept.");
         if (!app.respondBy || app.respondBy <= now) return fail("This offer has ended.");
+        if (event.status === EventStatus.CANCELLED) return fail(EVENT_CANCELLED);
         if (paying) return { ok: true, status: app.status, paying: true };
         if (account) {
           await holdPaidPlace(tx, { event, app, account, actorUserId, now });

@@ -8,7 +8,9 @@ import { closeOpenAttempts } from "../checkout";
 import { enqueueOrderEmail, enqueuePaymentEmail } from "../email";
 import { isActiveHold } from "../holds";
 import { effectiveOfflineRecord } from "../offlineRecord";
-import { hasFreeSeats, ORDER_SUBJECT_SELECT } from "../targets";
+import { hasFreeSeats, ORDER_SUBJECT_SELECT, orderTargetCancelled, ticketTypesFit } from "../targets";
+import { promoStillFits } from "../promo";
+import { addOnsFit } from "../addOnStock";
 import { AdmissionManagedError, attendeeEmail, isAdmissionOrder, lockOrder, PaymentOperationError, subjectTitle } from "./shared";
 import { heldStatusWebhooks } from "../settlement";
 import { placePaidTeamOrder } from "../teamOrders";
@@ -48,7 +50,7 @@ export async function settleOrderByHand(params: {
     const order = await tx.order.findUniqueOrThrow({
       where: { id: owned.id },
       select: {
-        id: true, status: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, teamJoin: true, submissionId: true, ...ORDER_SUBJECT_SELECT,
+        id: true, status: true, buyerEmail: true, buyerName: true, eventId: true, teamId: true, teamName: true, teamJoin: true, submissionId: true, promoCodeId: true, ...ORDER_SUBJECT_SELECT,
         payments: { where: { status: PaymentStatus.PENDING }, select: { id: true, provider: true } },
         rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true, status: true, holdExpiresAt: true, checkInToken: true, guestEmail: true, user: { select: { email: true } } } },
       },
@@ -69,6 +71,8 @@ export async function settleOrderByHand(params: {
     const payment = order.payments[0];
     if (order.status !== OrderStatus.PENDING || !payment) throw new PaymentOperationError("Only orders waiting for payment can be settled by hand.");
     await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "id" = ${payment.id} FOR UPDATE`;
+    // Never a ticket or a submitted project for a cancelled event, series or date.
+    if (await orderTargetCancelled(tx, order)) throw new PaymentOperationError("This event or date was cancelled, so this order can't be confirmed.");
     // A project entry fee (docs/HACKATHON.md) holds no places: record it and submit the project.
     if (order.submissionId && order.rsvps.length === 0) {
       await tx.paymentCheckoutAttempt.updateMany({ where: { paymentId: payment.id, status: CheckoutAttemptStatus.OPEN }, data: { status: CheckoutAttemptStatus.CANCELLED } });
@@ -79,10 +83,17 @@ export async function settleOrderByHand(params: {
     }
     const held = order.rsvps.filter((rsvp) => rsvp.status === RsvpStatus.PENDING_PAYMENT);
     if (held.length === 0) throw new PaymentOperationError("This order has no tickets left to confirm.");
-    const holdActive = held.every((rsvp) => isActiveHold(rsvp, now));
+    // Read under the locks: `now` was taken before the provider pages were closed.
+    const at = new Date();
+    const holdActive = held.every((rsvp) => isActiveHold(rsvp, at));
+    // An ended hold released its extras, ticket-type places and promo use too:
+    // they come back only if still there, checked before anything changes.
+    if (!holdActive && !(await addOnsFit(tx, order.id, at))) throw new PaymentOperationError("The hold ended and some extras on this order have sold out since.");
+    if (!holdActive && !(await ticketTypesFit(tx, held, at))) throw new PaymentOperationError("The hold ended and the places have gone.");
+    if (!holdActive && !(await promoStillFits(tx, order, at))) throw new PaymentOperationError("The hold ended and the promo code on this order has been used up since.");
     // TEAM events place the one registration in its team or unit (docs/TEAMS.md).
-    const team = held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, now) : null;
-    if (team === "gone" || (!team && !holdActive && !(await hasFreeSeats(tx, held, now)))) throw new PaymentOperationError("The hold ended and the places have gone.");
+    const team = held.length === 1 ? await placePaidTeamOrder(tx, order, held[0]!.id, holdActive, at) : null;
+    if (team === "gone" || (!team && !holdActive && !(await hasFreeSeats(tx, held, at)))) throw new PaymentOperationError("The hold ended and the places have gone.");
     const status = team?.status ?? RsvpStatus.CONFIRMED;
 
     await tx.paymentCheckoutAttempt.updateMany({ where: { paymentId: payment.id, status: CheckoutAttemptStatus.OPEN }, data: { status: CheckoutAttemptStatus.CANCELLED } });

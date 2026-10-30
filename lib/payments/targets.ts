@@ -48,11 +48,34 @@ function dateLabel(date: Date, timeZone: string) {
 }
 
 /**
+ * The organisation fence (docs/PAYMENTS.md), the first lock of every path
+ * that creates an order or a payment: a key-share lock on the Organisation
+ * row. It never blocks other payment paths, but organisation deletion takes
+ * the row FOR UPDATE, so the two run one after the other instead of the
+ * deletion's cascade meeting an order still being written. False when the
+ * organisation is gone (deleted while this waited).
+ */
+export async function fenceOrganisation(tx: Prisma.TransactionClient, organisationId: string) {
+  const rows = await tx.$queryRaw<Array<{ id: string; }>>`SELECT "id" FROM "Organisation" WHERE "id" = ${organisationId} FOR KEY SHARE`;
+  return rows.length === 1;
+}
+
+/** The organisation owning an event or series, read before any lock so its fence comes first. */
+async function fenceOwner(tx: Prisma.TransactionClient, owner: { eventId: string; } | { eventSeriesId: string; }) {
+  const row = "eventId" in owner
+    ? await tx.event.findUnique({ where: { id: owner.eventId }, select: { organisationId: true } })
+    : await tx.eventSeries.findUnique({ where: { id: owner.eventSeriesId }, select: { organisationId: true } });
+  return row != null && fenceOrganisation(tx, row.organisationId);
+}
+
+/**
  * Lock what the order sells, always in the same order so concurrent orders
- * never deadlock: the event row; or the series row, then its dates by id.
+ * never deadlock: the organisation fence; then the event row, or the series
+ * row and its dates by id.
  */
 export async function lockSellable(tx: Prisma.TransactionClient, target: OrderTarget, now: Date): Promise<Sellable | null> {
   if ("eventId" in target) {
+    if (!(await fenceOwner(tx, { eventId: target.eventId }))) return null;
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${target.eventId} FOR UPDATE`;
     const event = await tx.event.findUnique({
       where: { id: target.eventId },
@@ -81,7 +104,7 @@ export async function lockSellable(tx: Prisma.TransactionClient, target: OrderTa
   const seriesId = "passSeriesId" in target
     ? target.passSeriesId
     : (await tx.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: { eventSeriesId: true } }))?.eventSeriesId;
-  if (!seriesId) return null;
+  if (!seriesId || !(await fenceOwner(tx, { eventSeriesId: seriesId }))) return null;
   await lockSeriesDates(tx, seriesId, "eventInstanceId" in target ? [target.eventInstanceId] : null, now);
   const series = await tx.eventSeries.findUnique({
     where: { id: seriesId },
@@ -176,16 +199,37 @@ export async function hasFreeSeats(tx: Prisma.TransactionClient, rsvps: Array<{ 
   }
   for (const { target, rsvps: seats } of groups.values()) {
     let capacity: number | null;
+    // A cancelled event, series or date has no free seats.
     if ("eventId" in target) {
-      const event = await tx.event.findUnique({ where: { id: target.eventId }, select: { capacity: true } });
-      if (!event) return false;
+      const event = await tx.event.findUnique({ where: { id: target.eventId }, select: { capacity: true, status: true } });
+      if (!event || event.status === EventStatus.CANCELLED) return false;
       capacity = event.capacity;
     } else {
-      const date = await tx.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: { capacity: true, cancelledAt: true, series: { select: { capacity: true } } } });
-      if (!date || date.cancelledAt) return false;
+      const date = await tx.eventInstance.findUnique({ where: { id: target.eventInstanceId }, select: { capacity: true, cancelledAt: true, series: { select: { capacity: true, status: true } } } });
+      if (!date || date.cancelledAt || date.series.status === EventStatus.CANCELLED) return false;
       capacity = date.capacity ?? date.series.capacity;
     }
     if (capacity != null && await tx.rSVP.count({ where: { ...target, ...others } }) + seats.length > capacity) return false;
+  }
+  return ticketTypesFit(tx, rsvps, now);
+}
+
+/**
+ * Whether each ticket type's limit still has room for these registrations
+ * (per event or date for date tickets, in passes for passes), counting
+ * everyone else's confirmed places and live holds. Part of hasFreeSeats, and
+ * checked on its own where places are counted otherwise (a TEAM event's
+ * units, docs/TEAMS.md).
+ */
+export async function ticketTypesFit(tx: Prisma.TransactionClient, rsvps: Array<{ id: string; orderId: string | null; eventId: string | null; eventInstanceId: string | null; ticketTypeId: string | null; }>, now: Date) {
+  const others = { id: { notIn: rsvps.map((rsvp) => rsvp.id) }, ...seatTakingWhere(now) };
+  const groups = new Map<string, { target: SeatTarget; rsvps: typeof rsvps; }>();
+  for (const rsvp of rsvps) {
+    const target = seatTargetOf(rsvp);
+    if (!target) continue;
+    const group = groups.get(targetKey(target)) ?? { target, rsvps: [] };
+    group.rsvps.push(rsvp);
+    groups.set(targetKey(target), group);
   }
   const typeIds = [...new Set(rsvps.flatMap((rsvp) => (rsvp.ticketTypeId ? [rsvp.ticketTypeId] : [])))];
   for (const ticketTypeId of typeIds) {
@@ -256,17 +300,32 @@ export function orderSubject(order: SubjectOrder): OrderSubject | null {
   };
 }
 
+/**
+ * Whether anything an order sells was cancelled: its event, its series, or a
+ * date it holds seats on (a pass reaches its dates through its
+ * registrations). Read under the order's target locks.
+ */
+export async function orderTargetCancelled(tx: Prisma.TransactionClient, order: { event: { status: EventStatus; } | null; series: { status: EventStatus; } | null; instance: { cancelledAt: Date | null; } | null; rsvps: Array<{ eventInstanceId: string | null; }>; }) {
+  if (order.event?.status === EventStatus.CANCELLED || order.series?.status === EventStatus.CANCELLED || order.instance?.cancelledAt) return true;
+  const dates = [...new Set(order.rsvps.flatMap((rsvp) => (rsvp.eventInstanceId ? [rsvp.eventInstanceId] : [])))];
+  return dates.length > 0 && (await tx.eventInstance.count({ where: { id: { in: dates }, cancelledAt: { not: null } } })) > 0;
+}
+
 /** The event or date a freed seat belongs to, for the waitlist. */
 export function seatTargetOf(rsvp: { eventId: string | null; eventInstanceId: string | null; }): SeatTarget | null {
   return rsvp.eventId ? { eventId: rsvp.eventId } : rsvp.eventInstanceId ? { eventInstanceId: rsvp.eventInstanceId } : null;
 }
 
-/** Lock one date (after its series) and read its capacity, and whether it still takes registrations. */
+/** Lock one date (after its series) and read its capacity, whether it still takes registrations, and whether it (or its series) was cancelled. */
 export async function lockDate(tx: Prisma.TransactionClient, instanceId: string, now: Date) {
   const date = await tx.eventInstance.findUnique({ where: { id: instanceId }, select: { eventSeriesId: true } });
   if (!date) return null;
   await lockSeriesDates(tx, date.eventSeriesId, [instanceId], now);
   const current = await tx.eventInstance.findUnique({ where: { id: instanceId }, select: { capacity: true, endDateTime: true, cancelledAt: true, series: { select: { capacity: true, status: true } } } });
   if (!current) return null;
-  return { capacity: current.capacity ?? current.series.capacity, open: current.series.status === EventStatus.PUBLISHED && current.endDateTime > now && !current.cancelledAt };
+  return {
+    capacity: current.capacity ?? current.series.capacity,
+    open: current.series.status === EventStatus.PUBLISHED && current.endDateTime > now && !current.cancelledAt,
+    cancelled: current.series.status === EventStatus.CANCELLED || current.cancelledAt != null,
+  };
 }

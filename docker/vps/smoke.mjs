@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { deleteSmokeObject } from "./smoke-storage.mjs";
 
 await import("./check.mjs");
 const prisma = new PrismaClient();
@@ -41,13 +42,18 @@ try {
   const unauthorized = await fetch("http://app:3000/api/health/db");
   await unauthorized.body?.cancel();
   assert.equal(unauthorized.status, 404, "Readiness must require authentication");
-  console.log("Disposable VPS smoke passed: plain-text rejection, anonymous storage rejection, object roundtrip, audited runtime writes, page rendering and readiness authorization.");
 } catch {
   console.error("Disposable VPS smoke failed; connection details were suppressed.");
   process.exitCode = 1;
 } finally {
-  await s3.send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET, Key: objectKey })).catch(() => {});
+  try {
+    await deleteSmokeObject(s3, process.env.S3_BUCKET, objectKey);
+  } catch {
+    console.error("Disposable VPS smoke failed: object cleanup failed; connection details were suppressed.");
+    process.exitCode = 1;
+  }
   s3.destroy();
   await plain.$disconnect();
   await prisma.$disconnect();
 }
+if (!process.exitCode) console.log("Disposable VPS smoke passed: plain-text rejection, anonymous storage rejection, object roundtrip and cleanup, audited runtime writes, page rendering and readiness authorization.");

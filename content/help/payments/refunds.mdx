@@ -33,11 +33,63 @@ Tickets can't be cancelled once anyone on the order has checked in.
 
 Online refunds are sent to the provider straight away and usually show as "on its way" until the provider confirms them. Card and UPI refunds can take 5 to 10 working days to reach the buyer.
 
-If the provider refuses a refund, for example because your account balance is too low, the owners and admins are emailed so they can try again or refund another way.
+If the provider refuses a refund, for example because your account balance is too low, the owners and admins are emailed so they can retry it or refund another way. See [Retrying a failed refund](#retrying-a-failed-refund).
+
+If the provider accepts a refund but never confirms it finished, the app asks the provider about it again after an hour, and keeps asking until it has an answer. A refund is never marked as failed just because the provider didn't answer in time.
 
 <Callout kind="note">
 
 If someone pays after their time to pay ran out and their place has gone, the payment is refunded in full automatically, and they're told by email.
+
+</Callout>
+
+## Retrying a failed refund
+
+A refund the provider refused stays on record as failed. Once you've fixed the cause (usually topping up your provider balance), send it again:
+
+<Steps>
+
+1. Open the event's **Finance** tab (for a series, the series page).
+2. Under **Failed refunds**, find the order. Each refused refund is listed with the buyer, the order reference and the amount, even when the order's tickets were already cancelled.
+3. Choose **Retry refund**.
+
+</Steps>
+
+The app sends a new refund for the same amount, and it shows as "on its way" until the provider confirms it. The failed one stays on the order's record, so you can always see what happened.
+
+<Callout kind="permission">
+
+Retrying a refund: owners and admins only, after an authenticator check. If you signed in more than a few minutes ago, you're asked to sign in again first.
+
+</Callout>
+
+Each failed refund can be retried once. If the retry fails too, it's listed again so you can retry that one, or refund the buyer another way. A retry is refused if it would return more than is left on the payment.
+
+Only a refund the provider refused is listed as failed. If the app couldn't hear back from the provider, for example while your keys were being changed, the refund stays "on its way" and the app checks with the provider again, so the same money is never sent twice.
+
+## Refunding a cancelled order
+
+A cancelled order can still have money on it, for example when the buyer cancelled under a policy that refunds part of the price, or when a payment arrived too late and its order expired. To give back what's left:
+
+<Steps>
+
+1. Open the event's **Finance** tab (for a series, the series page).
+2. Under **Refundable orders**, find the order. Cancelled and expired orders with money left are listed with the buyer, the order reference and how much is left, even when their tickets are gone. Confirmed orders on cancelled events or cancelled dates appear only when a guest has checked in on the cancelled event or date, preventing its automatic refund.
+3. Choose **Refund…**, enter an amount (or leave it blank to refund everything left) and a reason, then choose **Refund**.
+
+</Steps>
+
+This only returns money; it keeps any tickets and attendance records. Other confirmed orders are refunded from the guest list instead. Return money collected in person yourself before recording its refund.
+
+Unchecked-in places on a cancelled event or date are refunded automatically and do not appear here. If cancellation was interrupted, choose **Finish refunds** in the cancelled event's **Settings**, or beside the cancelled date on the series page, and confirm. Cancelled dates appear under **Upcoming dates** or **Past cancelled dates**. You can finish refunds even after the event or date has ended; orders already processed are skipped and cancellation emails are not sent again. For a pass, any cancelled date still awaiting its automatic share keeps the order out of this list, even if someone checked in on another cancelled date. The order still blocks organisation deletion until the cancellation refunds are resolved.
+
+Cancelling a series cancels its upcoming dates. Payments for earlier dates that were not cancelled stay with you: those date orders, and passes covering only those dates, do not appear here. Retaining that revenue prevents deleting the series, so leave it cancelled as a record with its finance, exports and refund controls available. These payments alone do not block organisation deletion. To refund attended orders, use the date's guest list.
+
+The list shows the newest 100 orders with money left. Fully refunded orders never hide older orders. As you refund these, the list refreshes to show the next ones.
+
+<Callout kind="permission">
+
+Refunding a cancelled order: owners and admins only, after an authenticator check. If you signed in more than a few minutes ago, you're asked to sign in again first.
 
 </Callout>
 
@@ -67,6 +119,8 @@ From a paid order's page, a buyer can ask for a refund outside your policy, with
 
 ## Cancelling an event
 
+Owners and admins can reopen a cancelled event from the organisation's **Events → Past** list. In its **Settings**, choose **Finish refunds** and confirm to resume any interrupted cancellation processing, even after the event has ended.
+
 <Steps>
 
 1. Open the event's **Settings** tab.
@@ -77,11 +131,23 @@ From a paid order's page, a buyer can ask for a refund outside your policy, with
 
 Registration closes, the event page shows it's cancelled, every paid order is refunded in full, orders still being paid for are released, and waiting paid requests are declined. Everyone is emailed. This can't be undone.
 
-The message afterwards says how many orders were refunded, and how many need settling by hand, such as an order where someone had already checked in. Settle those from the guest list. If the provider later refuses a refund, the owners and admins are emailed. See [Cloning, cancelling and deleting](/help/events/clone-cancel-delete).
+Nobody on the waitlist is offered a place on a cancelled event, even when cancelling frees places.
 
-To cancel one date of a series instead, use **Cancel date** under **Upcoming dates** on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share. See [Passes](/help/payments/passes#cancelling-a-date).
+### Payments that arrive after you cancel
+
+A buyer may have paid just before you cancelled, or the provider may tell the app about a payment late. That payment never becomes a ticket. The app records it, cancels the order, and refunds the whole amount automatically. The buyer is emailed that their refund is on its way, and your team chat is told if you've connected one. The same happens for a team place (no team is created) and a hackathon entry fee (the project stays a draft), and for a pass when one of its dates was cancelled.
+
+You can't settle an order by hand for a cancelled event or date either; the app refuses it.
+
+The message afterwards says how many orders were refunded, and how many need settling by hand, such as an order where someone had already checked in. Find those orders under **Refundable orders** in the **Finance** tab and refund the balance there. Their checked-in tickets and attendance records stay intact. If the provider later refuses a refund, the owners and admins are emailed. See [Cloning, cancelling and deleting](/help/events/clone-cancel-delete).
+
+To cancel one date of a series instead, use **Cancel date** under **Upcoming dates** on the series page. Tickets for that date are refunded in full, and each pass gets back that date's share, once, even if the date is cancelled twice. A pass whose holder already checked in to that date is left for you to settle by hand from **Refundable orders** on the series page. Enter the cancelled date's share, or leave the amount blank to return the whole remaining balance. If a checked-in place stays attached to a cancelled date, any remaining balance on the pass still blocks organisation deletion; refund the rest before deleting. See [Passes](/help/payments/passes#cancelling-a-date).
 
 ## Good to know
 
+- You cannot delete an organisation while cancelled events, series or dates still have money to refund, even before their first refund is recorded. Resume cancellation for unchecked-in places. Use **Refundable orders** for checked-in places once no automatic share remains, then wait for online refunds to finish. Cancelled events and series with money left cannot be deleted separately either.
+- You cannot delete an event or series while it holds any collected money, including revenue for attended dates, or has unpaid orders or pending refunds to resolve. Keep it as a record if you are retaining revenue. A failed refund that has been retried is not a separate obligation; the retry's own outcome counts.
+- Once every collected payment has been fully refunded, unpaid orders resolved and no refund is on its way, those orders allow deletion. You do not need to remove checked-in attendance first.
+- Before deleting, download your orders CSV. Fully refunded orders, payments and refunds stay in the database and organisation totals, and buyers can still open their receipts, but organisers lose finance access and order exports. There is no organisation order ledger to replace them. Receipts keep line items and amounts but lose the event or series title, date and time zone. Keep the event or series instead if you need that context.
 - Refunds go through the provider the buyer paid with, using its saved keys. Keep those keys connected while you may still need to refund.
 - A team event has extra rules about who leaves when an order is cancelled. See [Paid team places](/help/payments/paid-team-places#cancellations-and-refunds).

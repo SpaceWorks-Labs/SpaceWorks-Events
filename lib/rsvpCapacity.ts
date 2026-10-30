@@ -1,4 +1,4 @@
-import { EventStatus, Prisma, RegistrationMode, RsvpStatus } from "@prisma/client";
+import { EventStatus, OrderStatus, PaymentStatus, Prisma, RegistrationMode, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { countConfirmedForCapacity, countConfirmedUnits } from "@/lib/teamUnits";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
@@ -26,6 +26,23 @@ export async function countHeldForEvent(eventId: string, now = new Date()): Prom
 
 /** Registrations from a paid order are confirmed only by its payment. */
 export const NOT_FROM_PAID_ORDER = { OR: [{ orderId: null }, { order: { totalMinor: 0 } }] } satisfies Prisma.RSVPWhereInput;
+
+const SETTLED: PaymentStatus[] = [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE, PaymentStatus.WAIVED];
+
+/**
+ * A solo place on an approval-required TEAM event is paid first and approved
+ * after (lib/payments/teamOrders.ts): its order is CONFIRMED once paid while
+ * the registration waits. Under the Event lock, this locks that order and
+ * returns its id only when it is confirmed and settled, so approval confirms
+ * a paid place and never an unpaid one.
+ */
+async function settledSoloOrder(tx: Prisma.TransactionClient, rsvpId: string) {
+  const rsvp = await tx.rSVP.findUnique({ where: { id: rsvpId }, select: { orderId: true, teamId: true } });
+  if (!rsvp?.orderId || rsvp.teamId) return null;
+  await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${rsvp.orderId} FOR UPDATE`;
+  const settled = await tx.order.count({ where: { id: rsvp.orderId, status: OrderStatus.CONFIRMED, totalMinor: { gt: 0 }, payments: { some: { status: { in: SETTLED } } } } });
+  return settled === 1 ? rsvp.orderId : null;
+}
 
 export async function countConfirmedForInstance(
   eventInstanceId: string,
@@ -83,6 +100,7 @@ export async function confirmRsvpWithinCapacity(params: {
   const outcome = await prisma.$transaction(async (tx): Promise<"confirmed" | "waitlisted" | "full" | "changed" | "closed"> => {
     let capacity: number | null;
     let isOpen: boolean;
+    let cancelled: boolean;
     let teamMode = false;
     if (params.eventId) {
       const events = await tx.$queryRaw<Array<{ capacity: number | null; status: EventStatus; endDateTime: Date; registrationMode?: RegistrationMode }>>`
@@ -92,6 +110,7 @@ export async function confirmRsvpWithinCapacity(params: {
       if (!event) return "changed";
       capacity = event.capacity;
       isOpen = event.status === EventStatus.PUBLISHED && event.endDateTime > new Date();
+      cancelled = event.status === EventStatus.CANCELLED;
       teamMode = event.registrationMode === RegistrationMode.TEAM;
     } else {
       // The series, then the date: the same lock order as every series path.
@@ -99,8 +118,10 @@ export async function confirmRsvpWithinCapacity(params: {
       if (!date) return "changed";
       capacity = date.capacity;
       isOpen = date.open;
+      cancelled = date.cancelled;
     }
-    if (params.requireOpen && !isOpen) return "closed";
+    // Nobody is confirmed onto a cancelled event, series or date, requireOpen or not.
+    if (cancelled || (params.requireOpen && !isOpen)) return "closed";
     // TEAM events count units, and only solo RSVPs are confirmed one by one:
     // team members change status with their whole team (lib/core/teams.ts).
     const taken = teamMode
@@ -118,8 +139,9 @@ export async function confirmRsvpWithinCapacity(params: {
       }
       return waitlisted.count === 1 ? "waitlisted" : "changed";
     }
+    const paidOrderId = teamMode ? await settledSoloOrder(tx, params.rsvpId) : null;
     const updated = await tx.rSVP.updateMany({
-      where: { id: params.rsvpId, ...target, status: { in: params.expectedStatuses }, ...NOT_FROM_PAID_ORDER, ...soloOnly },
+      where: { id: params.rsvpId, ...target, status: { in: params.expectedStatuses }, ...(paidOrderId ? { orderId: paidOrderId } : NOT_FROM_PAID_ORDER), ...soloOnly },
       data: { status: RsvpStatus.CONFIRMED },
     });
     if (updated.count === 1 && params.notification) {

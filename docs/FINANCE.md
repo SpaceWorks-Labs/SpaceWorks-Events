@@ -48,16 +48,26 @@ matter, like prize payouts and payment settings. Every step is audited.
   approved; rejected and withdrawn ones don't count. The cap is checked under
   the event row lock, so two claims can't both slip under it. The ticket token
   is the proof; an account-owned ticket also needs that account signed in.
-  Claims belong to the registration, so a ticket with claims waiting,
-  approved or paid can't be transferred ([Paid tickets](PAYMENTS.md)).
+  The Event lock is followed by the RSVP lock: the supplied ticket token,
+  account ownership, confirmed status and crew classification are rechecked,
+  and payee details come from that locked registration, after receipt uploads.
+  A ticket with claims waiting, approved or paid can't be transferred by its
+  buyer ([Paid tickets](PAYMENTS.md)). On any holder change, including an
+  organiser's guest-email edit, claims are detached from the registration;
+  their original payee, amounts, decisions, receipts and payouts remain for
+  organisers. The replacement holder never sees that person's claims or
+  decision notes. A detached policy claim cannot be approved using the new
+  holder's eligibility; organisers can still reject it and retain its history.
 - **Crew** ([Event crew](CREW.md)) claim from their crew ticket page when
   the event turns on *Let crew claim expenses* (`Event.crewClaimsEnabled`,
   off by default), as kind `CREW`, with no cap; the participant switch and
   cap don't apply to them. The Finance list labels them *(crew)*.
 - Lifecycle: `SUBMITTED` → `APPROVED` (for the amount asked or less, with an
   optional note) or `REJECTED` (with a reason the claimant sees) →
-  `PAID`. The claimant may withdraw (`WITHDRAWN`) while it waits. Each step
-  locks the claim row.
+  `PAID`. The claimant may withdraw (`WITHDRAWN`) while it waits: staff only
+  their own claims on the organisation and event of the route they use
+  (`withdrawClaim` matches all three), a participant only claims of the
+  registration their ticket proves. Each step locks the claim row.
 - Emails (operator notices through the outbox): owners and admins when a
   claim arrives; the person being paid back when it is approved, rejected or
   paid. Chat: *Expense claims* for claims and refund requests, *Payouts* for
@@ -183,6 +193,37 @@ create, edit, close (**Close to new claims**) and delete them
   the claim back to `APPROVED`. Rows are never deleted, except with their
   organisation (a BEFORE DELETE trigger).
 
+## Claim lock order
+
+Claims follow the event-first order in [Paid tickets](PAYMENTS.md#locks-and-races-developers).
+Take Event `FOR UPDATE` before locking ExpenseClaim, ReimbursementPolicy or
+RSVP, and before inserting a claim or payout whose foreign key takes Event
+`FOR KEY SHARE`. This applies to general, crew, staff and policy claims:
+staff submission, participant submission, withdrawal, decisions, payment
+recording and reversal. Records retained after event deletion have no Event
+to lock; their claim lock and ledger constraints still apply.
+
+- Participant submission takes Event, then RSVP `FOR UPDATE`, and rechecks
+  the holder before creating the claim. Keep that RSVP lock mode: taking
+  Event first in the competing paths removes the cycles without weakening
+  the protection against holder mutations.
+- Reimbursement notice queueing takes Event before Policy `FOR UPDATE`,
+  then inserts notices (whose foreign keys take RSVP key-share locks).
+  Submission cannot hold RSVP while the beat holds Policy for that event.
+- Decisions and payment recording take Event before ExpenseClaim, including
+  general claims. Reversal reads the original payout's Event, locks it,
+  re-reads the payout's references and only then locks ExpenseClaim and
+  inserts the reversal. The Event key-share needed by payout inserts cannot
+  wait behind a holder change while retaining its claim lock.
+- Organiser holder changes take Event, then RSVP, then detach claims.
+  Withdrawal rechecks its caller's claim scope after waiting for Event, so
+  a detached claim cannot be withdrawn through the former registration.
+
+Event is the common serialisation point for these paths; it precedes both
+explicit locks and locks taken by updates or foreign-key checks. The wider
+Organisation, series, date, order and payment order stays as documented in
+PAYMENTS.md. Organisation deletion retains its documented deadlock retry.
+
 ## Refund requests
 
 - On a paid order's page (bearer order link), a buyer can ask for a refund
@@ -199,6 +240,9 @@ create, edit, close (**Close to new claims**) and delete them
   approved, so two approvals never refund twice. Or they **decline**
   with a reason the buyer sees. Audited `REFUND_REQUESTED`,
   `REFUND_REQUEST_APPROVED`, `REFUND_REQUEST_DECLINED`.
+- **Failed refunds**: a refund the provider refused is listed by order on the
+  Finance tab (and the series page) for owners and admins to retry once,
+  after a recent sign-in. See [Refused refunds in PAYMENTS.md](PAYMENTS.md#after-the-sale).
 
 ## Summary, budget and export
 
@@ -206,6 +250,13 @@ create, edit, close (**Close to new claims**) and delete them
   refunds. **Expenses paid** and **prize money paid** are net of reversals.
   **Net** is income less both. Approved claims not yet paid and waiting
   claims are shown beside expenses.
+- **Test payments** (taken online with the payment account's test keys) are
+  left out of income and net: a separate note shows how many there were and
+  their total after refunds, and the CSV marks their rows "(test)". Money
+  recorded as collected in person always counts as real.
+- **Refundable orders**: cancelled or expired orders with money left on them,
+  refunded by order by owners and admins. See
+  [Refunds in PAYMENTS.md](PAYMENTS.md#after-the-sale).
 - The optional **budget** (`Event.budgetMinor`) is compared with what is
   spent or approved (paid claims, approved claims and prize money).
 - **Download CSV** (`GET /api/exports/events/:eventId/finance`, owners and
@@ -232,7 +283,19 @@ the path.
   reversed; participant claims refused when off, capped, and counted after a
   rejection; refund requests asked once, declined only with a reason,
   approved in part (one refund), never twice.
+- `tests/integration/payment-final-flows.db.test.ts`: a test payment is left
+  out of income, net and the Money card's collected and shown apart, while
+  cash recorded at the desk counts; `tests/unit/payment-revenue.test.ts`
+  covers the same split in the revenue summary.
+- `tests/integration/payment-final-refunds.db.test.ts`: money left on a
+  cancelled order after a partial refund is listed and refunded once, by
+  owners and admins only.
 - `tests/unit/reimbursement-policies.test.ts`: cap and budget arithmetic, the
   frozen snapshot, and each eligibility resolver.
 - `reimbursements-claims.db.test.ts`, `reimbursements-eligibility.db.test.ts`,
   `reimbursements-admin.db.test.ts`: see [Testing](TESTING.md).
+- `claims-lock-order.db.test.ts` pauses real transactions after the RSVP
+  lock and observes PostgreSQL contention before release: submission against
+  notice queueing, and organiser holder changes against payment recording
+  and reversal for general and policy claims, plus withdrawal scope after
+  detachment. Financial records and receipts stay with the original payee.

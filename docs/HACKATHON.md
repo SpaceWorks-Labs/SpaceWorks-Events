@@ -120,9 +120,20 @@ Who may edit an entrant's submission (always re-scoped by event):
   ticket page; it is emailed to the RSVP's address through the outbox (so
   possessing the ticket QR alone is never enough). The token is random, at
   least 128 bits, stored as a SHA-256 hash on the RSVP-scoped row, and
-  regenerating it retires the old one.
+  regenerating it retires the old one. When the registration changes hands
+  (a ticket transfer, or an organiser changing the guest's email) the link
+  is deleted in the same transaction (`lib/rsvpHolder.ts`): the project stays
+  with the registration, and the new holder requests a new link.
 
 Entrants can save a draft, submit, edit while the window is open, and withdraw.
+Published results freeze every project, even while the window is still open:
+saving, submitting and withdrawing are refused ("Results are published, so
+projects can no longer change.") and the editor is read-only
+(`resultsFreezeSubmissions` in lib/core/judging/shared.ts, read under the
+Event lock that publishing takes for update). Unpublishing lifts the freeze.
+An entry fee whose payment arrives after publication is kept and its order
+confirmed, but the waiting draft is not submitted (`confirmEntryFeeTx`,
+lib/payments/entryFees.ts); the organiser decides what to do with it.
 The editor's window line says when submissions open or close, that they are
 closed, or, if the dates are missing, that the organisers haven't set them.
 A team that is disbanded or a solo RSVP that is cancelled has its submission
@@ -635,6 +646,9 @@ audited (`JUDGING_ROUND_CREATED`, `_UPDATED`, `_DELETED`,
   progress filters and totals, search (wildcards literal, surnames never
   matched), assignments, conflict of interest, event scoping, forged cursors,
   page clamping, and every winner kept on the results page.
+  `tests/integration/judging-results-freeze.db.test.ts`: saving, submitting
+  and withdrawing refused once results are published (the award kept),
+  allowed before and again after unpublishing.
   `tests/integration/gallery.db.test.ts`: gallery orders with id tiebreaks,
   search (title, team, first name only, literal wildcards, bounded), the
   winners filter and awards order hidden until results are published and

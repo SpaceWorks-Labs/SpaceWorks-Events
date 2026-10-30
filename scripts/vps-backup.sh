@@ -7,6 +7,8 @@
 #   BACKUP_KEEP_DAYS        days a backup stays on this server (default 14); the
 #                           newest three of each kind are always kept
 #   BACKUP_AGE_RECIPIENT    encrypt every backup to this age public key
+#   BACKUP_ENCRYPTION       "requested" while encryption chosen at setup is not
+#                           working yet; backups are refused until it is
 #   OFFSITE_*               copy each backup to an S3 bucket (needs encryption)
 # A systemd timer (swevents-backup.timer) runs it nightly when scheduled. Each
 # run records its outcome in $SWE_CONFIG_DIR/status/backup.json, which the
@@ -49,27 +51,24 @@ started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 offsite=off
 
 # status.json carries no secrets; the app reads it through a read-only mount.
-json_time() { if [[ -n "$1" ]]; then printf '"%s"' "$1"; else printf null; fi; }
 write_status() {
-  local outcome=$1 size=${2:-0} file previous success full scheduled=false encrypted=false
-  file="$(status_dir)/backup.json"
-  previous=$(cat "$file" 2>/dev/null || true)
-  success=$(printf '%s' "$previous" | sed -n 's/.*"lastSuccessAt":"\([^"]*\)".*/\1/p')
-  full=$(printf '%s' "$previous" | sed -n 's/.*"lastFullSuccessAt":"\([^"]*\)".*/\1/p')
-  if [[ $outcome = ok ]]; then
-    success=$started
-    [[ $kind != full ]] || full=$started
-  fi
-  ! timer_enabled backup || scheduled=true
-  [[ -z "$recipient" ]] || encrypted=true
-  ( umask 022
-    mkdir -p "$(status_dir)"
-    chmod 755 "$(status_dir)"
-    printf '{"version":1,"lastAttemptAt":"%s","lastStatus":"%s","lastKind":"%s","lastSuccessAt":%s,"lastFullSuccessAt":%s,"sizeBytes":%s,"encrypted":%s,"offsite":"%s","scheduled":%s,"keepDays":%s}\n' \
-      "$started" "$outcome" "$kind" "$(json_time "$success")" "$(json_time "$full")" "$size" "$encrypted" "$offsite" "$scheduled" "$keep_days" \
-      > "$file.new"
-    mv -f "$file.new" "$file" )
+  local encrypted=false
+  [[ -z "$recipient" || -n "${3:-}" ]] || encrypted=true
+  write_backup_status "$1" "$kind" "$started" "${2:-0}" "$encrypted" "$offsite" "$keep_days" "${3:-}"
 }
+
+# Encryption that is on, or requested at setup but never completed, must work
+# before anything is written: no plaintext backup is made in its place. The
+# refusal is recorded first, so the Operations page shows it.
+problem=''
+if [[ -n "$recipient" || "$(conf_get "$settings" BACKUP_ENCRYPTION)" = requested ]]; then
+  problem=$(backup_encryption_problem "$recipient")
+fi
+if [[ -n "$problem" ]]; then
+  write_status failed 0 "$problem"
+  die 'Backups are set to be encrypted, but encryption is not working (age is missing, or no key is saved), so no unencrypted backup was made. Install the "age" package, then turn on encryption in the installer menu (Backups), or turn the encryption request off there.'
+fi
+
 on_exit() {
   local status=$?
   [[ $status = 0 ]] && return 0
@@ -93,7 +92,6 @@ printf '%s\n' "$kind" > "$target.partial/kind"
 # Encrypted backups keep only `version` and `kind` readable; everything else
 # goes into backup.tar.age, which only the off-server private key opens.
 if [[ -n "$recipient" ]]; then
-  command -v age >/dev/null || die 'Backups are set to be encrypted, but age is not installed. Install it (package "age") and rerun.'
   # The archive is written into the folder it archives, so it skips itself.
   tar -cf - -C "$target.partial" --exclude=./version --exclude=./kind --exclude=./backup.tar.age . \
     | age --encrypt --recipient "$recipient" > "$target.partial/backup.tar.age"

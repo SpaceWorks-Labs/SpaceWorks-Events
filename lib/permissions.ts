@@ -39,13 +39,16 @@ function normalizeEmail(email: string): string {
 
 
 /**
- * The user's email when they are the configured, verified super admin, else
- * null. Pages and actions use `requireSuperAdminMfa`; this is for readers that
- * only need to know (the guide's section list, lib/views/app__help__layout.ts).
+ * The user's email when they are the configured, verified super admin signed
+ * in with the password (`session.authMethod`), else null. A Google sign-in, an
+ * app session or a token from before sign-in methods were recorded never
+ * counts. Pages and actions use `requireSuperAdminMfa`; this is for readers
+ * that only need to know (the guide's section list, lib/views/app__help__layout.ts).
  */
-export async function superAdminEmailFor(userId: string): Promise<string | null> {
+export async function superAdminEmailFor(session: Pick<Session, "user" | "authMethod">): Promise<string | null> {
   const configured = process.env.SUPER_ADMIN_EMAIL;
-  if (!configured) return null;
+  if (!configured || session.authMethod !== "credentials") return null;
+  const userId = session.user.id;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true, emailVerified: true },
@@ -68,7 +71,7 @@ export async function requireSuperAdmin(): Promise<
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const userEmail = await superAdminEmailFor(session.user.id);
+  const userEmail = await superAdminEmailFor(session);
   if (!userEmail) notFound();
 
   return {

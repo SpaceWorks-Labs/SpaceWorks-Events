@@ -11,7 +11,7 @@ const revalidatePath = trackedRevalidation(nextRevalidatePath);
 
 export async function submitRsvp(
   input: unknown,
-): Promise<ActionResult<{ count: number; }>> {
+): Promise<ActionResult<{ count?: number; }>> {
   const session = await auth();
   const subject =
     typeof input === "object" && input !== null && "guestEmail" in input && typeof (input as { guestEmail?: unknown; }).guestEmail === "string"

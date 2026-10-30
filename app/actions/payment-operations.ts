@@ -10,7 +10,9 @@ import { prisma } from "@/lib/db";
 import { canAccessEvent } from "@/lib/eventAccess";
 import { trackedRevalidation } from "@/lib/frontend/revalidation";
 import { parseMoneyToMinor } from "@/lib/payments/money";
-import { AdmissionManagedError, amendOfflinePayment, PaymentOperationError, refundOrder, sendPaymentLink, settleOrderByHand } from "@/lib/payments/operations";
+import { AdmissionManagedError, amendOfflinePayment, PaymentOperationError, refundEndedOrder, refundOrder, retryFailedRefund, sendPaymentLink, settleOrderByHand } from "@/lib/payments/operations";
+import { getMembership } from "@/lib/permissions";
+import { hasRecentAuthentication } from "@/lib/reauth";
 import { submitManualTicketOrderCore } from "@/lib/rsvpCore";
 import { attendeeNameSchema } from "@/lib/validators";
 
@@ -85,6 +87,55 @@ export async function refundPaidOrder(input: unknown): Promise<ActionResult> {
     orderId: order.id, organisationId: context.organisation.id, actorUserId: context.userId,
     amountMinor, reason: parsed.data.reason, cancelTickets: parsed.data.cancelTickets,
   }));
+}
+
+const retrySchema = z.object({ ...target, refundId: z.string().trim().min(1).max(64) }).strict();
+
+/** Owners and admins only (MANAGE_REGISTRATIONS collaborators can't), after a fresh sign-in. */
+async function ownerOrAdminRecently(context: { userId: string; organisation: { id: string; }; }, doing: string) {
+  const membership = await getMembership(context.userId, context.organisation.id);
+  if (membership?.role !== "OWNER" && membership?.role !== "ADMIN") return `Only the organisation's owners and admins can ${doing}.`;
+  if (!(await hasRecentAuthentication())) return `For security, sign in again before you ${doing}.`;
+  return null;
+}
+
+/** Retry a refund the provider refused (docs/PAYMENTS.md). */
+export async function retryFailedRefundAction(input: unknown): Promise<ActionResult> {
+  const parsed = retrySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Choose a refund." };
+  const context = await access(parsed.data);
+  if ("error" in context) return { ok: false, error: context.error ?? "Event not found." };
+  const refused = await ownerOrAdminRecently(context, "retry refunds");
+  if (refused) return { ok: false, error: refused };
+  const refund = await prisma.paymentRefund.findFirst({ where: { id: parsed.data.refundId, payment: { organisationId: context.organisation.id, order: context.scope } }, select: { id: true } });
+  if (!refund) return { ok: false, error: "Refund not found." };
+  return run(context.path, () => retryFailedRefund({ refundId: refund.id, organisationId: context.organisation.id, actorUserId: context.userId }));
+}
+
+const endedRefundSchema = z.object({
+  ...orderTarget,
+  /** Major units; blank refunds everything left. */
+  amount: z.string().trim().max(20).default(""),
+  reason: z.string().trim().min(1, "Say why you're refunding.").max(500),
+}).strict();
+
+/**
+ * Refund money left on an ended order or a cancelled target (its tickets
+ * may be gone): the Refundable orders list (docs/PAYMENTS.md). Owners and
+ * admins after a fresh sign-in, like retrying a refund.
+ */
+export async function refundEndedOrderAction(input: unknown): Promise<ActionResult> {
+  const parsed = endedRefundSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the refund." };
+  const context = await access(parsed.data);
+  if ("error" in context) return { ok: false, error: context.error ?? "Event not found." };
+  const refused = await ownerOrAdminRecently(context, "refund cancelled orders");
+  if (refused) return { ok: false, error: refused };
+  const order = await orderOf(context.scope, parsed.data.orderId);
+  if (!order) return { ok: false, error: "Order not found." };
+  const amountMinor = parsed.data.amount ? parseMoneyToMinor(parsed.data.amount, order.currency) : null;
+  if (parsed.data.amount && amountMinor == null) return { ok: false, error: `Enter the amount in ${order.currency}, for example 250.` };
+  return run(context.path, () => refundEndedOrder({ orderId: order.id, organisationId: context.organisation.id, actorUserId: context.userId, amountMinor, reason: parsed.data.reason }));
 }
 
 const settleSchema = z.object({

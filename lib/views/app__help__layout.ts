@@ -12,8 +12,8 @@ import type { HelpAccess } from "@/content/help/manifest";
 export async function loadHelpAccess(): Promise<HelpAccess[]> {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) return ["public"];
-  if (await superAdminEmailFor(userId)) return ["public", "org-admin", "super-admin"];
+  if (!session || !userId) return ["public"];
+  if (await superAdminEmailFor(session)) return ["public", "org-admin", "super-admin"];
   const adminMembership = await prisma.membership.findFirst({
     where: { userId, role: { in: ["OWNER", "ADMIN"] } },
     select: { id: true },

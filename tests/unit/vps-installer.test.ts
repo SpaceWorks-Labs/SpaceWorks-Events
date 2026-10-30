@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const scripts = [
-  "install.sh", "scripts/vps-lib.sh", "scripts/setup-vps.sh", "scripts/update-vps.sh", "scripts/vps-backup.sh",
+  "install.sh", "scripts/vps-lib.sh", "scripts/setup-vps.sh", "scripts/update-vps.sh", "scripts/vps-backup.sh", "scripts/runner-service.sh",
   "scripts/vps-restore.sh", "scripts/vps-status.sh", "scripts/install-docker.sh", "scripts/vps-backup-settings.sh",
   "scripts/vps-reconfigure.sh", "scripts/vps-harden.sh", "scripts/vps-recover.sh", "scripts/vps-renew-certs.sh",
   "scripts/vps-support.sh", "scripts/vps-uninstall.sh",
@@ -281,7 +281,7 @@ describe("VPS installer", () => {
     // The archive is written into the folder it archives: it must skip itself.
     expect(backup).toContain("--exclude=./backup.tar.age .");
     expect(backup).toContain("Off-site copies need encrypted backups");
-    expect(backup).toContain('"lastFullSuccessAt"');
+    expect(readFileSync(path.join(root, "scripts/vps-lib.sh"), "utf8")).toContain('"lastFullSuccessAt"');
     const restore = readFileSync(path.join(root, "scripts/vps-restore.sh"), "utf8");
     expect(restore).toContain('mktemp -d "$SWE_CONFIG_DIR/backups/.restore.XXXXXX"');
     expect(readFileSync(path.join(root, "scripts/vps-lib.sh"), "utf8")).not.toMatch(/AGE-SECRET-KEY.*>\s*"?\$/m);

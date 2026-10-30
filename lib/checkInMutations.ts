@@ -1,7 +1,9 @@
 import "server-only";
 
-import { AdmissionStatus, type Prisma, type RsvpStatus } from "@prisma/client";
+import { AdmissionStatus, Prisma, type RsvpStatus } from "@prisma/client";
+import { gateCheckInForStatus } from "@/lib/checkIn";
 import { prisma } from "@/lib/db";
+import { sqlUtcTimestamp, SQL_UTC_NOW } from "@/lib/sqlTimestamp";
 import { publishTicketCheckedIn } from "@/lib/ticketCheckInEvents";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 import { currentMobileActor } from "@/lib/requestActor";
@@ -51,43 +53,103 @@ export function isUnacceptedApplicant(row: ApplicationStatusRow): boolean {
   return status != null && status !== AdmissionStatus.ACCEPTED;
 }
 
-export async function commitCheckInProjection(params: {
+type CheckInParams = {
   rsvpId: string;
   actorUserId: string | null;
   source: CheckInSource;
   checkedInAt: Date;
   force: boolean;
-}): Promise<CheckInCommitResult> {
-  const result = await prisma.$transaction(async (tx): Promise<CheckInCommitResult> => {
-    const allowedStatuses = params.force
-      ? ["CONFIRMED", "WAITLISTED", "PENDING_APPROVAL"] as const
-      : ["CONFIRMED"] as const;
-    const updated = await tx.rSVP.updateMany({
-      where: { id: params.rsvpId, checkedInAt: null, status: { in: [...allowedStatuses] }, ...(params.force ? { NOT: unacceptedApplicant } : {}) },
-      data: { checkedInAt: params.checkedInAt },
-    });
-    if (updated.count === 1) {
-      await tx.checkInEvent.create({
-        data: {
-          rsvpId: params.rsvpId,
-          actorUserId: params.actorUserId,
-          action: "CHECKED_IN",
-          source: recordedSource(params.source),
-          occurredAt: params.checkedInAt,
-        },
-      });
-      return { state: "checked-in", checkedInAt: params.checkedInAt };
-    }
-    const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { checkedInAt: true, status: true, ...applicationStatusSelect } });
-    if (!current) return { state: "missing" };
-    if (current.checkedInAt) return { state: "already-checked-in", checkedInAt: current.checkedInAt };
-    return { state: "ineligible", status: current.status, applicant: current.status !== "CONFIRMED" && isUnacceptedApplicant(current) };
+};
+
+async function applyCheckIn(tx: Prisma.TransactionClient, params: CheckInParams): Promise<CheckInCommitResult> {
+  const allowedStatuses = params.force
+    ? ["CONFIRMED", "WAITLISTED", "PENDING_APPROVAL"] as const
+    : ["CONFIRMED"] as const;
+  const updated = await tx.rSVP.updateMany({
+    where: { id: params.rsvpId, checkedInAt: null, status: { in: [...allowedStatuses] }, ...(params.force ? { NOT: unacceptedApplicant } : {}) },
+    data: { checkedInAt: params.checkedInAt },
   });
-  if (result.state === "checked-in") {
-    publishTicketCheckedIn({ rsvpId: params.rsvpId, checkedInAt: result.checkedInAt });
-    emitWebhookEvent({ type: "checkin.created", rsvpId: params.rsvpId, checkedInAt: result.checkedInAt });
+  if (updated.count === 1) {
+    await tx.checkInEvent.create({
+      data: {
+        rsvpId: params.rsvpId,
+        actorUserId: params.actorUserId,
+        action: "CHECKED_IN",
+        source: recordedSource(params.source),
+        occurredAt: params.checkedInAt,
+      },
+    });
+    return { state: "checked-in", checkedInAt: params.checkedInAt };
   }
+  const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { checkedInAt: true, status: true, ...applicationStatusSelect } });
+  if (!current) return { state: "missing" };
+  if (current.checkedInAt) return { state: "already-checked-in", checkedInAt: current.checkedInAt };
+  return { state: "ineligible", status: current.status, applicant: current.status !== "CONFIRMED" && isUnacceptedApplicant(current) };
+}
+
+/** After the transaction commits: the live ticket update and webhook, for a real transition only. */
+function announceCheckIn(rsvpId: string, result: CheckInCommitResult) {
+  if (result.state !== "checked-in") return;
+  publishTicketCheckedIn({ rsvpId, checkedInAt: result.checkedInAt });
+  emitWebhookEvent({ type: "checkin.created", rsvpId, checkedInAt: result.checkedInAt });
+}
+
+export async function commitCheckInProjection(params: CheckInParams): Promise<CheckInCommitResult> {
+  const result = await prisma.$transaction((tx) => applyCheckIn(tx, params));
+  announceCheckIn(params.rsvpId, result);
   return result;
+}
+
+export type OfflineCheckInCommit =
+  | { kind: "applied" | "replayed"; result: CheckInCommitResult }
+  | { kind: "mismatch" };
+
+/**
+ * An offline desk's queued check-in. Its clientMutationId is claimed in the
+ * same transaction that checks the guest in, and every outcome is stored with
+ * it (already checked in and status refusals too), so a retry of the same
+ * mutation returns that outcome and never checks the guest in again, even
+ * after an organiser undid the check-in. The same id with another
+ * registration, time or override is refused. The status gate runs here, on
+ * the locked row, so an early refusal is recorded like any other outcome.
+ */
+export async function commitOfflineCheckIn(params: CheckInParams & { eventId: string; clientMutationId: string }): Promise<OfflineCheckInCommit> {
+  const commit = await prisma.$transaction(async (tx): Promise<OfflineCheckInCommit> => {
+    const claimed = await tx.$executeRaw`
+      INSERT INTO "OfflineCheckInMutation" ("id", "eventId", "clientMutationId", "rsvpId", "checkedInAt", "force", "createdAt")
+      VALUES (gen_random_uuid()::text, ${params.eventId}, ${params.clientMutationId}, ${params.rsvpId}, ${sqlUtcTimestamp(params.checkedInAt)}, ${params.force}, ${SQL_UTC_NOW})
+      ON CONFLICT ("eventId", "clientMutationId") DO NOTHING`;
+    const key = { eventId_clientMutationId: { eventId: params.eventId, clientMutationId: params.clientMutationId } };
+    if (claimed !== 1) {
+      // A concurrent first attempt has committed by now (the insert waited for it).
+      const stored = await tx.offlineCheckInMutation.findUnique({ where: key });
+      const same = stored && stored.rsvpId === params.rsvpId && stored.force === params.force
+        && stored.checkedInAt.getTime() === params.checkedInAt.getTime() && stored.outcome != null;
+      return same ? { kind: "replayed", result: storedOutcome(stored.outcome) } : { kind: "mismatch" };
+    }
+    await tx.$queryRaw`SELECT 1 FROM "RSVP" WHERE "id" = ${params.rsvpId} FOR UPDATE`;
+    const current = await tx.rSVP.findUnique({ where: { id: params.rsvpId }, select: { status: true, checkedInAt: true } });
+    let result: CheckInCommitResult;
+    if (!current) result = { state: "missing" };
+    else if (current.checkedInAt) result = { state: "already-checked-in", checkedInAt: current.checkedInAt };
+    else if (!gateCheckInForStatus(current.status, params.force).ok) result = { state: "ineligible", status: current.status, applicant: false };
+    else result = await applyCheckIn(tx, params);
+    await tx.offlineCheckInMutation.update({ where: key, data: { outcome: toStoredOutcome(result) } });
+    return { kind: "applied", result };
+  });
+  if (commit.kind === "applied") announceCheckIn(params.rsvpId, commit.result);
+  return commit;
+}
+
+function toStoredOutcome(result: CheckInCommitResult): Prisma.InputJsonValue {
+  return "checkedInAt" in result ? { ...result, checkedInAt: result.checkedInAt.toISOString() } : result;
+}
+
+function storedOutcome(value: Prisma.JsonValue): CheckInCommitResult {
+  const stored = value as { state: CheckInCommitResult["state"]; checkedInAt?: string; status?: RsvpStatus; applicant?: boolean };
+  if (stored.state === "checked-in" || stored.state === "already-checked-in") return { state: stored.state, checkedInAt: new Date(stored.checkedInAt!) };
+  if (stored.state === "ineligible") return { state: "ineligible", status: stored.status!, applicant: Boolean(stored.applicant) };
+  return { state: "missing" };
 }
 
 export async function commitUndoCheckInProjection(params: {

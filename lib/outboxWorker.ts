@@ -11,6 +11,7 @@ import {
   recordHeartbeatSuccess,
 } from "@/lib/operationalHeartbeat";
 import { purgeExpiredOperationalData } from "@/lib/retention";
+import { processStorageDeletions } from "@/lib/storage/deletionQueue";
 import { runPaymentMaintenance } from "@/lib/payments/maintenance";
 import { fillWaitlists } from "@/lib/payments/operations";
 import { runAdmissionMaintenance } from "@/lib/admission/maintenance";
@@ -69,6 +70,8 @@ export const SCHEDULED_JOBS: Job[] = [
   // Reimbursement policies with the email on: queue "you can claim" once per person (row lock per policy, unique notice rows).
   { name: "reimbursement-notices", everyMs: 5 * 60_000, run: (now) => queueReimbursementNotices(now) },
   { name: "backup-alerts", everyMs: 5 * 60_000, run: () => alertOnBackupProblems() },
+  // Stored files of failed uploads and deleted organisations (row claims, SKIP LOCKED; repeated deletes are harmless).
+  { name: "storage-deletions", everyMs: 60_000, run: (now) => processStorageDeletions(now) },
   { name: "retention", everyMs: 60 * 60_000, run: () => purgeExpiredOperationalData() },
 ];
 

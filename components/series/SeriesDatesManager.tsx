@@ -22,9 +22,7 @@ export type ManagedDate = {
 };
 
 /**
- * Upcoming dates of a series: each can have its own capacity, or be
- * cancelled. Cancelling refunds its orders (a pass, that date's share) and
- * emails everyone on it.
+ * Upcoming or past cancelled dates: manage capacity, cancel, or finish refunds.
  */
 export function SeriesDatesManager({ organisationSlug, seriesId, seriesCapacity, timeZone, dates, canManage }: {
   organisationSlug: string;
@@ -53,14 +51,14 @@ export function SeriesDatesManager({ organisationSlug, seriesId, seriesCapacity,
     });
   }
 
-  function cancelDate(id: string, reason: string) {
+  function cancelDate(id: string, reason: string, retry: boolean) {
     setError(null);
     startTransition(async () => {
       const result = await cancelSeriesDate({ organisationSlug, eventSeriesId: seriesId, instanceId: id, reason });
       if (!result.ok) return setError(result.error);
       setCancelling(null);
       const { refunded, failed, notified } = result.data!;
-      showToast(`Date cancelled. ${refunded} ${refunded === 1 ? "order" : "orders"} refunded, ${notified} ${notified === 1 ? "person" : "people"} emailed.${failed ? ` ${failed} need settling by hand.` : ""}`, failed ? "warning" : "success");
+      showToast(`${retry ? "Refund processing finished." : "Date cancelled."} ${refunded} ${refunded === 1 ? "order" : "orders"} refunded, ${notified} ${notified === 1 ? "person" : "people"} emailed.${failed ? ` ${failed} need settling by hand.` : ""}`, failed ? "warning" : "success");
       router.refresh();
     });
   }
@@ -93,6 +91,9 @@ export function SeriesDatesManager({ organisationSlug, seriesId, seriesCapacity,
                     <Button size="sm" variant="dangerQuiet" onClick={() => { setError(null); setEditing(null); setCancelling({ id: date.id, reason: "" }); }}>Cancel date</Button>
                   </>
                 ) : null}
+                {canManage && date.cancelled ? (
+                  <Button size="sm" variant="secondary" disabled={pending} onClick={() => { setError(null); setEditing(null); setCancelling({ id: date.id, reason: "Finishing cancellation refunds." }); }}>Finish refunds</Button>
+                ) : null}
               </div>
               {editing?.id === date.id ? (
                 <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); saveCapacity(date.id, editing.value); }}>
@@ -104,16 +105,16 @@ export function SeriesDatesManager({ organisationSlug, seriesId, seriesCapacity,
                 </form>
               ) : null}
               {cancelling?.id === date.id ? (
-                <form className="flex flex-col gap-3 rounded-lg bg-subtle p-3" onSubmit={(event) => { event.preventDefault(); cancelDate(date.id, cancelling.reason); }}>
+                <form className="flex flex-col gap-3 rounded-lg bg-subtle p-3" onSubmit={(event) => { event.preventDefault(); cancelDate(date.id, cancelling.reason, date.cancelled); }}>
                   <p className="text-body-ui text-ink">
-                    Everyone on this date is emailed. Tickets for this date alone are refunded in full; each pass is refunded this date&apos;s share and keeps its other dates. This can&apos;t be undone.
+                    {date.cancelled ? "Finish any cancellation refunds left for this date, even after it has ended. Orders already processed are skipped; cancellation emails are not sent again." : "Everyone on this date is emailed. Tickets for this date alone are refunded in full; each pass is refunded this date's share and keeps its other dates. This can't be undone."}
                   </p>
-                  <Field label="Reason, for the email" optional>
+                  {!date.cancelled ? <Field label="Reason, for the email" optional>
                     <Input value={cancelling.reason} maxLength={500} onChange={(event) => setCancelling({ id: date.id, reason: event.target.value })} />
-                  </Field>
+                  </Field> : null}
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" size="sm" variant="danger" loading={pending} loadingLabel="Cancelling…">Cancel this date and refund</Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setCancelling(null)}>Keep it</Button>
+                    <Button type="submit" size="sm" variant={date.cancelled ? "primary" : "danger"} loading={pending} loadingLabel="Processing…">{date.cancelled ? "Finish refunds" : "Cancel this date and refund"}</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setCancelling(null)}>{date.cancelled ? "Close" : "Keep it"}</Button>
                   </div>
                 </form>
               ) : null}

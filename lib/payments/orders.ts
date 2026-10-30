@@ -15,10 +15,12 @@ import { DEFAULT_CURRENCY, formatMoney, providerMinimumMinor } from "./money";
 import { priceOrder, PricingError, type AddOnItem, type OrderItem } from "./pricing";
 import { isValidPromoCode, lockPromoCode, promoCodeDigest, PromoCodeError } from "./promo";
 import { lockSellable, passesTaken, type OrderTarget, type Slot } from "./targets";
+import { addOnsTaken } from "./addOnStock";
 import { ticketSalesState } from "./tickets";
 import { OrderError } from "./orderError";
 import { placeTeamOrderRegistration, planTeamOrder } from "./teamOrders";
 import type { TeamRegistrationIntent } from "@/lib/validators";
+import { publicRegistrationCount } from "@/lib/publicRegistrationCount";
 
 export { OrderError } from "./orderError";
 
@@ -140,6 +142,19 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
     const type = types.find((candidate) => candidate.id === line.ticketTypeId)!;
     return Array<string>(line.quantity * type.seatsPerTicket).fill(type.id);
   });
+  // Invite-only (docs/PAYMENTS.md): one place, for the signed-in invitee,
+  // checked under the lock so an audience change or a withdrawn invitation
+  // is seen. An organiser adding a guest by hand isn't limited.
+  if (sellable.privacyType === EventPrivacyType.INVITE_ONLY && !params.manual) {
+    if (!params.buyer.userId) throw new OrderError("This event is invite-only. Sign in with the invited account to register.");
+    const invited = "eventId" in sellable.owner
+      ? await tx.eventInvite.findUnique({ where: { eventId_email: { eventId: sellable.owner.eventId, email: params.buyer.email } }, select: { id: true } })
+      : await tx.seriesInvite.findUnique({ where: { eventSeriesId_email: { eventSeriesId: sellable.owner.eventSeriesId, email: params.buyer.email } }, select: { id: true } });
+    if (!invited) throw new OrderError("This event is invite-only. Use the email you were invited with.");
+    if (seatTypes.length !== 1 || params.attendees.some((attendee) => attendee.name?.trim() || attendee.email?.trim())) {
+      throw new OrderError("Each invitation is for one person: choose one ticket, for yourself.");
+    }
+  }
   const attendees = seatTypes.slice(1).map((_, index) => params.attendees[index] ?? {});
   const emails = [params.buyer.email, ...attendees.map((attendee) => attendee.email?.trim().toLowerCase()).filter(Boolean)];
   if (new Set(emails).size !== emails.length) throw new OrderError("Each ticket needs a different email address, or leave extra ones blank.");
@@ -191,8 +206,7 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   for (const line of priced.lines.filter((candidate) => candidate.kind === "ADD_ON")) {
     const addOn = addOnTypes.find((candidate) => candidate.id === line.addOnId)!;
     if (addOn.capacity == null) continue;
-    const sold = await tx.orderLine.aggregate({ _sum: { quantity: true }, where: { addOnId: addOn.id, order: { OR: [{ status: OrderStatus.CONFIRMED }, { status: OrderStatus.PENDING, holdExpiresAt: { gt: now } }] } } });
-    const left = addOn.capacity - (sold._sum.quantity ?? 0);
+    const left = addOn.capacity - await addOnsTaken(tx, addOn.id, now);
     if (line.quantity > left) throw new OrderError(left <= 0 ? `${addOn.name} is sold out.` : `Only ${left} ${addOn.name} left.`);
   }
   // A pass needs a place on every date it covers.
@@ -339,6 +353,6 @@ export async function reserveOrder(tx: Prisma.TransactionClient, params: {
   else if (orderStatus === OrderStatus.CONFIRMED) {
     await notifyChat(tx, sellable.organisationId, "registration", `${params.buyer.name || "Someone"} booked ${rsvps.length} ${rsvps.length === 1 ? "ticket" : "tickets"} for ${sellable.slots[0]!.label}.`);
   }
-  const count = await tx.rSVP.count({ where: sellable.slots[0]!.target });
+  const count = await publicRegistrationCount(tx, sellable.slots[0]!.target);
   return { orderId: order.id, reference: order.reference, accessToken: order.accessToken, status, buyerRsvpId: rsvps[0]!.id, buyerTicketToken: rsvps[0]!.checkInToken, paymentId, count, teamId: placedTeam?.teamId ?? null, rsvpIds: rsvps.map((rsvp) => rsvp.id) };
 }

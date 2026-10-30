@@ -3,7 +3,7 @@ import "server-only";
 import { MembershipRole, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getBroadcastBaseUrl } from "@/lib/eventBroadcast";
-import { enqueueOperatorNotice } from "@/lib/outbox";
+import { enqueueOperatorNotice, enqueueOperatorNotices } from "@/lib/outbox";
 import { notifyChat } from "@/lib/chat/notify";
 import { noticeSubject, shorten } from "@/lib/noticeText";
 
@@ -29,6 +29,15 @@ export async function noticeEach(client: Client, emails: string[], notice: { sub
     });
   }
   return emails.length;
+}
+
+/** Queue a date's recipients together while cancellation holds the target locks. */
+export async function noticeMany(client: Client, emails: string[], notice: { subject: string; lines: string[]; organisationId?: string; }) {
+  const payload = {
+    subject: shorten(notice.subject), lines: notice.lines.slice(0, 10).map((line) => shorten(line, 1000)),
+    ...(notice.organisationId ? { organisationId: notice.organisationId } : {}),
+  };
+  return (await enqueueOperatorNotices(client, emails.map((to) => ({ ...payload, to })))).count;
 }
 
 /** Owners and admins with a verified address: who hears about requests and failed refunds. */

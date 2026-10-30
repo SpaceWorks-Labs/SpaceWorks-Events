@@ -79,7 +79,47 @@ describe("Razorpay gateway", () => {
   it("finds a refund it already made by our reference", async () => {
     fetchMock.mockResolvedValue(reply(200, { items: [{ id: "rfnd_other", notes: { refund_id: "x" }, status: "processed" }, { id: "rfnd_ours", notes: { refund_id: "refund1" }, status: "pending" }] }));
     await expect(gateway.findRefund("pay_1", "refund1")).resolves.toEqual({ refundId: "rfnd_ours", state: "PENDING" });
-    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.razorpay.com/v1/payments/pay_1/refunds?count=100");
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.razorpay.com/v1/payments/pay_1/refunds?count=100&skip=0");
+  });
+
+  it("looks through every page of refunds, and treats a lookup it can't finish as unknown", async () => {
+    const others = Array.from({ length: 100 }, (_, index) => ({ id: `rfnd_other${index}`, notes: { refund_id: `x${index}` }, status: "processed" }));
+    fetchMock
+      .mockResolvedValueOnce(reply(200, { items: others }))
+      .mockResolvedValueOnce(reply(200, { items: [{ id: "rfnd_ours", notes: { refund_id: "refund1" }, status: "processed" }] }));
+    await expect(gateway.findRefund("pay_1", "refund1")).resolves.toEqual({ refundId: "rfnd_ours", state: "SUCCEEDED" });
+    expect(fetchMock.mock.calls[1]![0]).toBe("https://api.razorpay.com/v1/payments/pay_1/refunds?count=100&skip=100");
+    // A short last page without ours: there is none.
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(reply(200, { items: others })).mockResolvedValueOnce(reply(200, { items: [] }));
+    await expect(gateway.findRefund("pay_1", "refund1")).resolves.toBeNull();
+    // An unreadable page, or more pages than it reads, is never "not found".
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(reply(200, { error: "nope" }));
+    await expect(gateway.findRefund("pay_1", "refund1")).rejects.toBeInstanceOf(PaymentsUnavailable);
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async () => reply(200, { items: others }));
+    await expect(gateway.findRefund("pay_1", "refund1")).rejects.toBeInstanceOf(PaymentsUnavailable);
+  });
+
+  it("sends Razorpay's refund idempotency header with a key it accepts, stable per refund", async () => {
+    fetchMock.mockImplementation(async () => reply(200, { id: "rfnd_1", status: "pending" }));
+    const request = { paymentId: "pay_1", amountMinor: BigInt(1000), currency: "INR", reference: "cmrefund1", idempotencyKey: "refund:cmrefund1" };
+    await gateway.createRefund(request);
+    await gateway.createRefund(request);
+    const [first, second] = fetchMock.mock.calls.map((call) => call[1].headers as Record<string, string>);
+    expect(first!["X-Refund-Idempotency"]).toBe("refund_cmrefund1");
+    expect(first!["X-Refund-Idempotency"]).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(second!["X-Refund-Idempotency"]).toBe(first!["X-Refund-Idempotency"]);
+    expect(first!["Idempotency-Key"]).toBeUndefined();
+  });
+
+  it("reads one refund's status, and never reads a timeout as failed", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { id: "rfnd_1", status: "failed" }));
+    await expect(gateway.getRefundStatus("pay_1", "rfnd_1")).resolves.toBe("FAILED");
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.razorpay.com/v1/payments/pay_1/refunds/rfnd_1");
+    fetchMock.mockRejectedValueOnce(new Error("timeout"));
+    await expect(gateway.getRefundStatus("pay_1", "rfnd_1")).rejects.toBeInstanceOf(PaymentsUnavailable);
   });
 
   it("reports a paid link when cancelling finds the attendee already paid", async () => {
@@ -149,6 +189,39 @@ describe("Stripe gateway", () => {
     await expect(gateway.getCheckoutStatus("cs_test_1")).resolves.toEqual({ state: "open" });
     fetchMock.mockResolvedValueOnce(reply(200, { status: "complete", payment_status: "paid", payment_intent: { id: "pi_1" }, amount_total: 49900, currency: "inr" }));
     await expect(gateway.getCheckoutStatus("cs_test_1")).resolves.toEqual({ state: "paid", paymentId: "pi_1", amountMinor: BigInt(49900), currency: "INR" });
+  });
+
+  it("looks through every page of refunds by cursor, and treats a lookup it can't finish as unknown", async () => {
+    const others = Array.from({ length: 100 }, (_, index) => ({ id: `re_other${index}`, metadata: { refund_id: `x${index}` }, status: "succeeded" }));
+    fetchMock
+      .mockResolvedValueOnce(reply(200, { data: others, has_more: true }))
+      .mockResolvedValueOnce(reply(200, { data: [{ id: "re_ours", metadata: { refund_id: "refund1" }, status: "pending" }], has_more: false }));
+    await expect(gateway.findRefund("pi_1", "refund1")).resolves.toEqual({ refundId: "re_ours", state: "PENDING" });
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.stripe.com/v1/refunds?payment_intent=pi_1&limit=100");
+    expect(fetchMock.mock.calls[1]![0]).toBe("https://api.stripe.com/v1/refunds?payment_intent=pi_1&limit=100&starting_after=re_other99");
+    // The last page without ours: there is none.
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(reply(200, { data: others, has_more: true })).mockResolvedValueOnce(reply(200, { data: [], has_more: false }));
+    await expect(gateway.findRefund("pi_1", "refund1")).resolves.toBeNull();
+    // A malformed page (no list, no has_more, a bad id) or more pages than it reads is never "not found".
+    for (const body of [{ error: "nope" }, { data: others }, { data: [{ id: "bad id!", metadata: {} }], has_more: false }]) {
+      fetchMock.mockReset();
+      fetchMock.mockResolvedValueOnce(reply(200, body));
+      await expect(gateway.findRefund("pi_1", "refund1")).rejects.toBeInstanceOf(PaymentsUnavailable);
+    }
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async () => reply(200, { data: others, has_more: true }));
+    await expect(gateway.findRefund("pi_1", "refund1")).rejects.toBeInstanceOf(PaymentsUnavailable);
+    // A refusal (for example 401 while the keys are wrong) is unknown too.
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(reply(401, { error: { code: "invalid_api_key" } }));
+    await expect(gateway.findRefund("pi_1", "refund1")).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("reads one refund's status by its id", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, { id: "re_1", status: "succeeded" }));
+    await expect(gateway.getRefundStatus("pi_1", "re_1")).resolves.toBe("SUCCEEDED");
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.stripe.com/v1/refunds/re_1");
   });
 
   it("expires an open session and reports closed", async () => {

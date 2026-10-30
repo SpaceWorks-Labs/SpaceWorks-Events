@@ -4,6 +4,7 @@ import "server-only";
 
 import { Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { sendCrewTicketEmail } from "@/lib/email/crew";
 import { designedTicketAttachment } from "@/lib/ticketDesign/resolve";
 import type { OutboxClient } from "./enqueue";
@@ -46,12 +47,13 @@ export async function deliverCrewMessage(value: Prisma.JsonValue, messageId: str
     select: {
       status: true,
       isCrew: true,
+      guestEmail: true, user: { select: { email: true } },
       crewMember: { select: { name: true, role: true } },
       event: { select: { organisationId: true, title: true, status: true, startDateTime: true, endDateTime: true, timezone: true, location: true, isOnline: true } },
     },
   });
   const event = rsvp?.event;
-  if (!rsvp?.isCrew || rsvp.status !== RsvpStatus.CONFIRMED || !rsvp.crewMember || !event || event.organisationId !== payload.organisationId || event.status === "CANCELLED") return "dropped";
+  if (!rsvp?.isCrew || !isCurrentHolderRecipient(rsvp, payload.to) || rsvp.status !== RsvpStatus.CONFIRMED || !rsvp.crewMember || !event || event.organisationId !== payload.organisationId || event.status === "CANCELLED") return "dropped";
   await sendCrewTicketEmail({
     to: payload.to,
     eventTitle: event.title,

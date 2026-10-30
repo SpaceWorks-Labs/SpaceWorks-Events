@@ -1,7 +1,7 @@
 import "server-only";
 
-import { request } from "node:https";
-import { resolvePublicAddress } from "@/lib/net/publicAddress";
+import { beforeDeadline, DEADLINE_PASSED, postPinnedJson } from "@/lib/net/pinnedPost";
+import { resolvePublicAddresses } from "@/lib/net/publicAddress";
 import type { ChatConfig } from "./config";
 import type { ChatKind } from "./events";
 
@@ -34,33 +34,21 @@ async function postJson(url: string, body: unknown, headers: Record<string, stri
 
 /**
  * An organisation's own server (Mattermost): connected only by the public
- * address its name resolves to, checked first and pinned for the request, with
- * TLS checked against the name, so DNS can't be switched in between.
+ * addresses its name resolves to, checked first and pinned for the request
+ * (the webhooks' lookup, which also answers Node's `all: true` requests), with
+ * TLS checked against the name, so DNS can't be switched in between. One
+ * absolute deadline covers DNS, the connection and the reply's status, and
+ * the body is never read, so a slow server can't hold up the outbox worker.
  */
 async function postJsonToOwnServer(url: string, body: unknown) {
   const target = new URL(url);
-  const address = await resolvePublicAddress(target.hostname);
-  const payload = Buffer.from(JSON.stringify(body));
-  await new Promise<void>((resolve, reject) => {
-    const req = request({
-      host: target.hostname,
-      port: target.port || 443,
-      path: `${target.pathname}${target.search}`,
-      method: "POST",
-      servername: target.hostname,
-      lookup: (_hostname, _options, callback) => callback(null, address, address.includes(":") ? 6 : 4),
-      headers: { "Content-Type": "application/json", "Content-Length": payload.length },
-      timeout: TIMEOUT_MS,
-    }, (response) => {
-      response.resume();
-      const status = response.statusCode ?? 0;
-      if (status >= 200 && status < 300) resolve();
-      else reject(failure(status));
-    });
-    req.on("timeout", () => req.destroy(new ChatDeliveryError("The chat service did not answer in time.", false)));
-    req.on("error", (error) => reject(error instanceof ChatDeliveryError ? error : new ChatDeliveryError("Couldn't reach the chat service.", false)));
-    req.end(payload);
-  });
+  const deadline = Date.now() + TIMEOUT_MS;
+  const timedOut = () => new ChatDeliveryError("The chat service did not answer in time.", false);
+  const addresses = await beforeDeadline(resolvePublicAddresses(target.hostname), deadline);
+  if (addresses === DEADLINE_PASSED) throw timedOut();
+  const outcome = await postPinnedJson(target, addresses, Buffer.from(JSON.stringify(body)), deadline);
+  if ("error" in outcome) throw outcome.error === "timeout" ? timedOut() : new ChatDeliveryError("Couldn't reach the chat service.", false);
+  if (outcome.status < 200 || outcome.status >= 300) throw failure(outcome.status);
 }
 
 /** Post one plain-text message. Throws ChatDeliveryError on failure. */

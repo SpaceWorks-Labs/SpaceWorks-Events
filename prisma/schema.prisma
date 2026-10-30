@@ -553,7 +553,7 @@ model MobileIdempotencyKey {
   keyHash     String
   /// HMAC of the method, path and body; the same key on another path or with another body is refused.
   requestHash String
-  /// 0 while the first request is still running.
+  /// 0 while the first request is still running; 1 when it ran with an unknown outcome (a 5xx or an exception).
   status      Int      @default(0)
   body        Json?
   createdAt   DateTime @default(now())
@@ -890,6 +890,7 @@ model Event {
   shortLinkClickDays ShortLinkClickDay[]
   promoCodes       PromoCode[]
   checkInLists     CheckInList[]
+  offlineCheckInMutations OfflineCheckInMutation[]
   savedViews       SavedView[]
   attendanceChecks AttendanceCheck[]
   crewMembers      EventCrewMember[]
@@ -1251,16 +1252,23 @@ model PaymentRefund {
   createdByUserId  String?
   /// When the provider was last asked; a retry first looks the refund up by our id.
   submittedAt      DateTime?
+  /// When maintenance last asked the provider about a refund it accepted but hasn't finished (docs/PAYMENTS.md).
+  lastCheckedAt    DateTime?
+  /// The FAILED refund this one retries. Unique, so each failed refund is retried once; the failed row never changes.
+  retryOfRefundId  String?             @unique
   settledAt        DateTime?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
-  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  payment   Payment        @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  createdBy User?          @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  retryOf   PaymentRefund? @relation("PaymentRefundRetry", fields: [retryOfRefundId], references: [id], onDelete: NoAction)
+  retry     PaymentRefund? @relation("PaymentRefundRetry")
 
   @@unique([paymentId, externalRefundId])
   @@index([paymentId, status])
   @@index([status, createdAt])
+  @@index([status, lastCheckedAt])
 }
 
 /// An append-only correction to an offline payment's method or reference.
@@ -2061,6 +2069,29 @@ model CheckInEvent {
   @@index([actorUserId, occurredAt])
 }
 
+/// One offline check-in a desk sent (its queue entry's clientMutationId),
+/// claimed in the check-in transaction: a retry with the same id returns this
+/// stored outcome instead of checking in again (after an undo, too), and the
+/// same id with another registration, time or override is refused. Offline
+/// check-ins older than 7 days are not accepted, and rows go 8 days after
+/// `checkedInAt` (lib/retention.ts), so a deleted row can never be replayed.
+model OfflineCheckInMutation {
+  id               String   @id @default(cuid())
+  eventId          String
+  clientMutationId String
+  rsvpId           String
+  checkedInAt      DateTime
+  force            Boolean
+  /// The CheckInCommitResult of the first attempt; null only inside that transaction.
+  outcome          Json?
+  createdAt        DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, clientMutationId])
+  @@index([checkedInAt])
+}
+
 /// An organiser-defined check-in list beyond venue entry ("Swag collection",
 /// "Lunch – Day 1", "Workshop B"). Standalone events only. Names are unique per
 /// event among non-archived lists, case-insensitively, through the partial
@@ -2198,6 +2229,65 @@ model InstanceSetting {
 
 /// Tracks stored files (S3/R2/MinIO/etc.) for per-org storage accounting.
 /// This is optional for runtime today but enables accurate “bytes stored” metrics.
+enum StorageDeletionKind {
+  OBJECT
+  PREFIX
+}
+
+enum StorageDeletionState {
+  PENDING
+  CLAIMED
+  VERIFYING
+}
+
+enum StorageDeletionReason {
+  UPLOAD_PENDING
+  ORG_DELETED
+  LEGACY_PREFIX
+  UNATTACHED
+}
+
+/// The object-storage deletion queue (lib/storage/deletionQueue.ts,
+/// docs/CONFIGURATION.md "Object storage"). Every object-storage upload
+/// registers a PENDING row before its PUT and removes it only when it
+/// publishes its Asset, so a failed, abandoned or uncertain PUT is deleted
+/// later. Organisation deletion, abandoned receipts and legacy prefixes queue
+/// rows too. No foreign key: rows outlive the organisation. The beat claims a
+/// due row (CLAIMED, which can never be published) before any DELETE, then
+/// re-checks it a day later (VERIFYING) and removes the row only once the
+/// object is gone. `location` is the storage location the key belongs to; a
+/// row for another location is kept and reported, never deleted elsewhere.
+model StorageDeletion {
+  id                String                @id @default(cuid())
+  kind              StorageDeletionKind
+  state             StorageDeletionState  @default(PENDING)
+  location          String
+  key               String
+  organisationId    String?
+  reason            StorageDeletionReason
+  /// Uploads only: the PUT is refused from, and aborted at, this time.
+  deadline          DateTime?
+  notBefore         DateTime
+  attempts          Int                   @default(0)
+  lastErrorCode     String?
+  /// PREFIX rows: where the paginated listing continues.
+  continuationToken String?
+  createdAt         DateTime              @default(now())
+
+  @@unique([location, key, kind])
+  @@index([state, notBefore])
+  @@index([notBefore])
+}
+
+/// When this database started tracking every upload (the storage deletion
+/// queue's migration). Prefix listings start no earlier than 27 hours after
+/// it, past the old-writer drain and the late-write bound
+/// (docs/production-operations.md).
+model StorageProtocol {
+  id        Int      @id
+  enabledAt DateTime
+}
+
 model Asset {
   id             String   @id @default(cuid())
   organisationId String?

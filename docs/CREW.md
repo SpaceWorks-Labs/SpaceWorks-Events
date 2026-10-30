@@ -109,6 +109,12 @@ counts are shown) but never in *spots left* or *sold out*.
   adding an asked guest to the crew deletes their question and its link.
 - Removing a crew member deletes their ticket (and its check-in) with the
   crew row. Event cancellation notifies crew like everyone with a place.
+- Lock order: editing and removing a crew member both lock the Event, then
+  the member's RSVP, then the crew row (`lockCrewRows`,
+  `lib/core/crew/members.ts`). Removal deletes the RSVP and the crew row
+  cascades from it, so an edit that held the crew row while waiting for the
+  RSVP would deadlock with it; now the second one waits and then finds the
+  member gone ("Crew member not found.").
 
 ## Webhooks and chat
 

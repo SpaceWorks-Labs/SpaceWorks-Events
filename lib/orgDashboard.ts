@@ -53,7 +53,7 @@ export async function getOrgDashboard(input: {
   const viewWhere: Record<OrgEventView, Prisma.EventWhereInput> = {
     upcoming: { ...orgEvent, status: { in: [...LISTED] }, endDateTime: { gte: now } },
     draft: { ...orgEvent, status: "DRAFT" },
-    past: { ...orgEvent, status: { in: [...LISTED] }, endDateTime: { lt: now } },
+    past: { ...orgEvent, OR: [{ status: { in: [...LISTED] }, endDateTime: { lt: now } }, ...(canManage ? [{ status: "CANCELLED" as const }] : [])] },
   };
   const take = PAGE_SIZE * Math.min(Math.max(input.pages, 1), 20);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * DAY_MS);
@@ -119,7 +119,7 @@ export async function getOrgDashboard(input: {
     prisma.rSVP.count({ where: { ...orgRsvp, createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
     prisma.eventFeedbackResponse.findMany({ where: { submittedAt: { gte: thirtyDaysAgo }, form: { event: orgEvent } }, select: { submittedAt: true }, orderBy: { submittedAt: "desc" }, take: SAMPLE_LIMIT }),
     prisma.event.count({ where: { ...orgEvent, feedbackForm: { responses: { some: { submittedAt: { gte: thirtyDaysAgo } } } } } }),
-    prisma.event.findMany({ where: viewWhere.past, orderBy: { endDateTime: "desc" }, take: 5, select: { id: true } }),
+    prisma.event.findMany({ where: { ...viewWhere.past, status: { in: [...LISTED] } }, orderBy: { endDateTime: "desc" }, take: 5, select: { id: true } }),
     prisma.eventSeries.findMany({
       where: { organisationId: organisation.id, ...(canManage ? {} : { status: { in: [...LISTED] } }) },
       orderBy: { createdAt: "desc" },
@@ -159,15 +159,17 @@ export async function getOrgDashboard(input: {
 
   const rows: OrgEventRow[] = listed.map((event) => {
     const base = toEventRow(event, counts, canManage);
-    const isUpcoming = event.status !== "DRAFT" && event.endDateTime >= now;
+    const cancelled = event.status === "CANCELLED";
+    const isUpcoming = !cancelled && event.status !== "DRAFT" && event.endDateTime >= now;
     const going = countsFor(counts, event.id).confirmed;
     return {
       ...base,
+      ...(cancelled ? { status: { label: "Cancelled", tone: "neutral" as const }, fill: null } : {}),
       privacy: PRIVACY_LABELS[event.privacyType],
       publicPath: event.status === "PUBLISHED" ? `/${organisation.slug}/${event.slug}` : null,
       checkInHref: canManage && isUpcoming && base.href ? `${base.href}/check-in` : null,
       linkable: base.href != null,
-      outcome: view === "past" ? { came: Math.min(checkedInBy.get(event.id) ?? 0, going), going, feedback: feedbackBy.get(event.id) ?? 0 } : null,
+      outcome: view === "past" && !cancelled ? { came: Math.min(checkedInBy.get(event.id) ?? 0, going), going, feedback: feedbackBy.get(event.id) ?? 0 } : null,
     };
   });
 

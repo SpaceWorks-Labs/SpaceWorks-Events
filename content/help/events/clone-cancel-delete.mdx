@@ -67,6 +67,8 @@ When you confirm:
 
 A message tells you how many orders were refunded and how many guests were emailed. If any refund couldn't go through, it says how many need settling by hand; you'll find them in the guest list. See [Refunds and cancellations](/help/payments/refunds).
 
+If processing stops before all refunds are recorded, reopen the cancelled event from your organisation's **Events → Past** list. In **Settings**, choose **Finish refunds** and confirm. This works even after the event has ended, skips orders already processed and does not send cancellation emails again.
+
 <Callout kind="warning">
 
 Cancelling can't be undone. If you're only moving the date or venue, change it in **Event page** → **Details** instead: guests with a place are emailed the new time and place automatically, and keep their places. See [Event details](/help/events/details#when-guests-are-told).
@@ -94,7 +96,9 @@ The app takes you back to your organisation's dashboard. The event's link and sh
 
 If the event is live and hasn't ended yet, everyone with a place is emailed that it has been cancelled before it's deleted. Draft, offline and finished events are deleted without emailing anyone.
 
-You can't delete an event that people have paid for. Cancel it instead, so they're refunded; the cancelled event can then stay on your dashboard as a record.
+You can't delete an event while any collected money remains, including revenue from attended tickets, or while unpaid orders or pending refunds need resolving. Keep it on your dashboard as a record if you are retaining revenue. To delete it, resolve unpaid orders, refund every collected payment, retry failed refunds and wait for pending refunds to finish. Use the guest list for attended tickets and **Refundable orders** in **Finance** for cancelled orders.
+
+After all payments are fully refunded, deletion is allowed. Download your orders CSV first: the orders, payments and refunds stay in organisation totals and buyer receipts, but organiser finance and order exports stop being available. Receipts keep their line items and amounts but lose the event title, date and time zone. Keep the event if you need its purchase context. See [Refunds and cancellations](/help/payments/refunds#good-to-know).
 
 ## Which should I use?
 

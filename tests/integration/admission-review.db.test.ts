@@ -57,7 +57,7 @@ describe.sequential("application review", () => {
     expect(await releaseDraftBatch(ctx)).toMatchObject({ ok: false, error: expect.stringMatching(/short of the stage's reviews/) });
     for (const reviewer of [people.r1, people.r2]) {
       const mine = assignments.find((row) => row.applicationId === target && row.reviewerUserId === reviewer)!;
-      expect(await submitReview(await reviewerCtx(event.id, reviewer), mine.id, { scores: { overall: 4 }, notes: "Strong" })).toMatchObject({ ok: true });
+      expect(await submitReview(await reviewerCtx(event.id, reviewer), mine.id, { answersRevision: 1, scores: { overall: 4 }, notes: "Strong" })).toMatchObject({ ok: true });
     }
     expect(await releaseDraftBatch(ctx)).toMatchObject({ ok: true, data: { ACCEPT: 1 } });
     expect(await appOf(target)).toMatchObject({ status: AdmissionStatus.OFFERED });
@@ -71,9 +71,9 @@ describe.sequential("application review", () => {
     const stage = await prisma.admissionStage.findFirstOrThrow({ where: { eventId: event.id } });
     const assignment = await prisma.admissionReviewAssignment.create({ data: { stageId: stage.id, applicationId: a.application.id, reviewerUserId: people.r1 } });
     const r1 = await reviewerCtx(event.id, people.r1);
-    expect(await submitReview(r1, assignment.id, { scores: { overall: 9 }, notes: "" })).toMatchObject({ ok: false });
-    expect(await submitReview(r1, assignment.id, { scores: { overall: 3 }, notes: "" })).toMatchObject({ ok: true });
-    expect(await submitReview(r1, assignment.id, { scores: { overall: 5 }, notes: "" })).toMatchObject({ ok: false });
+    expect(await submitReview(r1, assignment.id, { answersRevision: 1, scores: { overall: 9 }, notes: "" })).toMatchObject({ ok: false });
+    expect(await submitReview(r1, assignment.id, { answersRevision: 1, scores: { overall: 3 }, notes: "" })).toMatchObject({ ok: true });
+    expect(await submitReview(r1, assignment.id, { answersRevision: 1, scores: { overall: 5 }, notes: "" })).toMatchObject({ ok: false });
     await expect(prisma.admissionReview.updateMany({ where: { assignmentId: assignment.id }, data: { notes: "rewritten" } })).rejects.toThrow(/append-only/);
 
     expect(await editApplicationAnswers(a.token, { why: "Because" })).toEqual({ ok: true });
@@ -85,7 +85,7 @@ describe.sequential("application review", () => {
     // The old review no longer counts, so the decision needs a fresh one (or an override).
     expect(await draftDecisions(ctx, { applicationIds: [a.application.id], outcome: "REJECT" })).toMatchObject({ ok: true });
     expect(await releaseDraftBatch(ctx)).toMatchObject({ ok: false });
-    expect(await submitReview(r1, assignment.id, { scores: { overall: 2 }, notes: "" })).toMatchObject({ ok: true });
+    expect(await submitReview(r1, assignment.id, { answersRevision: 2, scores: { overall: 2 }, notes: "" })).toMatchObject({ ok: true });
     expect(await releaseDraftBatch(ctx)).toMatchObject({ ok: true });
     // Decided: the answers are locked.
     expect(await editApplicationAnswers(a.token, { why: "Changed my mind" })).toMatchObject({ ok: false });
@@ -106,7 +106,7 @@ describe.sequential("application review", () => {
     expect(item).toMatchObject({ blind: true, teamName: null });
     expect(item!.people[0]).toMatchObject({ name: "Applicant 1", email: null });
     expect(await loadReviewItem(r2, mine.id)).toBeNull();
-    expect(await submitReview(r2, mine.id, { scores: { overall: 3 }, notes: "" })).toMatchObject({ ok: false });
+    expect(await submitReview(r2, mine.id, { answersRevision: 1, scores: { overall: 3 }, notes: "" })).toMatchObject({ ok: false });
     expect(await resolveAdmissionReviewer(people.outsider, paid.orgSlug, event.id)).toBeNull();
 
     expect(await recuse(r1, mine.id)).toMatchObject({ ok: true, data: { replacedBy: true } });

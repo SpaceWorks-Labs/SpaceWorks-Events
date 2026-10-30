@@ -186,6 +186,9 @@ export const participantClaimsDtoSchema = z.object({
   claims: z.array(claimSchema),
 }).strict();
 
+/** POST …/claims when the claim was filed but its list could not be read back: re-read it with GET. */
+export const claimFiledDtoSchema = z.object({ claimId: z.string() }).strict();
+
 export const staffClaimSchema = claimSchema.extend({ description: z.string(), createdAt: iso, receiptIds: z.array(z.string()) }).strict();
 export const staffClaimsDtoSchema = z.object({ currency: z.string(), claims: z.array(staffClaimSchema) }).strict();
 

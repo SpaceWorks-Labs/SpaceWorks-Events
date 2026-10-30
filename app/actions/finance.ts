@@ -64,7 +64,7 @@ export async function submitStaffClaimAction(formData: FormData): Promise<Action
 export async function withdrawStaffClaimAction(scopeInput: unknown, claimId: unknown): Promise<ActionResult> {
   const scope = await resolveScope(scopeInput, false);
   if ("error" in scope) return { ok: false, error: scope.error };
-  return done(scope, await withdrawClaim(String(claimId ?? "").slice(0, 128), { userId: scope.userId }));
+  return done(scope, await withdrawClaim(String(claimId ?? "").slice(0, 128), { userId: scope.userId, organisationId: scope.organisationId, eventId: scope.eventId }));
 }
 
 export async function approveClaimAction(scopeInput: unknown, input: unknown): Promise<ActionResult> {

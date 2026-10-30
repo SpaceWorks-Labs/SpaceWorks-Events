@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueRsvpConfirmation } from "@/lib/outbox";
 import { hasFreeSeats, ORDER_SUBJECT_SELECT, orderSubject } from "../targets";
+import { promoStillFits } from "../promo";
 import { COLLECTED, lockOrder, onlineAccount, PaymentOperationError } from "./shared";
 import { offerInTransaction } from "./waitlist";
 
@@ -23,7 +24,7 @@ export async function reacceptDeclinedOrder(params: { orderId: string; organisat
     const order = await tx.order.findFirst({
       where: { id: params.orderId, organisationId: params.organisationId },
       select: {
-        id: true, status: true, buyerEmail: true, ...ORDER_SUBJECT_SELECT,
+        id: true, status: true, buyerEmail: true, promoCodeId: true, ...ORDER_SUBJECT_SELECT,
         rsvps: { select: { id: true, orderId: true, eventId: true, eventInstanceId: true, ticketTypeId: true, status: true, checkInToken: true } },
         payments: { where: { status: { in: COLLECTED } }, select: { id: true } },
       },
@@ -34,6 +35,8 @@ export async function reacceptDeclinedOrder(params: { orderId: string; organisat
     if (!order || !declined) throw new PaymentOperationError("Only a declined request can be re-accepted.");
     const subject = orderSubject(order);
     if (!subject || !subject.open(now)) throw new PaymentOperationError("This event is no longer open for registration.");
+    // Declining released its promo code's use: it comes back only if the code still has one.
+    if (!(await promoStillFits(tx, order, now))) throw new PaymentOperationError("The promo code on this order has been used up since it was declined, so it can't be re-accepted.");
 
     await tx.order.update({ where: { id: order.id }, data: { status: OrderStatus.REQUESTED } });
     if (await hasFreeSeats(tx, order.rsvps, now)) {

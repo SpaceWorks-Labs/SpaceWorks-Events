@@ -9,10 +9,11 @@ import { validateAndNormalizeAnswers } from "./answers";
 import { submitInstanceRsvp } from "./instance";
 import { joinsFree, sellsTickets, submitTicketOrder } from "./orders";
 import { reserveRsvp } from "./reserve";
+import { publicCountField } from "@/lib/publicRegistrationCount";
 import { isUniqueViolationOn, TeamRegistrationError, teamRegistrationFailure } from "./team";
-import { isRsvpTargetClosedError, normalizeGuestEmail } from "./shared";
+import { isRsvpTargetClosedError, normalizeGuestEmail, RsvpInviteRequiredError } from "./shared";
 
-export type SubmitRsvpResult = ActionResult<{ count: number; status: RsvpStatus; ticketToken: string; orderToken?: string; checkoutUrl?: string | null; teamId?: string | null }>;
+export type SubmitRsvpResult = ActionResult<{ count?: number; status: RsvpStatus; ticketToken: string; orderToken?: string; checkoutUrl?: string | null; teamId?: string | null }>;
 
 /** The signed-out (guest) branch of `submitRsvpCore`. */
 export async function submitGuestRsvp(
@@ -141,10 +142,11 @@ export async function submitGuestRsvp(
 
     return {
       ok: true,
-      data: { count: reservation.count, status: reservation.status, ticketToken: reservation.checkInToken, teamId: reservation.teamId },
+      data: { ...publicCountField(reservation.count), status: reservation.status, ticketToken: reservation.checkInToken, teamId: reservation.teamId },
     };
   } catch (e: unknown) {
     if (isRsvpTargetClosedError(e)) return { ok: false, error: "This event is not open for RSVP." };
+    if (e instanceof RsvpInviteRequiredError) return { ok: false, error: e.message };
     if (e instanceof TeamRegistrationError) return teamRegistrationFailure(e);
     if (isUniqueViolationOn(e, "nameKey")) return { ok: false, error: "That team name is already taken for this event." };
     if (

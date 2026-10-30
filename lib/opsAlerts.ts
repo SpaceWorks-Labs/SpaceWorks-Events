@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { decryptInstanceConfigSecret } from "@/lib/instanceConfigSecrets";
 import { INSTANCE_SETTINGS_ID } from "@/lib/instanceSettings";
 import { describeOperationalError, redactSensitiveText } from "@/lib/redactSensitiveText";
-import { isAllowedOpsWebhook, PRIVATE_WEBHOOK_ERROR } from "@/lib/opsWebhookAddress";
+import { postOpsWebhook, PRIVATE_WEBHOOK_ERROR, type OpsWebhookPost } from "@/lib/opsWebhookAddress";
 
 /**
  * Operational alerts posted to a super-admin configured incoming webhook
@@ -263,23 +263,13 @@ export type OpsWebhookResult = { ok: true } | { ok: false; error: string };
 
 async function post(url: string, text: string): Promise<OpsWebhookResult> {
   return deliveryScope().run(true, async () => {
-    // Checked on every post (deliveries and the test), not only when saved.
-    if (!(await isAllowedOpsWebhook(url))) return { ok: false, error: PRIVATE_WEBHOOK_ERROR };
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username: "Space Works Events", text }),
-        redirect: "error",
-        cache: "no-store",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
-      await response.body?.cancel().catch(() => undefined);
-      return response.ok ? { ok: true } : { ok: false, error: `The webhook responded with HTTP ${response.status}.` };
-    } catch (error) {
-      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-      return { ok: false, error: timedOut ? "The webhook did not respond within 5 seconds." : "Could not reach the webhook." };
-    }
+    // The host is checked on every post (deliveries and the test), not only when
+    // saved, and the connection is pinned to the addresses just checked.
+    const outcome = await postOpsWebhook(url, JSON.stringify({ username: "Space Works Events", text }), REQUEST_TIMEOUT_MS)
+      .catch((): OpsWebhookPost => ({ error: "unreachable" }));
+    if ("status" in outcome) return outcome.status >= 200 && outcome.status < 300 ? { ok: true } : { ok: false, error: `The webhook responded with HTTP ${outcome.status}.` };
+    if (outcome.error === "blocked") return { ok: false, error: PRIVATE_WEBHOOK_ERROR };
+    return { ok: false, error: outcome.error === "timeout" ? "The webhook did not respond within 5 seconds." : "Could not reach the webhook." };
   });
 }
 

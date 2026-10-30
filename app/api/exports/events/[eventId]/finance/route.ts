@@ -36,7 +36,7 @@ export async function GET(_request: Request, context: RouteContext) {
     prisma.payment.findMany({
       where: { order: { eventId }, status: { in: [PaymentStatus.PAID_ONLINE, PaymentStatus.PAID_OFFLINE] } },
       select: {
-        amountMinor: true, currency: true, paidAt: true, createdAt: true, provider: true, offlineMethod: true, methodSummary: true, description: true,
+        amountMinor: true, currency: true, paidAt: true, createdAt: true, provider: true, offlineMethod: true, methodSummary: true, description: true, testMode: true, status: true,
         order: { select: { reference: true, buyerName: true, submissionId: true } },
         refunds: { where: { status: { in: [PaymentRefundStatus.PENDING, PaymentRefundStatus.SUCCEEDED] } }, select: { amountMinor: true, settledAt: true, createdAt: true, offline: true, status: true } },
       },
@@ -49,10 +49,12 @@ export async function GET(_request: Request, context: RouteContext) {
   for (const payment of payments) {
     const at = payment.paidAt ?? payment.createdAt;
     const method = payment.provider === "OFFLINE" || payment.offlineMethod ? offlineMethodLabel(payment.offlineMethod ?? "OTHER") : payment.methodSummary ?? payment.provider;
-    rows.push({ at, cells: [at.toISOString(), payment.order.submissionId ? "Entry fee" : "Ticket payment", payment.order.buyerName, payment.description, amount(payment.amountMinor, payment.currency, 1), payment.currency, method, payment.order.reference] });
+    // Test-key payments moved no real money: labelled, as on the Finance tab.
+    const test = payment.testMode && payment.status === PaymentStatus.PAID_ONLINE ? " (test)" : "";
+    rows.push({ at, cells: [at.toISOString(), `${payment.order.submissionId ? "Entry fee" : "Ticket payment"}${test}`, payment.order.buyerName, payment.description, amount(payment.amountMinor, payment.currency, 1), payment.currency, method, payment.order.reference] });
     for (const refund of payment.refunds) {
       const refundAt = refund.settledAt ?? refund.createdAt;
-      rows.push({ at: refundAt, cells: [refundAt.toISOString(), refund.status === PaymentRefundStatus.PENDING ? "Refund (pending)" : "Refund", payment.order.buyerName, payment.description, amount(refund.amountMinor, payment.currency, -1), payment.currency, refund.offline ? "In person" : method, payment.order.reference] });
+      rows.push({ at: refundAt, cells: [refundAt.toISOString(), `${refund.status === PaymentRefundStatus.PENDING ? "Refund (pending)" : "Refund"}${test}`, payment.order.buyerName, payment.description, amount(refund.amountMinor, payment.currency, -1), payment.currency, refund.offline ? "In person" : method, payment.order.reference] });
     }
   }
   for (const payout of claimPayouts) {

@@ -23,28 +23,25 @@ COPY prisma ./prisma
 COPY scripts/prisma.mjs ./scripts/prisma.mjs
 CMD ["node", "scripts/prisma.mjs", "migrate", "deploy"]
 
-# Prisma CLI only, pinned to the lockfile's version, so the runner can apply
-# migrations on start (MIGRATE_ON_START=1) on platforms without a release job,
-# such as the Render free plan. Kept apart from the app's node_modules.
+# Prisma CLI only, so the runner can apply migrations on start
+# (MIGRATE_ON_START=1) on platforms without a release job, such as the Render
+# free plan. Kept apart from the app's node_modules and installed with `npm ci`
+# from its own committed lockfile, so every transitive dependency is pinned
+# too. tests/unit/docker-deps.test.ts keeps its version equal to the root
+# lockfile's.
 FROM node:22-alpine AS prisma-cli
 WORKDIR /opt/prisma-cli
-COPY --from=deps /app/node_modules/prisma/package.json /tmp/prisma-package.json
-RUN npm install --omit=dev --no-save --no-audit --no-fund \
-      "prisma@$(node -p "require('/tmp/prisma-package.json').version")" \
-    && npm cache clean --force
+COPY docker/deps/prisma-cli/package.json docker/deps/prisma-cli/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
-# Clients the VPS operator tools (docker/vps/*.mjs) import, pinned to the
-# lockfile's versions. The application bundles its own copies into its build.
+# Clients the VPS operator tools (docker/vps/*.mjs) import, installed with
+# `npm ci` from their own committed lockfile (same direct versions as the root
+# lockfile, checked by tests/unit/docker-deps.test.ts). The application
+# bundles its own copies into its build.
 FROM node:22-alpine AS ops-modules
 WORKDIR /opt/ops
-COPY --from=deps /app/node_modules/ioredis/package.json /tmp/ioredis-package.json
-COPY --from=deps /app/node_modules/@aws-sdk/client-s3/package.json /tmp/s3-package.json
-COPY --from=deps /app/node_modules/nodemailer/package.json /tmp/nodemailer-package.json
-RUN npm install --omit=dev --no-save --no-audit --no-fund \
-      "ioredis@$(node -p "require('/tmp/ioredis-package.json').version")" \
-      "@aws-sdk/client-s3@$(node -p "require('/tmp/s3-package.json').version")" \
-      "nodemailer@$(node -p "require('/tmp/nodemailer-package.json').version")" \
-    && npm cache clean --force
+COPY docker/deps/ops/package.json docker/deps/ops/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
 # Stage 2: Rebuild the source code
 FROM node:22-alpine AS builder

@@ -61,7 +61,9 @@ Only the owner.
 
 <Callout kind="warning">
 
-Deleting an organisation permanently removes it with all of its events, recurring series, registrations and memberships. It can't be undone.
+Deleting an organisation permanently removes it with all of its events, recurring series, registrations and memberships. Its stored files (images, ID card photos and expense receipts) are deleted from storage shortly afterwards. It can't be undone.
+
+Space Works also queues member ID photos when replaced or their member record or programme is deleted, and programme watermarks when replaced, removed or their programme is deleted. Crew photos older than a day that no crew member uses, and receipt photos left unattached for a day, are queued too. Receipt photos already uploaded are queued if a later photo fails validation or the expense claim cannot be submitted. For queued files, Space Works removes every stored version and delete marker, with retries if the storage service is unavailable. Replacing an event cover, organisation logo or event page logo currently does not delete the old image or queue it for deletion.
 
 </Callout>
 
@@ -79,6 +81,7 @@ For security, this is only allowed within 10 minutes of signing in. If you see "
 What happens to your guests:
 
 - If anyone has paid for an upcoming event, you can't delete the organisation yet. Cancel those events (or their dates) first, which refunds the buyers. See [Cloning, cancelling and deleting](/help/events/clone-cancel-delete).
+- You also can't delete it while money is still moving, for any event, cancelled or not: while a buyer is in the middle of paying, while a refund is still on its way, or while a refund the provider refused is still owed. Wait for refunds to go through, and retry failed ones from the event's **Finance** tab (or the series page) first. See [Refunds](/help/payments/refunds#retrying-a-failed-refund). Nobody is told anything, and nothing is removed, when deleting is refused.
 - Everyone with a place at an upcoming published event or series date is emailed that it has been cancelled because the organisation closed its account.
 
 ## Good to know

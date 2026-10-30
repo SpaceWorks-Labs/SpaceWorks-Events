@@ -34,6 +34,7 @@ vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => ({ value: "p
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { POST } from "@/app/api/check-in/station/route";
+import { chunkedRequest, oversizedJsonParts } from "@/tests/helpers/chunkedRequest";
 
 const event = {
   id: "event_1",
@@ -88,6 +89,27 @@ describe("venue check-in station route", () => {
     mocks.eventFind.mockResolvedValue({ ...event, startDateTime: new Date("2000-01-01T10:00:00.000Z"), endDateTime: new Date("2000-01-01T12:00:00.000Z") });
     const late = await POST(request("unlock", { pin: "12345678" }));
     expect(await late.json()).toEqual({ ok: false, error: "This check-in station has closed." });
+  });
+
+  it("stops reading a chunked body past 128 KiB and answers 413 before any lookup", async () => {
+    const stream = chunkedRequest("https://events.example.test/api/check-in/station", oversizedJsonParts(1024 * 1024));
+    const response = await POST(stream.request);
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ ok: false, error: "Request is too large." });
+    expect(stream.cancelled()).toBe(true);
+    expect(stream.pulled()).toBeLessThan(200);
+    expect(mocks.eventFind).not.toHaveBeenCalled();
+  });
+
+  it("reads a normal chunked body and keeps the invalid-request answer", async () => {
+    const body = JSON.stringify({ organisationSlug: "org", eventSlug: "event", action: "lookup", query: "Guest" });
+    mocks.rsvpFindMany.mockResolvedValue([]);
+    const ok = await POST(chunkedRequest("https://events.example.test/api/check-in/station", [body.slice(0, 10), body.slice(10)]).request);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ ok: true, data: { rows: [] } });
+    const broken = await POST(chunkedRequest("https://events.example.test/api/check-in/station", ["{"]).request);
+    expect(broken.status).toBe(400);
+    expect(await broken.json()).toEqual({ ok: false, error: "Invalid request." });
   });
 
   it("rejects action-specific payloads before querying attendee data", async () => {

@@ -6,8 +6,14 @@ import "server-only";
  * for the team, the mentor available for the whole slot, capacity counted
  * under the slot lock, and no team cancellation once the slot has started.
  * Every schedule change and cancellation is logged with its reason
- * (append-only). Lock order: the mentor's grant (FOR SHARE), the teams, then
- * the slot, as the grant removal takes the grant before the slots.
+ * (append-only). Lock order (docs/MENTOR_DESK.md "Lock order"): the Event
+ * (FOR KEY SHARE), the mentor's person lock (lib/personLock.ts), the mentor's
+ * grant (FOR SHARE), the teams, then the slot, as assignments and grant
+ * changes take the Event before the grant. Creating or rescheduling a slot
+ * takes the grant FOR UPDATE, so two schedule changes for one mentor can't
+ * both pass the overlap check; the person lock makes booking and rescheduling
+ * one decision with volunteer approvals, so a booked office hour never
+ * overlaps the mentor's approved volunteer shift.
  */
 
 import { OfficeHourBookingStatus, Prisma } from "@prisma/client";
@@ -16,11 +22,12 @@ import { recordAuditEvent } from "@/lib/audit";
 import { coversInterval, OFFICE_HOUR_CAPACITY_MAX, OFFICE_HOUR_LOCATION_MAX_LENGTH, OFFICE_HOUR_REASON_MAX_LENGTH } from "@/lib/mentorDesk/rules";
 import { OFFICE_HOUR_BOOKED_KIND, OFFICE_HOUR_CANCELLED_KIND } from "@/lib/outbox/mentor";
 import { notifyBooking, scheduleOf } from "./officeHourMail";
-import { deskEvent, liveMentor, liveParticipant, type DeskOrganiserContext, type MentorContext, type ParticipantContext } from "./access";
+import { lockPersons } from "@/lib/personLock";
+import { deskEvent, liveMentor, liveParticipant, type DeskOrganiserContext, type LiveMentor, type MentorContext, type ParticipantContext } from "./access";
 import { localToDate } from "./configuration";
 import { hasApprovedShiftBetween } from "@/lib/volunteer/shared";
 import { isBlockedForTeam } from "./eligibility";
-import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockTeam, refuse } from "./shared";
+import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockTeam, refuse, shareEvent } from "./shared";
 
 type Staff = MentorContext | DeskOrganiserContext;
 
@@ -39,11 +46,22 @@ async function lockSlot(tx: Prisma.TransactionClient, eventId: string, slotId: s
   return slot;
 }
 
-/** Takes the slot mentor's grant (FOR SHARE) before any team or slot lock; a slot's mentor never changes. */
-async function slotMentorFirst(tx: Prisma.TransactionClient, eventId: string, slotId: string) {
+/**
+ * After the Event lock: takes the slot mentor's person lock, then their grant
+ * (FOR SHARE, or FOR UPDATE when `exclusive`), before any team or slot lock;
+ * a slot's mentor never changes.
+ */
+async function slotMentorFirst(tx: Prisma.TransactionClient, eventId: string, slotId: string, exclusive = false) {
   const slot = await tx.officeHourSlot.findFirst({ where: { id: slotId, eventId }, select: { mentorUserId: true } });
   if (!slot) refuse(COPY.notFound);
-  return liveMentor(tx, eventId, slot.mentorUserId, { onShift: false });
+  await lockPersons(tx, [slot.mentorUserId]);
+  return liveMentor(tx, eventId, slot.mentorUserId, { onShift: false, exclusive });
+}
+
+/** Whether the mentor holds an approved volunteer shift overlapping the interval, through either crew link (decided under their person lock). */
+async function onVolunteerDuty(tx: Prisma.TransactionClient, eventId: string, mentor: LiveMentor, startsAt: Date, endsAt: Date) {
+  const crewMemberId = (await tx.mentorProfile.findUnique({ where: { id: mentor.profileId }, select: { crewMemberId: true } }))?.crewMemberId;
+  return hasApprovedShiftBetween(tx, eventId, { userId: mentor.userId, crewMemberId }, startsAt, endsAt);
 }
 
 /** Parses a slot window in the event's zone and checks it against the event, the mentor and their other slots. */
@@ -69,6 +87,10 @@ export async function createOfficeHourSlot(actor: Staff, input: unknown): Promis
   if (actor.kind === "mentor" && parsed.data.mentorUserId !== actor.userId) return fail(COPY.notFound);
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, actor);
+    // The Event, the mentor's person lock, then their schedule lock; slotWindow's own (shared) read then holds nothing new.
+    await shareEvent(tx, event.id);
+    await lockPersons(tx, [parsed.data.mentorUserId]);
+    await liveMentor(tx, event.id, parsed.data.mentorUserId, { onShift: false, exclusive: true });
     const window = await slotWindow(tx, event, parsed.data.mentorUserId, parsed.data);
     return tx.officeHourSlot.create({ data: { eventId: event.id, mentorUserId: parsed.data.mentorUserId, ...window, location: parsed.data.location, capacity: parsed.data.capacity }, select: { id: true } });
   });
@@ -90,7 +112,8 @@ export async function rescheduleOfficeHourSlot(actor: Staff, input: unknown): Pr
   if (!parsed.success) return fail(COPY.invalid);
   return inTransaction(async (tx) => {
     const event = await deskEvent(tx, actor);
-    await slotMentorFirst(tx, event.id, parsed.data.slotId);
+    await shareEvent(tx, event.id);
+    const mentor = await slotMentorFirst(tx, event.id, parsed.data.slotId, true);
     // Lock order as everywhere: teams before the slot (booking takes them in that order too).
     const teams = await tx.officeHourBooking.findMany({ where: { slotId: parsed.data.slotId, eventId: event.id, status: OfficeHourBookingStatus.BOOKED }, select: { teamId: true }, orderBy: { teamId: "asc" } });
     for (const { teamId } of teams) await lockTeam(tx, teamId);
@@ -99,6 +122,8 @@ export async function rescheduleOfficeHourSlot(actor: Staff, input: unknown): Pr
     if (window.startsAt <= new Date()) refuse("Choose a start time in the future.");
     const booked = await tx.officeHourBooking.findMany({ where: { slotId: slot.id, status: OfficeHourBookingStatus.BOOKED }, select: { id: true, teamId: true } });
     if (booked.length > parsed.data.capacity) refuse("Capacity cannot drop below the teams already booked.");
+    // A booked office hour never overlaps the mentor's approved volunteer shift (as booking checks).
+    if (booked.length > 0 && (await onVolunteerDuty(tx, event.id, mentor, window.startsAt, window.endsAt))) refuse("The mentor has an approved volunteer shift at that time.");
     // Each booked team must still be free at the new time and not conflicted with the mentor.
     for (const { teamId } of booked) {
       if (await isBlockedForTeam(tx, event.id, slot.mentorUserId, teamId)) refuse("A booked team now conflicts with this mentor. Cancel its booking first.");
@@ -139,6 +164,7 @@ export async function bookOfficeHour(p: ParticipantContext, input: unknown): Pro
     const event = await deskEvent(tx, p);
     const { teamId } = await liveParticipant(tx, p);
     if (!teamId) refuse(COPY.teamOnly);
+    await shareEvent(tx, event.id);
     const mentor = await slotMentorFirst(tx, event.id, parsed.data.slotId);
     await lockTeam(tx, teamId);
     const slot = await lockSlot(tx, event.id, parsed.data.slotId);
@@ -147,8 +173,7 @@ export async function bookOfficeHour(p: ParticipantContext, input: unknown): Pro
     if (slot.cancelledAt || slot.startsAt <= now || slot.bookingDeadline <= now) refuse(COPY.slotClosed);
     if (!coversInterval(mentor.availability, slot.startsAt, slot.endsAt)) refuse(COPY.bookingConflict);
     // A mentor on an approved volunteer shift at the time is unavailable (office_hours_workflow.book).
-    const crewMemberId = (await tx.mentorProfile.findUnique({ where: { id: mentor.profileId }, select: { crewMemberId: true } }))?.crewMemberId;
-    if (await hasApprovedShiftBetween(tx, event.id, { userId: slot.mentorUserId, crewMemberId }, slot.startsAt, slot.endsAt)) refuse(COPY.bookingConflict);
+    if (await onVolunteerDuty(tx, event.id, mentor, slot.startsAt, slot.endsAt)) refuse(COPY.bookingConflict);
     if (await isBlockedForTeam(tx, event.id, slot.mentorUserId, teamId)) refuse(COPY.bookingConflict);
     const overlap = { eventId: event.id, status: OfficeHourBookingStatus.BOOKED, slot: { startsAt: { lt: slot.endsAt }, endsAt: { gt: slot.startsAt } } };
     if (await tx.officeHourBooking.findFirst({ where: { ...overlap, teamId }, select: { id: true } })) refuse(COPY.teamOverlap);

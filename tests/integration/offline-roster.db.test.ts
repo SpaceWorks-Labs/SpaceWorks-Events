@@ -64,10 +64,21 @@ describe("offline check-in roster", () => {
     expect(rows.every((row) => typeof row.ticketToken === "string" && row.ticketToken.length > 0)).toBe(true);
   });
 
+  it("records who downloaded the roster, with the row count only", async () => {
+    identity.id = ids.owner;
+    const before = new Date();
+    const result = await downloadOfflineCheckInRoster({ organisationSlug: `roster-${suffix}`, eventId: ids.event });
+    expect(result.ok).toBe(true);
+    const audits = await prisma.auditEvent.findMany({ where: { action: "CHECK_IN_ROSTER_DOWNLOADED", targetId: ids.event, createdAt: { gte: before } } });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ actorUserId: ids.owner, organisationId: ids.org, targetType: "Event", metadata: { rows: 2 } });
+  });
+
   it("refuses another organisation's event", async () => {
     identity.id = ids.owner;
     const otherEvent = await prisma.event.create({ data: { organisationId: ids.other, title: "Other", slug: `roster-o-${suffix}`, timezone: "UTC", startDateTime: new Date(), endDateTime: new Date(Date.now() + 3_600_000) } });
     const result = await downloadOfflineCheckInRoster({ organisationSlug: `roster-${suffix}`, eventId: otherEvent.id });
     expect(result.ok).toBe(false);
+    expect(await prisma.auditEvent.count({ where: { action: "CHECK_IN_ROSTER_DOWNLOADED", targetId: otherEvent.id } })).toBe(0);
   });
 });

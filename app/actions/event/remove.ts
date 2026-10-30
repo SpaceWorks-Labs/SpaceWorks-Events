@@ -10,7 +10,8 @@ import { flattenZodErrors } from "../utils";
 import { isActionRateLimited } from "@/lib/actionRateLimit";
 import { recordAuditEvent } from "@/lib/audit";
 import { z } from "zod";
-import { hasPaidOrders, notifyEventCancelled, refundCancelledEvent } from "@/lib/payments/eventCancellation";
+import { hasPaidOrders, notifyEventCancelled, PAID_EVENT_REFUSAL, refundCancelledEvent } from "@/lib/payments/eventCancellation";
+import { fenceOrganisation } from "@/lib/payments/targets";
 import { revalidateEventPaths, revalidatePath } from "./shared";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
 
@@ -46,21 +47,26 @@ export async function deleteEvent(input: unknown): Promise<ActionResult> {
     where: { id: eventId, organisationId: org.id },
   });
   if (!event) return { ok: false, error: "Event not found." };
-  // Deleting would leave people who paid without their tickets: cancel instead, which refunds them.
-  if (await hasPaidOrders({ eventId: event.id })) {
-    return { ok: false, error: "People have paid for this event. Cancel it instead, which refunds them in full." };
-  }
+  // Retain organiser access to every order while any money is held or in flight.
+  if (await hasPaidOrders({ eventId: event.id })) return { ok: false, error: PAID_EVENT_REFUSAL };
 
   const slug = event.slug;
   try {
-    await prisma.$transaction(async (tx) => {
-      if (event.status === EventStatus.PUBLISHED && event.endDateTime > new Date()) await notifyEventCancelled(tx, { organisationId: org.id, eventId: event.id, title: event.title });
-      // Claims outlive the event; their policy terms stay in each claim's snapshot.
-      // The event lock first, as when claims are filed, approved or paid (Event, then claim).
+    const refused = await prisma.$transaction(async (tx) => {
+      // The locks a reservation takes (docs/PAYMENTS.md): the organisation
+      // fence, then the event. A paid order committed before this is seen
+      // below; one that waits finds the event gone.
+      await fenceOrganisation(tx, org.id);
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
+      if (await hasPaidOrders({ eventId: event.id }, tx)) return true;
+      if (event.status === EventStatus.PUBLISHED && event.endDateTime > new Date()) await notifyEventCancelled(tx, { organisationId: org.id, eventId: event.id, title: event.title });
+      // Claims outlive the event; their policy terms stay in each claim's snapshot
+      // (the event lock is held, as when claims are filed, approved or paid).
       await tx.expenseClaim.updateMany({ where: { policy: { eventId: event.id } }, data: { policyId: null } });
       await tx.event.delete({ where: { id: event.id } });
+      return false;
     });
+    if (refused) return { ok: false, error: PAID_EVENT_REFUSAL };
     await recordAuditEvent({
       action: "EVENT_DELETED",
       actorUserId: session.user.id,
@@ -104,6 +110,7 @@ export async function cancelEvent(input: unknown): Promise<ActionResult<{ refund
 
   let cancelledNow = false;
   const notified = await prisma.$transaction(async (tx) => {
+    await fenceOrganisation(tx, org.id);
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
     if (event.status === EventStatus.CANCELLED) return 0;
     cancelledNow = true;

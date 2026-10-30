@@ -3,6 +3,7 @@ import "server-only";
 import { AdmissionAssignmentStatus, AdmissionStatus, Prisma, RegistrationFieldType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { validateAndNormalizeAnswers } from "@/lib/rsvpCore/answers";
+import type { AnswerRow as NewAnswer } from "@/lib/rsvpCore/shared";
 import { admissionKeyHash } from "./registration";
 import { AdmissionError, CHANGED, lockAdmissionEvent, unitMembers } from "./state";
 
@@ -15,7 +16,9 @@ import { AdmissionError, CHANGED, lockAdmissionEvent, unitMembers } from "./stat
  * and not yet locked (the first released decision locks it). Each change
  * keeps the replaced answers (AdmissionAnswerRevision, append-only) and bumps
  * the answers revision, so reviews of the old answers stop counting and
- * their reviewers are asked again.
+ * their reviewers are asked again. The organiser's registration editor and
+ * the buyer's order page follow the same rules: every answer write goes
+ * through `replaceRegistrationAnswers`.
  */
 
 type AnswerRow = { fieldId: string; valueText: string | null; valueBool: boolean | null; valueNumber: number | null; valueDate: Date | null; field: { label: string; type: RegistrationFieldType; sortOrder: number } };
@@ -57,6 +60,54 @@ export async function applicationPeople(client: Prisma.TransactionClient, app: {
   return { teamName: blind ? null : team?.name ?? null, people };
 }
 
+const DECIDED = "Your answers can't change any more: a decision has been made.";
+
+/** Order-insensitive comparison key for a registration's answers. */
+function answersKey(rows: NewAnswer[]) {
+  return JSON.stringify(rows
+    .map((row) => JSON.stringify([row.fieldId, row.valueText ?? null, row.valueBool ?? null, row.valueNumber ?? null, row.valueDate?.toISOString() ?? null]))
+    .sort());
+}
+
+/**
+ * Replace one registration's answers, inside a transaction that holds its
+ * Event lock. Unchanged answers are left alone (an edit of the name only
+ * writes nothing here). For an application, changed answers are refused
+ * (AdmissionError) unless it is in review and not locked; the replaced
+ * answers are kept, the answers revision and version go up, and submitted
+ * reviews are asked again, so a reviewer still holding the old answers is
+ * refused as stale (lib/admission/reviews.ts).
+ */
+export async function replaceRegistrationAnswers(
+  tx: Prisma.TransactionClient,
+  rsvp: { id: string; eventId: string | null; teamId: string | null; attendeeKey: string },
+  rows: NewAnswer[],
+  decided = "This application's answers can't change any more: a decision has been made.",
+): Promise<void> {
+  const previous = await tx.rsvpAnswer.findMany({ where: { rsvpId: rsvp.id }, select: answerSelect });
+  if (answersKey(previous) === answersKey(rows)) return;
+  const app = rsvp.eventId
+    ? await tx.admissionApplication.findFirst({ where: rsvp.teamId ? { teamId: rsvp.teamId } : { rsvpId: rsvp.id }, select: { id: true, status: true, answersLockedAt: true, answersRevision: true, version: true } })
+    : null;
+  if (app) {
+    if (app.status !== AdmissionStatus.IN_REVIEW || app.answersLockedAt) throw new AdmissionError(decided);
+    await tx.admissionAnswerRevision.create({
+      data: { applicationId: app.id, rsvpId: rsvp.id, personKey: admissionKeyHash(rsvp.attendeeKey), answersRevision: app.answersRevision, answers: previous.map((row) => ({ fieldId: row.fieldId, label: row.field.label, value: answerText(row) })) as Prisma.InputJsonValue },
+    });
+  }
+  await tx.rsvpAnswer.deleteMany({ where: { rsvpId: rsvp.id } });
+  if (rows.length) {
+    await tx.rsvpAnswer.createMany({
+      data: rows.map((row) => ({ rsvpId: rsvp.id, fieldId: row.fieldId, valueText: row.valueText ?? null, valueBool: row.valueBool ?? null, valueNumber: row.valueNumber ?? null, valueDate: row.valueDate ?? null })),
+    });
+  }
+  if (!app) return;
+  const bumped = await tx.admissionApplication.updateMany({ where: { id: app.id, version: app.version }, data: { answersRevision: { increment: 1 }, version: { increment: 1 } } });
+  if (bumped.count !== 1) throw new AdmissionError(CHANGED);
+  // Reviews of the old answers no longer count: their reviewers are asked again.
+  await tx.admissionReviewAssignment.updateMany({ where: { applicationId: app.id, status: AdmissionAssignmentStatus.SUBMITTED }, data: { status: AdmissionAssignmentStatus.ASSIGNED } });
+}
+
 /** The applicant's own edit of their answers, by ticket token. */
 export async function editApplicationAnswers(token: string, input: Record<string, unknown>): Promise<{ ok: true } | { ok: false; error: string }> {
   const rsvp = await prisma.rSVP.findUnique({ where: { checkInToken: token }, select: { id: true, eventId: true, teamId: true, isCrew: true, attendeeKey: true } });
@@ -68,19 +119,12 @@ export async function editApplicationAnswers(token: string, input: Record<string
   try {
     return await prisma.$transaction(async (tx) => {
       await lockAdmissionEvent(tx, rsvp.eventId!);
-      const app = await tx.admissionApplication.findFirst({ where: rsvp.teamId ? { teamId: rsvp.teamId } : { rsvpId: rsvp.id }, select: { id: true, status: true, answersLockedAt: true, answersRevision: true, version: true } });
+      const current = await tx.rSVP.findUnique({ where: { id: rsvp.id }, select: { id: true, eventId: true, checkInToken: true, isCrew: true, teamId: true, attendeeKey: true } });
+      if (!current || current.eventId !== rsvp.eventId || current.checkInToken !== token || current.isCrew || current.teamId !== rsvp.teamId) return { ok: false as const, error: "This ticket has no application." };
+      const app = await tx.admissionApplication.findFirst({ where: current.teamId ? { teamId: current.teamId } : { rsvpId: current.id }, select: { status: true, answersLockedAt: true } });
       if (!app) return { ok: false as const, error: "This ticket has no application." };
-      if (app.status !== AdmissionStatus.IN_REVIEW || app.answersLockedAt) return { ok: false as const, error: "Your answers can't change any more: a decision has been made." };
-      const previous = await tx.rsvpAnswer.findMany({ where: { rsvpId: rsvp.id }, select: answerSelect });
-      await tx.admissionAnswerRevision.create({
-        data: { applicationId: app.id, rsvpId: rsvp.id, personKey: admissionKeyHash(rsvp.attendeeKey), answersRevision: app.answersRevision, answers: previous.map((row) => ({ fieldId: row.fieldId, label: row.field.label, value: answerText(row) })) as Prisma.InputJsonValue },
-      });
-      await tx.rsvpAnswer.deleteMany({ where: { rsvpId: rsvp.id } });
-      if (validated.rows.length) await tx.rsvpAnswer.createMany({ data: validated.rows.map((row) => ({ ...row, rsvpId: rsvp.id })) });
-      const bumped = await tx.admissionApplication.updateMany({ where: { id: app.id, version: app.version }, data: { answersRevision: { increment: 1 }, version: { increment: 1 } } });
-      if (bumped.count !== 1) throw new AdmissionError(CHANGED);
-      // Reviews of the old answers no longer count: their reviewers are asked again.
-      await tx.admissionReviewAssignment.updateMany({ where: { applicationId: app.id, status: AdmissionAssignmentStatus.SUBMITTED }, data: { status: AdmissionAssignmentStatus.ASSIGNED } });
+      if (app.status !== AdmissionStatus.IN_REVIEW || app.answersLockedAt) return { ok: false as const, error: DECIDED };
+      await replaceRegistrationAnswers(tx, current, validated.rows, DECIDED);
       return { ok: true as const };
     });
   } catch (error) {

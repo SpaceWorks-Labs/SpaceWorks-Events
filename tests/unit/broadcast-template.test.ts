@@ -135,4 +135,10 @@ describe("audience helpers", () => {
     expect(broadcastHtmlToText(html)).toBe("Form (https://forms.test/?n=&#99999999;)");
     expect(broadcastHtmlToText("<p>&#99999999; &#x110000; &#65;</p>")).toBe("&#99999999; &#x110000; A");
   });
+
+  it("keeps inherited property names literally instead of resolving Object.prototype", () => {
+    const tokens = "{{constructor}} {{toString}} {{hasOwnProperty}} {{valueOf}} {{name}}";
+    expect(renderBroadcastTemplate(tokens, variables)).toBe("{{constructor}} {{toString}} {{hasOwnProperty}} {{valueOf}} Priya Nair");
+    expect(renderBroadcastHtml(`<p>${tokens}</p>`, variables)).toBe("<p>{{constructor}} {{toString}} {{hasOwnProperty}} {{valueOf}} Priya Nair</p>");
+  });
 });

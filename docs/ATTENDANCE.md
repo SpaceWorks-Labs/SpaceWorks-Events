@@ -35,7 +35,11 @@ delivery, replies, the card counts and the Guests filters. It requires
 `isCrew: false`: [crew](CREW.md) are never asked, counted or given a link, and
 carry no attendance badge. Adding an asked guest to the crew deletes their
 question, so its link stops working and a later No can never release a crew
-ticket.
+ticket. A registration that changes hands (a ticket transfer, or an organiser
+changing the guest's email) deletes its question in the same transaction
+(`retireHolderCapabilities`, `lib/rsvpHolder.ts`): the previous holder's link
+stops working, a No they answered just before finds no current answer under
+the release lock and releases nothing, and the next send asks the new holder.
 
 ## Sending
 
@@ -71,8 +75,10 @@ it**) that open the form with that answer preselected. Links use the absolute
 `NEXT_PUBLIC_BASE_URL`. At delivery a question is dropped if its link was
 replaced, the guest already answered, is no longer eligible, or the event was
 cancelled, and it expires when the event starts. The email goes to the
-registration's address at delivery (the account's current email, or the
-guest's), not the one it was queued for.
+registration's current address (the account's email, or the guest's) only
+while it still matches the queued recipient, ignoring case and surrounding
+whitespace. A changed address drops the message; a former holder never gets
+the replacement holder's capabilities.
 
 The email says a No gives up the place **only when release is on and that
 registration would actually be released right now** (computed at delivery by
@@ -127,6 +133,20 @@ Each reply is written only if the answer it replaces is still the stored one
 (response and its time), so when two windows answer at once only one plans and
 runs a release; the other is told what was stored.
 
+A release runs after its No has been recorded, so a Yes can be answered in
+between. The release therefore carries the No's own time
+(`lib/attendanceGuard.ts`): the free cancellation, the paid cancellation and
+the refund request each lock the attendance check last, after the event or
+dates, the order, its payments and the registration ([lock order](PAYMENTS.md#locks-and-races-developers)),
+and go ahead only while that exact No is still the answer. Otherwise nothing
+is released and the No's reply is told its answer changed. A release that
+deletes the registration deletes the check with it, so a Yes waiting on it
+finds the link gone instead of succeeding over a released place. The
+outcome (`releaseOutcome`) and refund-request fields are written only for
+that same No, and a Yes withdraws a refund request only while it is still
+the answer, after re-reading the check under the order lock, so No, Yes, No
+in quick succession ends with whatever the last answer says.
+
 **Where the note goes.** A guest's note is kept with their answer (Guests →
 People, the attendee CSV, their own data export). When a closed policy opens a
 refund request, the note is included in the request's reason, which the
@@ -174,7 +194,7 @@ token or a note.
 | Shared link | `lib/core/attendanceCheck/link.ts` |
 | Card status, Overview counts, preview | `lib/core/attendanceCheck/status.ts`, `lib/eventDashboard/attendanceCheckCard.ts` |
 | Reply, form view | `lib/core/attendanceCheck/reply.ts` |
-| Release on No | `lib/core/attendanceCheck/release.ts`, `releaseRun.ts`, `lib/rsvpCancel.ts`, `lib/refundRequests.ts` |
+| Release on No | `lib/core/attendanceCheck/release.ts`, `releaseRun.ts`, `lib/attendanceGuard.ts`, `lib/rsvpCancel.ts`, `lib/refundRequests.ts` |
 | Email and outbox kind | `lib/email/attendance.ts`, `lib/outbox/attendance.ts` |
 | Server Actions | `app/actions/attendance-check.ts` |
 | Page | `app/attend/[token]/page.tsx`, `lib/views/app__attend__token__page.ts`, `components/attendance/` |

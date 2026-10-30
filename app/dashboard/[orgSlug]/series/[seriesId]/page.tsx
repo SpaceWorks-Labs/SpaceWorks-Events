@@ -10,7 +10,9 @@ import { TicketTypesManager } from "@/components/event-dashboard/settings/Ticket
 import { AddOnsManager } from "@/components/event-dashboard/settings/AddOnsManager";
 import { PromoCodesManager, RefundPolicyControl, TransfersControl } from "@/components/event-dashboard/settings/PromoCodesManager";
 import { EventReportDownloadButton } from "@/components/reports/EventReportDownloadButton";
-import { Card, PageHeader } from "@/components/ui/display";
+import { Card, CardHeader, PageHeader } from "@/components/ui/display";
+import { FailedRefundsList } from "@/components/payments/FailedRefundsList";
+import { RefundableOrdersList } from "@/components/payments/RefundableOrdersList";
 import { formatDayTime } from "@/lib/format/datetime";
 import type { Metadata } from "next";
 import { cachedDateTimeFormat } from "@/lib/format/intlCache";
@@ -27,7 +29,7 @@ function eventDateInput(date: Date, timeZone: string) {
 }
 
 export default async function SeriesManagePage({ params }: Props) {
-  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, tickets, revenue } = await loadSeriesManageView({ params });
+  const { series, isAdmin, organisation, canManageInvites, invites, canManageSchedule, canDownloadReports, finishedInstances, firstInstanceId, now, attendeesPage, rollup, dates, pastCancelledDates, tickets, revenue, failedRefunds, refundableOrders } = await loadSeriesManageView({ params });
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title={series.title} description="Manage this recurring event and its upcoming occurrences." />
@@ -65,6 +67,13 @@ export default async function SeriesManagePage({ params }: Props) {
         <SeriesDatesManager organisationSlug={organisation.slug} seriesId={series.id} seriesCapacity={series.capacity} timeZone={series.timezone} dates={dates} canManage={isAdmin} />
       </section>
 
+      {pastCancelledDates.length > 0 ? (
+        <section aria-labelledby="series-past-cancelled-title" className="flex flex-col gap-3">
+          <h2 id="series-past-cancelled-title" className="text-h4 text-ink">Past cancelled dates</h2>
+          <SeriesDatesManager organisationSlug={organisation.slug} seriesId={series.id} seriesCapacity={series.capacity} timeZone={series.timezone} dates={pastCancelledDates} canManage={isAdmin} />
+        </section>
+      ) : null}
+
       {tickets ? (
         <section aria-label="Tickets and passes" className="flex flex-col gap-5">
           <TicketTypesManager
@@ -86,6 +95,20 @@ export default async function SeriesManagePage({ params }: Props) {
       ) : null}
 
       {revenue && hasRevenue(revenue) ? <MoneyCard revenue={revenue} title="Money across the series" exportHref={`/api/exports/series/${series.id}/orders`} /> : null}
+
+      {failedRefunds.length > 0 ? (
+        <Card as="section" aria-labelledby="series-failed-refunds-title">
+          <CardHeader title={<span id="series-failed-refunds-title">Failed refunds</span>} description="Refunds the payment provider refused. Check your balance with the provider, then retry." />
+          <FailedRefundsList target={{ organisationSlug: organisation.slug, seriesId: series.id }} refunds={failedRefunds} timezone={series.timezone} />
+        </Card>
+      ) : null}
+
+      {isAdmin && (tickets || refundableOrders.length > 0) ? (
+        <Card as="section" aria-labelledby="series-refundable-orders-title">
+          <CardHeader title={<span id="series-refundable-orders-title">Refundable orders</span>} description="Cancelled or expired orders with money left on them. Confirmed orders are refunded from the guest list." />
+          <RefundableOrdersList target={{ organisationSlug: organisation.slug, seriesId: series.id }} orders={refundableOrders} timezone={series.timezone} />
+        </Card>
+      ) : null}
 
       {canDownloadReports ? (
         <section aria-labelledby="series-reports-title" className="flex flex-col gap-3">

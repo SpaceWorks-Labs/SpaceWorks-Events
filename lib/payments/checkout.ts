@@ -10,7 +10,7 @@ import { submitPendingRefund } from "./refunds";
 import { paymentReturnUrl } from "./returnLink";
 import { settlePaidNotification } from "./settlement";
 import { emitWebhookEvent } from "@/lib/webhooks/emit";
-import { ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
+import { lockOrderTargets, ORDER_SUBJECT_SELECT, orderSubject } from "./targets";
 import { loadPaymentAccount } from "./settings";
 
 function publicBaseUrl() {
@@ -31,11 +31,19 @@ const REUSE_MARGIN_MS = 3 * 60_000;
  * needs a unique reference_id per link). Opening one extends the hold to the
  * provider's minimum page lifetime, never past the hold's cap, and the
  * provider is called outside any lock.
+ *
+ * Extending a hold takes the same event (or series and dates) locks as a new
+ * reservation, before the order, and reads the time only once it has them:
+ * a hold that ended meanwhile is refused, never revived, so a reservation
+ * that already counted its seats as free can't be oversold.
  */
-export async function startCheckout(orderId: string, now = new Date()): Promise<CheckoutOutcome> {
+export async function startCheckout(orderId: string, at?: Date): Promise<CheckoutOutcome> {
   const base = publicBaseUrl();
   const prepared = await prisma.$transaction(async (tx) => {
+    const row = await tx.order.findUnique({ where: { id: orderId }, select: { id: true, eventId: true, eventSeriesId: true } });
+    if (row) await lockOrderTargets(tx, row);
     await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
+    const now = at ?? new Date();
     const order = await tx.order.findUnique({
       where: { id: orderId },
       select: {

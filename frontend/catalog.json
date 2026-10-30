@@ -1964,6 +1964,16 @@
     },
     {
       "module": "app/actions/payment-operations",
+      "name": "retryFailedRefundAction",
+      "id": "payment-operations:retryFailedRefundAction"
+    },
+    {
+      "module": "app/actions/payment-operations",
+      "name": "refundEndedOrderAction",
+      "id": "payment-operations:refundEndedOrderAction"
+    },
+    {
+      "module": "app/actions/payment-operations",
       "name": "settlePaidOrder",
       "id": "payment-operations:settlePaidOrder"
     },

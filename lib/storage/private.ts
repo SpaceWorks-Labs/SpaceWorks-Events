@@ -1,9 +1,11 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
-import { client, storageConfigured } from "./index";
+import { client, storageConfigured } from "./objects";
+import { uploadObject } from "./uploads";
+import { queueAssetDeletions } from "./deletionQueue";
 
 /**
  * Private files: expense claim receipts (docs/FINANCE.md). They never go
@@ -27,12 +29,8 @@ export async function uploadReceipt(organisationId: string, key: string, body: B
   if (RECEIPT_KEY.exec(key)?.[1] !== organisationId) throw new Error("Invalid receipt storage key.");
   const contentType = "image/webp";
   if (storageConfigured()) {
-    await client().send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key, Body: body, ContentType: contentType, CacheControl: "private, no-store" }));
-    await prisma.asset.upsert({
-      where: { key },
-      create: { key, contentType, byteSize: BigInt(body.length), provider: "s3", organisationId },
-      update: { contentType, byteSize: BigInt(body.length), provider: "s3", fileData: null, organisationId },
-    });
+    // Tracked from before the PUT until the Asset exists (lib/storage/uploads.ts).
+    await uploadObject({ key, organisationId, body, contentType, cacheControl: "private, no-store" });
     return;
   }
   if (process.env.NODE_ENV === "production") throw new Error("Private object storage is not configured.");
@@ -60,9 +58,5 @@ export async function downloadReceipt(key: string) {
 export async function deleteReceipts(keys: string[]) {
   const valid = [...new Set(keys.filter(isReceiptKey))];
   if (valid.length === 0) return;
-  const stored = await prisma.asset.findMany({ where: { key: { in: valid }, provider: "s3" }, select: { key: true } });
-  if (stored.length > 0 && storageConfigured()) {
-    await client().send(new DeleteObjectsCommand({ Bucket: process.env.S3_BUCKET!, Delete: { Objects: stored.map(({ key }) => ({ Key: key })), Quiet: true } }));
-  }
-  await prisma.asset.deleteMany({ where: { key: { in: valid } } });
+  await queueAssetDeletions(valid);
 }

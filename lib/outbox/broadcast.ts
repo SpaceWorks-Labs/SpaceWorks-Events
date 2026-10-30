@@ -4,6 +4,7 @@ import "server-only";
 
 import { Prisma, RsvpStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { isCurrentHolderRecipient } from "./holder";
 import { sendEventBroadcast } from "@/lib/email";
 import { broadcastHtmlToText, renderBroadcastHtml, renderBroadcastTemplate, sampleBroadcastVariables } from "@/lib/broadcastTemplate";
 import { broadcastBrandFor, broadcastEventUrl, broadcastTicketUrl, rsvpMatchesBroadcastAudience } from "@/lib/eventBroadcast";
@@ -22,13 +23,13 @@ export async function deliverEventBroadcast(value: Prisma.JsonValue, stableMessa
     }),
     prisma.rSVP.findUnique({
       where: { id: payload.rsvpId },
-      select: { eventId: true, status: true, checkedInAt: true, checkInToken: true, guestName: true, user: { select: { name: true } } },
+      select: { eventId: true, status: true, checkedInAt: true, checkInToken: true, guestName: true, guestEmail: true, user: { select: { name: true, email: true } } },
     }),
   ]);
   // The broadcast or registration was removed, or the registration no
   // longer belongs to the audience it was selected for. Drop silently
   // rather than sending wording that no longer applies.
-  if (!broadcast || !rsvp || rsvp.eventId !== broadcast.eventId || !rsvpMatchesBroadcastAudience(rsvp, broadcast)) {
+  if (!broadcast || !rsvp || !isCurrentHolderRecipient(rsvp, payload.to) || rsvp.eventId !== broadcast.eventId || !rsvpMatchesBroadcastAudience(rsvp, broadcast)) {
     return "dropped";
   }
   const variables = broadcastVariablesFor(broadcast.event, {
@@ -74,7 +75,7 @@ export async function deliverEventBroadcastTest(value: Prisma.JsonValue, stableM
     where: {
       eventId: payload.eventId,
       status: RsvpStatus.CONFIRMED,
-      OR: [{ user: { email: { equals: payload.to, mode: "insensitive" } } }, { guestEmail: { equals: payload.to, mode: "insensitive" } }],
+      OR: [{ user: { email: { equals: payload.to, mode: "insensitive" } } }, { user: { OR: [{ email: null }, { email: "" }] }, guestEmail: { equals: payload.to, mode: "insensitive" } }, { userId: null, guestEmail: { equals: payload.to, mode: "insensitive" } }],
     },
     select: { checkInToken: true },
   });

@@ -13,7 +13,7 @@ type OutboxClient = Prisma.TransactionClient | typeof prisma;
 export const PAYMENT_EMAIL_KIND = "payment-notice";
 
 /** Notices about one payment. */
-export const PAYMENT_NOTICES = ["pending", "reminder", "desk", "paid", "expired", "late-refund", "organiser-late-refund", "refunded"] as const;
+export const PAYMENT_NOTICES = ["pending", "reminder", "desk", "paid", "expired", "late-refund", "organiser-late-refund", "refunded", "cancelled-refund"] as const;
 /** Notices about an order as a whole. */
 export const ORDER_NOTICES = ["attendee-details", "cancelled"] as const;
 export type PaymentNotice = (typeof PAYMENT_NOTICES)[number];
@@ -94,6 +94,8 @@ function matches(notice: PaymentNotice, payment: { status: PaymentStatus; refund
     case "expired": return payment.status === PaymentStatus.EXPIRED;
     case "late-refund":
     case "organiser-late-refund": return automaticRefund;
+    // A payment that arrived after its event, series or date was cancelled.
+    case "cancelled-refund": return automaticRefund && order.status === OrderStatus.CANCELLED;
     case "refunded": return payment.refunds.some((refund) => !refund.automatic && refund.status !== PaymentRefundStatus.FAILED);
   }
 }
@@ -173,6 +175,12 @@ export async function deliverPaymentEmail(payload: PaymentEmailPayload, messageI
       subject: `Payment refunded: ${title}`,
       heading: "Your payment was refunded",
       body: `Your payment of ${escapeHtml(amount)} for <strong>${escapeHtml(title)}</strong> arrived after your held tickets had been released, and there weren't enough places left. We've refunded it in full; your bank may take a few days to show it.${testNote}`,
+    },
+    "cancelled-refund": {
+      subject: `Refund on its way: ${title}`,
+      heading: "Your payment is being refunded",
+      body: `Your payment of ${escapeHtml(amount)} for <strong>${escapeHtml(title)}</strong> arrived after it was cancelled, so no ticket was issued. We've asked the payment provider to return it in full; card and UPI refunds can take 5 to 10 working days to appear once it goes through.${testNote}`,
+      button: { label: "View your order", href: orderUrl },
     },
     "organiser-late-refund": {
       subject: `A late payment was refunded: ${title}`,

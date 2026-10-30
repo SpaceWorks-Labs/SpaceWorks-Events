@@ -255,6 +255,42 @@ backup_env() { printf '%s/backup.env' "$SWE_CONFIG_DIR"; }
 # Non-secret status the app reads (mounted read-only at /status).
 status_dir() { printf '%s/status' "$SWE_CONFIG_DIR"; }
 
+json_time() { if [[ -n "$1" ]]; then printf '"%s"' "$1"; else printf null; fi; }
+# write_backup_status OUTCOME KIND STARTED SIZE ENCRYPTED OFFSITE KEEP_DAYS [REASON]:
+# record a backup attempt in status/backup.json. It carries no secrets, and
+# REASON is one of the fixed codes from backup_encryption_problem, never
+# command output. The last success times carry over from the previous file.
+write_backup_status() {
+  local outcome=$1 kind=$2 started=$3 size=$4 encrypted=$5 offsite=$6 keep_days=$7 reason=${8:-}
+  local file previous success full scheduled=false
+  file="$(status_dir)/backup.json"
+  previous=$(cat "$file" 2>/dev/null || true)
+  success=$(printf '%s' "$previous" | sed -n 's/.*"lastSuccessAt":"\([^"]*\)".*/\1/p')
+  full=$(printf '%s' "$previous" | sed -n 's/.*"lastFullSuccessAt":"\([^"]*\)".*/\1/p')
+  if [[ $outcome = ok ]]; then
+    success=$started
+    [[ $kind != full ]] || full=$started
+  fi
+  ! timer_enabled backup || scheduled=true
+  ( umask 022
+    mkdir -p "$(status_dir)"
+    chmod 755 "$(status_dir)"
+    printf '{"version":1,"lastAttemptAt":"%s","lastStatus":"%s","lastKind":"%s","lastSuccessAt":%s,"lastFullSuccessAt":%s,"sizeBytes":%s,"encrypted":%s,"offsite":"%s","scheduled":%s,"keepDays":%s,"reason":%s}\n' \
+      "$started" "$outcome" "$kind" "$(json_time "$success")" "$(json_time "$full")" "$size" "$encrypted" "$offsite" "$scheduled" "$keep_days" "$(json_time "$reason")" \
+      > "$file.new"
+    mv -f "$file.new" "$file" )
+}
+
+# backup_encryption_problem RECIPIENT: prints nothing when age encrypts to the
+# recipient, otherwise why it can't: encryption-key-missing (no key saved) or
+# encryption-unavailable (age missing or failing).
+backup_encryption_problem() {
+  [[ -n "$1" ]] || { printf encryption-key-missing; return 0; }
+  if ! command -v age >/dev/null || ! printf 'check\n' | age --encrypt --recipient "$1" >/dev/null 2>&1; then
+    printf encryption-unavailable
+  fi
+}
+
 # install_timer NAME "Description" ONCALENDAR SCRIPT [ARGS...]: a systemd timer
 # that runs a script of the current release as root. The unit names the
 # current symlink, so updates never need to rewrite it.
@@ -443,4 +479,27 @@ compose() {
     run|exec) local command=$1; shift; sh "$SWE_REPO_DIR/scripts/vps-compose.sh" "$command" -T "$@" ;;
     *) sh "$SWE_REPO_DIR/scripts/vps-compose.sh" "$@" ;;
   esac
+}
+
+# Release compatibility follows the migrations: a release can run against this
+# database only if its prisma/migrations has every migration the database has
+# recorded (applied, or started and failed; not rolled back). An older release
+# lacks the newer ones, and is never started against them.
+applied_migrations() {
+  compose exec postgres psql -U swevents -d swevents -AtX -v ON_ERROR_STOP=1 \
+    -c 'SELECT DISTINCT migration_name FROM _prisma_migrations WHERE rolled_back_at IS NULL ORDER BY 1'
+}
+
+# The names from stdin (applied_migrations) that the release in DIR lacks, one per line.
+missing_migrations() {
+  local dir=$1 name
+  while IFS= read -r name; do
+    [[ -z "$name" || -d "$dir/prisma/migrations/$name" ]] || printf '%s\n' "$name"
+  done
+}
+
+# The newest local backup directory, if any.
+newest_backup() {
+  [[ -d "$SWE_CONFIG_DIR/backups" ]] || return 0
+  find "$SWE_CONFIG_DIR/backups" -mindepth 1 -maxdepth 1 -type d -name '2*Z' | sort | tail -n 1
 }

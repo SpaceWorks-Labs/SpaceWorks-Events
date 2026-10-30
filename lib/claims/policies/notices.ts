@@ -31,17 +31,20 @@ export async function queueReimbursementNotices(now = new Date()) {
     },
     orderBy: [{ noticesCheckedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
     take: POLICIES_PER_PASS,
-    select: { id: true },
+    select: { id: true, eventId: true },
   });
   let queued = 0;
-  for (const { id } of policies) queued += await prisma.$transaction((tx) => queueForPolicy(tx, id, now));
+  for (const { id, eventId } of policies) queued += await prisma.$transaction((tx) => queueForPolicy(tx, id, eventId, now));
   return { queued, policies: policies.length };
 }
 
-async function queueForPolicy(tx: Prisma.TransactionClient, policyId: string, now: Date) {
+async function queueForPolicy(tx: Prisma.TransactionClient, policyId: string, eventId: string, now: Date) {
+  // Event first, as for submission and holder changes: inserting a notice
+  // needs RSVP key-share, while inserting a claim needs Policy key-share.
+  await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "ReimbursementPolicy" WHERE "id" = ${policyId} FOR UPDATE`;
   const policy = await tx.reimbursementPolicy.findUnique({ where: { id: policyId }, include: { event: { select: { organisationId: true } } } });
-  if (!policy) return 0;
+  if (!policy || policy.eventId !== eventId) return 0;
   await tx.reimbursementPolicy.update({ where: { id: policyId }, data: { noticesCheckedAt: now } });
   if (!policy.active || !policy.notifyWhenAvailable) return 0;
   const ids = await eligibleRegistrationIds(tx, policy.eventId, policy, PEOPLE_PER_POLICY, { reimbursementNotices: { none: { policyId } } });

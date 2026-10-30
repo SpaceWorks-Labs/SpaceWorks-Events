@@ -4,7 +4,7 @@ import { saveJudgeScores, submitJudgeReview } from "@/lib/core/judging";
 import { mobileActionError, mobileError, parseJsonBody, zodFieldErrors } from "@/lib/mobile/http";
 import { judgeDetailResponse, judgingRoute } from "@/lib/mobile/judging";
 import { judgeReviewSchema } from "@/lib/validators";
-import { currentRoundReview, refuseUnlessCurrentRound } from "@/lib/mobile/judgeReview";
+import { pinnedRoundReview, pinScoringRound } from "@/lib/mobile/judgeReview";
 
 type Params = { orgSlug: string; eventId: string; submissionId: string };
 
@@ -20,24 +20,24 @@ const bodySchema = z.object({
  * the project as `GET …/judging/submissions/:id`.
  */
 export const POST = judgingRoute<Params>("POST /api/mobile/v1/orgs/:orgSlug/events/:eventId/judging/submissions/:submissionId/review", "action", async (request, { submissionId }, { judge }) => {
-  // Scores and reviews are written to the current round only.
-  const notCurrent = await refuseUnlessCurrentRound(judge, new URL(request.url).searchParams.get("roundId"));
-  if (notCurrent) return notCurrent;
+  // Scores and reviews are written to the current round only, the same one for the whole request.
+  const pin = await pinScoringRound(judge, new URL(request.url).searchParams.get("roundId"));
+  if ("response" in pin) return pin.response;
   const body = await parseJsonBody(request, bodySchema);
   if ("response" in body) return body.response;
   const { scores, comment } = body.data;
   const review = judgeReviewSchema.safeParse({ submissionId, ...(comment !== undefined ? { comment } : {}), submit: true });
   if (!review.success) return mobileError("INVALID_REQUEST", "Check the highlighted fields.", { fieldErrors: zodFieldErrors(review.error) });
   if (scores && scores.length > 0) {
-    const saved = await saveJudgeScores(judge, { submissionId, scores });
+    const saved = await saveJudgeScores(judge, { submissionId, scores }, pin.roundId);
     if (!saved.ok) return mobileActionError(saved);
   }
   // Without a new comment, keep the saved draft comment.
   const existing = comment === undefined
-    ? (await currentRoundReview(judge, submissionId))?.comment ?? ""
+    ? (await pinnedRoundReview(judge, pin.roundId, submissionId))?.comment ?? ""
     : review.data.comment;
-  const submitted = await submitJudgeReview(judge, { submissionId, comment: existing, submit: true });
+  const submitted = await submitJudgeReview(judge, { submissionId, comment: existing, submit: true }, pin.roundId);
   revalidatePath(`/dashboard/${judge.orgSlug}/event/${judge.eventId}`);
   if (!submitted.ok) return mobileActionError(submitted);
-  return judgeDetailResponse(judge, submissionId);
+  return judgeDetailResponse(judge, submissionId, pin.roundId ?? undefined);
 }, { idempotent: true });

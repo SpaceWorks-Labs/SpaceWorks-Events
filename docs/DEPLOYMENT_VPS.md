@@ -146,8 +146,12 @@ region (`auto` for R2), bucket, access key and secret (hidden). The application
 reads and writes the bucket itself; browsers never talk to it, so no CORS is
 needed. With external storage (`SWE_STORAGE='external'`) the Silo services do
 not run and `vps-backup.sh` copies the database and configuration only: back
-the bucket up with your provider. To change the bucket later, edit `S3_*` in
-`app.env` and recreate the app (`scripts/vps-compose.sh up -d`).
+the bucket up with your provider. Versioning may be on: the app deletes every version
+of a deleted file, so on Amazon S3 the key also needs `s3:ListBucketVersions` and
+`s3:DeleteObjectVersion`, and no object lock or retention rule may keep deleted versions
+([storage contract](CONFIGURATION.md#storage-contract-and-the-deletion-queue)).
+To change the bucket later, copy every object to the new bucket first, then edit
+`S3_*` in `app.env` and recreate the app (`scripts/vps-compose.sh up -d`).
 
 ### Automatic deploys
 
@@ -179,6 +183,18 @@ this server. That code runs as `swe-runner`, which has no Docker access; its
 only root permission (`/etc/sudoers.d/spaceworks-events-deploy`) is the deploy
 wrapper, and `vps-deploy.sh` installs only a published, non-pre-release GitHub
 Release whose commit is on `main`. Keep write access to trusted maintainers.
+Because `swe-runner` can change every file in the runner's directory
+(`/opt/spaceworks-events-runner`), the installer never runs anything from it
+as root: the systemd unit `swevents-runner.service` is written by the installer
+itself, the runner's files are unpacked as `swe-runner`, and the runner's system
+dependencies are installed from a fresh root-owned copy of the checksum-verified
+archive. A server set up before this change runs the runner under the unit
+GitHub's `svc.sh` created (`actions.runner.<owner>-<repo>.<runner>.service`);
+re-registering or removing the runner replaces that unit only after systemd
+confirms it is a root-owned file in `/etc/systemd/system` that runs as
+`swe-runner` from the runner's directory. If anything differs, the installer
+stops and prints the commands to remove the unit by hand. Re-register once
+after upgrading (menu option 4) to move an existing runner onto the new unit.
 Remove the runner with menu option 4 or
 `sudo bash /opt/spaceworks-events/current/scripts/install-runner.sh --remove`,
 then delete the `SWE_DEPLOY` variable.
@@ -338,10 +354,25 @@ Run the one-liner again and choose **1) Update to the latest release** (or pass
 6. points `current` at the new release and keeps the three newest releases and
    their images.
 
+A release runs only against a database whose every recorded migration (applied,
+or started and failed, in `_prisma_migrations`) is in its own `prisma/migrations`.
+Before step 3 the updater refuses a release that lacks one, changing nothing; an
+automatic deploy makes the same check in the installed `vps-deploy.sh` before the
+requested release's own updater runs, so an older release is never installed
+over newer migrations. The installed deploy script holds the installation lock
+from before reading those migrations until the child updater finishes. The
+child inherits file descriptor 9 and `SWE_LOCK_HELD=1`; older updaters already
+honour that flag, so they do not try to acquire the same lock again. A second
+update cannot migrate the database between the check and the handoff.
+
 If any step after the backup fails, it restores the previous `compose.env` and
-starts the previous release's retained images. **Migrations that already ran are
-not reversed**; review migrations before updating, and restore the pre-update
-backup if an older release cannot run on the newer schema. For automation, unpack
+starts the previous release's retained images, provided that release has every
+migration now recorded. **Migrations that already ran are not reversed.** If the
+update applied (or started) a migration the previous release lacks, the updater
+stops the app, worker and scheduler instead, prints the restore command, and
+exits with an error: either fix the problem and run the update again, or restore
+the backup taken at the start of the update with the previous release's
+`scripts/vps-restore.sh`, which starts that release on the database as it was. For automation, unpack
 the new release with its commit in a `.release` file (and, for a published
 release, its version in `.release-version`) and run
 `sudo bash <new release>/scripts/update-vps.sh --yes`; it is copied into
@@ -408,6 +439,16 @@ saved in `/etc/spaceworks-events/backup.env`. Setup asks about the first three:
 | **Off-site copies** | After each backup, an encrypted copy goes to an S3-compatible bucket at another provider (R2, B2, S3…), kept for its own number of days (default 90). Only encrypted backups are sent. A private endpoint (for example your own Silo or MinIO) can use its own certificate authority: give the CA file when asked, and the installer keeps a copy beside `backup.env`. Keys may contain any characters, including `/` and `+`. |
 | **Retention** | Days a backup stays on this server. |
 
+Encryption chosen at setup is never silently skipped. Setup installs `age` and
+makes the key before it turns on the nightly timer; if `age` cannot be installed
+or cannot encrypt to the key, setup leaves the timer off, records the reason in
+the status file and says so. While encryption is on, or was requested and is not
+working yet, `vps-backup.sh` refuses to run (this includes the backup the updater
+takes first) and records the refusal instead of writing a backup that holds every
+secret unencrypted. Install the `age` package, then in **Backups** choose
+**Set up the requested encryption** and turn nightly backups on; or, to accept
+unencrypted backups, turn the request off there.
+
 Each run writes `/etc/spaceworks-events/status/backup.json` (no secrets), which the
 app reads read-only. **Super admin → Operations** shows the newest backup, schedule,
 encryption and off-site state. If a backup fails, or scheduled backups are more than
@@ -426,7 +467,29 @@ For an encrypted backup it asks you to paste the key (or pass `--identity FILE`)
 bucket; the installer menu's **Backups → List off-site backups** shows the names.
 It shows what will be replaced and asks you to type `RESTORE`. It backs up the
 current database first, stops the app, the worker, the beat and Caddy, and
-replaces the database in one transaction. It then copies the backup's files back into Silo
+resets the `public` application schema in the `swevents` database and restores
+the dump **together in one transaction**. Any SQL error rolls back both the reset
+and the restore, preserving the database as it was before the attempt; the failure
+cleanup restarts the services. Resetting the schema removes tables and other
+objects introduced after the backup, so they cannot conflict with the restored migration history
+on the next update. Other databases and schemas are not explicitly reset, though
+`CASCADE` also removes objects that depend on `public` objects.
+
+Before connecting, `pg_restore` converts the entire dump into a private temporary
+SQL file inside the PostgreSQL container. Allow space there for the uncompressed
+SQL; it is removed on success or failure. A corrupt dump or conversion failure
+exits without resetting the database. One `psql -X -v ON_ERROR_STOP=1
+--single-transaction` invocation applies both the reset and that SQL file.
+The reset uses PostgreSQL 16's normal `pg_database_owner` schema owner (implicitly
+the database owner, `swevents`) and baseline public schema usage. It re-applies
+`swevents_app` schema `USAGE` and the table/sequence default privileges from
+`init-database.sh` before restoring objects. The full `pg_dump -Fc` backup retains
+object grants and default privileges because neither backup nor restore disables
+ACLs. The existing app login and database `CONNECT` grant are outside the schema
+and survive its reset; the dump does not create login roles. Migrations still run
+as `swevents`, and the app still connects as `swevents_app`.
+
+It then copies the backup's files back into Silo
 (newer files stay), runs migrations if the backup came from an older release,
 starts everything and runs the VPS checks.
 

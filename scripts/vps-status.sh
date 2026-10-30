@@ -12,7 +12,9 @@ load_config_dir
 SWE_REPO_DIR=$source_dir
 say "Release: $(conf_get "$SWE_CONFIG_DIR/compose.env" SWE_VERSION) at $(conf_get "$SWE_CONFIG_DIR/compose.env" PUBLIC_ORIGIN)"
 say "Free disk: $(free_disk_mb /var/lib/docker) MB"
-newest=$(find "$SWE_CONFIG_DIR/backups" -mindepth 1 -maxdepth 1 -type d -name '2*Z' 2>/dev/null | sort | tail -n 1)
+# No backups directory yet just means no backup yet; any other error is shown,
+# and the service checks below still run.
+newest=$(newest_backup) || warn "Could not list $SWE_CONFIG_DIR/backups."
 say "Newest backup: ${newest:-none yet; run scripts/vps-backup.sh}"
 compose ps
 compose run --rm --no-deps ops node docker/vps/check.mjs

@@ -15,7 +15,7 @@ import { HELP_COMMENT_MAX_LENGTH, HELP_LOCATION_MAX_LENGTH, HELP_PRIORITY_WINDOW
 import { deskEvent, liveMentor, liveParticipant, type MentorContext, type ParticipantContext } from "./access";
 import { visitEligible, type HelpScope } from "./eligibility";
 import { changeHelp, lockHelpRow, requireBeforeDeadline, requireLive, requireStatus } from "./helpShared";
-import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockTeam, refuse } from "./shared";
+import { COPY, checkVersion, type DeskResult, fail, inTransaction, lockHelpEvent, lockTeam, refuse } from "./shared";
 
 const raiseSchema = z.object({
   categoryKey: z.string().trim().min(1).max(40),
@@ -41,6 +41,9 @@ export async function createHelpLocked(tx: Prisma.TransactionClient, params: {
   now: Date;
   mentor?: { userId: string; skills: readonly string[] };
 }): Promise<{ id: string } | "limit"> {
+  // Callers also take this before any grant/round locks. Key-share matches
+  // the insert's FK lock; assignments and answer editors wait at Event first.
+  await lockHelpEvent(tx, params.event.id);
   const category = await tx.helpCategory.findFirst({ where: { eventId: params.event.id, key: params.categoryKey, active: true }, select: { id: true, priority: true, openLimit: true, expiryMinutes: true, skillTags: true } });
   if (!category) refuse(COPY.category);
   if (params.mentor && !(await visitEligible(tx, { eventId: params.event.id, mentor: params.mentor, scope: params.scope, skillTags: category.skillTags, now: params.now }))) refuse(COPY.notEligible);
@@ -78,6 +81,7 @@ export async function raiseHelp(p: ParticipantContext, input: unknown): Promise<
   const parsed = raiseSchema.safeParse(input);
   if (!parsed.success) return fail(COPY.invalid);
   return inTransaction(async (tx) => {
+    await lockHelpEvent(tx, p.eventId);
     const event = await deskEvent(tx, p);
     const scope = await liveParticipant(tx, p);
     const created = await createHelpLocked(tx, { event: { id: event.id, endDateTime: event.endDateTime }, scope, ...parsed.data, origin: HelpRequestOrigin.TEAM, raisedByUserId: p.userId, now: new Date() });
@@ -91,6 +95,7 @@ export async function raiseHelpAsMentor(m: MentorContext, input: unknown): Promi
   const parsed = raiseSchema.extend({ teamId: z.string().min(1).max(128) }).safeParse(input);
   if (!parsed.success) return fail(COPY.invalid);
   return inTransaction(async (tx) => {
+    await lockHelpEvent(tx, m.eventId);
     const event = await deskEvent(tx, m);
     const now = new Date();
     const mentor = await liveMentor(tx, event.id, m.userId, { at: now });

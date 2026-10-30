@@ -28,10 +28,11 @@ function emitStatus<T>(result: ClaimResult<T>, claimId: string, status: ExpenseC
 }
 
 async function lockedClaim(tx: Prisma.TransactionClient, ctx: ClaimAdminContext, claimId: string) {
-  // A policy claim's cap and budget are checked under the event lock, taken
-  // before the claim's as when claims are filed.
-  const policyClaim = await tx.expenseClaim.findFirst({ where: { id: claimId, organisationId: ctx.organisationId, policyId: { not: null } }, select: { eventId: true } });
-  if (policyClaim?.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${policyClaim.eventId} FOR UPDATE`;
+  // Event before Claim, including general claims: holder changes detach
+  // claims under Event, and payout inserts need Event key-share.
+  const target = await tx.expenseClaim.findFirst({ where: { id: claimId, organisationId: ctx.organisationId }, select: { eventId: true } });
+  if (!target) return null;
+  if (target.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${target.eventId} FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "ExpenseClaim" WHERE "id" = ${claimId} FOR UPDATE`;
   return tx.expenseClaim.findFirst({ where: { id: claimId, organisationId: ctx.organisationId }, select: claimSelect });
 }
@@ -117,6 +118,11 @@ export async function reverseClaimPayout(ctx: ClaimAdminContext, input: unknown)
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the reversal.");
   let reopened: string | null = null;
   const result = await prisma.$transaction(async (tx): Promise<ClaimResult<undefined>> => {
+    const target = await tx.claimPayout.findFirst({ where: { id: parsed.data.payoutId, organisationId: ctx.organisationId, reversesId: null }, select: { eventId: true } });
+    if (!target) return fail("Payout not found.");
+    // A reversal also inserts an Event reference: take Event before Claim.
+    if (target.eventId) await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${target.eventId} FOR UPDATE`;
+    // Event deletion can have cleared the ledger references while we waited.
     const original = await tx.claimPayout.findFirst({ where: { id: parsed.data.payoutId, organisationId: ctx.organisationId, reversesId: null } });
     if (!original) return fail("Payout not found.");
     if (original.claimId) await tx.$queryRaw`SELECT "id" FROM "ExpenseClaim" WHERE "id" = ${original.claimId} FOR UPDATE`;

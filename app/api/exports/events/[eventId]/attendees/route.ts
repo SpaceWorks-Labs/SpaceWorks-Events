@@ -1,4 +1,4 @@
-import { EventPermission, type Prisma } from "@prisma/client";
+import { EventPermission, RegistrationFieldType, type Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { recordAuditEvent } from "@/lib/audit";
 import { csvStreamResponse, exportFilename, exportFilterNames, exportNotFound } from "@/lib/csvExport";
@@ -29,12 +29,40 @@ function isFiltered(view: AttendeeListView) {
   return view.status !== "all" || view.kind !== "all" || view.team !== "all" || view.attendance !== "all" || Boolean(view.query);
 }
 
-function answerValue(answer: { valueText: string | null; valueBool: boolean | null; valueNumber: number | null; valueDate: Date | null }) {
+type StoredAnswer = { fieldId: string; valueText: string | null; valueBool: boolean | null; valueNumber: number | null; valueDate: Date | null };
+
+function answerValue(answer: StoredAnswer) {
   return answer.valueText
     ?? (answer.valueBool == null ? null : answer.valueBool ? "Yes" : "No")
     ?? (answer.valueNumber == null ? null : String(answer.valueNumber))
     ?? answer.valueDate?.toISOString().slice(0, 10)
     ?? "";
+}
+
+type AnswerColumn = { id: string; multi: boolean; rank: Map<string, number> };
+
+/** One column per question; a multi-select's options are ranked in the question's order. */
+function answerColumns(fields: ReadonlyArray<{ id: string; type: RegistrationFieldType; options: Prisma.JsonValue }>): AnswerColumn[] {
+  return fields.map((field) => {
+    const options = Array.isArray(field.options) ? field.options.filter((option): option is string => typeof option === "string").map((option) => option.trim()) : [];
+    return { id: field.id, multi: field.type === RegistrationFieldType.MULTI_SELECT, rank: new Map(options.map((option, index) => [option, index])) };
+  });
+}
+
+/**
+ * One cell per question. A multi-select keeps one answer row per choice, so
+ * its cell joins every choice with "; ": the question's options in their
+ * order, then any other text ("Other", or an option since removed) by value.
+ */
+function answerCells(columns: AnswerColumn[], answers: ReadonlyArray<StoredAnswer>) {
+  const byField = new Map<string, string[]>();
+  for (const answer of answers) byField.set(answer.fieldId, [...(byField.get(answer.fieldId) ?? []), answerValue(answer)]);
+  return columns.map((column) => {
+    const values = byField.get(column.id) ?? [];
+    if (!column.multi) return values[0] ?? "";
+    const rank = (value: string) => column.rank.get(value) ?? column.rank.size;
+    return values.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0)).join("; ");
+  });
 }
 
 /** Team name and role for one registration; solo registrants get an empty team and "Solo", crew "Crew". */
@@ -62,7 +90,7 @@ export async function GET(request: Request, context: RouteContext) {
       organisationId: true,
       registrationMode: true,
       registrationForm: {
-        select: { fields: { select: { id: true, label: true }, orderBy: { sortOrder: "asc" } } },
+        select: { fields: { select: { id: true, label: true, type: true, options: true }, orderBy: { sortOrder: "asc" } } },
       },
       // One column per custom check-in list, after the registration answers,
       // so existing columns keep their positions.
@@ -79,6 +107,7 @@ export async function GET(request: Request, context: RouteContext) {
   if (!(await canAccessEvent({ userId: session.user.id, organisationId: event.organisationId, eventId: event.id, permission: EventPermission.MANAGE_REGISTRATIONS }))) return exportNotFound();
 
   const fields = event.registrationForm?.fields ?? [];
+  const columns = answerColumns(fields);
   // TEAM events add Team and Team role columns (docs/TEAMS.md); other exports keep their columns.
   const teamColumns = event.registrationMode === "TEAM";
   const lists = event.checkInLists;
@@ -130,7 +159,6 @@ export async function GET(request: Request, context: RouteContext) {
         if (!rsvps.length) break;
 
         const rows = rsvps.map((rsvp) => {
-          const answers = new Map(rsvp.answers.map((answer) => [answer.fieldId, answerValue(answer)]));
           const listCheckIns = new Map(rsvp.checkInListRecords.map((record) => [record.listId, record.checkedInAt.toISOString()]));
           return [
             rsvp.user?.name ?? rsvp.guestName ?? "",
@@ -145,7 +173,7 @@ export async function GET(request: Request, context: RouteContext) {
             rsvp.order?.reference ?? "",
             rsvp.order?.status ?? "",
             rsvp.order ? `${rsvp.order.currency} ${minorToDecimalString(rsvp.order.totalMinor, rsvp.order.currency)}` : "",
-            ...fields.map((field) => answers.get(field.id) ?? ""),
+            ...answerCells(columns, rsvp.answers),
             ...lists.map((list) => listCheckIns.get(list.id) ?? ""),
             ...attendanceCsvCells(rsvp, { showNotAsked: attendanceAsked }),
           ];

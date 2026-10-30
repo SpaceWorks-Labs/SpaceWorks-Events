@@ -197,6 +197,12 @@ describe("event broadcast actions", () => {
     expect(result.data?.text).toContain("Ticket (http://localhost:3000/org/mixer)");
   });
 
+  it("previews inherited property names as literal placeholders", async () => {
+    const result = await previewEventBroadcast({ ...baseInput, subject: "{{toString}}", body: "<p>{{constructor}} {{name}}</p>" });
+    expect(result.ok && result.data?.subject).toBe("{{toString}}");
+    expect(result.ok && result.data?.html).toContain("{{constructor}} Priya");
+  });
+
   it("clears the sender's own draft inside a successful send transaction only", async () => {
     await sendEventBroadcast(baseInput);
     expect(mocks.draftDeleteMany).toHaveBeenCalledWith({ where: { eventId: "event_1", userId: "admin_1" } });
