@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-30
+
+Security, money-integrity and concurrency fixes from three rounds of multi-track audits of 0.11.0: the 38 findings of the first audit, about 45 from a re-audit of the fixed release, and those of a final data and privacy audit. Release 0.11.0 ended at migration `20261119030000_admission_audit_fixes`; this release adds the four migrations from `20261120000000_payment_audit_fixes` to `20261120010200_offline_check_in_mutations` (listed under **Migrations** below and described in `docs/production-operations.md` → Recent schema migrations).
+
+### Upgrade notes
+
+- **Everyone signs in once more.** Web sessions now carry how they were signed in and a sign-in id. Sessions from before this release are retired, so every web user signs in again, staff confirm their authenticator again, and the super admin uses the password (Google is now refused for the super admin).
+- **Stop the previous release within one hour of the migration, and never run it again.** `20261120010100_storage_deletion_queue` makes every upload record a pending deletion before its first byte; an older instance uploads without one. Replace web, worker and beat within an hour, and roll back only by restoring the pre-migration backup (`docs/production-operations.md` → Storage deletion queue rollout). The VPS updater and automatic deploy now refuse a release that lacks a migration the database already has, and stop the app, worker and scheduler rather than restart an incompatible release after a failed update.
+- **Storage keys need version permissions.** The deletion queue removes every version and delete marker of a file. On Amazon S3 or another service with a versions API, give the application's key `s3:ListBucketVersions` and `s3:DeleteObjectVersion` before upgrading; bundled Silo's policy updates itself, and Cloudflare R2 needs nothing. Don't change the bucket without migrating the stored files first.
+- **Backups refuse to run unencrypted.** While encryption is requested, a VPS backup that can't encrypt fails and the status page shows it; setup enables the backup timer only once `age` works.
+- **Mobile API:** application review submissions now require `answersRevision`, and a stale one is refused so the reviewer reloads (the app is unreleased). A replayed mobile write whose first attempt failed answers `IDEMPOTENCY_STALE`.
+
+### Security
+
+- Google sign-in is refused for the super admin on the web and in the app, including through a previously linked Google account; the super-admin area accepts only a password session.
+- Sign-in redirects are checked after dot segments are resolved, closing an open redirect (`/x/..//host`).
+- A missing or malformed device id counts as an unknown device: the sign-in is audited and alerted.
+- Broadcast placeholders resolve only the template's own fields (`{{constructor}}` stays as typed).
+- Alert webhook and Mattermost posts run under one absolute deadline, from the DNS lookup until the socket closes.
+- Report downloads authorise and rate-limit before loading any metrics; offline roster downloads are audited.
+- Claim withdrawal is limited to the authorised organisation and event, or the ticket's own registration.
+
+### Changed
+
+- **Ticket transfers and holder changes** retire everything the old holder had: attendance and submission links, a team leader's management link, the ticket link (rotated) and their expense claims (detached from the ticket; organisers keep the records). Queued emails only resolve a ticket, attendance, submission or team link for the current holder.
+- **Invite-only events** take exactly one seat per invitation, for the signed-in invitee, on free and paid registration alike.
+- **Deleting an organisation** is refused while people have paid for upcoming events, a payment is in progress, a refund is pending or still owed, or a cancelled event or date has money to refund (a pass with a cancelled date blocks until its remaining balance is refunded). Notices, audit and the storage queue happen only when it goes ahead, and it retries if a database deadlock aborts it.
+- **Deleting an event or series** is refused while it holds any money; a cancelled series whose earlier dates took place stays as the record.
+- **Refundable orders** (Finance tab and series page) lists cancelled or expired orders with money left, refunded by order; checked-in paid orders on a cancelled event or date are refunded here, never on top of the automatic cancellation refund. **Finish refunds** resumes an interrupted cancellation, also for past dates.
+- Test payments, their refunds and chargebacks are left out of every live total; money recorded in person always counts.
+- Changing a mentor's access, issuing their crew ticket and linking their account now happen in one transaction; a refused link refuses the whole change.
+
+### Fixed
+
+- **Payments:** hold eligibility is decided with the time read under the locks; ticket types, promo codes and extras are checked again before an ended hold (or a declined order) is revived; a payment captured after cancellation is refunded in full; a failed refund lookup keeps the refund pending; Stripe refund lookups page through every result; approved paid solo team places confirm only once paid; an organisation fence comes first in the lock order.
+- **Concurrency:** deadlocks and races fixed across office hours, mentor grants, invite acceptance, mobile sessions, check-in list undo, crew edits and reordering, help reassignment, volunteer shifts, expense claims and payouts, team moves against check-in, and member role changes. A person lock keeps a mentor's booked office hours and approved volunteer shifts from overlapping, in both directions.
+- **Registration and programmes:** cancellations, claims and admission responses or answer edits recheck the ticket under the lock; no team promotions, admission offers or acceptances on cancelled events; mobile judging pins one round per request; mobile `/me` lists application-review workspaces; application status webhooks are crash-safe with stable event ids.
+- **Operations and storage:** a durable storage deletion queue with retries, removing every version (R2 falls back to plain deletes) and fenced by attempt; uploads registered before their first byte; replaced member photos, watermarks and receipts are queued for deletion; restore resets the schema and restores in one transaction; `vps-status` works without a backups folder; database trigger timestamps are UTC; offline check-in replays are recorded once; the runner refuses root, GitHub Actions are pinned and the Docker image installs from the lockfile.
+
+### Known limitations
+
+- Replaced event covers, organisation logos and event page logos are not deleted from storage.
+- A command that locks an event and writes a record of the organisation can deadlock with a concurrent organisation deletion; PostgreSQL aborts one and the deletion retries.
+
+### Migrations
+
+All are additive and applied with `npm run db:deploy`; lock notes for each are in `docs/production-operations.md`:
+
+`20261120000000_payment_audit_fixes`, `20261120010000_utc_trigger_timestamps`, `20261120010100_storage_deletion_queue` (a release requirement: see the upgrade notes), `20261120010200_offline_check_in_mutations`.
+
 ## [0.11.0] - 2026-10-28
 
 Third Yuyu sync, hackathon operations (crew, judging rounds and finalists, the Mentor Desk, volunteer shifts, applications, per-stage reimbursements), the mobile API, the in-app guide at `/help`, and the fixes from the final audit. Release 0.10.0 ended at migration `20261102000000_event_broadcast_drafts`; this release adds the 39 migrations from `20261103000000_check_in_lists` to `20261119030000_admission_audit_fixes` (listed under **Migrations** below and described one by one, with their locks, in `docs/production-operations.md` → Recent schema migrations).
