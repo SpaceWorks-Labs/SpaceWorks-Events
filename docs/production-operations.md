@@ -83,7 +83,7 @@ then re-run the check.
 
 ### Recent schema migrations
 
-Apply these with `npm run db:deploy` before rolling out the matching application version. Release 0.10.0 ends at `20261102000000_event_broadcast_drafts`; release 0.11.0 adds everything from `20261103000000_check_in_lists` to `20261119030000_admission_audit_fixes`; later migrations belong to the next release. The **Rolling deploy** column says whether instances of the previous release keep working while the migration has run and they have not yet been replaced, and what to do before or after upgrading.
+Apply these with `npm run db:deploy` before rolling out the matching application version. Release 0.10.0 ends at `20261102000000_event_broadcast_drafts`; release 0.11.0 adds everything from `20261103000000_check_in_lists` to `20261119030000_admission_audit_fixes`; release 0.12.0 adds `20261120000000_payment_audit_fixes` to `20261120010200_offline_check_in_mutations`; later migrations belong to the next release. The **Rolling deploy** column says whether instances of the previous release keep working while the migration has run and they have not yet been replaced, and what to do before or after upgrading.
 
 How to read the lock notes. Prisma runs each migration in one transaction without a lock timeout, and every lock is held until that transaction commits, so a table altered early in a migration stays locked through the migration's later steps:
 
